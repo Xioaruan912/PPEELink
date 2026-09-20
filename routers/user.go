@@ -11,7 +11,6 @@ func User(r *gin.Engine) {
 	{
 		authGroup.POST("/login", api.UserLogin)
 		authGroup.DELETE("/logout", api.UserOut)
-		authGroup.GET("/captcha", api.GetCaptcha)
 	}
 	userGroup := r.Group("/api/v1/users")
 	{
