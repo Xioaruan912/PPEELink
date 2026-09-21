@@ -64,9 +64,32 @@ func TestBuildClashYAMLFull(t *testing.T) {
 		}
 	}
 	// 规则集
-	for _, s := range []string{"rule-providers:", "RULE-SET,LAN,DIRECT", "RULE-SET,AI,AI", "MATCH,日常使用"} {
+	for _, s := range []string{"rule-providers:", "RULE-SET, LAN, DIRECT", "RULE-SET, Google, Gemini", "MATCH, 日常使用"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("缺少: %s", s)
+		}
+	}
+}
+
+func TestBuildClashYAMLDefaultListeners(t *testing.T) {
+	req := BuilderRequest{
+		Filename:      "default.yaml",
+		Source:        "default",
+		Port:          7890,
+		Mode:          "rule",
+		DNSEnable:     true,
+		SnifferEnable: true,
+		Groups:        defaultGroups(),
+		RuleProviders: defaultRuleProviders(),
+		Rules:         defaultRules(),
+	}
+	out, err := buildClashYAML(req)
+	if err != nil {
+		t.Fatalf("buildClashYAML error: %v", err)
+	}
+	for _, s := range []string{"listeners:", "name: socks5-in-1", "port: 10808", "8080-8880"} {
+		if !strings.Contains(out, s) {
+			t.Errorf("缺少: %s\n%s", s, out)
 		}
 	}
 }

@@ -34,26 +34,26 @@ type RuleProvider struct {
 
 // BuilderRequest 构建模板请求
 type BuilderRequest struct {
-	Filename  string `json:"filename"`
+	Filename    string `json:"filename"`
 	EditOldname string `json:"edit_oldname"` // 编辑现有模板时的旧文件名
-	Source    string `json:"source"`          // default / custom
-	Target    string `json:"target"`          // clash / loon
-	LoonText  string `json:"loon_text"`       // Loon 文本模板模式
+	Source      string `json:"source"`       // default / custom
+	Target      string `json:"target"`       // clash / loon
+	LoonText    string `json:"loon_text"`    // Loon 文本模板模式
 
 	// 基础端口（用户可改，其他端口基于主端口偏移联动）
-	Port          int  `json:"port"`
-	SocksPort     int  `json:"socks_port"`
-	MixedPort     int  `json:"mixed_port"`
-	RedirPort     int  `json:"redir_port"`
-	TproxyPort    int  `json:"tproxy_port"`
-	PortOffset    bool `json:"port_offset"` // 是否联动偏移关联端口
+	Port       int  `json:"port"`
+	SocksPort  int  `json:"socks_port"`
+	MixedPort  int  `json:"mixed_port"`
+	RedirPort  int  `json:"redir_port"`
+	TproxyPort int  `json:"tproxy_port"`
+	PortOffset bool `json:"port_offset"` // 是否联动偏移关联端口
 
 	// 基础配置
-	AllowLan bool   `json:"allow_lan"`
-	Mode     string `json:"mode"`
-	LogLevel string `json:"log_level"`
-	IPv6     bool   `json:"ipv6"`
-	UDP      bool   `json:"udp"`
+	AllowLan           bool   `json:"allow_lan"`
+	Mode               string `json:"mode"`
+	LogLevel           string `json:"log_level"`
+	IPv6               bool   `json:"ipv6"`
+	UDP                bool   `json:"udp"`
 	ExternalController string `json:"external_controller"`
 
 	// 高级配置
@@ -88,37 +88,58 @@ var defaultTestURL = "http://www.gstatic.com/generate_204"
 
 // 默认 geox-url
 const defaultMMDBURL = "https://geodata.kelee.one/Country-Masaiki.mmdb"
-const defaultASNURL  = "https://geodata.kelee.one/GeoLite2-ASN-P3TERX.mmdb"
+const defaultASNURL = "https://geodata.kelee.one/GeoLite2-ASN-P3TERX.mmdb"
 
 // defaultGroups 默认策略分组
 func defaultGroups() []BuilderGroup {
 	return []BuilderGroup{
 		{Name: "日常使用", Type: "select", IncludeAllProviders: true, Proxies: []string{"DIRECT"}},
-		{Name: "AI", Type: "select", IncludeAllProviders: true, Filter: "(?i)US|USA|United States|美国|JP"},
+		{Name: "Gemini", Type: "select", Filter: "(?i)JP|USA", IncludeAllProviders: true, Proxies: []string{"DIRECT"}},
+		{Name: "ChatGPT", Type: "select", Filter: "(?i)US|USA|United States|美国|JP|Japan|新加坡|SG|Singapore|英国|UK|GB", IncludeAllProviders: true, Proxies: []string{"DIRECT"}},
+		{Name: "AI", Type: "select", Filter: "(?i)US|USA|United States|美国|JP|EG", IncludeAllProviders: true, Proxies: []string{"DIRECT"}},
 	}
 }
 
 // defaultRuleProviders 默认规则集
 func defaultRuleProviders() []RuleProvider {
 	return []RuleProvider{
-		{Name: "LAN", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "DIRECT", Path: "./rules/Lan.yaml", URL: "https://kelee.one/Tool/Clash/Rule/LAN_SPLITTER.yaml"},
-		{Name: "Direct", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "DIRECT", Path: "./rules/Direct.yaml", URL: "https://kelee.one/Tool/Clash/Rule/Direct.yaml"},
-		{Name: "Proxy", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "DIRECT", Path: "./rules/Proxy.yaml", URL: "https://kelee.one/Tool/Clash/Rule/Proxy.yaml"},
-		{Name: "AI", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "DIRECT", Path: "./rules/AI.yaml", URL: "https://kelee.one/Tool/Clash/Rule/AI.yaml"},
-		{Name: "ESET_China", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "DIRECT", Path: "./rules/ESET_China.yaml", URL: "https://kelee.one/Tool/Clash/Rule/ESET_China.yaml"},
+		{Name: "115", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/115.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/115/115.yaml"},
+		{Name: "AI", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/AI.yaml", URL: "https://kelee.one/Tool/Clash/Rule/AI.yaml"},
+		{Name: "Anthropic", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./ruleset/Anthropic.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Anthropic/Anthropic.yaml"},
+		{Name: "ChatGPT", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/ChatGPT.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/65e8adff06ea66c81bc61ed64329dae4fbfa7438/rule/Clash/OpenAI/OpenAI.yaml"},
+		{Name: "Direct", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Direct.yaml", URL: "https://kelee.one/Tool/Clash/Rule/Direct.yaml"},
+		{Name: "Discord", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Discord.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Discord/Discord.yaml"},
+		{Name: "ESET_China", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/ESET_China.yaml", URL: "https://kelee.one/Tool/Clash/Rule/ESET_China.yaml"},
+		{Name: "Gemini", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Gemini.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/65e8adff06ea66c81bc61ed64329dae4fbfa7438/rule/Clash/Gemini/Gemini.yaml"},
+		{Name: "Google", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Google.yaml", URL: "https://rule.kelee.one/Clash/Google.yaml"},
+		{Name: "LAN", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Lan.yaml", URL: "https://kelee.one/Tool/Clash/Rule/LAN_SPLITTER.yaml"},
+		{Name: "Microsoft", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Microsoft.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Microsoft/Microsoft.yaml"},
+		{Name: "Proxy", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Proxy.yaml", URL: "https://kelee.one/Tool/Clash/Rule/Proxy.yaml"},
+		{Name: "Reddit", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Reddit.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Reddit/Reddit.yaml"},
+		{Name: "Whatsapp", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Whatsapp.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Whatsapp/Whatsapp.yaml"},
+		{Name: "Xbox", Type: "http", Behavior: "classical", Interval: 3600, Format: "yaml", Proxy: "日常使用", Path: "./rules/Xbox.yaml", URL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master/rule/Clash/Xbox/Xbox.yaml"},
 	}
 }
 
 // defaultRules 默认规则
 func defaultRules() []string {
 	return []string{
-		"RULE-SET,LAN,DIRECT",
-		"RULE-SET,Direct,DIRECT",
-		"RULE-SET,ESET_China,DIRECT",
-		"RULE-SET,AI,AI",
-		"RULE-SET,Proxy,日常使用",
-		"GEOIP,CN,DIRECT",
-		"MATCH,日常使用",
+		"RULE-SET, LAN, DIRECT",
+		"RULE-SET, Direct, DIRECT",
+		"RULE-SET, ESET_China, DIRECT",
+		"RULE-SET, Google, Gemini",
+		"RULE-SET, Gemini, Gemini",
+		"RULE-SET, ChatGPT, ChatGPT",
+		"RULE-SET,Anthropic,ChatGPT",
+		"RULE-SET, Proxy, 日常使用",
+		"GEOIP, CN, DIRECT",
+		"RULE-SET,115,DIRECT",
+		"RULE-SET,Microsoft,日常使用",
+		"RULE-SET,Xbox,日常使用",
+		"RULE-SET,Discord,日常使用",
+		"RULE-SET,Reddit,ChatGPT",
+		"RULE-SET,Whatsapp,ChatGPT",
+		"MATCH, 日常使用",
 	}
 }
 
@@ -371,39 +392,39 @@ func applyBuilderDefaults(req *BuilderRequest) {
 // GET /api/v1/template/default
 func TemplateGetDefault(c *gin.Context) {
 	req := BuilderRequest{
-		Filename:               "mihomo_default.yaml",
-		Source:                 "default",
-		Port:                   7890,
-		SocksPort:              7891,
-		MixedPort:              7892,
-		RedirPort:              7893,
-		TproxyPort:             7894,
-		PortOffset:             true,
-		AllowLan:               true,
-		Mode:                   "rule",
-		LogLevel:               "info",
-		IPv6:                   true,
-		UDP:                    true,
-		ExternalController:     "0.0.0.0:9090",
-		UnifiedDelay:           true,
-		GeodataMode:            false,
-		GeodataLoader:          "standard",
-		GeoAutoUpdate:          true,
-		GeoUpdateInterval:      24,
-		TcpConcurrent:          true,
-		FindProcessMode:        "strict",
+		Filename:                "mihomo_default.yaml",
+		Source:                  "default",
+		Port:                    7890,
+		SocksPort:               7891,
+		MixedPort:               7892,
+		RedirPort:               7893,
+		TproxyPort:              7894,
+		PortOffset:              true,
+		AllowLan:                true,
+		Mode:                    "rule",
+		LogLevel:                "info",
+		IPv6:                    true,
+		UDP:                     true,
+		ExternalController:      "0.0.0.0:9090",
+		UnifiedDelay:            true,
+		GeodataMode:             false,
+		GeodataLoader:           "standard",
+		GeoAutoUpdate:           true,
+		GeoUpdateInterval:       24,
+		TcpConcurrent:           true,
+		FindProcessMode:         "strict",
 		GlobalClientFingerprint: "chrome",
-		SnifferEnable:          true,
-		TunEnable:              true,
-		TunStack:               "system",
-		DNSEnable:              true,
-		DNSEnhancedMode:        "fake-ip",
-		DNSListenPort:          1053,
-		TestURL:                defaultTestURL,
-		Interval:               300,
-		Groups:                 defaultGroups(),
-		RuleProviders:          defaultRuleProviders(),
-		Rules:                  defaultRules(),
+		SnifferEnable:           true,
+		TunEnable:               true,
+		TunStack:                "system",
+		DNSEnable:               true,
+		DNSEnhancedMode:         "fake-ip",
+		DNSListenPort:           1053,
+		TestURL:                 defaultTestURL,
+		Interval:                300,
+		Groups:                  defaultGroups(),
+		RuleProviders:           defaultRuleProviders(),
+		Rules:                   defaultRules(),
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": req, "msg": "默认配置"})
 }
@@ -456,14 +477,14 @@ func buildClashYAML(req BuilderRequest) (string, error) {
 	// sniffer
 	if req.SnifferEnable {
 		cfg["sniffer"] = map[string]any{
-			"enable":                 true,
-			"force-dns-mapping":      true,
-			"parse-pure-ip":          true,
-			"override-destination":   true,
-			"force-domain":           []string{"+.v2ex.com"},
-			"skip-domain":            []string{"Mijia Cloud"},
+			"enable":               true,
+			"force-dns-mapping":    true,
+			"parse-pure-ip":        true,
+			"override-destination": true,
+			"force-domain":         []string{"+.v2ex.com"},
+			"skip-domain":          []string{"Mijia Cloud"},
 			"sniff": map[string]any{
-				"HTTP": map[string]any{"ports": []int{80, 8080}, "override-destination": true},
+				"HTTP": map[string]any{"ports": []any{80, "8080-8880"}, "override-destination": true},
 				"TLS":  map[string]any{"ports": []int{443, 8443}},
 				"QUIC": map[string]any{"ports": []int{443, 8443}},
 			},
@@ -473,26 +494,41 @@ func buildClashYAML(req BuilderRequest) (string, error) {
 	// tun
 	if req.TunEnable {
 		cfg["tun"] = map[string]any{
-			"enable":               true,
-			"stack":                req.TunStack,
-			"auto-route":           true,
+			"enable":                true,
+			"stack":                 req.TunStack,
+			"auto-route":            true,
 			"auto-detect-interface": true,
-			"dns-hijack":           []string{"any:53"},
+			"dns-hijack":            []string{"any:53"},
+		}
+	}
+
+	// listeners（默认模板内置 socks5 入口）
+	if req.Source == "default" {
+		cfg["listeners"] = []map[string]any{
+			{
+				"name":   "socks5-in-1",
+				"type":   "socks",
+				"listen": "0.0.0.0",
+				"port":   10808,
+				"proxy":  "DIRECT",
+				"udp":    true,
+				"users":  []any{},
+			},
 		}
 	}
 
 	// dns
 	if req.DNSEnable {
 		cfg["dns"] = map[string]any{
-			"enable":              true,
-			"prefer-h3":           true,
-			"listen":              "0.0.0.0:" + strconv.Itoa(req.DNSListenPort),
-			"ipv6":                false,
-			"enhanced-mode":       req.DNSEnhancedMode,
-			"fake-ip-range":       "28.0.0.1/8",
-			"fake-ip-filter":      []string{"*", "+.lan"},
-			"default-nameserver":  []string{"223.5.5.5", "223.6.6.6"},
-			"nameserver":          []string{"https://223.5.5.5/dns-query", "https://223.6.6.6/dns-query"},
+			"enable":             true,
+			"prefer-h3":          true,
+			"listen":             "0.0.0.0:" + strconv.Itoa(req.DNSListenPort),
+			"ipv6":               false,
+			"enhanced-mode":      req.DNSEnhancedMode,
+			"fake-ip-range":      "28.0.0.1/8",
+			"fake-ip-filter":     []string{"*", "+.lan"},
+			"default-nameserver": []string{"223.5.5.5", "223.6.6.6"},
+			"nameserver":         []string{"https://223.5.5.5/dns-query", "https://223.6.6.6/dns-query"},
 		}
 	}
 
