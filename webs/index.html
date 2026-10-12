@@ -1,9 +1,22 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <script>
+      // 主题防闪烁：默认深色，仅当用户明确选择过浅色时不加 dark
+      (function () {
+        try {
+          var t = localStorage.getItem("theme");
+          var light = t === "light" || t === '"light"';
+          if (!light) document.documentElement.classList.add("dark");
+        } catch (e) {
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#060a08" />
     <title>PPEELink 节点订阅管理系统</title>
   </head>
 
@@ -26,32 +39,81 @@
       height: 100%;
     }
 
+    html {
+      background: #060a08;
+    }
+
+    html:not(.dark) {
+      background: #f1f6f3;
+    }
+
+    html:not(.dark) .loader {
+      background: #ffffff;
+      box-shadow: inset 0 0 0 1px #d9e6de;
+    }
+
     .loader {
       position: relative;
-      width: 40px;
-      aspect-ratio: 0.577;
-      overflow: hidden;
-      clip-path: polygon(0 0, 100% 100%, 0 100%, 100% 0);
-      animation: l19 2s infinite linear;
+      display: grid;
+      place-items: center;
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      background: #0d1511;
+      box-shadow: inset 0 0 0 1px #1d2c24;
     }
 
     .loader::before {
       position: absolute;
-      inset: -150%;
-      content: "";
-      background: repeating-conic-gradient(
-        from 30deg,
-        #ffabab 0 60deg,
-        #abe4ff 0 120deg,
-        #ff7373 0 180deg
+      inset: 0;
+      border-radius: 14px;
+      background: conic-gradient(from 90deg, transparent 0 65%, #3ddba2 100%);
+      mask: radial-gradient(
+        farthest-side,
+        transparent calc(100% - 3px),
+        #000 calc(100% - 2px)
       );
-      animation: inherit;
-      animation-direction: reverse;
+      -webkit-mask: radial-gradient(
+        farthest-side,
+        transparent calc(100% - 3px),
+        #000 calc(100% - 2px)
+      );
+      animation: lspin 1.05s linear infinite;
+      content: "";
     }
 
-    @keyframes l19 {
+    .loader::after {
+      width: 10px;
+      height: 10px;
+      border-radius: 4px;
+      background: #3ddba2;
+      box-shadow: 0 0 18px rgba(61, 219, 162, 0.6);
+      animation: lpulse 1.4s ease-in-out infinite;
+      content: "";
+    }
+
+    @keyframes lspin {
+      to {
+        transform: rotate(1turn);
+      }
+    }
+
+    @keyframes lpulse {
+      0%,
       100% {
-        transform: rotate(360deg);
+        opacity: 0.55;
+        transform: scale(0.88);
+      }
+      50% {
+        opacity: 1;
+        transform: scale(1.12);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .loader::before,
+      .loader::after {
+        animation: none;
       }
     }
   </style>

@@ -1,128 +1,841 @@
 @use "./reset";
+@use "./fonts";
 
-/* ===== Advanced Web UI Theme (EasyCLIProxyAPI Aesthetics) ===== */
+/* =========================================================================
+   PPEELink Console — Jade Control (fresh design system)
+   Dark-first, single jade accent, hairline surfaces, cinematic motion.
+   ========================================================================= */
 
 :root {
-  --ui-accent: #0f766e;
-  --ui-accent-strong: #0b5d57;
-  --ui-accent-soft: #d9f0ec;
-  --ui-focus-ring: rgba(15, 118, 110, 0.25);
-  --ui-accent-shadow: rgba(15, 118, 110, 0.17);
-  --ui-canvas: #f6f7f5;
-  --ui-sidebar: #eef2ef;
-  --ui-surface: #fbfcfb;
-  --ui-surface-strong: #fff;
-  --ui-text: #202521;
-  --ui-text-secondary: #556159;
-  --ui-text-muted: #758078;
-  --ui-border: #dfe6e0;
-  --ui-hover: #e6ece7;
-  --ui-panel-shadow: 0 8px 24px rgba(32, 42, 36, 0.07);
-  --el-color-primary: #0f766e;
-  --el-color-primary-light-3: #4aa49c;
-  --el-color-primary-light-5: #87c3bd;
-  --el-color-primary-light-7: #b9ddd8;
-  --el-color-primary-light-8: #d9efec;
-  --el-color-primary-light-9: #eef8f6;
-  --el-color-primary-dark-2: #0b5d57;
-  
-  --el-border-radius-base: 8px; /* Inner cards/buttons */
-  --el-border-radius-small: 6px; /* Tags */
-  --el-border-radius-round: 20px;
-  --el-border-radius-circle: 100%;
+  /* --- type --- */
+  --font-sans: "Geist Sans", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
 
-  /* Transitions */
-  --el-transition-duration: 150ms;
-  --el-transition-duration-fast: 150ms;
-  --el-transition-all: all var(--el-transition-duration) ease-in-out;
+  /* --- jade accent scale --- */
+  --jade-100: #e2faf0;
+  --jade-200: #bdf3dd;
+  --jade-300: #8ae9c5;
+  --jade-400: #4fddab;
+  --jade-500: #23c98c;
+  --jade-600: #12a878;
+  --jade-700: #0b855e;
+  --jade-800: #0a6749;
+
+  /* --- semantic surfaces (light) --- */
+  --ui-accent: #0f9f74;
+  --ui-accent-strong: #087a58;
+  --ui-accent-soft: #d7f3e7;
+  --ui-focus-ring: rgba(15, 159, 116, 0.22);
+  --ui-accent-shadow: rgba(15, 159, 116, 0.18);
+  --ui-canvas: #f1f6f3;
+  --ui-sidebar: #eaf2ed;
+  --ui-surface: #f8fbf9;
+  --ui-surface-strong: #ffffff;
+  --ui-text: #14201a;
+  --ui-text-secondary: #46584e;
+  --ui-text-muted: #75887c;
+  --ui-border: #d9e6de;
+  --ui-hover: #e2ece6;
+  --ui-panel-shadow: 0 18px 40px rgba(18, 42, 31, 0.08);
+  --ui-glow: 0 0 0 1px color-mix(in srgb, var(--ui-accent) 26%, transparent),
+    0 14px 36px var(--ui-accent-shadow);
+
+  /* --- radii lock --- */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+
+  /* --- motion --- */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-fast: 140ms;
+  --dur-mid: 240ms;
+  --dur-slow: 420ms;
+
+  /* --- element plus remap (light) --- */
+  --el-color-primary: #0f9f74;
+  --el-color-primary-light-3: #4cbd9b;
+  --el-color-primary-light-5: #87d2bc;
+  --el-color-primary-light-7: #c0e8dc;
+  --el-color-primary-light-8: #d9f1e9;
+  --el-color-primary-light-9: #eef8f4;
+  --el-color-primary-dark-2: #0b7a5a;
+  --el-border-radius-base: 9px;
+  --el-border-radius-small: 6px;
+  --el-border-radius-round: 999px;
+  --el-font-family: var(--font-sans);
+
+  /* semantic states, tuned to the jade family */
+  --el-color-success: #1da97a;
+  --el-color-success-light-3: #55c398;
+  --el-color-success-light-5: #8ed8bd;
+  --el-color-success-light-7: #c5ebdd;
+  --el-color-success-light-8: #ddf3ea;
+  --el-color-success-light-9: #eff9f4;
+  --el-color-success-dark-2: #158363;
+  --el-color-warning: #c98f26;
+  --el-color-warning-light-3: #d9ad5c;
+  --el-color-warning-light-5: #e3c691;
+  --el-color-warning-light-7: #eedec6;
+  --el-color-warning-light-8: #f4ead9;
+  --el-color-warning-light-9: #faf5ec;
+  --el-color-warning-dark-2: #a1721e;
+  --el-color-danger: #cf574c;
+  --el-color-danger-light-3: #dc867e;
+  --el-color-danger-light-5: #e6aca6;
+  --el-color-danger-light-7: #efd2cf;
+  --el-color-danger-light-8: #f4e0dd;
+  --el-color-danger-light-9: #faf0ef;
+  --el-color-danger-dark-2: #a5463d;
+  --el-color-error: #cf574c;
+  --el-color-error-light-3: #dc867e;
+  --el-color-error-light-5: #e6aca6;
+  --el-color-error-light-7: #efd2cf;
+  --el-color-error-light-8: #f4e0dd;
+  --el-color-error-light-9: #faf0ef;
+  --el-color-error-dark-2: #a5463d;
+  --el-color-info: #7c8d84;
+  --el-color-info-light-3: #a3b0a9;
+  --el-color-info-light-5: #c2cbc6;
+  --el-color-info-light-7: #dee4e0;
+  --el-color-info-light-8: #eaefec;
+  --el-color-info-light-9: #f4f7f5;
+  --el-color-info-dark-2: #63716a;
 }
 
 html.dark {
-  --ui-accent: #5dd3c7;
-  --ui-accent-strong: #83e0d6;
-  --ui-accent-soft: rgba(45, 169, 158, 0.2);
-  --ui-focus-ring: rgba(93, 211, 199, 0.3);
-  --ui-accent-shadow: rgba(0, 0, 0, 0.22);
-  --ui-canvas: #111412;
-  --ui-sidebar: #171c18;
-  --ui-surface: #1a211c;
-  --ui-surface-strong: #1f2721;
-  --ui-text: #edf2ee;
-  --ui-text-secondary: #c0cac2;
-  --ui-text-muted: #8d998f;
-  --ui-border: #303b32;
-  --ui-hover: #263129;
-  --ui-panel-shadow: 0 10px 28px rgba(0, 0, 0, 0.2);
+  --ui-accent: #3ddba2;
+  --ui-accent-strong: #8aefc9;
+  --ui-accent-soft: rgba(61, 219, 162, 0.14);
+  --ui-focus-ring: rgba(61, 219, 162, 0.26);
+  --ui-accent-shadow: rgba(0, 0, 0, 0.42);
+  --ui-canvas: #060a08;
+  --ui-sidebar: #090f0c;
+  --ui-surface: #0d1511;
+  --ui-surface-strong: #111b15;
+  --ui-text: #e9f4ee;
+  --ui-text-secondary: #a6bab0;
+  --ui-text-muted: #6d8177;
+  --ui-border: #1d2c24;
+  --ui-hover: #152219;
+  --ui-panel-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
+  --ui-glow: 0 0 0 1px color-mix(in srgb, var(--ui-accent) 34%, transparent),
+    0 12px 40px rgba(0, 0, 0, 0.5);
+
+  /* brighter jade primaries for dark surfaces */
+  --el-color-primary: #34d69d !important;
+  --el-color-primary-light-3: #6fe2ba !important;
+  --el-color-primary-light-5: #9aecd0 !important;
+  --el-color-primary-light-7: #c3f4e3 !important;
+  --el-color-primary-light-8: #d8f8ed !important;
+  --el-color-primary-light-9: #edfcf6 !important;
+  --el-color-primary-dark-2: #1fae7c !important;
+  --el-color-success: #34d69d;
+  --el-color-success-light-3: #6fe2ba;
+  --el-color-success-light-5: #9aecd0;
+  --el-color-success-light-7: #c3f4e3;
+  --el-color-success-light-8: #d8f8ed;
+  --el-color-success-light-9: #edfcf6;
+  --el-color-success-dark-2: #23a87c;
+  --el-color-warning: #e0b055;
+  --el-color-warning-light-3: #e7c17f;
+  --el-color-warning-light-5: #edd4a8;
+  --el-color-warning-light-7: #f3e6cd;
+  --el-color-warning-light-8: #f6ecdb;
+  --el-color-warning-light-9: #fbf6ec;
+  --el-color-warning-dark-2: #b28a44;
+  --el-color-danger: #e07569;
+  --el-color-danger-light-3: #e7968e;
+  --el-color-danger-light-5: #edb4ae;
+  --el-color-danger-light-7: #f3d5d2;
+  --el-color-danger-light-8: #f6e3e1;
+  --el-color-danger-light-9: #fbf1f0;
+  --el-color-danger-dark-2: #b25c52;
+  --el-color-error: #e07569;
+  --el-color-error-light-3: #e7968e;
+  --el-color-error-light-5: #edb4ae;
+  --el-color-error-light-7: #f3d5d2;
+  --el-color-error-light-8: #f6e3e1;
+  --el-color-error-light-9: #fbf1f0;
+  --el-color-error-dark-2: #b25c52;
+  --el-color-info: #93a49b;
+  --el-color-info-light-3: #adb9b3;
+  --el-color-info-light-5: #c6cfca;
+  --el-color-info-light-7: #e0e6e2;
+  --el-color-info-light-8: #ecf0ee;
+  --el-color-info-light-9: #f5f8f6;
+  --el-color-info-dark-2: #75857c;
+  --el-border-color: #1d2c24;
+  --el-fill-color-blank: var(--ui-surface-strong);
 }
 
-/* Base Backgrounds - Removing app-main backgrounds to float on base html background */
-html, body {
+/* =========================================================================
+   Global canvas
+   ========================================================================= */
+
+html,
+body {
   background-color: var(--ui-canvas);
   color: var(--ui-text);
-  transition: background-color 150ms ease-in-out;
+  font-family: var(--font-sans);
 }
 
-html.dark, html.dark body { background-color: var(--ui-canvas); }
+html.dark,
+html.dark body {
+  background-color: var(--ui-canvas);
+}
 
-/* Ensure no rogue shadows on fixed header */
+/* fine grain texture — fixed, non-interactive layer only */
+body::after {
+  position: fixed;
+  z-index: 2147483000;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  content: "";
+}
+
+html.dark body::after {
+  opacity: 0.07;
+  mix-blend-mode: soft-light;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ui-accent) 30%, transparent);
+  color: var(--ui-text);
+}
+
+/* cursor spotlight — upgraded by JS, harmless without it */
+.cursor-spotlight {
+  position: fixed;
+  z-index: 2147482999;
+  top: 0;
+  left: 0;
+  width: 560px;
+  height: 560px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--ui-accent) 9%, transparent) 0%,
+    transparent 62%
+  );
+  mix-blend-mode: screen;
+  translate: -50% -50%;
+  transition: opacity 400ms ease;
+  will-change: transform;
+}
+
+.cursor-spotlight.is-on {
+  opacity: 1;
+}
+
+/* =========================================================================
+   Motion primitives
+   ========================================================================= */
+
+.reveal {
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateY(20px);
+  transition:
+    opacity 700ms var(--ease-out) var(--reveal-delay, 0ms),
+    transform 700ms var(--ease-out) var(--reveal-delay, 0ms),
+    filter 700ms var(--ease-out) var(--reveal-delay, 0ms);
+  will-change: transform, opacity, filter;
+}
+
+.reveal-in {
+  opacity: 1;
+  filter: none;
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1 !important;
+    filter: none !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+.nav-stagger .el-menu-item,
+.nav-stagger .el-sub-menu__title {
+  opacity: 0;
+  animation: nav-item-in 520ms var(--ease-out) both;
+  animation-delay: calc(var(--nav-i, 0) * 36ms);
+}
+
+@keyframes nav-item-in {
+  from {
+    opacity: 0;
+    transform: translateX(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes jade-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--ui-accent) 45%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 9px transparent;
+  }
+}
+
+@keyframes aurora-drift {
+  0%,
+  100% {
+    transform: translate3d(-4%, -3%, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(5%, 4%, 0) scale(1.12);
+  }
+}
+
+@keyframes dash-flow {
+  to {
+    stroke-dashoffset: -240;
+  }
+}
+
+/* =========================================================================
+   App shell
+   ========================================================================= */
+
+.app-main {
+  color: var(--ui-text);
+}
+
+.sidebar-container {
+  background: var(--ui-sidebar) !important;
+  border-right: 1px solid var(--ui-border);
+}
+
+/* jade edge light on the active rail */
+.sidebar-container::after {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  width: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    color-mix(in srgb, var(--ui-accent) 30%, transparent) 30%,
+    color-mix(in srgb, var(--ui-accent) 30%, transparent) 70%,
+    transparent
+  );
+  content: "";
+}
+
+.navbar-container {
+  padding: 0 18px 0 10px;
+}
+
 .fixed-header {
-  box-shadow: none !important;
-  border-bottom: none !important;
-  background: transparent !important;
+  backdrop-filter: blur(18px) saturate(1.2);
+  background: color-mix(in srgb, var(--ui-canvas) 78%, transparent) !important;
 }
 
-/* Sidebar Menu Tweaks for "Pill Shape" modern feel */
+/* =========================================================================
+   Element Plus — menu
+   ========================================================================= */
+
 .el-menu {
   border-right: none !important;
   background-color: transparent !important;
 }
+
 .el-menu-item {
-  border-radius: 10px !important;
-  margin: 3px 16px !important;
   height: 46px !important;
-  line-height: 46px !important;
+  margin: 3px 14px !important;
+  border-radius: var(--r-md) !important;
   color: var(--ui-text-secondary) !important;
   font-weight: 600;
-  transition: background 140ms ease,color 140ms ease,transform 140ms ease,box-shadow 140ms ease !important;
+  line-height: 46px !important;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-mid) var(--ease-spring),
+    box-shadow var(--dur-mid) ease !important;
 }
+
 html.dark .el-menu-item {
-  color: #a1a1aa !important;
+  color: var(--ui-text-secondary) !important;
 }
-.el-menu-item.is-active {
-  background: var(--ui-accent-soft) !important;
-  color: var(--ui-accent-strong) !important;
-  font-weight: 700;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--ui-accent) 22%,transparent),0 4px 12px var(--ui-accent-shadow);
-}
+
 .el-menu-item:hover:not(.is-active) {
   background-color: var(--ui-hover) !important;
-  transform: translateX(2px);
-}
-html.dark .el-menu-item:hover:not(.is-active) {
-  background-color: rgba(255, 255, 255, 0.04) !important;
+  transform: translateX(4px);
 }
 
-/* Global Transition for Interactive Elements */
-a, button, input, textarea, .el-button, .el-input__wrapper, .el-card {
-  transition: all 150ms ease-in-out !important;
+.el-menu-item.is-active {
+  color: var(--ui-accent-strong) !important;
+  background: var(--ui-accent-soft) !important;
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ui-accent) 26%, transparent),
+    0 6px 18px var(--ui-accent-shadow);
 }
 
-/* Modals & Dialogs Shadow */
-.el-dialog, .el-drawer, .el-message-box, .el-popover {
-  border-radius: 14px !important;
+.el-menu-item.is-active::before {
+  position: absolute;
+  top: 50%;
+  left: -9px;
+  width: 3px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background: var(--ui-accent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ui-accent) 70%, transparent);
+  transform: translateY(-50%);
+  animation: jade-pulse 2.4s ease-out infinite;
+  content: "";
+}
+
+.el-sub-menu__title {
+  height: 46px !important;
+  margin: 3px 14px !important;
+  border-radius: var(--r-md);
+  color: var(--ui-text-secondary) !important;
+  font-weight: 600;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-mid) var(--ease-spring) !important;
+}
+
+.el-sub-menu__title:hover {
+  background: var(--ui-hover) !important;
+  transform: translateX(4px);
+}
+
+.el-sub-menu__icon-arrow {
+  transition: transform 200ms var(--ease-out) !important;
+}
+
+.el-sub-menu.is-opened > .el-sub-menu__title {
+  color: var(--ui-text) !important;
+}
+
+/* =========================================================================
+   Element Plus — buttons (with jade sheen)
+   ========================================================================= */
+
+.el-button {
+  position: relative;
+  overflow: hidden;
+  border: none !important;
+  border-radius: var(--r-sm) !important;
+  font-weight: 600;
+  transition:
+    transform var(--dur-fast) ease,
+    box-shadow var(--dur-mid) ease,
+    filter var(--dur-fast) ease !important;
+}
+
+.el-button:not(.is-text):not(.is-link) {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+}
+
+.el-button:hover {
+  transform: translateY(-1px);
+  filter: saturate(1.06);
+}
+
+.el-button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.el-button--primary:not(.is-text):not(.is-link) {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ui-accent) 40%, transparent),
+    0 10px 26px var(--ui-accent-shadow) !important;
+}
+
+html.dark .el-button--primary:not(.is-text):not(.is-link) {
+  --el-button-text-color: #05231a;
+  --el-button-hover-text-color: #05231a;
+  --el-button-active-text-color: #05231a;
+  font-weight: 700;
+}
+
+html.dark .el-button--success:not(.is-text):not(.is-link),
+html.dark .el-button--warning:not(.is-text):not(.is-link),
+html.dark .el-button--danger:not(.is-text):not(.is-link),
+html.dark .el-button--error:not(.is-text):not(.is-link) {
+  --el-button-text-color: #08211a;
+  --el-button-hover-text-color: #08211a;
+  --el-button-active-text-color: #08211a;
+  font-weight: 700;
+}
+
+.el-button--primary:not(.is-text):not(.is-link)::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -80%;
+  width: 50%;
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  transform: skewX(-18deg);
+  transition: left 520ms var(--ease-out);
+  content: "";
+  pointer-events: none;
+}
+
+html.dark .el-button--primary:not(.is-text):not(.is-link)::after {
+  background: linear-gradient(
+    100deg,
+    transparent,
+    rgba(255, 255, 255, 0.5),
+    transparent
+  );
+}
+
+.el-button--primary:not(.is-text):not(.is-link):hover::after {
+  left: 130%;
+}
+
+/* =========================================================================
+   Element Plus — inputs
+   ========================================================================= */
+
+.el-input__wrapper,
+.el-textarea__inner {
+  border-radius: var(--r-sm) !important;
+  border: none !important;
+  background-color: var(--ui-surface-strong);
+  box-shadow: inset 0 0 0 1px var(--ui-border) !important;
+  transition:
+    box-shadow var(--dur-mid) ease,
+    transform var(--dur-mid) var(--ease-out);
+}
+
+html.dark .el-input__wrapper,
+html.dark .el-textarea__inner {
+  background-color: var(--ui-surface-strong);
+  box-shadow: inset 0 0 0 1px var(--ui-border) !important;
+}
+
+.el-input__wrapper:hover,
+.el-textarea__inner:hover {
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--ui-accent) 42%, var(--ui-border)) !important;
+}
+
+.el-input__wrapper.is-focus,
+.el-textarea__inner:focus {
+  box-shadow:
+    inset 0 0 0 1px var(--ui-accent),
+    0 0 0 3px var(--ui-focus-ring) !important;
+}
+
+/* =========================================================================
+   Element Plus — cards, tables, tags, dialogs, dropdowns
+   ========================================================================= */
+
+.el-card,
+.app-container .el-card,
+.search-container {
+  border: none !important;
+  border-radius: var(--r-lg);
+  background-color: var(--ui-surface-strong);
+  box-shadow:
+    inset 0 0 0 1px var(--ui-border),
+    var(--ui-panel-shadow) !important;
+  transition:
+    box-shadow var(--dur-mid) ease,
+    transform var(--dur-mid) var(--ease-out) !important;
+}
+
+.el-card:hover,
+.search-container:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--ui-accent) 24%, var(--ui-border)),
+    0 22px 48px color-mix(in srgb, var(--ui-accent-shadow) 60%, transparent) !important;
+}
+
+.el-table {
+  border: none !important;
+  border-radius: var(--r-md);
+  --el-table-border-color: transparent !important;
+  --el-table-header-bg-color: transparent;
+  --el-table-bg-color: transparent;
+  --el-table-tr-bg-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--ui-border) !important;
+}
+
+.el-table th.el-table__cell {
+  background-color: color-mix(in srgb, var(--ui-surface) 80%, transparent) !important;
+  border-bottom: 1px solid var(--ui-border) !important;
+  color: var(--ui-text-secondary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.el-table__row td.el-table__cell {
+  border-bottom: 1px solid color-mix(in srgb, var(--ui-border) 55%, transparent) !important;
+  transition: background-color var(--dur-fast) ease;
+}
+
+.el-table__row:hover > td.el-table__cell {
+  background: var(--ui-hover) !important;
+}
+
+.el-tag {
+  border: none !important;
+  border-radius: var(--r-xs) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-border) 90%, transparent) !important;
+  font-weight: 600;
+}
+
+.el-dialog,
+.el-drawer,
+.el-message-box,
+.el-popover {
   border: 1px solid var(--ui-border) !important;
+  border-radius: var(--r-lg) !important;
   background: var(--ui-surface-strong) !important;
-  box-shadow: 0 18px 50px rgba(24, 40, 31, 0.16) !important;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.35) !important;
 }
 
-html.dark .el-dialog, html.dark .el-drawer, html.dark .el-message-box, html.dark .el-popover {
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4) !important;
+html:not(.dark) .el-dialog,
+html:not(.dark) .el-drawer,
+html:not(.dark) .el-message-box {
+  box-shadow: 0 32px 80px rgba(18, 42, 31, 0.18) !important;
 }
 
-/* Mobile safety net: page-level components can still provide tighter rules, but
- * no fixed desktop dialog/drawer is allowed to overflow a phone viewport. */
+.el-overlay {
+  backdrop-filter: blur(6px);
+}
+
+.dialog-fade-enter-active .el-dialog {
+  animation: jade-dialog-in 300ms var(--ease-out);
+}
+
+@keyframes jade-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.el-drawer {
+  animation-duration: 300ms !important;
+}
+
+.el-popper.is-pure,
+.el-select__popper,
+.el-dropdown__popper {
+  overflow: hidden;
+  border: 1px solid var(--ui-border) !important;
+  border-radius: var(--r-md) !important;
+  background: var(--ui-surface-strong) !important;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28) !important;
+}
+
+.el-dropdown-menu {
+  min-width: 158px;
+  padding: 6px !important;
+  background: var(--ui-surface-strong) !important;
+}
+
+.el-dropdown-menu__item {
+  min-height: 38px;
+  padding: 0 11px !important;
+  border-radius: var(--r-xs);
+  color: var(--ui-text-secondary) !important;
+  font-weight: 600;
+  transition:
+    background var(--dur-fast) ease,
+    color var(--dur-fast) ease,
+    transform var(--dur-fast) ease;
+}
+
+.el-dropdown-menu__item:not(.is-disabled):focus,
+.el-dropdown-menu__item:not(.is-disabled):hover {
+  background: var(--ui-hover) !important;
+  color: var(--ui-text) !important;
+  transform: translateX(3px);
+}
+
+.el-select-dropdown__item {
+  margin: 2px 5px;
+  border-radius: var(--r-xs);
+  color: var(--ui-text-secondary);
+  transition: background var(--dur-fast) ease;
+}
+
+.el-select-dropdown__item.hover,
+.el-select-dropdown__item:hover {
+  background: var(--ui-hover) !important;
+  color: var(--ui-text);
+}
+
+.el-select-dropdown__item.is-selected {
+  color: var(--ui-accent-strong) !important;
+  background: var(--ui-accent-soft) !important;
+}
+
+.el-segmented {
+  padding: 4px !important;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--r-sm) !important;
+  background: var(--ui-hover) !important;
+}
+
+.el-segmented__item {
+  border-radius: var(--r-xs) !important;
+  transition:
+    color var(--dur-fast) ease,
+    background var(--dur-fast) ease,
+    box-shadow var(--dur-fast) ease !important;
+}
+
+.el-segmented__item-selected {
+  background: var(--ui-surface-strong) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14) !important;
+}
+
+.el-pagination.is-background .el-pager li {
+  border: none !important;
+  border-radius: var(--r-xs) !important;
+  box-shadow: inset 0 0 0 1px var(--ui-border) !important;
+  transition: transform var(--dur-fast) var(--ease-spring);
+}
+
+.el-pagination.is-background .el-pager li:hover {
+  transform: translateY(-1px);
+}
+
+.el-loading-mask {
+  background-color: color-mix(in srgb, var(--ui-surface-strong) 70%, transparent) !important;
+  backdrop-filter: blur(3px);
+}
+
+/* progress bar */
+#nprogress .bar {
+  background: linear-gradient(
+    90deg,
+    var(--ui-accent),
+    var(--jade-300)
+  ) !important;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--ui-accent) 60%, transparent);
+}
+
+#nprogress .peg {
+  box-shadow:
+    0 0 10px var(--ui-accent),
+    0 0 6px var(--ui-accent) !important;
+}
+
+/* =========================================================================
+   Helpers used by views
+   ========================================================================= */
+
+.link-type,
+.link-type:focus {
+  color: var(--el-color-primary);
+  cursor: pointer;
+}
+
+.link-type:hover {
+  color: var(--el-color-primary-light-3);
+}
+
+.search-container {
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.table-container > .el-card__header {
+  padding: 16px 24px;
+}
+
+/* =========================================================================
+   Scrollbar
+   ========================================================================= */
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: var(--r-pill);
+  background-clip: content-box;
+  background-color: color-mix(in srgb, var(--ui-text-muted) 40%, transparent);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--ui-accent) 55%, transparent);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* =========================================================================
+   A11y
+   ========================================================================= */
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--ui-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .cursor-spotlight {
+    display: none;
+  }
+}
+
+/* =========================================================================
+   Mobile safety net
+   ========================================================================= */
+
 @media (max-width: 720px) {
-  html, body, #app {
+  html,
+  body,
+  #app {
     width: 100%;
     min-width: 0;
     max-width: 100%;
@@ -133,7 +846,7 @@ html.dark .el-dialog, html.dark .el-drawer, html.dark .el-message-box, html.dark
     width: calc(100vw - 20px) !important;
     max-width: calc(100vw - 20px) !important;
     margin: 10px auto !important;
-    border-radius: 12px !important;
+    border-radius: var(--r-md) !important;
   }
 
   .el-dialog__header {
@@ -198,204 +911,8 @@ html.dark .el-dialog, html.dark .el-drawer, html.dark .el-message-box, html.dark
     max-width: 100%;
   }
 
-  pre, code {
+  pre,
+  code {
     max-width: 100%;
   }
 }
-
-/* Cards (Outer Panels) */
-.app-container .el-card,
-.el-card,
-.search-container {
-  border-radius: 12px;
-  border: none !important; /* Remove solid border */
-  background-color: var(--ui-surface-strong);
-  box-shadow: inset 0 0 0 1px var(--ui-border), var(--ui-panel-shadow) !important;
-  --el-card-padding: 24px; /* More breathing room */
-}
-
-html.dark .app-container .el-card,
-html.dark .el-card,
-html.dark .search-container {
-  background-color: #1a1d1b;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
-}
-
-/* Buttons (Inner Elements) */
-.el-button {
-  border-radius: 8px !important;
-  border: none !important;
-  font-weight: 500;
-}
-.el-button:not(.is-text):not(.is-link) {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1) !important;
-}
-.el-button--primary:not(.is-text):not(.is-link) {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2) !important;
-}
-html.dark .el-button:not(.is-text):not(.is-link) {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15) !important;
-}
-html.dark .el-button--primary:not(.is-text):not(.is-link) {
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* Hover/Focus States for Buttons */
-.el-button:hover {
-  transform: translateY(-1px);
-  filter: saturate(1.04);
-}
-.el-button:active {
-  transform: translateY(0);
-}
-
-/* Inputs & Textareas */
-.el-input__wrapper,
-.el-textarea__inner {
-  border-radius: 8px !important;
-  border: none !important;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
-  background-color: var(--ui-surface-strong);
-}
-
-.el-input__wrapper.is-focus,
-.el-textarea__inner:focus {
-  box-shadow: inset 0 0 0 1px var(--el-color-primary), 0 0 0 3px var(--ui-focus-ring) !important;
-}
-
-html.dark .el-input__wrapper,
-html.dark .el-textarea__inner {
-  background-color: #161917;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
-}
-html.dark .el-input__wrapper.is-focus,
-html.dark .el-textarea__inner:focus {
-  box-shadow: inset 0 0 0 1px var(--el-color-primary), 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
-}
-
-/* Table */
-.el-table {
-  border-radius: 12px;
-  --el-table-border-color: transparent !important;
-  border: none !important;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
-}
-
-html.dark .el-table {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
-  background-color: #1a1d1b;
-}
-
-.el-table th.el-table__cell {
-  background-color: #fafafa !important;
-  font-weight: 600;
-  color: #3f3f46;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.04) !important;
-}
-
-html.dark .el-table th.el-table__cell {
-  background-color: #161917 !important;
-  color: #d4d4d8;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
-}
-
-/* Tags */
-.el-tag {
-  border-radius: 6px !important;
-  border: none !important;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05) !important;
-}
-html.dark .el-tag {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Pagination */
-.el-pagination.is-background .el-pager li {
-  border-radius: 8px !important;
-  border: none !important;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
-}
-html.dark .el-pagination.is-background .el-pager li {
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Search Container Specifics */
-.search-container {
-  padding: 24px;
-  margin-bottom: 16px;
-}
-
-/* Table Header Padding Fix */
-.table-container > .el-card__header {
-  padding: 16px 24px;
-}
-
-/* Links */
-.link-type, .link-type:focus {
-  color: var(--el-color-primary);
-  cursor: pointer;
-}
-.link-type:hover {
-  color: var(--el-color-primary-light-3);
-}
-
-/* Scrollbar tweaks to look more modern */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-}
-html.dark ::-webkit-scrollbar-thumb {
-  background-color: rgba(255, 255, 255, 0.2);
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-/* EasyCLI-style application shell */
-.sidebar-container { background: var(--ui-sidebar) !important; border-right: 1px solid var(--ui-border); }
-.navbar-container { padding: 0 18px 0 10px; }
-.fixed-header { backdrop-filter: blur(14px); background: color-mix(in srgb,var(--ui-canvas) 84%,transparent) !important; }
-.app-main { color: var(--ui-text); }
-
-/* Submenu headers use the same motion and selected language as leaf items. */
-.el-sub-menu__title { height:46px !important; margin:3px 16px !important; border-radius:10px; color:var(--ui-text-secondary) !important; font-weight:600; transition:background 140ms ease,color 140ms ease,transform 140ms ease !important; }
-.el-sub-menu__title:hover { background:var(--ui-hover) !important; transform:translateX(2px); }
-.el-sub-menu__icon-arrow { transition:transform 180ms cubic-bezier(.22,1,.36,1) !important; }
-.el-sub-menu.is-opened > .el-sub-menu__title { color:var(--ui-text) !important; }
-
-/* Dropdowns: compact floating surface, arrow rotation and soft entrance. */
-.el-popper.is-pure,.el-select__popper,.el-dropdown__popper { border:1px solid var(--ui-border) !important; border-radius:10px !important; background:var(--ui-surface-strong) !important; box-shadow:0 14px 34px rgba(31,45,36,.16) !important; overflow:hidden; }
-.el-dropdown-menu { min-width:158px; padding:6px !important; background:var(--ui-surface-strong) !important; }
-.el-dropdown-menu__item { min-height:38px; padding:0 11px !important; border-radius:7px; color:var(--ui-text-secondary) !important; font-weight:600; transition:background 120ms ease,color 120ms ease,transform 120ms ease; }
-.el-dropdown-menu__item:not(.is-disabled):focus,.el-dropdown-menu__item:not(.is-disabled):hover { background:var(--ui-hover) !important; color:var(--ui-text) !important; transform:translateX(2px); }
-.el-select-dropdown__item { margin:2px 5px; border-radius:7px; color:var(--ui-text-secondary); transition:background 120ms ease,color 120ms ease; }
-.el-select-dropdown__item.hover,.el-select-dropdown__item:hover { background:var(--ui-hover) !important; color:var(--ui-text); }
-.el-select-dropdown__item.is-selected { color:var(--ui-accent-strong) !important; background:var(--ui-accent-soft) !important; }
-.el-zoom-in-top-enter-active,.el-zoom-in-top-leave-active { transform-origin:top center; transition:opacity 150ms ease,transform 180ms cubic-bezier(.22,1,.36,1) !important; }
-.el-zoom-in-top-enter-from,.el-zoom-in-top-leave-to { opacity:0; transform:translateY(-5px) scale(.985); }
-
-/* Segmented controls and tabs */
-.el-segmented { padding:4px !important; border:1px solid var(--ui-border); border-radius:9px !important; background:var(--ui-hover) !important; }
-.el-segmented__item { border-radius:6px !important; transition:color 150ms ease,background 150ms ease,box-shadow 150ms ease !important; }
-.el-segmented__item-selected { background:var(--ui-surface-strong) !important; box-shadow:0 1px 3px rgba(0,0,0,.08) !important; }
-.el-tabs__item { transition:color 140ms ease !important; }
-
-/* Dialog and drawer motion */
-.dialog-fade-enter-active .el-overlay-dialog,.dialog-fade-leave-active .el-overlay-dialog { transition:opacity 160ms ease !important; }
-.dialog-fade-enter-active .el-dialog { animation:ui-dialog-in 220ms cubic-bezier(.22,1,.36,1); }
-@keyframes ui-dialog-in { from { opacity:0; transform:translateY(10px) scale(.985); } to { opacity:1; transform:none; } }
-.el-drawer { animation-duration:220ms !important; }
-
-/* Tables and cards feel interactive without becoming noisy. */
-.el-table__row td { transition:background-color 120ms ease; }
-.el-table__row:hover > td.el-table__cell { background:var(--ui-hover) !important; }
-.el-card,.bg-white { transition:box-shadow 160ms ease,border-color 160ms ease,transform 160ms ease !important; }
-.el-loading-mask { backdrop-filter:blur(2px); background-color:color-mix(in srgb,var(--ui-surface-strong) 72%,transparent) !important; }
-.el-loading-spinner .circular { animation:loading-rotate 1.15s linear infinite; }
-
-button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible { outline:3px solid var(--ui-focus-ring); outline-offset:2px; }
-@media (prefers-reduced-motion: reduce) { *,*::before,*::after { scroll-behavior:auto !important; animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; } }

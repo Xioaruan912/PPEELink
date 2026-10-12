@@ -1,5 +1,8 @@
 <template>
   <div class="wh-full" :class="classObj">
+    <!-- 极光环境层（固定装饰，不拦截交互） -->
+    <div class="shell-aurora" aria-hidden="true"></div>
+
     <!-- 遮罩层 -->
     <div
       v-if="classObj.mobile && classObj.openSidebar"
@@ -110,6 +113,31 @@ function toggleSidebar() {
 </script>
 
 <style lang="scss" scoped>
+.shell-aurora {
+  position: fixed;
+  z-index: 0;
+  inset: -14% -8%;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      34% 30% at 68% 10%,
+      color-mix(in srgb, var(--ui-accent) 6%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      28% 26% at 18% 86%,
+      color-mix(in srgb, var(--jade-300) 5%, transparent),
+      transparent 72%
+    );
+  animation: aurora-drift 30s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell-aurora {
+    animation: none;
+  }
+}
+
 .fixed-header {
   position: fixed;
   top: 0;

@@ -30,6 +30,6 @@ const setTheme = (value: ThemeEnum) => settingsStore.changeTheme(value);
 .theme-selector button.active { color:var(--ui-text); background:var(--ui-surface-strong); box-shadow:inset 0 0 0 1px var(--ui-border),0 1px 2px rgba(24,40,31,.06); }
 .sidebar-version { display:flex; align-items:center; gap:7px; margin-top:11px; padding:0 3px; color:var(--ui-text-muted); font-size:11px; }
 .sidebar-version small { margin-left:auto; }
-.status-dot { width:7px; height:7px; border-radius:50%; background:#22a06b; box-shadow:0 0 0 3px rgba(34,160,107,.13); }
+.status-dot { width:7px; height:7px; border-radius:50%; background:var(--ui-accent); box-shadow:0 0 0 3px var(--ui-accent-soft); animation:jade-pulse 3s ease-out infinite; }
 .hideSidebar & { display:none; }
 </style>

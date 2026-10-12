@@ -80,9 +80,36 @@ const cachedViews = computed(() => useTagsViewStore().cachedViews); // 缓存页
 </style>
 
 <style>
-.page-shift-enter-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.22,1,.36,1); }
-.page-shift-leave-active { transition: opacity 110ms ease; }
-.page-shift-enter-from { opacity:0; transform:translateY(7px); }
-.page-shift-leave-to { opacity:0; }
-@media (prefers-reduced-motion: reduce) { .page-shift-enter-active,.page-shift-leave-active { transition:none; } }
+.page-shift-enter-active {
+  transition:
+    opacity 280ms ease,
+    transform 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.page-shift-leave-active {
+  transition:
+    opacity 150ms ease,
+    transform 220ms ease,
+    filter 220ms ease;
+}
+
+.page-shift-enter-from {
+  opacity: 0;
+  filter: blur(9px);
+  transform: translateY(16px) scale(0.996);
+}
+
+.page-shift-leave-to {
+  opacity: 0;
+  filter: blur(5px);
+  transform: translateY(-8px) scale(0.998);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-shift-enter-active,
+  .page-shift-leave-active {
+    transition: none;
+  }
+}
 </style>
