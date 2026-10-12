@@ -2,51 +2,39 @@
   <div class="p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
     <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] flex flex-col overflow-hidden min-h-[500px]">
       
-      <!-- Toolbar -->
-      <div class="p-5 border-b border-gray-100 dark:border-white/5 flex gap-3 items-center justify-between">
-        <div class="text-lg font-medium text-gray-800 dark:text-gray-200">机场数据源管理</div>
-        <el-button type="primary" @click="handleAdd"><el-icon class="mr-1"><Plus /></el-icon>添加机场</el-button>
-      </div>
+      <PageHero title="机场管理" desc="机场订阅源与同步状态；同步会拉取最新节点并按机场名称分组归类。">
+        <template #actions>
+          <el-button type="primary" @click="handleAdd"><el-icon class="mr-1"><Plus /></el-icon>添加机场</el-button>
+        </template>
+        <template #stats>
+          <StatStrip :items="airportStats" />
+        </template>
+      </PageHero>
 
-      <!-- Table -->
-      <div class="p-5 bg-gray-50/30 dark:bg-black/10 flex-1">
-        <el-table :data="tableData" v-loading="loading" class="w-full">
-          <el-table-column prop="ID" label="ID" width="80" />
-          <el-table-column prop="Name" label="机场名称" min-width="150">
-            <template #default="{ row }">
-              <span class="font-medium text-gray-800 dark:text-gray-200">{{ row.Name }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="URL" label="订阅链接" min-width="250">
-            <template #default="{ row }">
-              <div class="truncate text-xs text-gray-500" :title="row.URL">{{ row.URL }}</div>
-            </template>
-          </el-table-column>
-          <el-table-column label="自动清理死节点" width="130" align="center">
-            <template #default="{ row }">
-              <el-tag :type="row.AutoCleanup ? 'success' : 'info'" size="small">{{ row.AutoCleanup ? '是' : '否' }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="专线(测活免死)" width="130" align="center">
-            <template #default="{ row }">
-              <el-tag :type="row.IsDedicated ? 'warning' : 'info'" size="small">{{ row.IsDedicated ? '专线免死' : '常规丢弃' }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="NodeCount" label="存活节点" width="100" align="center" />
-          <el-table-column label="上次同步" width="160">
-            <template #default="{ row }">
-              <span class="text-xs text-gray-500">{{ row.LastSync ? new Date(row.LastSync).toLocaleString() : '从未同步' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="280" fixed="right" align="center">
-            <template #default="{ row }">
-              <el-button link type="success" size="small" @click="handleSync(row)">测活&同步</el-button>
-              <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
-              <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
-              <el-button link type="danger" size="small" @click="handleDel(row)">删除</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
+      <div class="p-4">
+        <div v-loading="loading" class="ap-grid">
+          <article v-for="row in tableData" :key="row.ID" class="ap-card">
+            <header class="ap-head">
+              <div class="ap-title"><b>{{ row.Name }}</b><small :title="row.URL">{{ row.URL }}</small></div>
+              <StatusPill :tone="row.LastSync ? 'ok' : 'info'" :text="row.LastSync ? '已同步' : '未同步'" />
+            </header>
+            <div class="ap-meta">
+              <span>存活节点 <b>{{ row.NodeCount || 0 }}</b></span>
+              <span>{{ row.AutoCleanup ? '自动清理死节点' : '保留死节点' }}</span>
+              <span>{{ row.IsDedicated ? '专线免死' : '常规丢弃' }}</span>
+            </div>
+            <footer class="ap-foot">
+              <span class="ap-time">{{ row.LastSync ? new Date(row.LastSync).toLocaleString() : '从未同步' }}</span>
+              <span class="ap-actions">
+                <el-button link type="success" size="small" @click="handleSync(row)">测活同步</el-button>
+                <el-button link type="primary" size="small" @click="openDetail(row)">详情</el-button>
+                <el-button link type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
+                <el-button link type="danger" size="small" @click="handleDel(row)">删除</el-button>
+              </span>
+            </footer>
+          </article>
+          <EmptyState v-if="!loading && !tableData.length" title="还没有机场" desc="点击右上角“添加机场”，填入订阅链接后执行一次同步。" />
+        </div>
       </div>
     </div>
 
@@ -172,6 +160,17 @@ const nodeRtt = (name: string) => {
   const v = rttMap.value[name]
   return v === undefined ? -2 : v // -2 表示未知(加载中)
 }
+
+const airportStats = computed(() => {
+  const list: any[] = tableData.value || []
+  const nodes = list.reduce((a: number, r: any) => a + (r.NodeCount || 0), 0)
+  const synced = list.filter((r: any) => r.LastSync).length
+  return [
+    { label: '机场数', value: list.length },
+    { label: '存活节点', value: nodes, tone: 'ok' as const },
+    { label: '已同步', value: synced },
+  ]
+})
 
 const openDetail = async (row: any) => {
   drawerVisible.value = true
@@ -408,4 +407,17 @@ onMounted(() => {
   .detail-body .node-cell-meta { align-items: flex-end; flex-direction: column; gap: 3px; }
   .detail-body .node-select-foot :deep(.el-button) { width: 100%; margin-left: 0; }
 }
+.ap-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.ap-card{display:flex;flex-direction:column;gap:10px;padding:16px 16px 12px;border:1px solid var(--ui-border);border-radius:var(--r-lg);background:var(--ui-surface-strong);box-shadow:0 10px 30px color-mix(in srgb,var(--ui-accent-shadow) 30%,transparent);transition:transform var(--dur-mid) var(--ease-out),box-shadow var(--dur-mid) ease,border-color var(--dur-mid) ease}
+.ap-card:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--ui-accent) 32%,var(--ui-border));box-shadow:0 16px 34px color-mix(in srgb,var(--ui-accent-shadow) 55%,transparent)}
+.ap-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.ap-title{display:flex;min-width:0;flex-direction:column;gap:3px}
+.ap-title b{color:var(--ui-text);font-size:14px;font-weight:700}
+.ap-title small{overflow:hidden;color:var(--ui-text-muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.ap-meta{display:flex;flex-wrap:wrap;gap:8px;color:var(--ui-text-secondary);font-size:11.5px}
+.ap-meta b{color:var(--ui-text);font-family:var(--font-mono)}
+.ap-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:9px;border-top:1px solid color-mix(in srgb,var(--ui-border) 65%,transparent)}
+.ap-time{color:var(--ui-text-muted);font-size:11px}
+.ap-actions{display:flex;align-items:center}
+@media(max-width:720px){.ap-grid{grid-template-columns:1fr}.ap-foot{flex-direction:column;align-items:stretch;gap:6px}.ap-actions{flex-wrap:wrap}}
 </style>

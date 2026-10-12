@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { getRuleSources, getRuleCatalog, getRulePreview, getRuleUpdateImpact, applyRuleUpdate, getRuleSnapshots, rollbackRule, getRuleTemplateGroups, syncRuleCatalog, applyRulesToTemplate } from "@/api/rules";
+import { getRuleSources, getRuleCatalog, getRulePreview, getRuleUpdateImpact, applyRuleUpdate, getRuleTemplateGroups, syncRuleCatalog, applyRulesToTemplate } from "@/api/rules";
 import { getTemp } from "@/api/template/temp";
 
 type RuleItem = {
@@ -36,7 +36,6 @@ const impactOpen = ref(false);
 const impactLoading = ref(false);
 const impactRule = ref<RuleItem | null>(null);
 const impact = ref<any>(null);
-const snapshots = ref<any[]>([]);
 const importOpen = ref(false);
 const importLoading = ref(false);
 const importItems = ref<RuleItem[]>([]);
@@ -129,23 +128,29 @@ async function openPreview(row: RuleItem) {
   }
 }
 
+const ruleStats = computed(() => {
+  const list: any[] = sources.value || []
+  const cached = list.reduce((a: number, s: any) => a + (s.cachedCount || 0), 0)
+  const catalogs = list.reduce((a: number, s: any) => a + (s.count || 0), 0)
+  return [
+    { label: '来源', value: list.length },
+    { label: '规则目录', value: catalogs },
+    { label: '已缓存', value: cached, tone: 'ok' as const },
+  ]
+})
+
 async function openImpact(row:RuleItem) {
-  impactRule.value = row; impactOpen.value = true; impactLoading.value = true; impact.value = null; snapshots.value = [];
+  impactRule.value = row; impactOpen.value = true; impactLoading.value = true; impact.value = null;
   try {
-    const [previewRes, snapshotsRes] = await Promise.all([getRuleUpdateImpact(row.externalId), getRuleSnapshots(row.externalId)]);
-    impact.value = previewRes?.data || null; snapshots.value = Array.isArray(snapshotsRes?.data) ? snapshotsRes.data : [];
+    const previewRes = await getRuleUpdateImpact(row.externalId);
+    impact.value = previewRes?.data || null;
   } catch (e:any) { impact.value = { error: typeof e === 'string' ? e : e?.message || '更新影响预览失败' }; }
   finally { impactLoading.value = false; }
 }
 async function applyUpdateNow() {
   if (!impactRule.value) return;
-  await ElMessageBox.confirm(`确认更新「${impactRule.value.name}」？系统会先保留当前可回滚快照。`, '应用规则更新', { type:'warning' });
-  await applyRuleUpdate(impactRule.value.externalId); ElMessage.success('规则已更新，旧版本已保留'); await loadCatalog(); await openImpact(impactRule.value);
-}
-async function rollbackSnapshot(snapshotId:number) {
-  if (!impactRule.value) return;
-  await ElMessageBox.confirm('回滚到这份规则快照？当前版本也会先保留为快照。', '回滚规则', { type:'warning' });
-  await rollbackRule(impactRule.value.externalId, snapshotId); ElMessage.success('规则已回滚'); await loadCatalog(); await openImpact(impactRule.value);
+  await ElMessageBox.confirm(`确认把「${impactRule.value.name}」更新到远端最新版本？`, '应用规则更新', { type:'warning' });
+  await applyRuleUpdate(impactRule.value.externalId); ElMessage.success('规则已更新'); await loadCatalog(); await openImpact(impactRule.value);
 }
 const ruleText = (r:any) => r ? [r.type, r.value, ...(r.options || [])].join(',') : '';
 
@@ -216,13 +221,14 @@ onMounted(async () => {
 
 <template>
   <div class="page">
-    <header class="hero">
-      <div>
-        <h2>规则中心</h2>
-        <p>从 ShuntRules 与 ios_rule_script 选择规则，预览后导入现有模板。</p>
-      </div>
-      <button class="btn" :disabled="syncing" @click="doSync">{{ syncing ? "同步中…" : "立即同步" }}</button>
-    </header>
+    <PageHero title="规则中心" desc="从 ShuntRules 与 ios_rule_script 选择规则，预览后导入现有模板。">
+      <template #actions>
+        <el-button type="primary" :disabled="syncing" @click="doSync">{{ syncing ? "同步中…" : "立即同步" }}</el-button>
+      </template>
+      <template #stats>
+        <StatStrip :items="ruleStats" />
+      </template>
+    </PageHero>
 
     <div v-if="errorText" class="alert">{{ errorText }}</div>
 
@@ -336,10 +342,9 @@ onMounted(async () => {
             <el-table :data="impact.regression || []" size="small" max-height="220"><el-table-column prop="template" label="模板" min-width="140"/><el-table-column prop="target" label="目标" min-width="110"/><el-table-column prop="domain" label="域名" min-width="180"/><el-table-column prop="policy" label="策略" min-width="120"/><el-table-column label="变化" width="140"><template #default="{row}">{{ row.beforeInSet ? '命中' : '不命中' }} → {{ row.afterInSet ? '命中' : '不命中' }}</template></el-table-column></el-table>
             <h4>Diff 样例</h4>
             <div class="diff-grid"><div><b>新增</b><pre>{{ (impact.preview.added || []).slice(0,30).map(ruleText).join('\n') || '--' }}</pre></div><div><b>删除</b><pre>{{ (impact.preview.deleted || []).slice(0,30).map(ruleText).join('\n') || '--' }}</pre></div></div>
-            <h4>可回滚快照</h4><div class="snapshot-list"><div v-for="s in snapshots" :key="s.id"><span><b>#{{ s.id }}</b> · {{ s.ruleCount }} 条 · {{ new Date(s.createdAt).toLocaleString() }}</span><button class="btn" @click="rollbackSnapshot(s.id)">回滚</button></div><div v-if="!snapshots.length" class="muted-text">尚无历史快照；第一次应用更新后会自动创建。</div></div>
-          </template>
+                      </template>
         </div>
-        <footer><button class="btn" @click="impactOpen=false">关闭</button><button class="btn primary" :disabled="impactLoading || !impact?.preview?.changed" @click="applyUpdateNow">保存快照并应用更新</button></footer>
+        <footer><button class="btn" @click="impactOpen=false">关闭</button><button class="btn primary" :disabled="impactLoading || !impact?.preview?.changed" @click="applyUpdateNow">应用更新</button></footer>
       </section>
     </div>
   </div>
@@ -347,5 +352,5 @@ onMounted(async () => {
 
 <style scoped>
 .page{padding:10px;color:var(--el-text-color-primary)}.hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}.hero h2{margin:0 0 5px;font-size:24px}.hero p,.muted-text,.batch p{margin:0;color:var(--el-text-color-secondary);font-size:13px}.btn{border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-primary);border-radius:8px;padding:9px 13px;cursor:pointer}.btn:disabled{opacity:.55;cursor:not-allowed}.btn.primary{background:var(--el-color-primary);border-color:var(--el-color-primary);color:#fff}.btn.ghost{border-color:transparent}.alert{border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:9px;padding:11px 13px;margin-bottom:12px}.sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}.source-card,.filters,.batch,.rule-card{border:1px solid var(--el-border-color-lighter);background:var(--el-bg-color);border-radius:12px}.source-card{padding:14px}.source-head,.source-foot,.list-title,.meta{display:flex;justify-content:space-between;gap:10px}.source-foot{margin-top:9px;font-size:12px;color:var(--el-text-color-secondary)}.status{font-size:12px;border-radius:999px;padding:4px 8px}.status.ok{background:#ecfdf5;color:#047857}.status.muted{background:var(--el-fill-color-light);color:var(--el-text-color-secondary)}.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:13px;margin-bottom:14px}.input{height:38px;border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-primary);border-radius:8px;padding:0 10px}.search{min-width:260px;flex:1}.chips{display:flex;gap:7px;flex-wrap:wrap;width:100%;margin-top:4px}.chip{border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-regular);padding:6px 10px;border-radius:999px;cursor:pointer}.chip.active{border-color:var(--el-color-primary);color:var(--el-color-primary);background:var(--el-color-primary-light-9)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:14px}.list-title{font-size:13px;margin-bottom:10px;color:var(--el-text-color-secondary)}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}.rule-card{padding:14px}.rule-head{display:flex;gap:9px;align-items:flex-start}.rule-head div{display:flex;flex-direction:column;gap:3px}.rule-head small{color:var(--el-text-color-secondary)}.tags{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0}.tags span{font-size:12px;background:var(--el-fill-color-light);padding:4px 7px;border-radius:6px}.meta,.summary{font-size:12px;color:var(--el-text-color-secondary)}.summary{margin-top:7px}.actions{display:flex;justify-content:flex-end;gap:12px;border-top:1px solid var(--el-border-color-lighter);padding-top:9px;margin-top:10px}.actions button,.selected-row button,.modal header button{border:0;background:transparent;color:var(--el-text-color-regular);cursor:pointer}.actions .primary-link{color:var(--el-color-primary)}.batch{padding:14px;height:max-content;position:sticky;top:12px}.batch h3{margin:0 0 5px}.selected{max-height:360px;overflow:auto;margin:12px 0}.selected-row{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--el-border-color-lighter)}.selected-row span{display:flex;flex-direction:column}.selected-row small{color:var(--el-text-color-secondary);margin-top:2px}.full{width:100%}.empty{text-align:center;color:var(--el-text-color-secondary);padding:32px 12px}.empty.small{padding:20px 8px}.skeleton{height:150px;border:1px solid var(--el-border-color-lighter);border-radius:12px;padding:14px}.skeleton i{display:block;height:14px;border-radius:7px;background:var(--el-fill-color);margin-bottom:12px;animation:pulse 1.2s infinite}.skeleton i:nth-child(1){width:45%;height:18px}.skeleton i:nth-child(2){width:70%}.skeleton i:nth-child(3){width:55%}.skeleton i:nth-child(4){width:85%}@keyframes pulse{50%{opacity:.45}}.overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}.modal{width:min(820px,95vw);max-height:88vh;overflow:auto;background:var(--el-bg-color);border-radius:14px;box-shadow:0 25px 60px rgba(0,0,0,.25)}.modal header,.modal footer{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:15px 18px;border-bottom:1px solid var(--el-border-color-lighter)}.modal footer{justify-content:flex-end;border-bottom:0;border-top:1px solid var(--el-border-color-lighter)}.modal header button{font-size:22px}.modal-body{padding:18px}.preview-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-bottom:12px}.modal pre{background:#0f172a;color:#d1fae5;border-radius:9px;padding:14px;min-height:260px;max-height:50vh;overflow:auto;font-size:12px;line-height:1.55}.form{display:grid;gap:13px}.form label{display:grid;gap:6px;font-size:13px;font-weight:600}.field-tip{font-weight:400;color:var(--el-text-color-secondary);line-height:1.5}.notice{padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46}.notice.warn{background:#fffbeb;color:#92400e}@media(max-width:1000px){.layout{grid-template-columns:1fr}.batch{position:static}.sources{grid-template-columns:1fr}}@media(max-width:700px){.hero{flex-direction:column}.grid{grid-template-columns:1fr}.search{min-width:100%}}
-.impact-modal{width:min(1050px,96vw)}.impact-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}.impact-stats article{padding:10px;border:1px solid var(--el-border-color-lighter);border-radius:9px;display:flex;flex-direction:column}.impact-stats small{color:var(--el-text-color-secondary)}.impact-stats b{font-size:18px}.impact-tags{display:flex;flex-wrap:wrap;gap:7px}.impact-tags span{padding:5px 8px;border-radius:7px;background:var(--el-fill-color-light);font-size:12px}.impact-tags i{color:var(--el-text-color-secondary);font-style:normal}.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.diff-grid pre{min-height:140px;max-height:220px}.snapshot-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--el-border-color-lighter)}@media(max-width:800px){.impact-stats{grid-template-columns:repeat(2,1fr)}.diff-grid{grid-template-columns:1fr}}
+.impact-modal{width:min(1050px,96vw)}.impact-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}.impact-stats article{padding:10px;border:1px solid var(--el-border-color-lighter);border-radius:9px;display:flex;flex-direction:column}.impact-stats small{color:var(--el-text-color-secondary)}.impact-stats b{font-size:18px}.impact-tags{display:flex;flex-wrap:wrap;gap:7px}.impact-tags span{padding:5px 8px;border-radius:7px;background:var(--el-fill-color-light);font-size:12px}.impact-tags i{color:var(--el-text-color-secondary);font-style:normal}.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.diff-grid pre{min-height:140px;max-height:220px}@media(max-width:800px){.impact-stats{grid-template-columns:repeat(2,1fr)}.diff-grid{grid-template-columns:1fr}}
 </style>

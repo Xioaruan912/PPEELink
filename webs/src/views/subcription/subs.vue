@@ -1,6 +1,6 @@
 <script setup lang='ts'>
 import { ref, reactive, computed, onMounted } from 'vue'
-import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, safePublishSubscription, AddSub, DelSub, UpdateSub, ResetToken, SetExpire, getImportLinks, createShortLink } from "@/api/subcription/subs"
+import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, safePublishSubscription, AddSub, DelSub, UpdateSub, ResetToken, SetExpire, getImportLinks } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
 import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
 import QrcodeVue from 'qrcode.vue'
@@ -156,7 +156,7 @@ const pipelineJSON = () => {
 const buildSubscription = async (sub:Sub) => {
   const client = await ElMessageBox.prompt('输入客户端：clash / surge / loon / v2ray / singbox / qx / shadowrocket', `生成产物 · ${sub.Name}`, { inputValue:'clash', inputPattern:/^(clash|surge|loon|v2ray|singbox|qx|shadowrocket)$/i, inputErrorMessage:'仅支持 clash/surge/loon/v2ray/singbox/qx/shadowrocket' })
   const { data } = await startSubscriptionBuild({ subscriptionId:sub.ID, client:client.value.toLowerCase() })
-  ElMessage.success(`生成产物任务已创建 #${data?.taskId || ''}，可在任务中心查看`)
+  ElMessage.success(`生成产物任务已创建 #${data?.taskId || ''}`)
 }
 const loadArtifacts = async () => {
   if (!artifactSub.value) return
@@ -195,10 +195,6 @@ const openImport = async (sub: Sub) => {
 const copyText = async (text: string) => {
   if (!text) return
   try { await navigator.clipboard.writeText(text); ElMessage.success('已复制') } catch { ElMessage.warning('复制失败，请手动复制') }
-}
-const makeShortLink = async (target: string) => {
-  const { data } = await createShortLink({ target, remark: importSub.value?.Name || '' })
-  if (data?.url) { ElMessage.success('短链：' + data.url); copyText(data.url) }
 }
 
 // 卡片「更多」菜单派发
@@ -257,6 +253,17 @@ const filteredSubs = computed(() => {
   const kw = searchKey.value.trim().toLowerCase()
   if (!kw) return tableData.value
   return tableData.value.filter(s => s.Name.toLowerCase().includes(kw))
+})
+
+const subStats = computed(() => {
+  const list: any[] = tableData.value || []
+  const visits = list.reduce((acc: number, s: any) => acc + (s.SubLogs || []).reduce((a: number, l: any) => a + (l.Count || 0), 0), 0)
+  const nodes = list.reduce((acc: number, s: any) => acc + (s.Nodes?.length || 0), 0)
+  return [
+    { label: '订阅数', value: list.length },
+    { label: '节点合计', value: nodes },
+    { label: '累计访问', value: visits },
+  ]
 })
 
 const serverAddress = () => {
@@ -560,9 +567,17 @@ const saveExpire = async () => {
 <template>
   <div class="subs-page">
     <!-- 顶部工具栏 -->
+    <PageHero title="订阅列表" desc="管理订阅链接、客户端输出格式与分享；详情抽屉里可以预览节点与访问记录。">
+      <template #actions>
+        <el-button type="primary" @click="handleAddSub">添加订阅</el-button>
+      </template>
+      <template #stats>
+        <StatStrip :items="subStats" />
+      </template>
+    </PageHero>
+
     <div class="toolbar">
       <el-input v-model="searchKey" placeholder="搜索订阅名称…" clearable class="search" />
-      <el-button type="primary" @click="handleAddSub">添加订阅</el-button>
     </div>
 
     <!-- 订阅卡片 -->
@@ -932,7 +947,7 @@ const saveExpire = async () => {
             <el-tag size="small" class="import-tag">{{ key }}</el-tag>
             <el-input :model-value="link" readonly size="small" />
             <el-button size="small" @click="copyText(link)">复制</el-button>
-            <el-button size="small" @click="makeShortLink(link)">短链</el-button>
+            
           </div>
         </template>
       </div>

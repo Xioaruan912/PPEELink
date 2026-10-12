@@ -1,9 +1,10 @@
 <template>
   <div class="app-container">
+    <PageHero title="操作模板" desc="配置节点与分组后生成模板内容，右侧可预览最终结果。" />
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
-          <span>操作模板</span>
+          <span>生成参数</span>
           <div class="header-actions">
             <el-select
               v-model="target"

@@ -49,36 +49,25 @@ function resetPassword(row: { [key: string]: any }) {
 </script>
 
 <template>
-  <el-card style="margin: 10px;text-align: center;">
-    <el-row :gutter="20">
-      <el-col :span="18">
-        <h2>{{$t('userset.title')}}</h2>
-      </el-col>
-      <el-col :span="18" v-if="userinfo">
-        <el-badge :value="userinfo.username" class="item">
-          <span class="set-avatar">{{ (userinfo.username || 'U').charAt(0).toUpperCase() }}</span>
-  </el-badge>
-        </el-col>
-
-      <el-col :span="18">
-        <el-input
-    v-model="username"
-    :placeholder="$t('userset.newUsername')"
-  />
-      </el-col>
-      <el-col :span="18">
-        <el-input
-        type="password"
-    v-model="password"
-    show-password
-    :placeholder="$t('userset.newPassword')"
-  />
-      </el-col>
-      <el-col :span="18">
-        <el-button type="primary" @click="resetPassword">修改</el-button>
-        </el-col>
-      </el-row> 
-  </el-card>
+  <div class="account-page">
+    <PageHero title="账户设置" desc="更新管理员用户名与密码；修改后请用新凭据重新登录。" />
+    <section class="account-card">
+      <div class="account-id">
+        <span class="account-avatar">{{ (userinfo?.username || 'U').charAt(0).toUpperCase() }}</span>
+        <div class="account-id-copy">
+          <b>{{ userinfo?.username || '管理员' }}</b>
+          <small>管理员账户</small>
+        </div>
+      </div>
+      <div class="account-form">
+        <label class="account-label">新用户名</label>
+        <el-input v-model="username" :placeholder="$t('userset.newUsername')" />
+        <label class="account-label">新密码</label>
+        <el-input type="password" v-model="password" show-password :placeholder="$t('userset.newPassword')" />
+        <el-button class="account-submit" type="primary" @click="resetPassword">保存修改</el-button>
+      </div>
+    </section>
+  </div>
 </template>
 
 

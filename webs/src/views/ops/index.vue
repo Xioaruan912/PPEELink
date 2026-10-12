@@ -1,25 +1,139 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { createApiToken, exportSafeBackup, getApiTokens, getAuditLogs, importSafeBackup, inspectSafeBackup, revokeApiToken } from '@/api/ops'
+import { onMounted, ref, computed } from "vue";
+import { getAuditLogs } from "@/api/ops";
 
-defineOptions({ name:'OpsCenter' })
-const tokens=ref<any[]>([]);const backup=ref<any>({});const loading=ref(false);const tokenDialog=ref(false);const tokenForm=ref({name:'',scopes:['read'] as string[],expiresInDays:90});const createdToken=ref('')
-const audits=ref<any[]>([])
-const load=async()=>{loading.value=true;try{const [t,b,a]=await Promise.all([getApiTokens(),inspectSafeBackup(),getAuditLogs()]);tokens.value=t?.data||[];backup.value=b?.data||{};audits.value=a?.data||[]}finally{loading.value=false}}
-const createToken=async()=>{const res=await createApiToken(tokenForm.value);createdToken.value=res?.data?.token||'';tokenDialog.value=false;await load()}
-const revoke=async(row:any)=>{await ElMessageBox.confirm(`撤销 API Token「${row.name}」？撤销后立即失效。`,'确认撤销',{type:'warning'});await revokeApiToken(row.id);ElMessage.success('已撤销');await load()}
-const downloadBackup=async()=>{const data=await exportSafeBackup();const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`sublinkx-safe-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url)}
-const importBackup=()=>{const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{const file=input.files?.[0];if(!file)return;const parsed=JSON.parse(await file.text());await ElMessageBox.confirm('恢复采用合并模式：不会删除现有节点、订阅关系或任何敏感凭据。继续？','安全恢复',{type:'warning'});const res:any=await importSafeBackup(parsed);ElMessage.success(res?.msg||res?.data?.msg||'安全配置已恢复');await load()};input.click()}
-const openStatus=()=>window.open('/status','_blank')
-const copyCreatedToken=async()=>{if(!createdToken.value)return;await navigator.clipboard.writeText(createdToken.value);ElMessage.success('已复制')}
-onMounted(load)
+defineOptions({ name: "OpsCenter" });
+
+const audits = ref<any[]>([]);
+const loading = ref(false);
+
+const load = async () => {
+  loading.value = true;
+  try {
+    const res = await getAuditLogs();
+    audits.value = res?.data || [];
+  } finally {
+    loading.value = false;
+  }
+};
+
+const openStatus = () => window.open("/status", "_blank");
+
+const todayCount = computed(() => {
+  const today = new Date().toDateString();
+  return audits.value.filter(
+    (row) => new Date(row.createdAt).toDateString() === today
+  ).length;
+});
+
+const loginCount = computed(
+  () =>
+    audits.value.filter((row) => String(row.path || "").includes("auth/login"))
+      .length
+);
+
+const stats = computed(() => [
+  { label: "总记录", value: audits.value.length },
+  { label: "今日操作", value: todayCount.value, tone: "ok" as const },
+  { label: "登录次数", value: loginCount.value },
+]);
+
+const methodTone = (method: string) => {
+  const m = String(method || "").toUpperCase();
+  if (m === "POST") return "primary";
+  if (m === "DELETE") return "danger";
+  if (m === "PUT" || m === "PATCH") return "warning";
+  return "info";
+};
+
+onMounted(load);
 </script>
 
-<template><div class="ops-page"><section class="hero"><div><span>SECURITY & OPERATIONS</span><h1>运维中心</h1><p>管理最小权限 API Token、安全配置备份与公开状态页。敏感凭据不会进入备份文件。</p></div><el-button @click="openStatus">打开公开状态页</el-button></section>
-<div class="ops-grid"><section class="panel"><header><div><b>API Token</b><small>只保存 SHA-256 哈希 · 支持权限与有效期</small></div><el-button type="primary" @click="tokenDialog=true">创建 Token</el-button></header><el-table v-loading="loading" :data="tokens" size="small"><el-table-column prop="name" label="名称"/><el-table-column prop="tokenPrefix" label="前缀"/><el-table-column prop="scopes" label="权限"/><el-table-column label="到期"><template #default="{row}">{{ row.expiresAt ? new Date(row.expiresAt).toLocaleString() : '永不过期' }}</template></el-table-column><el-table-column label="状态" width="80"><template #default="{row}"><el-tag :type="row.enabled?'success':'info'" size="small">{{row.enabled?'有效':'已撤销'}}</el-tag></template></el-table-column><el-table-column label="操作" width="90"><template #default="{row}"><el-button v-if="row.enabled" link type="danger" @click="revoke(row)">撤销</el-button></template></el-table-column></el-table></section>
-<section class="panel"><header><div><b>安全配置备份</b><small>默认排除密码、Token、节点链接、机场源 URL、Webhook</small></div></header><div class="backup-stats"><article><b>{{backup.templates||0}}</b><small>模板</small></article><article><b>{{backup.egressTargets||0}}</b><small>检测目标</small></article><article><b>{{backup.subscriptions||0}}</b><small>订阅配置</small></article><article><b>{{backup.airports||0}}</b><small>机场设置</small></article></div><el-alert type="info" :closable="false" title="恢复只合并安全配置；不会删除/覆盖节点链接、订阅 Token、机场源地址或用户密码。"/><div class="backup-actions"><el-button type="primary" @click="downloadBackup">导出安全备份</el-button><el-button @click="importBackup">从备份恢复</el-button></div></section></div>
-<section class="panel audit-panel"><header><div><b>管理操作审计</b><small>只记录操作者、IP、动作、路径、状态码与时间；不记录请求体和凭据</small></div><el-button @click="load">刷新</el-button></header><el-table :data="audits" size="small" max-height="420"><el-table-column prop="createdAt" label="时间" min-width="170"><template #default="{row}">{{new Date(row.createdAt).toLocaleString()}}</template></el-table-column><el-table-column prop="actor" label="操作者" min-width="130"/><el-table-column prop="authType" label="认证" width="90"/><el-table-column prop="ip" label="IP" min-width="130"/><el-table-column prop="method" label="方法" width="80"/><el-table-column prop="path" label="路径" min-width="260"/><el-table-column prop="status" label="状态" width="80"/></el-table></section>
-<el-dialog v-model="tokenDialog" title="创建 API Token" width="520px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="tokenForm.name"/></el-form-item><el-form-item label="权限"><el-checkbox-group v-model="tokenForm.scopes"><el-checkbox value="read">read 读取</el-checkbox><el-checkbox value="write">write 写入</el-checkbox><el-checkbox value="admin">admin 管理</el-checkbox></el-checkbox-group></el-form-item><el-form-item label="有效期（天，0=永久）"><el-input-number v-model="tokenForm.expiresInDays" :min="0" :max="3650"/></el-form-item></el-form><template #footer><el-button @click="tokenDialog=false">取消</el-button><el-button type="primary" @click="createToken">创建</el-button></template></el-dialog>
-<el-dialog :model-value="!!createdToken" title="API Token 已创建" width="620px" @close="createdToken=''" ><el-alert type="warning" :closable="false" title="明文 Token 只显示这一次，请立即保存。"/><el-input :model-value="createdToken" readonly class="token-value"><template #append><el-button @click="copyCreatedToken">复制</el-button></template></el-input></el-dialog></div></template>
+<template>
+  <div class="ops-page">
+    <PageHero
+      title="审计日志"
+      desc="只记录操作者、IP、动作、路径、状态码与时间；不记录请求体和凭据。"
+    >
+      <template #actions>
+        <el-button @click="openStatus">公开状态页</el-button>
+        <el-button :loading="loading" @click="load">刷新</el-button>
+      </template>
+      <template #stats>
+        <StatStrip :items="stats" />
+      </template>
+    </PageHero>
 
-<style scoped>.ops-page{padding:28px}.hero,.panel{border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.hero{display:flex;justify-content:space-between;align-items:flex-end;padding:26px;margin-bottom:16px}.hero span{color:var(--el-color-primary);font:800 11px ui-monospace;letter-spacing:.14em}.hero h1{margin:7px 0;font-size:28px}.hero p{margin:0;color:var(--el-text-color-secondary);font-size:12px}.ops-grid{display:grid;gap:16px}.panel{padding:20px}.panel header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.panel header>div{display:flex;flex-direction:column;gap:3px}.panel header small{color:var(--el-text-color-secondary)}.backup-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.backup-stats article{padding:14px;border:1px solid var(--el-border-color-lighter);border-radius:12px;display:flex;flex-direction:column}.backup-stats b{font:700 24px ui-monospace}.backup-stats small{color:var(--el-text-color-secondary)}.backup-actions{display:flex;gap:10px;margin-top:14px}.token-value{margin-top:14px;font-family:ui-monospace,monospace}@media(max-width:720px){.ops-page{padding:14px}.hero{align-items:stretch;flex-direction:column;gap:14px;padding:18px}.hero :deep(.el-button){width:100%;margin-left:0}.panel{padding:14px}.panel header{align-items:stretch;flex-direction:column;gap:10px}.panel header :deep(.el-button){width:100%;margin-left:0}.backup-stats{grid-template-columns:repeat(2,1fr)}.backup-actions{align-items:stretch;flex-direction:column}.backup-actions :deep(.el-button){width:100%;margin-left:0}.ops-page :deep(.el-checkbox-group){display:flex;flex-wrap:wrap;gap:6px 12px}.ops-page :deep(.el-checkbox){margin-right:0}.token-value :deep(.el-input-group__append){padding:0 10px}}</style>
+    <PanelSection title="管理操作" desc="最近的写操作与登录记录" flush>
+      <div class="audit-wrap">
+        <el-table
+          v-loading="loading"
+          :data="audits"
+          size="small"
+          max-height="560"
+        >
+          <el-table-column prop="createdAt" label="时间" min-width="170">
+            <template #default="{ row }">{{
+              new Date(row.createdAt).toLocaleString()
+            }}</template>
+          </el-table-column>
+          <el-table-column prop="actor" label="操作者" min-width="120" />
+          <el-table-column prop="authType" label="认证" width="90" />
+          <el-table-column prop="ip" label="IP" min-width="130" />
+          <el-table-column label="方法" width="90">
+            <template #default="{ row }">
+              <el-tag :type="methodTone(row.method)" size="small" effect="plain">{{
+                row.method
+              }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column
+            prop="path"
+            label="路径"
+            min-width="260"
+            show-overflow-tooltip
+          />
+          <el-table-column label="状态" width="80">
+            <template #default="{ row }">
+              <span
+                class="status-code"
+                :class="row.status < 400 ? 'ok' : 'bad'"
+                >{{ row.status }}</span
+              >
+            </template>
+          </el-table-column>
+        </el-table>
+        <EmptyState
+          v-if="!loading && !audits.length"
+          title="暂无审计记录"
+          desc="任意管理操作或登录之后，记录会自动出现在这里。"
+        />
+      </div>
+    </PanelSection>
+  </div>
+</template>
+
+<style lang="scss" scoped>
+.ops-page {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+}
+
+.audit-wrap {
+  padding: 8px 12px 12px;
+}
+
+.status-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+
+  &.ok {
+    color: var(--el-color-success);
+  }
+
+  &.bad {
+    color: var(--el-color-danger);
+  }
+}
+</style>

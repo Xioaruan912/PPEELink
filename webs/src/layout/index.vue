@@ -126,7 +126,7 @@ function toggleSidebar() {
     ),
     radial-gradient(
       28% 26% at 18% 86%,
-      color-mix(in srgb, var(--jade-300) 5%, transparent),
+      color-mix(in srgb, var(--gold-300) 5%, transparent),
       transparent 72%
     );
   animation: aurora-drift 30s ease-in-out infinite;

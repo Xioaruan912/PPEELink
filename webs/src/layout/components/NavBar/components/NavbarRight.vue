@@ -2,7 +2,7 @@
   <div class="navbar-actions">
     <template v-if="!isMobile">
       <!--测试状态 -->
-      <button class="setting-item" title="测试任务" @click="testDialogVisible = true">
+      <button class="setting-item" title="测试状态" @click="testDialogVisible = true">
         <el-badge is-dot :hidden="!testRunning" class="test-badge">
           <svg-icon icon-class="monitor" />
         </el-badge>

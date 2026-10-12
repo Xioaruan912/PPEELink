@@ -87,18 +87,6 @@ func GetMenus(c *gin.Context) {
 					},
 				},
 				{
-					Path:      "collections",
-					Component: "subcription/collections",
-					Name:      "Collections",
-					Meta: Meta{
-						Title:     "多订阅合集",
-						Icon:      "table",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
 					Path:      "nodes",
 					Component: "subcription/nodes",
 					Name:      "Nodes",
@@ -140,7 +128,7 @@ func GetMenus(c *gin.Context) {
 		{
 			Path:      "/test",
 			Component: "Layout",
-			Redirect:  "/test/unlock",
+			Redirect:  "/test/speed",
 			Name:      "test",
 			Meta: Meta{
 				Title:  "test",
@@ -149,12 +137,6 @@ func GetMenus(c *gin.Context) {
 				Roles:  []string{"ADMIN"},
 			},
 			Children: []Child{
-				{
-					Path:      "tasks",
-					Component: "task/index",
-					Name:      "TaskCenter",
-					Meta:      Meta{Title: "任务中心", Icon: "todolist", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true},
-				},
 				{
 					Path:      "speed",
 					Component: "test/speed",
@@ -174,30 +156,6 @@ func GetMenus(c *gin.Context) {
 					Meta: Meta{
 						Title:     "分流检测",
 						Icon:      "connection",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
-					Path:      "unlock",
-					Component: "subcription/unlock",
-					Name:      "Unlock",
-					Meta: Meta{
-						Title:     "unlocktest",
-						Icon:      "security",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
-					Path:      "tcp",
-					Component: "test/tcp",
-					Name:      "TcpTest",
-					Meta: Meta{
-						Title:     "tcptest",
-						Icon:      "link",
 						Hidden:    false,
 						Roles:     []string{"ADMIN"},
 						KeepAlive: true,

@@ -13,10 +13,10 @@ const defaultSettings: AppSettings = {
   fixedHeader: true,
   sidebarLogo: true,
   layout: LayoutEnum.LEFT,
-  theme: ThemeEnum.DARK,
+  theme: ThemeEnum.LIGHT,
   size: SizeEnum.DEFAULT,
   language: LanguageEnum.ZH_CN,
-  themeColor: "#0f9f74",
+  themeColor: "#e8960f",
   watermarkEnabled: false,
   watermarkContent: "PPEELink",
 };

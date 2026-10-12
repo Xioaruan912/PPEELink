@@ -57,7 +57,7 @@ const sampleMatrix = async (mode:'scene'|'full') => {
   matrixSampling.value = true
   try {
     const { data } = await startQualityMatrixSample(mode)
-    ElMessage.success(`采样任务已创建 #${data?.taskId || ''}，可在任务中心查看进度`)
+    ElMessage.success(`采样任务已创建 #${data?.taskId || ''}`)
   } finally { matrixSampling.value = false }
 }
 const resetResults = () => { results.value = targets.value.filter(item => item.enabled !== false).map(item => ({ ...item, group:groupLabels[item.group] || item.group, status:'pending', ip:'', countryCode:'', rtt:-1, note:'' })) }
@@ -187,7 +187,17 @@ const faviconUrl = (domain:string) => {
 }
 const iconFallback = (event: Event, icon: string) => { const image = event.target as HTMLImageElement; image.style.display = 'none'; const next = image.nextElementSibling as HTMLElement | null; if (next) { next.textContent = icon; next.style.display = 'grid' } }
 
-const statusType = (item: any) => item.status === 'done' ? 'success' : item.status === 'error' ? 'danger' : 'info'
+const egressStats = computed(() => {
+  const done = results.value.filter(item => item.status === 'done').length
+  const failed = results.value.filter(item => item.status === 'error').length
+  return [
+    { label: '启用目标', value: targets.value.filter(item => item.enabled !== false).length },
+    { label: '成功', value: done, tone: 'ok' as const },
+    { label: '失败', value: failed, tone: failed > 0 ? ('bad' as const) : ('default' as const) },
+    { label: '不同出口', value: uniqueEgress.value.length },
+  ]
+})
+
 const statusText = (item: any) => item.status === 'done' ? '已获取' : item.status === 'testing' ? '检测中' : item.status === 'error' ? item.note : '等待'
 
 onMounted(async () => {
@@ -199,10 +209,20 @@ onMounted(async () => {
 
 <template>
   <div class="egress-page">
-    <section class="hero-card">
-      <div><span class="eyebrow">SPLIT ROUTING INSPECTOR</span><h1>订阅分流与出口检测</h1><p>选择订阅及其中的具体节点，服务端会通过该节点访问各目标并返回真实出口 IP。也可切换为本机模式，检查当前浏览器的分流规则。</p></div>
-      <div class="hero-actions"><el-switch v-model="hideIP" active-text="隐藏 IP" /><el-button @click="openMatrix">质量矩阵</el-button><el-button @click="targetDrawer = true">检测目标</el-button><el-button type="primary" :loading="running" @click="runCurrent">开始检测</el-button></div>
-    </section>
+    <PageHero
+      title="分流检测"
+      desc="选择订阅及其中的节点，服务端通过该节点访问目标并返回真实出口 IP；也可切换本机模式或规则解释器。"
+    >
+      <template #actions>
+        <el-switch v-model="hideIP" active-text="隐藏 IP" />
+        <el-button @click="openMatrix">质量矩阵</el-button>
+        <el-button @click="targetDrawer = true">检测目标</el-button>
+        <el-button type="primary" :loading="running" @click="runCurrent">开始检测</el-button>
+      </template>
+      <template #stats>
+        <StatStrip :items="egressStats" />
+      </template>
+    </PageHero>
 
     <section class="source-card">
       <el-segmented v-model="mode" :options="[{label:'订阅节点检测',value:'subscription'},{label:'模板规则验证',value:'template'},{label:'规则解释器',value:'explain'},{label:'本机浏览器检测',value:'local'}]" />
@@ -275,15 +295,26 @@ onMounted(async () => {
     </section>
 
     <section v-if="mode !== 'explain'" class="result-card">
-      <header><div><b>网站分流结果</b><small>{{ mode === 'template' ? '按订阅模板规则选择节点并验证' : mode === 'subscription' ? '通过所选节点检测，最多 4 项并发' : '浏览器直连检测，最多 4 项并发' }}</small></div><el-tag type="info" effect="plain">失败不等于网站不可用</el-tag></header>
-      <el-table :data="results" row-key="domain" class="result-table">
-        <el-table-column label="目标" min-width="190"><template #default="{ row }"><div class="target-cell"><span class="target-title"><img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, row.icon)"><i class="target-icon" style="display:none">{{ row.icon }}</i>{{ row.name }}</span><small>{{ row.domain }}</small></div></template></el-table-column>
-        <el-table-column prop="group" label="类型" width="90"><template #default="{ row }"><el-tag size="small" effect="plain">{{ row.group }}</el-tag></template></el-table-column>
-        <el-table-column label="地区" width="100"><template #default="{ row }"><span v-if="row.countryCode">{{ countryFlag(row.countryCode) }} {{ row.countryCode }}</span><span v-else>--</span></template></el-table-column>
-        <el-table-column label="出口 IP" min-width="170"><template #default="{ row }"><span class="mono">{{ maskIP(row.ip) }}</span></template></el-table-column>
-        <el-table-column label="响应" width="90"><template #default="{ row }">{{ row.rtt >= 0 ? `${row.rtt}ms` : '--' }}</template></el-table-column>
-        <el-table-column label="状态" min-width="190"><template #default="{ row }"><el-tag :type="statusType(row)" size="small" :effect="row.status === 'testing' ? 'plain' : 'light'">{{ statusText(row) }}</el-tag><small v-if="row.note" class="status-note">{{ row.note }}</small></template></el-table-column>
-      </el-table>
+      <header><div><b>网站分流结果</b><small>{{ mode === 'template' ? '按订阅模板规则选择节点并验证' : mode === 'subscription' ? '通过所选节点检测，最多 4 项并发' : '浏览器直连检测，最多 4 项并发' }}</small></div><StatusPill tone="info" text="失败不等于网站不可用" /></header>
+      <div class="split-grid">
+        <article v-for="row in results" :key="row.domain" class="split-card" :class="row.status">
+          <header class="split-head">
+            <span class="site-mark">
+              <img class="site-icon" :src="faviconUrl(row.domain)" @error="iconFallback($event, row.icon)"><i class="target-icon" style="display:none">{{ row.icon }}</i>
+            </span>
+            <div class="split-title"><b>{{ row.name }}</b><small>{{ row.domain }}</small></div>
+            <StatusPill :tone="row.status === 'done' ? 'ok' : row.status === 'error' ? 'bad' : row.status === 'testing' ? 'live' : 'info'" :text="statusText(row)" />
+          </header>
+          <div class="split-meta">
+            <span class="split-group">{{ row.group }}</span>
+            <span v-if="row.countryCode">{{ countryFlag(row.countryCode) }} {{ row.countryCode }}</span>
+            <span v-else>--</span>
+            <span class="mono">{{ maskIP(row.ip) }}</span>
+            <span class="split-rtt">{{ row.rtt >= 0 ? row.rtt + 'ms' : '--' }}</span>
+          </div>
+          <p v-if="row.note" class="split-note">{{ row.note }}</p>
+        </article>
+      </div>
       <p class="privacy-note">检测结果仅用于当前页面展示，SubLinkX 不持久化出口 IP。本机模式下部分目标关闭 CORS 时会显示“未开放跨域检测”。</p>
     </section>
 
@@ -339,7 +370,7 @@ onMounted(async () => {
 .site-icon{width:24px;height:24px;border-radius:7px;object-fit:contain;background:var(--el-fill-color-light);padding:3px}.plan-card{padding:20px;margin-bottom:16px;border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.plan-card>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.plan-card header div{display:flex;flex-direction:column;gap:3px}.plan-card header small,.plan-card td small{color:var(--el-text-color-secondary);font-size:11px}.rule-text{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px}.plan-warning{margin-top:12px}
 .target-title{display:flex;align-items:center;gap:7px}.target-icon{display:grid;place-items:center;width:24px;height:24px;border-radius:7px;background:var(--el-fill-color-light);font-size:14px;font-style:normal}.status-note{display:block;margin-left:8px;color:var(--el-text-color-secondary);font-size:10px}
 .source-card{padding:16px 20px;margin-bottom:16px;border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.source-selectors{display:grid;grid-template-columns:minmax(220px,1fr) 24px minmax(260px,1.4fr) auto;align-items:center;gap:10px;margin-top:14px}.source-selectors .arrow{text-align:center;color:var(--el-text-color-placeholder)}.source-selectors :deep(.el-select-dropdown__item){display:flex;justify-content:space-between}.source-selectors small{margin-left:14px;color:var(--el-text-color-secondary)}
-.egress-page{width:min(1120px,100%);margin:0 auto;padding:28px}.hero-card,.summary-card,.result-card{border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.hero-card{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;padding:28px;margin-bottom:16px;background:radial-gradient(circle at 90% 0,color-mix(in srgb,var(--el-color-primary) 12%,transparent),transparent 42%),var(--el-bg-color)}.eyebrow{color:var(--el-color-primary);font-family:monospace;font-size:11px;font-weight:800;letter-spacing:.14em}.hero-card h1{margin:8px 0 7px;font-size:30px;letter-spacing:-.03em}.hero-card p{max-width:700px;margin:0;color:var(--el-text-color-secondary);font-size:13px;line-height:1.7}.hero-actions{display:flex;align-items:center;gap:16px;flex-shrink:0}.summary-card,.result-card{padding:20px;margin-bottom:16px}.summary-card>header,.result-card>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.summary-card header>div,.result-card header>div{display:flex;flex-direction:column;gap:3px}.summary-card header small,.result-card header small{color:var(--el-text-color-secondary);font-size:11px}.egress-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.egress-grid article{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid var(--el-border-color-lighter);border-radius:11px;background:var(--el-fill-color-extra-light)}.egress-grid .flag{font-size:23px}.egress-grid article div,.target-cell{display:flex;min-width:0;flex-direction:column}.egress-grid strong,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.egress-grid small,.target-cell small{overflow:hidden;color:var(--el-text-color-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.target-cell span{font-weight:650}.privacy-note{margin:14px 0 0;color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}.result-table{width:100%}@media(max-width:720px){.egress-page{padding:14px}.hero-card{align-items:flex-start;flex-direction:column;padding:20px}.hero-actions{width:100%;justify-content:space-between}.result-card{padding:12px}.summary-card>header,.result-card>header{align-items:flex-start;flex-direction:column}}
+.egress-page{width:min(1120px,100%);margin:0 auto;padding:28px}.hero-card,.summary-card,.result-card{border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.summary-card,.result-card{padding:20px;margin-bottom:16px}.summary-card>header,.result-card>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}.summary-card header>div,.result-card header>div{display:flex;flex-direction:column;gap:3px}.summary-card header small,.result-card header small{color:var(--el-text-color-secondary);font-size:11px}.egress-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.egress-grid article{display:flex;align-items:center;gap:11px;padding:13px;border:1px solid var(--el-border-color-lighter);border-radius:11px;background:var(--el-fill-color-extra-light)}.egress-grid .flag{font-size:23px}.egress-grid article div,.target-cell{display:flex;min-width:0;flex-direction:column}.egress-grid strong,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.egress-grid small,.target-cell small{overflow:hidden;color:var(--el-text-color-secondary);font-size:11px;text-overflow:ellipsis;white-space:nowrap}.target-cell span{font-weight:650}.privacy-note{margin:14px 0 0;color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}.result-table{width:100%}@media(max-width:720px){.egress-page{padding:14px}.hero-card{align-items:flex-start;flex-direction:column;padding:20px}.hero-actions{width:100%;justify-content:space-between}.result-card{padding:12px}.summary-card>header,.result-card>header{align-items:flex-start;flex-direction:column}}
 @media(max-width:720px){.source-selectors{grid-template-columns:1fr}.source-selectors .arrow{display:none}}
 .template-selectors{grid-template-columns:minmax(260px,420px) 1fr}.template-selectors :deep(.el-alert){margin:0}
 .explain-query{display:grid;grid-template-columns:2fr 1.4fr 150px 120px;gap:10px;margin-bottom:14px}.explain-flow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:14px;margin-bottom:14px;border:1px solid var(--el-border-color-lighter);border-radius:12px;background:var(--el-fill-color-extra-light)}.explain-flow span{padding:6px 9px;border-radius:8px;background:var(--el-bg-color);font-size:12px}.explain-flow .selected{color:var(--el-color-success);font-weight:700}.explain-flow b{color:var(--el-text-color-placeholder)}.explain-meta{margin-bottom:14px}.subhead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px}.subhead small{color:var(--el-text-color-secondary)}@media(max-width:900px){.explain-query{grid-template-columns:1fr 1fr}}@media(max-width:600px){.explain-query{grid-template-columns:1fr}}
@@ -355,4 +386,25 @@ onMounted(async () => {
   .target-admin-actions{align-items:stretch;flex-direction:column}.target-admin-actions :deep(.el-button){width:100%;margin-left:0}
   .matrix-actions{align-items:stretch;flex-direction:column}.matrix-actions span{margin-right:0;line-height:1.5}.matrix-actions :deep(.el-button){width:100%;margin-left:0}
 }
+
+/* ---- split result grid (sunlit console) ---- */
+.result-card>header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
+.result-card>header>div{display:flex;flex-direction:column;gap:3px}
+.result-card>header small{color:var(--ui-text-muted);font-size:11px}
+.split-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.split-card{display:flex;flex-direction:column;gap:8px;padding:13px 14px;border:1px solid var(--ui-border);border-radius:var(--r-md);background:var(--ui-surface);transition:transform var(--dur-mid) var(--ease-out),box-shadow var(--dur-mid) ease,border-color var(--dur-mid) ease}
+.split-card:hover{transform:translateY(-2px);border-color:color-mix(in srgb,var(--ui-accent) 30%,var(--ui-border));box-shadow:0 12px 26px color-mix(in srgb,var(--ui-accent-shadow) 45%,transparent)}
+.split-card.error{border-color:color-mix(in srgb,var(--el-color-danger) 30%,var(--ui-border))}
+.split-card.testing{border-color:color-mix(in srgb,var(--ui-accent) 45%,var(--ui-border))}
+.split-head{display:flex;align-items:center;gap:9px}
+.site-mark{display:inline-flex;flex-shrink:0}
+.split-title{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}
+.split-title b{overflow:hidden;color:var(--ui-text);font-size:12.5px;font-weight:700;text-overflow:ellipsis;white-space:nowrap}
+.split-title small{overflow:hidden;color:var(--ui-text-muted);font-size:10.5px;text-overflow:ellipsis;white-space:nowrap}
+.split-meta{display:flex;align-items:center;gap:8px;color:var(--ui-text-secondary);font-size:11px}
+.split-group{padding:2px 8px;border:1px solid var(--ui-border);border-radius:var(--r-pill);color:var(--ui-text-muted);font-size:10.5px;font-weight:600}
+.split-rtt{margin-left:auto;color:var(--ui-text);font-family:var(--font-mono);font-weight:600}
+.split-note{margin:0;color:var(--el-color-danger);font-size:10.5px;line-height:1.5}
+.mono{font-family:var(--font-mono)}
+@media(max-width:720px){.split-grid{grid-template-columns:1fr}.result-card{padding:14px}}
 </style>

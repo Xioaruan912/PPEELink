@@ -119,6 +119,17 @@ const download = async (client: string, p: PlatformItem) => {
   }
 };
 
+const clientStats = computed(() => {
+  const platforms = items.value.flatMap(c => c.platforms || [])
+  const ready = platforms.filter(p => p.status === 'ready').length
+  const pending = platforms.filter(p => p.status === 'downloading').length
+  return [
+    { label: '客户端', value: items.value.length },
+    { label: '可下载平台', value: ready, tone: 'ok' as const },
+    { label: '下载中', value: pending, tone: pending > 0 ? ('warn' as const) : ('default' as const) },
+  ]
+})
+
 const goRepo = (c: ClientItem) => window.open(c.type === "appstore" ? c.appStoreUrl : `https://github.com/${c.owner}/${c.repo}`);
 
 onMounted(() => {
@@ -130,16 +141,16 @@ onBeforeUnmount(() => clearTimeout(timer.value));
 
 <template>
   <div class="clients-page">
-    <!-- 顶部工具栏 -->
-    <div class="toolbar">
-      <div class="toolbar-info">
-        <span>客户端下载中心</span>
-        <span v-if="lastCheck" class="muted">上次检查：{{ fmtTime(lastCheck) }}</span>
-      </div>
-      <el-button type="primary" :loading="checking" @click="doCheck">
-        <svg-icon icon-class="refresh" /> 检查更新
-      </el-button>
-    </div>
+    <PageHero title="客户端下载" desc="常用代理客户端的官方安装包由服务端定时检查更新并缓存到本地。">
+      <template #actions>
+        <el-button type="primary" :loading="checking" @click="doCheck">
+          <svg-icon icon-class="refresh" /> 检查更新
+        </el-button>
+      </template>
+      <template #stats>
+        <StatStrip :items="clientStats" />
+      </template>
+    </PageHero>
 
     <div v-loading="loading" class="client-loading-area">
       <el-empty v-if="!loading && !items.length" description="暂无客户端" />

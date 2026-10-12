@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import { getTemp, AddTemp, UpdateTemp, DelTemp, ValidateTemp, PreflightTemp, GetTempVersions, GetTempVersion, RollbackTemp } from "@/api/template/temp"
 import TemplateMonacoEditor from '@/components/TemplateMonacoEditor.vue'
 import TemplateMonacoDiff from '@/components/TemplateMonacoDiff.vue'
-import { compareRegression, deleteRegressionCase, getRegressionCases, saveRegressionCase } from '@/api/regression'
 import { startTemplateValidationTask } from '@/api/task'
 
 interface Temp {
@@ -37,11 +36,6 @@ const preflightReport = ref<any>(null)
 const preflightDomains = ref('gemini.google.com\nchatgpt.com\nopenai.com\nclaude.ai')
 const lastPreflightSignature = ref('')
 const baselineText = ref('')
-const regressionVisible = ref(false)
-const regressionCases = ref<any[]>([])
-const regressionDiff = ref<any[]>([])
-const regressionResults = ref<any[]>([])
-const regressionForm = ref<any>({ name:'', domain:'', expectedPolicy:'', expectedCountry:'', forbiddenPolicy:'DIRECT', protocol:'tcp', port:443, enabled:true })
 
 // 类型识别：yaml→clash / conf→loon / 其他→generic
 const tempType = (file: string) => {
@@ -76,6 +70,17 @@ async function gettemps() {
   }
 }
 onMounted(gettemps)
+
+const tplStats = computed(() => {
+  const list: any[] = tableData.value || []
+  const count = (kw: string) => list.filter(t => String(t.file || '').toLowerCase().includes(kw)).length
+  return [
+    { label: '模板数', value: list.length },
+    { label: 'Clash', value: count('clash') },
+    { label: 'Surge', value: count('surge') },
+    { label: 'Loon', value: count('loon') },
+  ]
+})
 
 const handleAddTemp = () => {
   TempTitle.value = '添加模板'
@@ -118,11 +123,6 @@ const handleEdit = (row: Temp) => {
   dialogVisible.value = true
   runValidation()
 }
-const loadRegressionCases = async () => { const { data } = await getRegressionCases(); regressionCases.value = data || [] }
-const openRegression = async () => { regressionVisible.value = true; await loadRegressionCases(); if (baselineText.value && TempText.value) { const { data } = await compareRegression({ filename:Tempname.value, before:baselineText.value, after:TempText.value }); regressionDiff.value = data?.diff || []; regressionResults.value = data?.after || [] } }
-const persistRegression = async () => { if (!regressionForm.value.name || !regressionForm.value.domain) { ElMessage.warning('请填写名称和域名'); return }; await saveRegressionCase(regressionForm.value); regressionForm.value={ name:'',domain:'',expectedPolicy:'',expectedCountry:'',forbiddenPolicy:'DIRECT',protocol:'tcp',port:443,enabled:true }; await loadRegressionCases(); await openRegression() }
-const removeRegression = async (row:any) => { await deleteRegressionCase(row.id); await loadRegressionCases(); await openRegression() }
-const editRegression = (row:any) => { regressionForm.value = { ...row } }
 const queueTemplateValidation = async () => { if (!Tempoldname.value) { ElMessage.info('请先保存模板，再加入后台验证任务'); return }; const {data}=await startTemplateValidationTask(Tempoldname.value);ElMessage.success(`模板验证任务已创建 #${data?.taskId||''}`) }
 
 const editorLanguage = computed(() => /\.ya?ml$/i.test(Tempname.value) ? 'yaml' : 'ini')
@@ -230,10 +230,17 @@ const copyText = async (row: Temp) => {
 
 <template>
   <div class="tpl-page">
-    <!-- 顶部工具栏 -->
+    <PageHero title="模板列表" desc="管理 Clash / Surge / Loon 模板文件；预检通过后再应用到订阅。">
+      <template #actions>
+        <el-button type="primary" @click="handleAddTemp">添加模板</el-button>
+      </template>
+      <template #stats>
+        <StatStrip :items="tplStats" />
+      </template>
+    </PageHero>
+
     <div class="toolbar">
       <el-input v-model="searchKey" placeholder="搜索模板文件名…" clearable class="search" />
-      <el-button type="primary" @click="handleAddTemp">添加模板</el-button>
     </div>
 
     <div v-loading="loading" class="tpl-loading-area">
@@ -316,7 +323,7 @@ const copyText = async (row: Temp) => {
       <div class="preflight-query">
         <div><strong>规则解释目标</strong><small>每行一个域名；只解释模板规则，不会从浏览器直连目标网站。</small></div>
         <el-input v-model="preflightDomains" type="textarea" :rows="2" placeholder="gemini.google.com&#10;chatgpt.com" />
-        <div class="preflight-actions"><el-button @click="openRegression">回归用例</el-button><el-button @click="queueTemplateValidation">后台验证</el-button><el-button type="primary" :loading="preflightLoading" @click="runPreflight(true)">重新预检</el-button></div>
+        <div class="preflight-actions"><el-button @click="queueTemplateValidation">后台验证</el-button><el-button type="primary" :loading="preflightLoading" @click="runPreflight(true)">重新预检</el-button></div>
       </div>
 
       <div v-loading="preflightLoading" class="preflight-body">
@@ -383,29 +390,6 @@ const copyText = async (row: Temp) => {
       <template #footer><el-button @click="preflightVisible = false">关闭</el-button></template>
     </el-dialog>
 
-    <el-drawer v-model="regressionVisible" title="分流回归用例" size="860px">
-      <el-alert type="info" :closable="false" title="回归用例可以明确预期策略/地区或禁止策略；编辑模板时会比较修改前后的命中变化。" />
-      <div class="regression-form">
-        <el-input v-model="regressionForm.name" placeholder="名称，例如 Gemini 必须走 AI" />
-        <el-input v-model="regressionForm.domain" placeholder="域名，例如 gemini.google.com" />
-        <el-input v-model="regressionForm.expectedPolicy" placeholder="预期策略（可选）" />
-        <el-input v-model="regressionForm.expectedCountry" placeholder="预期地区 JP/US（可选）" />
-        <el-input v-model="regressionForm.forbiddenPolicy" placeholder="禁止策略，例如 DIRECT" />
-        <el-select v-model="regressionForm.protocol"><el-option label="TCP" value="tcp"/><el-option label="UDP" value="udp"/></el-select>
-        <el-input-number v-model="regressionForm.port" :min="1" :max="65535" />
-        <el-switch v-model="regressionForm.enabled" active-text="启用" />
-      </div>
-      <div class="regression-actions"><el-button type="primary" @click="persistRegression">保存用例</el-button></div>
-      <el-table :data="regressionCases" size="small">
-        <el-table-column prop="name" label="名称" min-width="130"/><el-table-column prop="domain" label="域名" min-width="170"/><el-table-column prop="expectedPolicy" label="预期策略" min-width="120"/><el-table-column prop="expectedCountry" label="地区" width="70"/><el-table-column prop="forbiddenPolicy" label="禁止" width="90"/>
-        <el-table-column label="操作" width="120"><template #default="{row}"><el-button link type="primary" @click="editRegression(row)">编辑</el-button><el-button link type="danger" @click="removeRegression(row)">删除</el-button></template></el-table-column>
-      </el-table>
-      <template v-if="regressionDiff.length">
-        <h4>当前编辑内容与打开时版本的命中差异</h4>
-        <el-table :data="regressionDiff" size="small"><el-table-column prop="domain" label="域名" min-width="170"/><el-table-column prop="beforePolicy" label="修改前" min-width="120"/><el-table-column prop="afterPolicy" label="修改后" min-width="120"/><el-table-column label="变化" width="90"><template #default="{row}"><el-tag :type="row.changed?'warning':'success'" size="small">{{ row.changed?'变化':'一致' }}</el-tag></template></el-table-column></el-table>
-      </template>
-      <template v-if="regressionResults.length"><h4>修改后回归结果</h4><el-table :data="regressionResults" size="small"><el-table-column label="用例" min-width="140"><template #default="{row}">{{ row.case?.name }}</template></el-table-column><el-table-column prop="policy" label="实际策略" min-width="120"/><el-table-column label="结果" width="90"><template #default="{row}"><el-tag :type="row.passed?'success':'danger'" size="small">{{ row.passed?'通过':'失败' }}</el-tag></template></el-table-column><el-table-column prop="reason" label="原因" min-width="180"/></el-table></template>
-    </el-drawer>
   </div>
 </template>
 
@@ -433,7 +417,7 @@ const copyText = async (row: Temp) => {
 .workbench-toolbar { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; }.filename-field { flex:1; max-width:560px; margin-bottom:12px; }.workbench-actions { display:flex; gap:8px; padding-bottom:12px; }
 .workbench-grid { display:grid; grid-template-columns:220px minmax(0,1fr) 260px; gap:12px; min-height:560px; }.outline-panel,.inspect-panel { overflow:auto; max-height:560px; border:1px solid var(--el-border-color-lighter); border-radius:10px; background:var(--el-fill-color-blank); }.panel-title { position:sticky; top:0; z-index:1; display:flex; justify-content:space-between; align-items:center; gap:8px; padding:12px; border-bottom:1px solid var(--el-border-color-lighter); background:var(--el-bg-color); font-weight:700; }.panel-title span { color:var(--el-text-color-secondary); }.panel-title small { margin-left:4px; font-weight:400; }.outline-toggle { border:0; background:transparent; color:var(--el-color-primary); font-size:12px; cursor:pointer; }.outline-item { display:flex; width:100%; justify-content:space-between; gap:8px; padding:8px 10px; border:0; background:transparent; color:var(--el-text-color-regular); text-align:left; cursor:pointer; }.outline-item:hover { background:var(--el-fill-color-light); color:var(--el-color-primary); }.outline-item small { color:var(--el-text-color-placeholder); }.inspect-panel { padding-bottom:12px; }.inspect-panel :deep(.el-alert) { margin:10px; width:auto; }.inspect-panel :deep(.el-result) { padding:28px 10px 12px; }.inspect-tip { padding:0 14px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.7; }.version-item { display:grid; grid-template-columns:1fr auto; gap:7px; padding:12px 0; border-bottom:1px solid var(--el-border-color-lighter); }.version-item > div:first-child { display:flex; gap:8px; align-items:center; }.version-item > div:last-child { grid-column:1/-1; }.version-item small { color:var(--el-text-color-secondary); }.diff-head { display:flex; gap:18px; align-items:center; margin-bottom:10px; color:var(--el-text-color-regular); font-size:13px; }.diff-head small { margin-left:auto; color:var(--el-text-color-secondary); }
 .preflight-query { display:grid; grid-template-columns:190px minmax(0,1fr) auto; align-items:center; gap:14px; padding:14px; border:1px solid var(--el-border-color-lighter); border-radius:12px; background:var(--el-fill-color-extra-light); }
-.preflight-actions{display:flex;gap:8px}.capability-table{border-top:1px solid var(--el-border-color-lighter)}.regression-form{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0}.regression-actions{display:flex;justify-content:flex-end;margin-bottom:14px}@media(max-width:720px){.regression-form{grid-template-columns:1fr}}
+.preflight-actions{display:flex;gap:8px}.capability-table{border-top:1px solid var(--el-border-color-lighter)}@media(max-width:720px){}
 .preflight-query>div { display:flex; flex-direction:column; gap:4px; }.preflight-query small { color:var(--el-text-color-secondary); font-size:11px; line-height:1.5; }.preflight-body { min-height:300px; margin-top:14px; }
 .preflight-hero { display:flex; align-items:center; gap:13px; padding:16px 18px; border:1px solid color-mix(in srgb,var(--el-color-success) 35%,var(--el-border-color)); border-radius:13px; background:color-mix(in srgb,var(--el-color-success) 7%,var(--el-bg-color)); }.preflight-hero.is-error { border-color:color-mix(in srgb,var(--el-color-danger) 35%,var(--el-border-color)); background:color-mix(in srgb,var(--el-color-danger) 7%,var(--el-bg-color)); }
 .preflight-mark { display:grid; width:36px; height:36px; place-items:center; border-radius:10px; background:var(--el-color-success); color:white; font-size:21px; font-weight:800; }.is-error .preflight-mark { background:var(--el-color-danger); }.preflight-hero>div:nth-child(2) { display:flex; flex-direction:column; gap:3px; }.preflight-hero>div:nth-child(2) small { color:var(--el-text-color-secondary); }
@@ -453,6 +437,5 @@ const copyText = async (row: Temp) => {
   .preflight-query{grid-template-columns:1fr}.preflight-actions{flex-wrap:wrap}.preflight-actions :deep(.el-button){flex:1;margin-left:0}
   .preflight-stats{display:grid;grid-template-columns:1fr 1fr;margin-left:0;width:100%}.preflight-hero{align-items:flex-start;flex-wrap:wrap}.preflight-mark{flex:0 0 auto}
   .issue-row{grid-template-columns:58px 1fr}.issue-row small{grid-column:2}.compat-grid{grid-template-columns:1fr;padding:8px}
-  .regression-actions :deep(.el-button){width:100%;margin-left:0}
 }
 </style>

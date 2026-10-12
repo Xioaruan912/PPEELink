@@ -2,8 +2,8 @@
 @use "./fonts";
 
 /* =========================================================================
-   PPEELink Console — Jade Control (fresh design system)
-   Dark-first, single jade accent, hairline surfaces, cinematic motion.
+   PPEELink Console — Sunlit Control (design system v2)
+   Warm-first, single sun-gold accent, soft ivory surfaces, cinematic motion.
    ========================================================================= */
 
 :root {
@@ -13,33 +13,33 @@
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas,
     monospace;
 
-  /* --- jade accent scale --- */
-  --jade-100: #e2faf0;
-  --jade-200: #bdf3dd;
-  --jade-300: #8ae9c5;
-  --jade-400: #4fddab;
-  --jade-500: #23c98c;
-  --jade-600: #12a878;
-  --jade-700: #0b855e;
-  --jade-800: #0a6749;
+  /* --- sun-gold accent scale --- */
+  --gold-100: #fdf3dc;
+  --gold-200: #fae3b0;
+  --gold-300: #f5cd7d;
+  --gold-400: #f0b444;
+  --gold-500: #e8960f;
+  --gold-600: #cf800a;
+  --gold-700: #a86407;
+  --gold-800: #7d4a06;
 
-  /* --- semantic surfaces (light) --- */
-  --ui-accent: #0f9f74;
-  --ui-accent-strong: #087a58;
-  --ui-accent-soft: #d7f3e7;
-  --ui-focus-ring: rgba(15, 159, 116, 0.22);
-  --ui-accent-shadow: rgba(15, 159, 116, 0.18);
-  --ui-canvas: #f1f6f3;
-  --ui-sidebar: #eaf2ed;
-  --ui-surface: #f8fbf9;
+  /* --- semantic surfaces (light, warm ivory) --- */
+  --ui-accent: #e8960f;
+  --ui-accent-strong: #a86407;
+  --ui-accent-soft: #fdf0d3;
+  --ui-focus-ring: rgba(232, 150, 15, 0.26);
+  --ui-accent-shadow: rgba(133, 92, 12, 0.2);
+  --ui-canvas: #faf7f0;
+  --ui-sidebar: #f5efe3;
+  --ui-surface: #fefcf7;
   --ui-surface-strong: #ffffff;
-  --ui-text: #14201a;
-  --ui-text-secondary: #46584e;
-  --ui-text-muted: #75887c;
-  --ui-border: #d9e6de;
-  --ui-hover: #e2ece6;
-  --ui-panel-shadow: 0 18px 40px rgba(18, 42, 31, 0.08);
-  --ui-glow: 0 0 0 1px color-mix(in srgb, var(--ui-accent) 26%, transparent),
+  --ui-text: #241f16;
+  --ui-text-secondary: #6b6252;
+  --ui-text-muted: #9a9081;
+  --ui-border: #ecdfc8;
+  --ui-hover: #f3ead9;
+  --ui-panel-shadow: 0 18px 40px rgba(90, 66, 20, 0.09);
+  --ui-glow: 0 0 0 1px color-mix(in srgb, var(--ui-accent) 30%, transparent),
     0 14px 36px var(--ui-accent-shadow);
 
   /* --- radii lock --- */
@@ -58,19 +58,19 @@
   --dur-slow: 420ms;
 
   /* --- element plus remap (light) --- */
-  --el-color-primary: #0f9f74;
-  --el-color-primary-light-3: #4cbd9b;
-  --el-color-primary-light-5: #87d2bc;
-  --el-color-primary-light-7: #c0e8dc;
-  --el-color-primary-light-8: #d9f1e9;
-  --el-color-primary-light-9: #eef8f4;
-  --el-color-primary-dark-2: #0b7a5a;
+  --el-color-primary: #e8960f;
+  --el-color-primary-light-3: #eeab41;
+  --el-color-primary-light-5: #f4c67b;
+  --el-color-primary-light-7: #f9dfb6;
+  --el-color-primary-light-8: #fbead4;
+  --el-color-primary-light-9: #fdf5e9;
+  --el-color-primary-dark-2: #c07c0b;
   --el-border-radius-base: 9px;
   --el-border-radius-small: 6px;
   --el-border-radius-round: 999px;
   --el-font-family: var(--font-sans);
 
-  /* semantic states, tuned to the jade family */
+  /* semantic states, tuned to the sunlit family */
   --el-color-success: #1da97a;
   --el-color-success-light-3: #55c398;
   --el-color-success-light-5: #8ed8bd;
@@ -78,63 +78,63 @@
   --el-color-success-light-8: #ddf3ea;
   --el-color-success-light-9: #eff9f4;
   --el-color-success-dark-2: #158363;
-  --el-color-warning: #c98f26;
-  --el-color-warning-light-3: #d9ad5c;
-  --el-color-warning-light-5: #e3c691;
-  --el-color-warning-light-7: #eedec6;
-  --el-color-warning-light-8: #f4ead9;
-  --el-color-warning-light-9: #faf5ec;
-  --el-color-warning-dark-2: #a1721e;
-  --el-color-danger: #cf574c;
-  --el-color-danger-light-3: #dc867e;
-  --el-color-danger-light-5: #e6aca6;
-  --el-color-danger-light-7: #efd2cf;
-  --el-color-danger-light-8: #f4e0dd;
-  --el-color-danger-light-9: #faf0ef;
-  --el-color-danger-dark-2: #a5463d;
-  --el-color-error: #cf574c;
-  --el-color-error-light-3: #dc867e;
-  --el-color-error-light-5: #e6aca6;
-  --el-color-error-light-7: #efd2cf;
-  --el-color-error-light-8: #f4e0dd;
-  --el-color-error-light-9: #faf0ef;
-  --el-color-error-dark-2: #a5463d;
-  --el-color-info: #7c8d84;
-  --el-color-info-light-3: #a3b0a9;
-  --el-color-info-light-5: #c2cbc6;
-  --el-color-info-light-7: #dee4e0;
-  --el-color-info-light-8: #eaefec;
-  --el-color-info-light-9: #f4f7f5;
-  --el-color-info-dark-2: #63716a;
+  --el-color-warning: #d97706;
+  --el-color-warning-light-3: #e49a3f;
+  --el-color-warning-light-5: #eebd7d;
+  --el-color-warning-light-7: #f6ddc1;
+  --el-color-warning-light-8: #fae9d8;
+  --el-color-warning-light-9: #fdf4ea;
+  --el-color-warning-dark-2: #b05f04;
+  --el-color-danger: #c9463a;
+  --el-color-danger-light-3: #d76f64;
+  --el-color-danger-light-5: #e5a29b;
+  --el-color-danger-light-7: #f2d2cf;
+  --el-color-danger-light-8: #f7e2df;
+  --el-color-danger-light-9: #fbf0ee;
+  --el-color-danger-dark-2: #a53a30;
+  --el-color-error: #c9463a;
+  --el-color-error-light-3: #d76f64;
+  --el-color-error-light-5: #e5a29b;
+  --el-color-error-light-7: #f2d2cf;
+  --el-color-error-light-8: #f7e2df;
+  --el-color-error-light-9: #fbf0ee;
+  --el-color-error-dark-2: #a53a30;
+  --el-color-info: #8a8172;
+  --el-color-info-light-3: #a99f8e;
+  --el-color-info-light-5: #c7bda9;
+  --el-color-info-light-7: #e3dcc9;
+  --el-color-info-light-8: #efe9da;
+  --el-color-info-light-9: #f8f5ec;
+  --el-color-info-dark-2: #6f6759;
 }
 
 html.dark {
-  --ui-accent: #3ddba2;
-  --ui-accent-strong: #8aefc9;
-  --ui-accent-soft: rgba(61, 219, 162, 0.14);
-  --ui-focus-ring: rgba(61, 219, 162, 0.26);
-  --ui-accent-shadow: rgba(0, 0, 0, 0.42);
-  --ui-canvas: #060a08;
-  --ui-sidebar: #090f0c;
-  --ui-surface: #0d1511;
-  --ui-surface-strong: #111b15;
-  --ui-text: #e9f4ee;
-  --ui-text-secondary: #a6bab0;
-  --ui-text-muted: #6d8177;
-  --ui-border: #1d2c24;
-  --ui-hover: #152219;
-  --ui-panel-shadow: 0 22px 50px rgba(0, 0, 0, 0.45);
-  --ui-glow: 0 0 0 1px color-mix(in srgb, var(--ui-accent) 34%, transparent),
+  --ui-accent: #f2ad3a;
+  --ui-accent-strong: #ffca63;
+  --ui-accent-soft: rgba(242, 173, 58, 0.16);
+  --ui-focus-ring: rgba(242, 173, 58, 0.3);
+  --ui-accent-shadow: rgba(0, 0, 0, 0.45);
+  --ui-canvas: #17120a;
+  --ui-sidebar: #1c160d;
+  --ui-surface: #211a10;
+  --ui-surface-strong: #271f14;
+  --ui-text: #f4ecdc;
+  --ui-text-secondary: #c3b49a;
+  --ui-text-muted: #93856d;
+  --ui-border: #3b2f1e;
+  --ui-hover: #2d2415;
+  --ui-panel-shadow: 0 22px 50px rgba(0, 0, 0, 0.5);
+  --ui-glow: 0 0 0 1px color-mix(in srgb, var(--ui-accent) 38%, transparent),
     0 12px 40px rgba(0, 0, 0, 0.5);
 
-  /* brighter jade primaries for dark surfaces */
-  --el-color-primary: #34d69d !important;
-  --el-color-primary-light-3: #6fe2ba !important;
-  --el-color-primary-light-5: #9aecd0 !important;
-  --el-color-primary-light-7: #c3f4e3 !important;
-  --el-color-primary-light-8: #d8f8ed !important;
-  --el-color-primary-light-9: #edfcf6 !important;
-  --el-color-primary-dark-2: #1fae7c !important;
+  /* brighter gold primaries for dark surfaces */
+  --el-color-primary: #f2ad3a !important;
+  --el-color-primary-light-3: #f5bd5f !important;
+  --el-color-primary-light-5: #f8ce8a !important;
+  --el-color-primary-light-7: #fbdfb8 !important;
+  --el-color-primary-light-8: #fce8cd !important;
+  --el-color-primary-light-9: #fdf2e2 !important;
+  --el-color-primary-dark-2: #d99019 !important;
   --el-color-success: #34d69d;
   --el-color-success-light-3: #6fe2ba;
   --el-color-success-light-5: #9aecd0;
@@ -142,13 +142,13 @@ html.dark {
   --el-color-success-light-8: #d8f8ed;
   --el-color-success-light-9: #edfcf6;
   --el-color-success-dark-2: #23a87c;
-  --el-color-warning: #e0b055;
-  --el-color-warning-light-3: #e7c17f;
-  --el-color-warning-light-5: #edd4a8;
-  --el-color-warning-light-7: #f3e6cd;
-  --el-color-warning-light-8: #f6ecdb;
-  --el-color-warning-light-9: #fbf6ec;
-  --el-color-warning-dark-2: #b28a44;
+  --el-color-warning: #e8964a;
+  --el-color-warning-light-3: #edac6f;
+  --el-color-warning-light-5: #f2c194;
+  --el-color-warning-light-7: #f7d9bd;
+  --el-color-warning-light-8: #fae5d1;
+  --el-color-warning-light-9: #fdf2e7;
+  --el-color-warning-dark-2: #bd7233;
   --el-color-danger: #e07569;
   --el-color-danger-light-3: #e7968e;
   --el-color-danger-light-5: #edb4ae;
@@ -163,14 +163,14 @@ html.dark {
   --el-color-error-light-8: #f6e3e1;
   --el-color-error-light-9: #fbf1f0;
   --el-color-error-dark-2: #b25c52;
-  --el-color-info: #93a49b;
-  --el-color-info-light-3: #adb9b3;
-  --el-color-info-light-5: #c6cfca;
-  --el-color-info-light-7: #e0e6e2;
-  --el-color-info-light-8: #ecf0ee;
-  --el-color-info-light-9: #f5f8f6;
-  --el-color-info-dark-2: #75857c;
-  --el-border-color: #1d2c24;
+  --el-color-info: #a89e8a;
+  --el-color-info-light-3: #b9b09e;
+  --el-color-info-light-5: #cbc3b2;
+  --el-color-info-light-7: #ddd7c8;
+  --el-color-info-light-8: #e8e3d7;
+  --el-color-info-light-9: #f4f1e9;
+  --el-color-info-dark-2: #857c6a;
+  --el-border-color: #3b2f1e;
   --el-fill-color-blank: var(--ui-surface-strong);
 }
 
@@ -324,7 +324,7 @@ html.dark body::after {
   border-right: 1px solid var(--ui-border);
 }
 
-/* jade edge light on the active rail */
+/* gold edge light on the active rail */
 .sidebar-container::after {
   position: absolute;
   top: 0;
@@ -431,7 +431,7 @@ html.dark .el-menu-item {
 }
 
 /* =========================================================================
-   Element Plus — buttons (with jade sheen)
+   Element Plus — buttons (with gold sheen)
    ========================================================================= */
 
 .el-button {
@@ -460,20 +460,23 @@ html.dark .el-menu-item {
 }
 
 .el-button--primary:not(.is-text):not(.is-link) {
+  --el-button-text-color: #3a2a08;
+  --el-button-hover-text-color: #3a2a08;
+  --el-button-active-text-color: #3a2a08;
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--ui-accent) 40%, transparent),
     0 10px 26px var(--ui-accent-shadow) !important;
-}
-
-html.dark .el-button--primary:not(.is-text):not(.is-link) {
-  --el-button-text-color: #05231a;
-  --el-button-hover-text-color: #05231a;
-  --el-button-active-text-color: #05231a;
   font-weight: 700;
 }
 
-html.dark .el-button--success:not(.is-text):not(.is-link),
-html.dark .el-button--warning:not(.is-text):not(.is-link),
+.el-button--success:not(.is-text):not(.is-link),
+.el-button--warning:not(.is-text):not(.is-link) {
+  --el-button-text-color: #08211a;
+  --el-button-hover-text-color: #08211a;
+  --el-button-active-text-color: #08211a;
+  font-weight: 700;
+}
+
 html.dark .el-button--danger:not(.is-text):not(.is-link),
 html.dark .el-button--error:not(.is-text):not(.is-link) {
   --el-button-text-color: #08211a;
@@ -711,10 +714,16 @@ html:not(.dark) .el-message-box {
 
 .el-segmented__item {
   border-radius: var(--r-xs) !important;
+  color: var(--ui-text-secondary);
   transition:
     color var(--dur-fast) ease,
     background var(--dur-fast) ease,
     box-shadow var(--dur-fast) ease !important;
+}
+
+.el-segmented__item.is-selected {
+  color: var(--ui-text);
+  font-weight: 600;
 }
 
 .el-segmented__item-selected {
@@ -743,7 +752,7 @@ html:not(.dark) .el-message-box {
   background: linear-gradient(
     90deg,
     var(--ui-accent),
-    var(--jade-300)
+    var(--gold-300)
   ) !important;
   box-shadow: 0 0 12px color-mix(in srgb, var(--ui-accent) 60%, transparent);
 }

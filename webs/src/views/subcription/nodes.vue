@@ -396,128 +396,155 @@ const cardGroups = computed(() => {
 const handleSelectionChange = (val: any[]) => { multipleSelection.value = val }
 
 onMounted(loadAll)
+
+// ===== 控制台统计与批量命令 =====
+const nodeStats = computed(() => {
+  const list = overviewList.value
+  const reachable = list.filter(n => n.rtt >= 0).length
+  const timeout = list.filter(n => n.rtt < 0 && n.rtt !== -2).length
+  const rtts = list.filter(n => n.rtt >= 0).map(n => n.rtt)
+  const avgRtt = rtts.length ? Math.round(rtts.reduce((a, b) => a + b, 0) / rtts.length) : 0
+  const scores = list.map(n => n.score || 0).filter(s => s > 0)
+  const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : 0
+  return [
+    { label: '节点总数', value: list.length },
+    { label: '链路可达', value: reachable, tone: 'ok' as const },
+    { label: '超时', value: timeout, tone: timeout > 0 ? ('bad' as const) : ('default' as const) },
+    { label: '平均延迟', value: avgRtt, unit: 'ms' },
+    { label: '平均评分', value: avgScore, tone: 'warn' as const },
+  ]
+})
+
+const onBatchCommand = (cmd: string) => {
+  switch (cmd) {
+    case 'toggleAll': toggleAllNodes(); break
+    case 'clear': clearCardSelect(); break
+    case 'unbind': cardSelectUnbind(); break
+    case 'hide': hideSelectedNodes(); break
+    case 'hideGroup': hideActiveGroup(); break
+    case 'delete': cardSelectDel(); break
+  }
+}
+
+const onNodeCommand = (cmd: string, n: any) => {
+  switch (cmd) {
+    case 'copy': copyInfo(n); break
+    case 'hide': hideVisibleNode(n.id); break
+    case 'delete': handleDel(n); break
+  }
+}
 </script>
 
 <template>
   <div class="p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
-    <el-row :gutter="24">
-      <!-- 左侧分组树 -->
-      <el-col :span="5" :xs="24">
-        <div class="group-sidebar-panel bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-5 sticky top-6">
-          <div class="flex justify-between items-center mb-4">
-            <div><span class="font-semibold text-gray-700 dark:text-gray-200">分组</span><small class="group-coverage">已分组 {{ groupedVisibleCount }}/{{ overviewList.length }}</small></div>
-            <el-button link type="primary" size="small" @click="openGroupManager">管理</el-button>
-          </div>
-          <div class="flex flex-col gap-1">
-            <div
-              class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
-              :class="activeGroup === '全部' ? 'group-filter-active' : 'group-filter-idle'"
-              @click="activeGroup = '全部'"
-            >
-              <span>全部</span>
-              <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ loading ? '…' : overviewList.length }}</span>
-            </div>
-            <div
-              v-for="g in groupTree"
-              :key="g.id"
-              class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
-              :class="activeGroup === g.id ? 'group-filter-active' : 'group-filter-idle'"
-              @click="activeGroup = g.id"
-            >
-              <span class="truncate pr-2">{{ g.label }}</span>
-              <span class="group-tree-actions">
-                <el-button link type="warning" size="small" class="group-hide-btn" @click.stop="hideGroupByName(g.id)">隐藏</el-button>
-                <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ g.count }}</span>
-              </span>
-            </div>
-          </div>
-        </div>
-      </el-col>
+    <PageHero title="节点列表" desc="节点、分组与质量一览。卡片视图关注健康度，列表视图用于批量维护。">
+      <template #actions>
+        <el-button :loading="localTesting" @click="triggerLocalPing">测本地</el-button>
+        <el-button :loading="loading" @click="loadAll">刷新</el-button>
+        <el-button type="primary" @click="handleAddNode">添加节点</el-button>
+      </template>
+      <template #stats>
+        <StatStrip :items="nodeStats" />
+      </template>
+    </PageHero>
 
-      <!-- 主区 -->
-      <el-col :span="19" :xs="24">
-        <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] flex flex-col overflow-hidden min-h-[500px]">
-          <!-- 工具条 -->
-          <div class="node-toolbar p-5 border-b border-gray-100 dark:border-white/5 flex flex-wrap gap-3 items-center">
-            <el-input v-model="searchText" placeholder="搜索节点名" clearable class="w-64" />
-            <el-select v-model="filterCountries" multiple collapse-tags placeholder="国家筛选" class="w-48">
-              <el-option v-for="c in countryOptions" :key="c" :label="c" :value="c" />
-            </el-select>
-            <el-button-group>
-              <el-button :type="viewMode === 'card' ? 'primary' : ''" @click="viewMode = 'card'">卡片</el-button>
-              <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">列表</el-button>
-            </el-button-group>
-            <template v-if="viewMode === 'card'">
-              <el-button size="small" @click="toggleAllNodes">
-                {{ filteredNodes.length && filteredNodes.every(n => selectedIds.has(n.id)) ? '取消全选' : '全选' }}
-              </el-button>
-              <el-button size="small" @click="clearCardSelect" :disabled="!selectedCount">取消选择</el-button>
-              <el-button v-if="activeGroup !== '全部'" size="small" type="warning" @click="cardSelectUnbind" :disabled="!selectedCount">移出分组</el-button>
-              <el-button size="small" type="warning" plain @click="hideSelectedNodes" :disabled="!selectedCount">隐藏选中</el-button>
-              <el-button v-if="activeGroup !== '全部'" size="small" type="warning" plain @click="hideActiveGroup">隐藏本组</el-button>
-              <el-button size="small" type="danger" @click="cardSelectDel" :disabled="!selectedCount">删除选中({{ selectedCount }})</el-button>
+    <div class="nodes-layout">
+      <aside class="group-rail">
+        <header class="rail-head">
+          <span>分组</span>
+          <button class="rail-manage" @click="openGroupManager">管理</button>
+        </header>
+        <button class="rail-item" :class="{ active: activeGroup === '全部' }" @click="activeGroup = '全部'">
+          <span class="rail-name">全部节点</span>
+          <b class="rail-count">{{ loading ? '…' : overviewList.length }}</b>
+        </button>
+        <button v-for="g in groupTree" :key="g.id" class="rail-item" :class="{ active: activeGroup === g.id }" @click="activeGroup = g.id">
+          <span class="rail-name">{{ g.label }}</span>
+          <span class="rail-meta">
+            <b class="rail-count">{{ g.count }}</b>
+            <i class="rail-hide" title="隐藏整组" @click.stop="hideGroupByName(g.id)">隐藏</i>
+          </span>
+        </button>
+        <p class="rail-foot">已分组 {{ groupedVisibleCount }}/{{ overviewList.length }}<template v-if="hiddenNodeCount"> · 隐藏 {{ hiddenNodeCount }}</template></p>
+      </aside>
+
+      <section class="nodes-main">
+        <div class="nodes-toolbar">
+          <el-input v-model="searchText" placeholder="搜索节点名" clearable class="toolbar-search" />
+          <el-select v-model="filterCountries" multiple collapse-tags placeholder="国家筛选" class="toolbar-country">
+            <el-option v-for="c in countryOptions" :key="c" :label="c" :value="c" />
+          </el-select>
+          <div class="view-switch">
+            <button :class="{ active: viewMode === 'card' }" @click="viewMode = 'card'">卡片</button>
+            <button :class="{ active: viewMode === 'list' }" @click="viewMode = 'list'">列表</button>
+          </div>
+          <div class="toolbar-spacer"></div>
+          <el-dropdown v-if="viewMode === 'card'" trigger="click" @command="onBatchCommand">
+            <el-button :disabled="!selectedCount">
+              批量操作<span v-if="selectedCount">（{{ selectedCount }}）</span>
+              <span class="batch-caret" aria-hidden="true"></span>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="toggleAll">{{ filteredNodes.length && filteredNodes.every(n => selectedIds.has(n.id)) ? '取消全选' : '全选当前' }}</el-dropdown-item>
+                <el-dropdown-item command="clear" :disabled="!selectedCount">取消选择</el-dropdown-item>
+                <el-dropdown-item v-if="activeGroup !== '全部'" command="unbind" :disabled="!selectedCount">移出分组</el-dropdown-item>
+                <el-dropdown-item command="hide" :disabled="!selectedCount">隐藏选中</el-dropdown-item>
+                <el-dropdown-item v-if="activeGroup !== '全部'" command="hideGroup">隐藏本组</el-dropdown-item>
+                <el-dropdown-item command="delete" divided :disabled="!selectedCount">删除选中</el-dropdown-item>
+              </el-dropdown-menu>
             </template>
-            <div class="flex-1"></div>
-            <el-button :loading="localTesting" type="success" @click="triggerLocalPing">测本地</el-button>
-            <el-button :loading="loading" @click="loadAll">刷新</el-button>
-            <el-button type="primary" @click="handleAddNode">添加节点</el-button>
-          </div>
+          </el-dropdown>
+        </div>
 
-          <div class="p-5 bg-gray-50/30 dark:bg-black/10 flex-1 node-loading-area" v-loading="loading">
-          <!-- 卡片视图 -->
+        <div class="nodes-body" v-loading="loading">
           <template v-if="viewMode === 'card'">
-            <div v-for="g in cardGroups" :key="g.country" class="mb-6 last:mb-0">
-              <div class="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3 ml-1">
-                <el-checkbox
-                  :model-value="countryAllSelected(g.items)"
-                  @change="() => toggleCountrySelect(g.items)"
-                  size="small"
-                />
-                <span>{{ countryFlag(g.items[0].countryCode) }} {{ g.country }}（{{ g.items.length }}）</span>
-                <el-button link type="primary" size="small" @click="toggleCountrySelect(g.items)">
-                  {{ countryAllSelected(g.items) ? '取消全选' : '全选' }}
-                </el-button>
-              </div>
-              <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <div v-for="n in g.items" :key="n.id" class="bg-white dark:bg-[#202322] rounded-xl p-4 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] hover:shadow-md transition-all duration-150 group" :class="selectedIds.has(n.id) ? 'node-card-selected' : ''">
-                  <div class="flex justify-between items-start mb-2">
-                    <div class="flex items-center gap-2 overflow-hidden flex-1 pr-2">
-                      <el-checkbox :model-value="selectedIds.has(n.id)" @change="() => toggleCardSelect(n.id)" size="small" class="node-check" />
-                      <span class="text-lg">{{ countryFlag(n.countryCode) }}</span>
-                      <span class="font-medium text-gray-800 dark:text-gray-200 truncate" :title="n.name">{{ n.name }}</span>
-                    </div>
-                    <span class="text-xs px-2 py-0.5 rounded-full whitespace-nowrap" :style="{ background: rttColor(n.rtt), color: '#fff' }">{{ rttText(n.rtt) }}</span>
-                  </div>
-                  <div class="text-xs text-gray-500 dark:text-gray-400 mb-4 truncate">{{ n.country }} · {{ n.server }}</div>
-                  <div class="quality-strip">
-                    <span class="quality-score" :class="n.score >= 80 ? 'good' : n.score >= 60 ? 'warn' : 'bad'">{{ n.score || 0 }}分</span>
+            <div v-for="g in cardGroups" :key="g.country" class="country-block">
+              <header class="country-head">
+                <el-checkbox :model-value="countryAllSelected(g.items)" @change="() => toggleCountrySelect(g.items)" size="small" />
+                <span class="country-flag">{{ countryFlag(g.items[0].countryCode) }}</span>
+                <span class="country-name">{{ g.country }}</span>
+                <b class="country-count">{{ g.items.length }}</b>
+                <button class="country-select" @click="toggleCountrySelect(g.items)">{{ countryAllSelected(g.items) ? '取消全选' : '全选' }}</button>
+              </header>
+              <div class="node-grid">
+                <article v-for="n in g.items" :key="n.id" class="node-card" :class="{ selected: selectedIds.has(n.id) }">
+                  <header class="node-card-top">
+                    <el-checkbox :model-value="selectedIds.has(n.id)" @change="() => toggleCardSelect(n.id)" size="small" />
+                    <span class="node-flag">{{ countryFlag(n.countryCode) }}</span>
+                    <span class="node-name" :title="n.name">{{ n.name }}</span>
+                    <QualityRing :value="n.score || 0" :size="42" />
+                  </header>
+                  <div class="node-meta">{{ n.country }} · {{ n.server }}</div>
+                  <div class="node-stats">
+                    <span class="node-rtt" :class="n.rtt === -2 ? 'unknown' : n.rtt < 0 ? 'bad' : n.rtt < 100 ? 'good' : n.rtt < 300 ? 'warn' : 'bad'">{{ rttText(n.rtt) }}</span>
                     <span>可用 {{ n.availability ?? 0 }}%</span>
                     <span>抖动 {{ n.jitter ?? 0 }}ms</span>
                   </div>
-                  <div class="node-card-actions flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                    <el-button link type="primary" size="small" @click="openQuality(n)">质量</el-button>
-                    <el-button link type="primary" size="small" @click="openUnlock(n)">解锁</el-button>
-                    <el-button link type="success" size="small" @click="openTcp(n)">链路TCP</el-button>
-                    <el-button link type="primary" size="small" @click="handleEditNode(n)">编辑</el-button>
-                    <el-button link type="primary" size="small" @click="copyInfo(n)">复制</el-button>
-                    <el-button link type="warning" size="small" @click="hideVisibleNode(n.id)">隐藏</el-button>
-                    <el-button link type="danger" size="small" @click="handleDel(n)">删除</el-button>
-                  </div>
-                </div>
+                  <footer class="node-actions">
+                    <button @click="openQuality(n)">质量</button>
+                    <button @click="openUnlock(n)">解锁</button>
+                    <button @click="openTcp(n)">TCP</button>
+                    <button @click="handleEditNode(n)">编辑</button>
+                    <el-dropdown trigger="click" @command="cmd => onNodeCommand(cmd, n)">
+                      <button class="node-more">更多</button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item command="copy">复制链接</el-dropdown-item>
+                          <el-dropdown-item command="hide">隐藏节点</el-dropdown-item>
+                          <el-dropdown-item command="delete" divided>删除节点</el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </footer>
+                </article>
               </div>
             </div>
-            <el-empty v-if="!loading && filteredNodes.length === 0" description="无匹配节点" />
+            <EmptyState v-if="!loading && filteredNodes.length === 0" title="没有匹配的节点" desc="调整搜索词、国家筛选，或切换到其他分组再试。" />
           </template>
 
-          <!-- 列表视图 -->
           <template v-else>
-            <el-table
-              ref="multipleTable"
-              :data="filteredNodes"
-              stripe
-              style="width: 100%"
-              @selection-change="handleSelectionChange"
-            >
+            <el-table ref="multipleTable" :data="filteredNodes" stripe style="width: 100%" @selection-change="handleSelectionChange">
               <el-table-column type="selection" width="45" />
               <el-table-column label="节点" min-width="200">
                 <template #default="{ row }">
@@ -553,7 +580,7 @@ onMounted(loadAll)
                 </template>
               </el-table-column>
             </el-table>
-            <div class="mt-4 flex gap-2">
+            <div class="list-actions">
               <el-button size="small" @click="selectAll">全选</el-button>
               <el-button size="small" @click="selectClear">取消</el-button>
               <el-button size="small" type="primary" @click="selectCopy">复制选中</el-button>
@@ -561,10 +588,9 @@ onMounted(loadAll)
               <el-button size="small" type="danger" @click="selectDel">删除选中</el-button>
             </div>
           </template>
-          </div>
         </div>
-      </el-col>
-    </el-row>
+      </section>
+    </div>
 
     <!-- 添加/编辑节点弹窗 -->
     <el-dialog v-model="Nodedialog" :title="NodeForm.Title" width="560px" align-center>
@@ -678,91 +704,140 @@ onMounted(loadAll)
 </template>
 
 <style scoped>
-.nodes-container { padding: 4px; }
-.group-card { min-height: 70vh; }
-.group-header { display: flex; justify-content: space-between; align-items: center; }
-.group-tree { max-height: 65vh; overflow-y: auto; }
-.tree-item {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 8px 10px; margin-bottom: 4px; border-radius: 8px; cursor: pointer;
-  color: var(--el-text-color-regular);
+/* ===== layout ===== */
+.nodes-layout { display: grid; grid-template-columns: 232px minmax(0, 1fr); gap: 16px; align-items: start; }
+
+/* ===== group rail ===== */
+.group-rail {
+  position: sticky;
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--r-lg);
+  background: var(--ui-surface-strong);
+  box-shadow: 0 10px 30px color-mix(in srgb, var(--ui-accent-shadow) 30%, transparent);
 }
-.tree-item:hover { background: var(--el-fill-color-light); }
-.tree-item.active { background: #f97316; color: #fff; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
-.toolbar .search { width: 200px; }
-.toolbar .country { width: 200px; }
-.flex-1 { flex: 1; }
-.card-group { margin-bottom: 18px; }
-.card-group-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
-.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.rail-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: var(--ui-text); font-size: 13px; font-weight: 700; }
+.rail-manage { padding: 2px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--ui-accent-strong); font-size: 12px; font-weight: 600; cursor: pointer; }
+.rail-manage:hover { background: var(--ui-accent-soft); }
+.rail-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 12px; border: 0; border-radius: var(--r-sm); background: transparent;
+  color: var(--ui-text-secondary); font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease, transform var(--dur-mid) var(--ease-spring);
+}
+.rail-item:hover { background: var(--ui-hover); color: var(--ui-text); transform: translateX(3px); }
+.rail-item.active { background: var(--ui-accent-soft); color: var(--ui-accent-strong); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ui-accent) 26%, transparent); }
+.rail-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail-meta { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; }
+.rail-count { color: var(--ui-text-muted); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.rail-item.active .rail-count { color: var(--ui-accent-strong); }
+.rail-hide { font-size: 10.5px; font-style: normal; color: var(--ui-text-muted); opacity: 0; transition: opacity var(--dur-fast) ease; cursor: pointer; }
+.rail-item:hover .rail-hide { opacity: 1; }
+.rail-hide:hover { color: var(--el-color-warning); }
+.rail-foot { margin: 10px 2px 0; color: var(--ui-text-muted); font-size: 10.5px; line-height: 1.5; }
+
+/* ===== toolbar + body ===== */
+.nodes-main { min-width: 0; }
+.nodes-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+  padding: 14px 16px; border: 1px solid var(--ui-border); border-bottom: 0;
+  border-radius: var(--r-lg) var(--r-lg) 0 0; background: var(--ui-surface-strong);
+}
+.toolbar-search { width: 220px; }
+.toolbar-country { width: 200px; }
+.view-switch { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--ui-border); border-radius: var(--r-sm); background: var(--ui-hover); }
+.view-switch button { padding: 6px 14px; border: 0; border-radius: 6px; background: transparent; color: var(--ui-text-muted); font-size: 12px; font-weight: 600; cursor: pointer; transition: background var(--dur-fast) ease, color var(--dur-fast) ease; }
+.view-switch button.active { background: var(--ui-surface-strong); color: var(--ui-text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.toolbar-spacer { flex: 1; }
+.batch-caret { display: inline-block; width: 0; height: 0; margin-left: 6px; border-right: 4px solid transparent; border-left: 4px solid transparent; border-top: 5px solid currentcolor; opacity: 0.7; vertical-align: middle; }
+
+.nodes-body {
+  min-height: 420px;
+  padding: 18px 16px 20px;
+  border: 1px solid var(--ui-border);
+  border-radius: 0 0 var(--r-lg) var(--r-lg);
+  background: color-mix(in srgb, var(--ui-surface) 62%, var(--ui-surface-strong));
+}
+
+/* ===== country block + node cards ===== */
+.country-block { margin-bottom: 20px; }
+.country-head { display: flex; align-items: center; gap: 8px; margin: 0 2px 10px; }
+.country-flag { font-size: 15px; }
+.country-name { color: var(--ui-text); font-size: 12.5px; font-weight: 700; }
+.country-count { color: var(--ui-text-muted); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.country-select { padding: 2px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--ui-accent-strong); font-size: 11px; font-weight: 600; cursor: pointer; }
+.country-select:hover { background: var(--ui-accent-soft); }
+
+.node-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
 .node-card {
-  padding: 12px 14px; border: 1px solid var(--el-border-color-lighter); border-radius: 12px;
-  transition: box-shadow .2s;
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 14px 14px 10px; border: 1px solid var(--ui-border); border-radius: var(--r-md);
+  background: var(--ui-surface-strong);
+  transition: transform var(--dur-mid) var(--ease-out), box-shadow var(--dur-mid) ease, border-color var(--dur-mid) ease;
 }
-.node-card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.1); }
-.card-top { display: flex; align-items: center; gap: 8px; }
-.card-flag { font-size: 20px; }
-.card-name { flex: 1; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rtt-badge { padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-.card-country { margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); }
-.unlock-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.unlock-item { font-size: 12px; color: var(--el-text-color-regular); }
-.group-node-visibility{display:flex;flex-direction:column;gap:10px;margin-top:14px}.visibility-tip{color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}
-.group-coverage{display:block;margin-top:2px;color:var(--el-text-color-secondary);font-size:10px;font-weight:400}
-.card-actions { margin-top: 10px; display: flex; gap: 4px; }
+.node-card:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--ui-accent) 34%, var(--ui-border)); box-shadow: 0 16px 34px color-mix(in srgb, var(--ui-accent-shadow) 55%, transparent); }
+.node-card.selected { border-color: var(--ui-accent); box-shadow: inset 0 0 0 1px var(--ui-accent), 0 10px 24px color-mix(in srgb, var(--ui-accent-shadow) 60%, transparent); }
+.node-card-top { display: flex; align-items: center; gap: 8px; }
+.node-flag { font-size: 16px; }
+.node-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-text); font-size: 13px; font-weight: 600; }
+.node-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ui-text-muted); font-size: 11px; }
+.node-stats { display: flex; align-items: center; gap: 8px; color: var(--ui-text-secondary); font-size: 11px; }
+.node-rtt { padding: 2px 8px; border-radius: var(--r-pill); font-family: var(--font-mono); font-size: 11px; font-weight: 600; }
+.node-rtt.good { color: #16803c; background: color-mix(in srgb, var(--el-color-success) 16%, transparent); }
+.node-rtt.warn { color: #a16207; background: color-mix(in srgb, var(--el-color-warning) 20%, transparent); }
+.node-rtt.bad { color: #b02a20; background: color-mix(in srgb, var(--el-color-danger) 14%, transparent); }
+.node-rtt.unknown { color: var(--ui-text-muted); background: var(--ui-hover); }
+.node-actions { display: flex; align-items: center; gap: 2px; padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--ui-border) 65%, transparent); }
+.node-actions button { padding: 4px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--ui-text-secondary); font-size: 11.5px; font-weight: 600; cursor: pointer; transition: background var(--dur-fast) ease, color var(--dur-fast) ease; }
+.node-actions button:hover { background: var(--ui-hover); color: var(--ui-text); }
+.node-more { margin-left: auto; }
+.list-actions { display: flex; gap: 8px; margin-top: 14px; }
+
+/* ===== kept dialog styles ===== */
+.group-node-visibility { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
+.visibility-tip { color: var(--el-text-color-secondary); font-size: 11px; line-height: 1.6; }
 .row-flag { margin-right: 6px; }
 .row-name { font-weight: 500; }
 .muted { color: var(--el-text-color-placeholder); font-size: 12px; }
-.list-actions { margin-top: 12px; display: flex; gap: 8px; }
-.dialog-actions { margin-top: 12px; }
 .del-group-row { display: flex; gap: 10px; align-items: center; }
 .node-form .el-divider { margin: 6px 0 16px; }
 .node-form .el-form-item { margin-bottom: 16px; }
 .group-tabs { display: block; margin-bottom: 10px; }
 .group-field { margin-bottom: 4px; }
 .full { width: 100%; }
-.node-loading-area { min-height: 460px; }
-.node-card-selected {
-  box-shadow: inset 0 0 0 2px var(--el-color-primary), 0 1px 2px rgba(0,0,0,0.02) !important;
-}
-.node-check { margin-right: 0; }
-.group-filter-active { color:var(--ui-accent-strong); background:var(--ui-accent-soft); font-weight:700; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ui-accent) 18%,transparent); }
-.group-filter-idle { color:var(--ui-text-secondary); transition:background 140ms ease,color 140ms ease,transform 140ms ease; }
-.group-filter-idle:hover { color:var(--ui-text); background:var(--ui-hover); transform:translateX(2px); }
-.group-tree-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}.group-hide-btn{font-size:11px;padding:0 2px!important}
-.node-card-actions { flex-wrap: wrap; row-gap: 2px; margin-top: 8px; min-width: 0; }
-.node-card-actions .el-button { margin-left: 0 !important; padding: 3px 5px; }
-.quality-strip { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--el-text-color-secondary); font-size:11px; }
-.quality-score { padding:2px 7px; border-radius:999px; font-weight:700; }
-.quality-score.good { color:#16803c; background:#dcfce7; }
-.quality-score.warn { color:#a16207; background:#fef3c7; }
-.quality-score.bad { color:#b91c1c; background:#fee2e2; }
 .group-actions { margin-top: 4px; }
-.del-group-card {
-  margin-top: 4px;
-  padding: 12px 14px;
-  background: var(--el-color-danger-light-9);
-  border: 1px solid var(--el-color-danger-light-7);
-  border-radius: 10px;
-}
-html.dark .del-group-card { background: rgba(245, 108, 108, 0.08); border-color: rgba(245, 108, 108, 0.2); }
-.del-group-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--el-color-danger); }
+.del-group-card { margin-top: 4px; padding: 12px 14px; background: var(--el-color-danger-light-9); border: 1px solid var(--el-color-danger-light-7); border-radius: 10px; }
+html.dark .del-group-card { background: rgba(224, 117, 105, 0.08); border-color: rgba(224, 117, 105, 0.2); }
+.del-group-title { margin-bottom: 8px; color: var(--el-color-danger); font-size: 13px; font-weight: 600; }
 .del-group-row .el-select { flex: 1; }
+
+/* ===== responsive ===== */
+@media (max-width: 900px) {
+  .nodes-layout { grid-template-columns: 1fr; }
+  .group-rail { position: static; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; padding: 12px; }
+  .rail-head { width: 100%; margin: 0; }
+  .rail-item { width: auto; padding: 7px 12px; }
+  .rail-foot { width: 100%; margin: 2px; }
+}
 @media (max-width: 720px) {
-  .group-sidebar-panel { position: static !important; top: auto !important; padding: 14px !important; margin-bottom: 12px; }
-  .node-toolbar { padding: 14px !important; gap: 8px !important; }
-  .node-toolbar :deep(.el-input),
-  .node-toolbar :deep(.el-select) { width: 100% !important; flex: 1 1 100%; }
-  .node-toolbar > .flex-1 { display: none; }
-  .node-toolbar :deep(.el-button-group) { flex: 1 1 auto; display: flex; }
-  .node-toolbar :deep(.el-button-group .el-button) { flex: 1; }
-  .node-loading-area { min-height: 320px; padding: 12px !important; }
-  .quality-strip { flex-wrap: wrap; gap: 5px 8px; }
-  .node-card-actions { justify-content: flex-start !important; }
+  .nodes-toolbar { padding: 12px; }
+  .toolbar-search, .toolbar-country { flex: 1 1 100%; width: 100%; }
+  .toolbar-spacer { display: none; }
+  .view-switch { flex: 1; }
+  .view-switch button { flex: 1; }
+  .nodes-body { padding: 12px; }
+  .node-grid { grid-template-columns: 1fr 1fr; }
+  .list-actions { flex-wrap: wrap; }
   .del-group-row { flex-direction: column; align-items: stretch; }
   .del-group-row :deep(.el-button) { width: 100%; margin-left: 0; }
   .group-tabs { display: flex; flex-wrap: wrap; }
   .group-node-visibility :deep(.el-table) { font-size: 12px; }
+}
+@media (max-width: 460px) {
+  .node-grid { grid-template-columns: 1fr; }
 }
 </style>

@@ -309,7 +309,7 @@ function initNetwork(canvas: HTMLCanvasElement) {
         const b = nodes[j];
         const d = Math.hypot(a.x - b.x, a.y - b.y);
         if (d < linkDist) {
-          const alpha = (1 - d / linkDist) * 0.16;
+          const alpha = (1 - d / linkDist) * 0.2;
           ctx.strokeStyle = color;
           ctx.globalAlpha = alpha;
           ctx.lineWidth = 0.7;
@@ -324,11 +324,11 @@ function initNetwork(canvas: HTMLCanvasElement) {
     ctx.globalAlpha = 1;
     for (const n of nodes) {
       ctx.fillStyle = color;
-      ctx.globalAlpha = 0.42;
+      ctx.globalAlpha = 0.52;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 0.1;
+      ctx.globalAlpha = 0.13;
       ctx.beginPath();
       ctx.arc(n.x, n.y, n.r * 4.2, 0, Math.PI * 2);
       ctx.fill();
@@ -463,8 +463,13 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background:
     radial-gradient(
-      ellipse 60% 46% at 72% 18%,
-      color-mix(in srgb, var(--ui-accent) 7%, transparent),
+      ellipse 62% 48% at 74% 14%,
+      color-mix(in srgb, var(--ui-accent) 12%, transparent),
+      transparent 68%
+    ),
+    radial-gradient(
+      ellipse 46% 40% at 10% 90%,
+      color-mix(in srgb, var(--gold-300) 10%, transparent),
       transparent 70%
     ),
     var(--ui-canvas);
@@ -491,7 +496,7 @@ onBeforeUnmount(() => {
     ),
     radial-gradient(
       30% 26% at 78% 74%,
-      color-mix(in srgb, var(--jade-300) 7%, transparent),
+      color-mix(in srgb, var(--gold-300) 7%, transparent),
       transparent 72%
     );
   animation: aurora-drift 22s ease-in-out infinite;
