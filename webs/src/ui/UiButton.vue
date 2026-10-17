@@ -52,7 +52,7 @@ withDefaults(
 .ui-button:hover {
   background: var(--c-surface-2);
 }
-.ui-button:active {
+.ui-button:active:not(:disabled) {
   transform: scale(0.98);
 }
 .ui-button:disabled {
@@ -65,6 +65,14 @@ withDefaults(
 }
 .ui-button--primary:hover {
   background: color-mix(in srgb, var(--c-signal) 88%, var(--c-surface));
+}
+.ui-button--primary:disabled {
+  color: var(--c-muted);
+  background: var(--c-surface-2);
+  border-color: var(--c-line);
+  box-shadow: none;
+  opacity: 1;
+  cursor: not-allowed;
 }
 .ui-button--ghost {
   border-color: transparent;

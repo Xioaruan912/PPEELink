@@ -29,13 +29,17 @@ function write<T>(key: string, data: T) {
   try {
     const obj: StoredData<T> = { data, ts: Date.now() };
     localStorage.setItem(PREFIX + key, JSON.stringify(obj));
-  } catch { /* 存储满或不可用则忽略 */ }
+  } catch {
+    /* 存储满或不可用则忽略 */
+  }
 }
 
 function remove(key: string) {
   try {
     localStorage.removeItem(PREFIX + key);
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 // 解锁测试结果
@@ -58,4 +62,11 @@ export function getTcp(nodeId: number): any {
 }
 export function clearTcp(nodeId: number) {
   remove(`tcp_${nodeId}`);
+}
+// 真实测速页沿用节点测试的一小时缓存策略。
+export function saveSpeed<T>(data: T) {
+  write("speed", data);
+}
+export function getSpeed<T>(): T | null {
+  return read<T>("speed");
 }
