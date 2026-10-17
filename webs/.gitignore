@@ -16,3 +16,6 @@ dist-ssr
 
 package-lock.json
 stats.html
+
+# Local visual QA fixtures (never bundled or committed)
+.qa/
