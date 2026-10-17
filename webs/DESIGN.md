@@ -30,9 +30,10 @@
 
 ## 3. 字体与字号
 - 自托管 woff2（`public/fonts/`，在 `src/styles/fonts.css` 用 `@font-face` + `font-display: swap`，base 为 `/static/fonts/...` 时需走 Vite 资源路径，确保生产和开发都能加载）：
-  - 展示：**Instrument Serif**（400 normal/italic）→ `--font-display`。只用于页面大标题、关键大数字旁的标签、空状态标题。中文回退 `"Songti SC","Noto Serif SC",serif`。
+  - 展示：**Instrument Serif**（400 normal/italic）→ `--font-display`。用于页面大标题、英雄数字、关键大数字旁的标签、页面级空状态标题。中文回退 `"Songti SC","Noto Serif SC",serif`。
   - 界面：**Geist**（variable）→ `--font-ui`，回退 `"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif`。
   - 数字/代码/链接/IP：**JetBrains Mono**（variable）→ `--font-mono`，统一 `font-variant-numeric: tabular-nums`。
+- `UiStat` 通过 `size` 控制数字层级：`hero` / `large`（≥40px）使用 `--font-display` 与 `font-variant-numeric: lining-nums tabular-nums`；`medium`（32px）/ `small`（≤24px）继续使用 mono。
 - 字号：正文 16 / 控件 15 / 次要 14 / 小标签 13（仅 mono 大写 eyebrow 用，letter-spacing .08em）；页面标题 clamp(40px, 5vw, 72px) display 字体，行高 1.0；区块标题 22px UI 字体 600。最小字号 13，禁止 12 及以下。
 - 行高：正文 1.6，控件 1.4。
 
@@ -42,10 +43,10 @@
 - **页面骨架**：`PageHeader`（mono eyebrow 分组名 / display 大标题 / 一句话说明可省 / 右侧主操作）→ 内容。区块之间用 48–64px 空白和发丝线分隔，而不是层层卡片嵌套。
 - 非对称：列表页采用 "主列表 8 : 侧信息 4" 或 "数字条带横跨 + 列表"；仪表盘用不规则网格（一个大块 + 若干不等宽块），禁止三/四等分卡片排一行。
 - 表格：行高 ≥ 48px，表头 13px mono 大写 muted，无竖线，仅横向发丝线；hover 行底 `--c-surface-2`；操作列最多 2 个可见按钮 + "更多" 下拉；手机下表格转为卡片列表（不出现横向滚动整页）。
-- 空状态：display 字体标题 + 一句引导 + 主操作按钮；绝不塞假数据。
+- 空状态：`EmptyState size="page"` 使用 display 大标题；`section` 使用 20px UI 标题、14px 说明与次级按钮；`inline` 使用一行 muted 文本。仪表盘内只使用 section / inline；绝不塞假数据。
 
 ## 5. 组件层（`src/ui/`，全部自建，EP 仅作复杂控件底座）
-`UiButton`（primary=signal 实心 / secondary=描边 / ghost / danger；支持 loading、icon、磁吸 `v-magnetic` 仅用于 primary）、`UiPanel`、`PageHeader`、`UiStat`（mono 大数字 + 计数动画 + 标签 + 可选趋势）、`StatusDot`（ok/warn/bad/idle，ok 带呼吸脉冲）、`UiTable`（包 el-table，统一样式 + 移动卡片插槽）、`EmptyState`、`UiSkeleton`、`UiDialog` / `UiDrawer`（包 el-dialog/el-drawer，统一头尾）、`UiSegmented`（分段切换，滑块弹簧动画）、`UiTag`、`CommandPalette`（⌘K / Ctrl+K，模糊搜索所有路由 + 常用动作，方向键 + Enter）。
+`UiButton`（primary=signal 实心 / secondary=描边 / ghost / danger；支持 loading、icon、磁吸 `v-magnetic` 仅用于 primary）、`UiPanel`、`PageHeader`、`UiStat`（按 size 区分 display / mono 数字 + 计数动画 + 标签 + 可选趋势）、`StatusDot`（ok/warn/bad/idle，ok 带呼吸脉冲）、`UiTable`（包 el-table，统一样式 + 移动卡片插槽）、`EmptyState`、`UiSkeleton`、`UiDialog` / `UiDrawer`（包 el-dialog/el-drawer，统一头尾）、`UiSegmented`（分段切换，滑块弹簧动画）、`UiTag`、`CommandPalette`（⌘K / Ctrl+K，模糊搜索所有路由 + 常用动作，方向键 + Enter）。
 Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 必须通过 `src/styles/element.scss` 全局重皮肤到上述 tokens，视觉上与自建组件一致。
 
 ## 6. 动效（MOTION 10，统一在 `src/motion/`）
@@ -53,13 +54,13 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 - 必做：
   1. 路由过渡：内容区 clip/translate+opacity 交错入场（标题先、内容后，stagger 40ms），离场 140ms。
   2. 列表/表格首屏行 stagger 入场；筛选结果变化用 `<TransitionGroup>` FLIP。
-  3. `UiStat` 数字从 0 滚动到值（mono）；延迟数值变化时颜色随阈值过渡。
+  3. `UiStat` 数字从 0 滚动到值（字体按第 3 节 size 规则）；延迟数值变化时颜色随阈值过渡。
   4. dock 图标弹簧放大 + 选中指示条滑动（FLIP）。
   5. 主按钮 `v-magnetic` 磁吸（指针 24px 内吸附，离开弹回）。
   6. 状态脉冲：在线点呼吸、测速/检测进行中扫描线或进度波纹。
-  7. 仪表盘地图/地球：节点位置点 + 连线描线动画（基于现有 `getNodeMap` 真实数据，无数据则空态）。
+  7. 仪表盘地图/地球：底图始终渲染，缓慢扫描 / 经纬线描线可暂停，reduced-motion 静止；节点位置点与标注线仅来自 `getNodeMap` 真实数据，无节点时左下角叠加小号说明与管理节点按钮。
   8. 骨架屏 shimmer；对话框/抽屉弹簧入场。
-- 守则：所有动画经 `useMotion()`/`prefersReducedMotion` 守卫，reduced-motion 时直接到终态；组件卸载时 kill tween / 移除监听 / cancel rAF；只动 transform/opacity/clip-path；不要永不停的装饰性无限循环（脉冲仅限真实状态）。
+- 守则：所有动画经 `useMotion()`/`prefersReducedMotion` 守卫，reduced-motion 时直接到终态；组件卸载时 kill tween / 移除监听 / cancel rAF；只动 transform/opacity/clip-path；除可暂停的地图底图扫描外，不要永不停的装饰性无限循环（脉冲仅限真实状态）。
 
 ## 7. 文案
 中文、短、具体。标题 2–6 字；说明 ≤ 25 字；按钮用动词（"添加节点"、"开始测速"）。删除重复说明、英文装饰词（如 "TELEMETRY"、"LIVE"、"CORE"），mono eyebrow 只用于分组名（如 `订阅 / 01`）。

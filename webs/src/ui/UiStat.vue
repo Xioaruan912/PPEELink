@@ -1,5 +1,5 @@
 <template>
-  <div class="ui-stat" data-enter>
+  <div :class="['ui-stat', `ui-stat--${size}`]" data-enter>
     <p class="ui-stat__label">
       <slot name="label">{{ label }}</slot>
     </p>
@@ -20,13 +20,14 @@ const props = withDefaults(
   defineProps<{
     label: string;
     value: number;
+    size?: "hero" | "large" | "medium" | "small";
     decimals?: number;
     unit?: string;
     trend?: string;
     state?: "default" | "ok" | "warn" | "bad";
     thresholds?: { warn: number; bad: number };
   }>(),
-  { decimals: 0, state: "default" }
+  { decimals: 0, state: "default", size: "large" }
 );
 const display = useCountUp(() => props.value, props.decimals);
 const state = computed(() =>
@@ -49,9 +50,21 @@ const state = computed(() =>
   margin-bottom: 16px;
 }
 .ui-stat__number {
-  font: 400 clamp(32px, 4vw, 56px)/1.1 var(--font-mono);
-  font-variant-numeric: tabular-nums;
+  font: 400 clamp(40px, 4vw, 56px)/1.1 var(--font-display);
+  font-variant-numeric: lining-nums tabular-nums;
   transition: color var(--duration-medium);
+}
+.ui-stat--hero .ui-stat__number {
+  font-size: clamp(64px, 7vw, 96px);
+  letter-spacing: -0.03em;
+}
+.ui-stat--medium .ui-stat__number {
+  font: 400 32px/1.1 var(--font-mono);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.ui-stat--small .ui-stat__number {
+  font: 400 24px/1.1 var(--font-mono);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .ui-stat__unit {
   margin-left: 8px;
