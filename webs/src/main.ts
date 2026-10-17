@@ -10,9 +10,11 @@ import "virtual:svg-icons-register";
 
 // 样式
 import "element-plus/theme-chalk/dark/css-vars.css";
+import "@/styles/fonts.css";
 import "@/styles/index.scss";
 import "uno.css";
 import "animate.css";
+import "@/styles/readability.scss";
 
 const app = createApp(App);
 // 全局注册 自定义指令(directive)

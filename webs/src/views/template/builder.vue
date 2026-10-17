@@ -1,5 +1,5 @@
 <template>
-  <div class="app-container">
+  <div class="app-container template-builder-workbench">
     <el-card shadow="never">
       <template #header>
         <div class="card-header">
@@ -39,7 +39,7 @@
       <template v-if="target !== 'loon'">
       <el-row :gutter="16">
         <el-col :span="14" :xs="24">
-          <el-form label-width="120px">
+          <el-form label-position="top">
             <!-- 文件名 -->
             <el-form-item label="文件名" required>
               <el-input v-model="form.filename" placeholder="例如 my_clash.yaml" />
@@ -632,20 +632,20 @@ onMounted(async () => {
 
 .group-hint {
   margin-top: 6px;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--el-text-color-secondary);
   line-height: 1.5;
 }
 
 .field-hint {
   margin-left: 8px;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--el-text-color-secondary);
 }
 
 .yaml-preview {
   font-family: monospace;
-  font-size: 12px;
+  font-size: 16px;
 }
 
 .loon-row,

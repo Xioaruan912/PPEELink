@@ -231,7 +231,7 @@ function message() {
 
     &__info {
       margin-bottom: 30px;
-      font-size: 13px;
+      font-size: 16px;
       line-height: 21px;
       color: grey;
       opacity: 0;

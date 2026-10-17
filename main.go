@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"ppeelink/client"
 	"ppeelink/middlewares"
 	"ppeelink/models"
 	"ppeelink/routers"
@@ -191,10 +190,6 @@ func Run(port int) {
 	routers.Audit(r)         // 管理操作审计
 	routers.ShortLinks(r)    // 内部短链与一键导入
 	routers.Collections(r)   // 多订阅合集与到期/用量告警
-	// 客户端下载目录 + 定时检查更新（启动即查 + 每 24h）
-	os.MkdirAll("downloads", 0o755)
-	client.Start()
-
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 

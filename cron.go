@@ -19,10 +19,10 @@ func StartCronTasks() {
 	_, err := c.AddFunc("0 0 3 * * *", func() {
 		defer utils.RecoverPanic("cron-airport-sync")
 		api.SyncAllAirports()
-		if err := models.CleanupNodeQuality(time.Now().Add(-30 * 24 * time.Hour)); err != nil {
+		if err := models.CleanupNodeQuality(time.Now().Add(-7 * 24 * time.Hour)); err != nil {
 			log.Println("[Cron] 清理节点质量历史失败:", err)
 		}
-		if err := models.CleanupNodeTargetQuality(time.Now().Add(-30 * 24 * time.Hour)); err != nil {
+		if err := models.CleanupNodeTargetQuality(time.Now().Add(-7 * 24 * time.Hour)); err != nil {
 			log.Println("[Cron] 清理目标质量历史失败:", err)
 		}
 		models.CleanupMaintenance(time.Now())
