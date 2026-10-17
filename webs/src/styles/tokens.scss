@@ -1,0 +1,298 @@
+:root {
+  --c-canvas: #f3f1ec;
+  --c-surface: #fbfaf7;
+  --c-surface-2: #ece9e2;
+  --c-line: #dad6cd;
+  --c-ink: #17181a;
+  --c-muted: #6b6a66;
+  --c-signal: #e4472b;
+  --c-data: #2f5bea;
+  --c-ok: #1f9d6b;
+  --c-warn: #d99a1e;
+  --c-bad: #c8321e;
+
+  --font-display:
+    "Instrument Serif", "Songti SC", "Noto Serif SC", "STSong", serif;
+  --font-ui:
+    "Geist", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei",
+    "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 180ms;
+  --duration-medium: 320ms;
+  --duration-slow: 560ms;
+  --radius-control: 10px;
+  --radius-panel: 16px;
+  --radius-overlay: 20px;
+  --shadow-panel: 0 1px 0 var(--c-line);
+  --shadow-overlay: 0 24px 48px -24px rgb(0 0 0 / 0.25);
+  --c-on-signal: #121314;
+  // Dock 30, tools 40; Element Plus owns overlays (2000+).
+  --z-dock: 30;
+  --z-tools: 40;
+  --mobile-dock-height: 73px;
+}
+html.dark {
+  --c-canvas: #121314;
+  --c-surface: #1a1b1d;
+  --c-surface-2: #222326;
+  --c-line: #2e3033;
+  --c-ink: #eceae4;
+  --c-muted: #9a9891;
+  --c-signal: #ff6a4d;
+  --c-data: #6e8cff;
+  --c-ok: #3cc48d;
+  --c-warn: #f0b43c;
+  --c-bad: #ff5a45;
+}
+:root,
+html.dark {
+  --c-on-danger: var(--c-surface);
+  --c-warn-ink: color-mix(in srgb, var(--c-warn) 65%, var(--c-ink));
+  --c-selected: color-mix(in srgb, var(--c-signal) 12%, transparent);
+  --el-color-white: var(--c-surface);
+  --el-color-black: var(--c-ink);
+  --el-bg-color: var(--c-surface);
+  --el-bg-color-page: var(--c-canvas);
+  --el-bg-color-overlay: var(--c-surface);
+  --el-text-color-primary: var(--c-ink);
+  --el-text-color-regular: var(--c-ink);
+  --el-text-color-secondary: var(--c-muted);
+  --el-text-color-placeholder: var(--c-muted);
+  --el-text-color-disabled: var(--c-muted);
+  --el-border-color: var(--c-line);
+  --el-border-color-light: var(--c-line);
+  --el-border-color-lighter: var(--c-line);
+  --el-border-color-extra-light: var(--c-line);
+  --el-border-color-dark: var(--c-muted);
+  --el-border-color-darker: var(--c-ink);
+  --el-fill-color: var(--c-surface-2);
+  --el-fill-color-light: var(--c-surface-2);
+  --el-fill-color-lighter: var(--c-canvas);
+  --el-fill-color-extra-light: var(--c-canvas);
+  --el-fill-color-dark: var(--c-line);
+  --el-fill-color-darker: var(--c-muted);
+  --el-fill-color-blank: var(--c-surface);
+  --el-disabled-bg-color: var(--c-surface-2);
+  --el-disabled-text-color: var(--c-muted);
+  --el-disabled-border-color: var(--c-line);
+  --el-mask-color: color-mix(in srgb, var(--c-canvas) 78%, transparent);
+  --el-mask-color-extra-light: color-mix(
+    in srgb,
+    var(--c-canvas) 40%,
+    transparent
+  );
+  --el-border-radius-base: var(--radius-control);
+  --el-border-radius-small: var(--radius-control);
+  --el-border-radius-round: 999px;
+  --el-font-family: var(--font-ui);
+  --el-font-size-extra-small: 13px;
+  --el-font-size-small: 14px;
+  --el-font-size-base: 15px;
+  --el-font-size-medium: 16px;
+  --el-component-size-small: 44px;
+  --el-component-size: 44px;
+  --el-component-size-large: 48px;
+  --el-box-shadow: var(--shadow-overlay);
+  --el-box-shadow-light: var(--shadow-panel);
+  --el-box-shadow-lighter: var(--shadow-panel);
+  --el-box-shadow-dark: var(--shadow-overlay);
+  --el-overlay-color: color-mix(in srgb, var(--c-ink) 35%, transparent);
+  --el-overlay-color-light: color-mix(in srgb, var(--c-ink) 25%, transparent);
+  --el-overlay-color-lighter: color-mix(in srgb, var(--c-ink) 15%, transparent);
+  --el-color-primary: var(--c-signal);
+  --el-color-primary-light-3: color-mix(
+    in srgb,
+    var(--c-signal) 70%,
+    var(--c-surface)
+  );
+  --el-color-primary-light-5: color-mix(
+    in srgb,
+    var(--c-signal) 50%,
+    var(--c-surface)
+  );
+  --el-color-primary-light-7: color-mix(
+    in srgb,
+    var(--c-signal) 30%,
+    var(--c-surface)
+  );
+  --el-color-primary-light-8: color-mix(
+    in srgb,
+    var(--c-signal) 20%,
+    var(--c-surface)
+  );
+  --el-color-primary-light-9: color-mix(
+    in srgb,
+    var(--c-signal) 10%,
+    var(--c-surface)
+  );
+  --el-color-primary-dark-2: color-mix(
+    in srgb,
+    var(--c-signal) 80%,
+    var(--c-ink)
+  );
+  --el-color-success: var(--c-ok);
+  --el-color-success-light-3: color-mix(
+    in srgb,
+    var(--c-ok) 70%,
+    var(--c-surface)
+  );
+  --el-color-success-light-5: color-mix(
+    in srgb,
+    var(--c-ok) 50%,
+    var(--c-surface)
+  );
+  --el-color-success-light-7: color-mix(
+    in srgb,
+    var(--c-ok) 30%,
+    var(--c-surface)
+  );
+  --el-color-success-light-8: color-mix(
+    in srgb,
+    var(--c-ok) 20%,
+    var(--c-surface)
+  );
+  --el-color-success-light-9: color-mix(
+    in srgb,
+    var(--c-ok) 10%,
+    var(--c-surface)
+  );
+  --el-color-success-dark-2: color-mix(in srgb, var(--c-ok) 80%, var(--c-ink));
+  --el-color-warning: var(--c-warn);
+  --el-color-warning-light-3: color-mix(
+    in srgb,
+    var(--c-warn) 70%,
+    var(--c-surface)
+  );
+  --el-color-warning-light-5: color-mix(
+    in srgb,
+    var(--c-warn) 50%,
+    var(--c-surface)
+  );
+  --el-color-warning-light-7: color-mix(
+    in srgb,
+    var(--c-warn) 30%,
+    var(--c-surface)
+  );
+  --el-color-warning-light-8: color-mix(
+    in srgb,
+    var(--c-warn) 20%,
+    var(--c-surface)
+  );
+  --el-color-warning-light-9: color-mix(
+    in srgb,
+    var(--c-warn) 10%,
+    var(--c-surface)
+  );
+  --el-color-warning-dark-2: color-mix(
+    in srgb,
+    var(--c-warn) 80%,
+    var(--c-ink)
+  );
+  --el-color-danger: var(--c-bad);
+  --el-color-danger-light-3: color-mix(
+    in srgb,
+    var(--c-bad) 70%,
+    var(--c-surface)
+  );
+  --el-color-danger-light-5: color-mix(
+    in srgb,
+    var(--c-bad) 50%,
+    var(--c-surface)
+  );
+  --el-color-danger-light-7: color-mix(
+    in srgb,
+    var(--c-bad) 30%,
+    var(--c-surface)
+  );
+  --el-color-danger-light-8: color-mix(
+    in srgb,
+    var(--c-bad) 20%,
+    var(--c-surface)
+  );
+  --el-color-danger-light-9: color-mix(
+    in srgb,
+    var(--c-bad) 10%,
+    var(--c-surface)
+  );
+  --el-color-danger-dark-2: color-mix(in srgb, var(--c-bad) 80%, var(--c-ink));
+  --el-color-error: var(--c-bad);
+  --el-color-error-light-3: color-mix(
+    in srgb,
+    var(--c-bad) 70%,
+    var(--c-surface)
+  );
+  --el-color-error-light-5: color-mix(
+    in srgb,
+    var(--c-bad) 50%,
+    var(--c-surface)
+  );
+  --el-color-error-light-7: color-mix(
+    in srgb,
+    var(--c-bad) 30%,
+    var(--c-surface)
+  );
+  --el-color-error-light-8: color-mix(
+    in srgb,
+    var(--c-bad) 20%,
+    var(--c-surface)
+  );
+  --el-color-error-light-9: color-mix(
+    in srgb,
+    var(--c-bad) 10%,
+    var(--c-surface)
+  );
+  --el-color-error-dark-2: color-mix(in srgb, var(--c-bad) 80%, var(--c-ink));
+  --el-color-info: var(--c-muted);
+  --el-color-info-light-3: color-mix(
+    in srgb,
+    var(--c-muted) 70%,
+    var(--c-surface)
+  );
+  --el-color-info-light-5: color-mix(
+    in srgb,
+    var(--c-muted) 50%,
+    var(--c-surface)
+  );
+  --el-color-info-light-7: color-mix(
+    in srgb,
+    var(--c-muted) 30%,
+    var(--c-surface)
+  );
+  --el-color-info-light-8: color-mix(
+    in srgb,
+    var(--c-muted) 20%,
+    var(--c-surface)
+  );
+  --el-color-info-light-9: color-mix(
+    in srgb,
+    var(--c-muted) 10%,
+    var(--c-surface)
+  );
+  --el-color-info-dark-2: color-mix(in srgb, var(--c-muted) 80%, var(--c-ink));
+  --ui-canvas: var(--c-canvas);
+  --ui-surface: var(--c-surface);
+  --ui-surface-strong: var(--c-surface-2);
+  --ui-text: var(--c-ink);
+  --ui-text-secondary: var(--c-muted);
+  --ui-text-muted: var(--c-muted);
+  --ui-border: var(--c-line);
+  --ui-border-strong: var(--c-line);
+  --ui-border-subtle: var(--c-line);
+  --ui-hover: var(--c-surface-2);
+  --ui-accent: var(--c-signal);
+  --ui-accent-strong: var(--c-signal);
+  --ui-success: var(--c-ok);
+  --ui-warning: var(--c-warn);
+  --ui-danger: var(--c-bad);
+  --ui-accent-soft: color-mix(in srgb, var(--c-signal) 12%, var(--c-surface));
+  --ui-danger-soft: color-mix(in srgb, var(--c-bad) 12%, var(--c-surface));
+  --ui-success-soft: color-mix(in srgb, var(--c-ok) 12%, var(--c-surface));
+  --ui-warning-soft: color-mix(in srgb, var(--c-warn) 12%, var(--c-surface));
+  --ui-focus-ring: var(--c-signal);
+  --ui-panel-shadow: var(--shadow-panel);
+  --ui-accent-shadow: var(--shadow-panel);
+  --font-data: var(--font-mono);
+  --ease-workspace: var(--ease-out);
+}

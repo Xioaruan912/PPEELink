@@ -287,9 +287,9 @@ import {
   updateAlertSetting,
 } from "@/api/subcription/node";
 import { ElMessage } from "element-plus";
-import WorkIcon from "@/components/workspace/WorkIcon.vue";
-import NetworkGlobe from "@/components/workspace/NetworkGlobe.vue";
-import { vMagnetic } from "@/utils/magnetic";
+import WorkIcon from "@/components/legacy/WorkIcon.vue";
+import NetworkGlobe from "@/components/legacy/NetworkGlobe.vue";
+import { vMagnetic } from "@/motion";
 const NodePing = defineAsyncComponent(
   () => import("./components/NodePing.vue")
 );

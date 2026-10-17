@@ -12,10 +12,14 @@
     <template v-if="status">
       <div class="test-item">
         <div class="test-row">
-          <span class="dot running" />
+          <span class="dot running"></span>
           <span class="label">测试进行中</span>
-          <el-tag size="small" :type="status.type === 'unlock' ? 'primary' : 'success'" effect="dark">
-            {{ status.type === 'unlock' ? '解锁' : 'TCP' }}
+          <el-tag
+            size="small"
+            :type="status.type === 'unlock' ? 'primary' : 'success'"
+            effect="dark"
+          >
+            {{ status.type === "unlock" ? "解锁" : "TCP" }}
           </el-tag>
         </div>
         <div class="test-row">
@@ -39,7 +43,13 @@
 
     <template #footer>
       <el-button @click="emit('update:visible', false)">关闭</el-button>
-      <el-button v-if="status" type="danger" :loading="canceling" @click="cancel">停止测试</el-button>
+      <el-button
+        v-if="status"
+        type="danger"
+        :loading="canceling"
+        @click="cancel"
+        >停止测试</el-button
+      >
     </template>
   </el-dialog>
 </template>
@@ -77,9 +87,14 @@ const refresh = async () => {
     if (status.value) {
       const start = new Date(status.value.startedAt).getTime();
       const sec = Math.floor((Date.now() - start) / 1000);
-      elapsed.value = sec < 60 ? sec + " 秒" : Math.floor(sec / 60) + " 分 " + (sec % 60) + " 秒";
+      elapsed.value =
+        sec < 60
+          ? sec + " 秒"
+          : Math.floor(sec / 60) + " 分 " + (sec % 60) + " 秒";
     }
-  } catch { status.value = null; }
+  } catch {
+    status.value = null;
+  }
 };
 
 const cancel = async () => {
@@ -96,12 +111,19 @@ const cancel = async () => {
 };
 
 let timer: any = null;
-onMounted(() => { refresh(); timer = setInterval(refresh, 3000); });
-onBeforeUnmount(() => { if (timer) clearInterval(timer); });
+onMounted(() => {
+  refresh();
+  timer = setInterval(refresh, 3000);
+});
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer);
+});
 </script>
 
 <style scoped>
-.test-item { padding: 4px 0; }
+.test-item {
+  padding: 4px 0;
+}
 .test-row {
   display: flex;
   align-items: center;
@@ -109,9 +131,32 @@ onBeforeUnmount(() => { if (timer) clearInterval(timer); });
   padding: 6px 0;
   font-size: 14px;
 }
-.dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
-.dot.running { background: #30a46c; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-.label { color: var(--el-text-color-secondary); width: 70px; flex-shrink: 0; }
-.value { font-weight: 500; word-break: break-all; }
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.running {
+  background: var(--c-ok);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+.label {
+  color: var(--el-text-color-secondary);
+  width: 70px;
+  flex-shrink: 0;
+}
+.value {
+  font-weight: 500;
+  word-break: break-all;
+}
 </style>

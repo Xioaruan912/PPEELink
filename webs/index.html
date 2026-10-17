@@ -2,60 +2,30 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f2f4f1" />
+    <meta name="theme-color" content="" />
     <meta
       name="description"
       content="PPEELink 个人网络工作台：节点管理、订阅分发与网络诊断。"
     />
+    <link rel="icon" href="%BASE_URL%favicon.ico" />
+    <link
+      rel="preload"
+      href="/src/assets/fonts/geist-latin-wght-normal.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <title>PPEELink · 个人网络工作台</title>
     <script>
       try {
-        if (
-          localStorage.getItem("workspace-visual-version") === "atlas-1" &&
-          localStorage.getItem("theme") === "dark"
-        )
+        if (localStorage.getItem("theme") === "dark")
           document.documentElement.classList.add("dark");
       } catch (e) {}
     </script>
-    <style>
-      html,
-      body {
-        margin: 0;
-        background: #f2f4f1;
-      }
-      #app {
-        min-height: 100dvh;
-      }
-      .boot-mark {
-        position: absolute;
-        inset: 0;
-        display: grid;
-        place-content: center;
-        font: 600 20px sans-serif;
-        color: #37654b;
-        letter-spacing: -1px;
-      }
-      .boot-mark span {
-        animation: boot 1s ease-in-out infinite alternate;
-      }
-      @keyframes boot {
-        to {
-          opacity: 0.3;
-        }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        .boot-mark span {
-          animation: none;
-        }
-      }
-    </style>
   </head>
   <body>
-    <div id="app">
-      <div class="boot-mark"><span>PPEELink.</span></div>
-    </div>
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

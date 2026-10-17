@@ -17,9 +17,6 @@ importers:
       '@vueuse/core':
         specifier: ^10.9.0
         version: 10.11.1(vue@3.5.44)
-      animate.css:
-        specifier: ^4.1.1
-        version: 4.1.1
       axios:
         specifier: ^1.6.8
         version: 1.20.0
@@ -2375,9 +2372,6 @@ packages:
     resolution: {integrity: sha512-OGj9yyTnJEttvzhTUWuscOvtqxq5vrhF7vL9oS0xJ2mK0ItPYP1/y+vCFebfxoEyAz0++1AIwJ5CMr+Fk3nDmg==}
     dev: true
 
-  /animate.css@4.1.1:
-    resolution: {integrity: sha512-+mRmCTv6SbCmtYJCN4faJMNFVNN5EuCTTprDTAo7YzIGji2KADmakjVA3+8mVDkZ2Bf09vayB35lSQIex2+QaQ==}
-    dev: false
 
   /ansi-escapes@4.3.2:
     resolution: {integrity: sha512-gKXj5ALrKWQLsYG9jlTRmR/xKluxHV+Z9QEwNIgCfM1/uwPMCuzVVnh5mwTd+OuBZcwSIMbqssNWRm1lE51QaQ==}

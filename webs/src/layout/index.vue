@@ -1,365 +1,566 @@
 <template>
-  <div class="workspace-shell">
-    <a href="#workspace-content" class="skip-link" @click.prevent="focusMain"
+  <div class="atlas-shell">
+    <a href="#atlas-content" class="skip-link" @click.prevent="focusMain"
       >跳到主要内容</a
     >
-    <header class="workspace-header">
-      <router-link
-        to="/dashboard"
-        class="workspace-brand"
-        aria-label="PPEELink 首页"
-        ><span class="brand-symbol"><i></i><i></i><i></i></span
-        ><span>PPEELink<span class="brand-period">.</span></span></router-link
-      >
-      <nav class="primary-navigation" aria-label="主导航">
-        <router-link
-          v-for="item in primaryNav"
+    <aside class="atlas-dock" aria-label="工作区导航">
+      <router-link class="dock-brand" to="/dashboard" aria-label="PPEELink 首页"
+        ><img
+          class="brand-logo"
+          :src="logo"
+          width="40"
+          height="40"
+          alt="PPEELink"
+      /></router-link>
+      <nav ref="dockNav" class="dock-navigation" aria-label="主导航">
+        <i ref="indicator" class="dock-indicator" aria-hidden="true"></i>
+        <div
+          v-for="(item, index) in navigation"
           :key="item.path"
-          :to="item.path"
-          :class="{ active: isActive(item.path) }"
-          ><WorkIcon :name="item.icon" /><span>{{ item.label }}</span
-          ><i v-if="isActive(item.path)" class="nav-active-marker"></i
-        ></router-link>
+          class="dock-entry"
+          :data-active="isActive(item)"
+          :data-index="index"
+        >
+          <DockGroup :item="item" :active="isActive(item)" />
+        </div>
       </nav>
-      <div class="workspace-header-actions">
+      <div class="dock-account">
         <button
-          class="search-trigger"
-          aria-label="快速跳转"
-          @click="openCommands"
+          class="icon-button"
+          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
+          @click="toggleTheme"
         >
-          <WorkIcon name="search" /><span>搜索</span>
+          <component :is="isDark ? Sunny : Moon" />
         </button>
-        <el-dropdown trigger="click"
-          ><button class="profile-trigger" aria-label="账户菜单">
-            <span>{{
-              (userStore.user.username || "A").charAt(0).toUpperCase()
-            }}</span></button
-          ><template #dropdown
-            ><el-dropdown-menu
-              ><el-dropdown-item @click="router.push('/system/user/set')"
-                >账户设置</el-dropdown-item
-              ><el-dropdown-item divided @click="userStore.logout()"
-                >退出登录</el-dropdown-item
-              ></el-dropdown-menu
-            ></template
-          ></el-dropdown
+        <AccountMenu
+          :username="user.user.username"
+          label="账户菜单"
+          @logout="logout"
+        />
+      </div>
+    </aside>
+    <header class="atlas-topbar">
+      <router-link
+        class="mobile-brand"
+        to="/dashboard"
+        aria-label="PPEELink 首页"
+      >
+        <img class="brand-logo" :src="logo" width="32" height="32" alt="" />
+        <span>{{ currentPageTitle }}</span>
+      </router-link>
+      <div class="atlas-tools" role="group" aria-label="快捷工具">
+        <button
+          class="search-button"
+          aria-label="搜索页面，Command K 或 Control K"
+          @click="commandVisible = true"
         >
+          <Search /><kbd>{{ shortcutLabel }} K</kbd>
+        </button>
+        <button
+          class="task-button"
+          :aria-label="`测试任务：${testRunning ? '进行中' : statusError ? '状态获取失败' : '空闲'}`"
+          @click="testVisible = true"
+        >
+          <StatusDot
+            :state="statusError ? 'warn' : testRunning ? 'ok' : 'idle'"
+            :running="testRunning"
+            :label="
+              testRunning ? '测试中' : statusError ? '状态未知' : '任务空闲'
+            "
+          />
+        </button>
+        <button
+          class="icon-button"
+          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
+          @click="toggleTheme"
+        >
+          <component :is="isDark ? Sunny : Moon" />
+        </button>
+        <AccountMenu :username="user.user.username" @logout="logout" />
       </div>
     </header>
-    <div v-if="sectionLinks.length > 1" class="workspace-subbar">
-      <nav
-        v-if="sectionLinks.length > 1"
-        class="section-navigation"
-        aria-label="页面"
-      >
-        <router-link
-          v-for="item in sectionLinks"
-          :key="item.path"
-          :to="item.path"
-          :class="{ active: route.path === item.path }"
-          >{{ item.label }}</router-link
-        >
-      </nav>
-    </div>
-    <main id="workspace-content" class="workspace-content" tabindex="-1">
-      <header v-if="route.path !== '/dashboard'" class="workspace-page-heading">
-        <div>
-          <h1>{{ currentInfo.label }}</h1>
-          <p>{{ currentInfo.description }}</p>
-        </div>
-        <span class="page-heading-symbol"
-          ><WorkIcon :name="currentInfo.icon"
-        /></span>
-      </header>
+    <main id="atlas-content" class="atlas-content" tabindex="-1">
       <AppMain />
     </main>
-    <nav class="command-dock" aria-label="快捷工具">
-      <button @click="testVisible = true" aria-label="查看测试任务">
-        <WorkIcon name="pulse" /><span>任务</span>
-      </button>
-      <i></i
-      ><button
-        class="dock-command"
-        @click="openCommands"
-        aria-label="打开快捷跳转"
+    <nav class="mobile-dock" aria-label="移动主导航">
+      <DockGroup
+        v-for="item in navigation.slice(0, 4)"
+        :key="item.path"
+        :item="item"
+        :active="isActive(item)"
+      /><button
+        class="mobile-more"
+        aria-label="打开更多菜单"
+        @click="moreVisible = true"
       >
-        <WorkIcon name="search" /><span>搜索</span></button
-      ><i></i>
-      <button
-        @click="toggleTheme"
-        :aria-label="isDark ? '切换浅色外观' : '切换深色外观'"
-      >
-        <WorkIcon :name="isDark ? 'sun' : 'moon'" /><span>外观</span>
-      </button>
-      <button
-        @click="settingsStore.settingsVisible = true"
-        aria-label="界面设置"
-      >
-        <WorkIcon name="settings" /><span>设置</span>
+        <MoreFilled /><span>更多</span>
       </button>
     </nav>
-    <el-dialog
-      v-model="commandVisible"
-      title="快速跳转"
-      class="command-dialog"
-      width="580px"
-      :show-close="false"
-      @opened="focusCommand"
-    >
-      <div class="command-search">
-        <WorkIcon name="search" /><input
-          ref="commandInput"
-          v-model="query"
-          placeholder="输入页面名称，或搜索功能…"
-          aria-label="搜索页面"
-          @keydown.down.prevent="
-            selected = Math.min(selected + 1, filteredCommands.length - 1)
-          "
-          @keydown.up.prevent="selected = Math.max(selected - 1, 0)"
-          @keydown.enter.prevent="goSelected"
-        /><kbd>Esc</kbd>
-      </div>
-      <div class="command-results">
-        <p>
-          页面 <span>{{ filteredCommands.length }}</span>
-        </p>
-        <button
-          v-for="(item, index) in filteredCommands"
-          :key="item.path"
-          :class="{ highlighted: selected === index }"
-          @click="navigate(item.path)"
-          @pointermove="selected = index"
-        >
-          <WorkIcon :name="item.icon" /><span
-            ><strong>{{ item.label }}</strong
-            ><small>{{ item.group }}</small></span
-          ><WorkIcon name="arrow" />
-        </button>
-        <div v-if="!filteredCommands.length" class="command-empty">
-          没有找到页面，试试「节点」「订阅」或「测速」。
+    <UiDrawer
+      v-model="moreVisible"
+      title="所有页面"
+      direction="btt"
+      size="75dvh"
+      ><nav class="more-navigation" aria-label="所有页面">
+        <section v-for="group in navigation" :key="group.path">
+          <h2>{{ group.label }}</h2>
+          <a
+            v-for="item in flattenNavigation([group])"
+            :key="item.path"
+            :href="isExternal(item.path) ? item.path : `#${item.path}`"
+            :aria-current="route.path === item.path ? 'page' : undefined"
+            @click="moreVisible = false"
+            ><SvgIcon :icon-class="item.icon" />{{ item.label }}</a
+          >
+        </section>
+      </nav>
+      <template #footer>
+        <div class="more-actions">
+          <UiButton variant="ghost" @click="toggleTheme">
+            {{ isDark ? "切换浅色主题" : "切换深色主题" }}
+          </UiButton>
+          <UiButton
+            variant="ghost"
+            @click="
+              testVisible = true;
+              moreVisible = false;
+            "
+          >
+            测试任务
+          </UiButton>
+          <UiButton
+            @click="
+              router.push('/system/user/set');
+              moreVisible = false;
+            "
+            >修改密码</UiButton
+          ><UiButton variant="ghost" @click="logout">退出登录</UiButton>
         </div>
-      </div>
-      <template #footer
-        ><span class="command-help">↑ ↓ 选择 <span>Enter 打开</span></span
-        ><span>随时按 Ctrl K</span></template
-      >
-    </el-dialog>
-    <TestStatusDialog v-model:visible="testVisible" />
-    <Settings />
+      </template>
+    </UiDrawer>
+    <CommandPalette v-model="commandVisible" :items="commands" />
+    <TestStatusDialog v-if="testVisible" v-model:visible="testVisible" />
   </div>
 </template>
 <script setup lang="ts">
 import {
   computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
   ref,
   watch,
-  onMounted,
-  onBeforeUnmount,
-  nextTick,
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { ElMessageBox } from "element-plus";
+import { Moon, MoreFilled, Search, Sunny } from "@element-plus/icons-vue";
 import { usePermissionStore, useSettingsStore, useUserStore } from "@/store";
 import { ThemeEnum } from "@/enums/ThemeEnum";
-import AppMain from "./components/AppMain/index.vue";
-import Settings from "./components/Settings/index.vue";
+import { translateRouteTitle } from "@/utils/i18n";
+import { GetTestStatus } from "@/api/subcription/node";
+import logo from "@/assets/logo.png";
+import SvgIcon from "@/components/SvgIcon/index.vue";
 import TestStatusDialog from "@/components/TestStatusDialog.vue";
-import WorkIcon from "@/components/workspace/WorkIcon.vue";
-const route = useRoute(),
-  router = useRouter(),
-  permission = usePermissionStore(),
-  settingsStore = useSettingsStore(),
-  userStore = useUserStore();
-const isDark = computed(() => settingsStore.theme === ThemeEnum.DARK);
+import {
+  CommandPalette,
+  StatusDot,
+  UiButton,
+  UiDrawer,
+  type CommandItem,
+} from "@/ui";
+import { useMotion } from "@/motion";
+import AppMain from "./components/AppMain/index.vue";
+import DockGroup from "./components/DockGroup.vue";
+import AccountMenu from "./components/AccountMenu.vue";
+import {
+  buildNavigation,
+  flattenNavigation,
+  type NavigationItem,
+} from "./navigation";
+const permission = usePermissionStore(),
+  settings = useSettingsStore(),
+  user = useUserStore(),
+  route = useRoute(),
+  router = useRouter();
+const isDark = computed(() => settings.theme === ThemeEnum.DARK);
+const navigation = computed(() => buildNavigation(permission.routes));
+const currentPageTitle = computed(
+  () =>
+    flattenNavigation(navigation.value).find((item) => item.path === route.path)
+      ?.label || String(translateRouteTitle(route.meta.title || "PPEELink"))
+);
+const isExternal = (path: string) => /^(https?:)?\/\//.test(path);
+const isActive = (item: NavigationItem) =>
+  flattenNavigation([item]).some((child) => child.path === route.path);
+const commandVisible = ref(false),
+  moreVisible = ref(false),
+  testVisible = ref(false),
+  testRunning = ref(false),
+  statusError = ref(false);
+const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 function toggleTheme() {
-  settingsStore.changeTheme(isDark.value ? ThemeEnum.LIGHT : ThemeEnum.DARK);
+  settings.changeTheme(isDark.value ? ThemeEnum.LIGHT : ThemeEnum.DARK);
 }
 function focusMain() {
-  document.getElementById("workspace-content")?.focus();
+  document.getElementById("atlas-content")?.focus();
 }
-const primaryNav = [
-  { path: "/dashboard", label: "总览", icon: "grid" },
-  { path: "/subcription/nodes", label: "节点", icon: "network" },
-  { path: "/subcription/subs", label: "订阅", icon: "link" },
-  { path: "/test/speed", label: "测速", icon: "pulse" },
-  { path: "/template/rules", label: "规则", icon: "rules" },
-];
-const pageDetails: Record<
-  string,
-  { label: string; group: string; icon: string; description: string }
-> = {
-  "/dashboard": {
-    label: "网络总览",
-    group: "工作区",
-    icon: "globe",
-    description: "",
-  },
-  "/subcription/nodes": {
-    label: "节点",
-    group: "连接管理",
-    icon: "network",
-    description: "添加、分组和管理你的节点。",
-  },
-  "/subcription/subs": {
-    label: "订阅",
-    group: "连接管理",
-    icon: "link",
-    description: "选择节点，生成设备可用的订阅链接。",
-  },
-  "/subcription/collections": {
-    label: "订阅合集",
-    group: "连接管理",
-    icon: "link",
-    description: "把多个订阅合并为一个链接。",
-  },
-  "/subcription/airport": {
-    label: "机场订阅",
-    group: "连接管理",
-    icon: "globe",
-    description: "添加机场订阅，自动更新节点。",
-  },
-  "/subcription/clients": {
-    label: "客户端",
-    group: "连接管理",
-    icon: "diagonal",
-    description: "为你的设备找到合适的连接工具。",
-  },
-  "/test/speed": {
-    label: "速度测试",
-    group: "测速",
-    icon: "pulse",
-    description: "选择节点，测试实际下载速度。",
-  },
-  "/test/unlock": {
-    label: "服务检测",
-    group: "测速",
-    icon: "globe",
-    description: "查看节点能否访问常用网站和视频服务。",
-  },
-  "/test/tcp": {
-    label: "连接测试",
-    group: "测速",
-    icon: "network",
-    description: "检查不同地区能否连接到节点。",
-  },
-  "/template/list": {
-    label: "配置模板",
-    group: "规则",
-    icon: "rules",
-    description: "保存和修改客户端的连接设置。",
-  },
-  "/template/builder": {
-    label: "编辑模板",
-    group: "规则",
-    icon: "rules",
-    description: "按需修改连接设置并保存。",
-  },
-  "/template/rules": {
-    label: "访问规则",
-    group: "规则",
-    icon: "rules",
-    description: "定义连接的去向，管理访问规则与规则集。",
-  },
-  "/system/user/set": {
-    label: "账户设置",
-    group: "我的账户",
-    icon: "settings",
-    description: "修改用户名和密码。",
-  },
-};
-const currentInfo = computed(
-  () =>
-    pageDetails[route.path] || {
-      label: String(route.meta.title || "工作区"),
-      group: "工作区",
-      icon: "grid",
-      description: "",
-    }
-);
-const commands = computed(() => {
-  const result = [{ path: "/dashboard", ...pageDetails["/dashboard"] }];
-  for (const parent of permission.routes)
-    for (const child of parent.children || []) {
-      const path = child.path.startsWith("/")
-        ? child.path
-        : `${parent.path}/${child.path}`.replace(/\/+/g, "/");
-      if (
-        path === "/dashboard" ||
-        (!pageDetails[path] && (parent.meta?.hidden || child.meta?.hidden))
-      )
-        continue;
-      result.push({
-        path,
-        ...(pageDetails[path] || {
-          label: String(child.meta?.title || child.name),
-          group: String(parent.meta?.title || "工作区"),
-          icon: "grid",
-          description: "",
-        }),
-      });
-    }
-  return result;
-});
-const sectionLinks = computed(() =>
-  commands.value.filter(
-    (item) => item.path.split("/")[1] === route.path.split("/")[1]
-  )
-);
-function isActive(path: string) {
-  if (path === "/dashboard") return route.path === path;
-  if (path === "/subcription/nodes")
-    return [
-      "/subcription/nodes",
-      "/subcription/airport",
-      "/subcription/clients",
-    ].includes(route.path);
-  if (path === "/subcription/subs")
-    return ["/subcription/subs", "/subcription/collections"].includes(
-      route.path
-    );
-  return route.path.split("/")[1] === path.split("/")[1];
-}
-const commandVisible = ref(false),
-  testVisible = ref(false),
-  query = ref(""),
-  selected = ref(0),
-  commandInput = ref<HTMLInputElement>();
-const filteredCommands = computed(() =>
-  commands.value.filter((item) =>
-    `${item.label} ${item.group} ${item.path}`
-      .toLowerCase()
-      .includes(query.value.toLowerCase())
-  )
-);
-watch(query, () => (selected.value = 0));
-watch(selected, () =>
-  nextTick(() => {
-    document
-      .querySelector(".command-results .highlighted")
-      ?.scrollIntoView({ block: "nearest" });
-  })
-);
-function openCommands() {
-  query.value = "";
-  selected.value = 0;
-  commandVisible.value = true;
-}
-function focusCommand() {
-  nextTick(() => commandInput.value?.focus());
-}
-function navigate(path: string) {
-  commandVisible.value = false;
-  router.push(path);
-}
-function goSelected() {
-  const item = filteredCommands.value[selected.value];
-  if (item) navigate(item.path);
-}
-function shortcut(event: KeyboardEvent) {
-  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-    event.preventDefault();
-    commandVisible.value ? (commandVisible.value = false) : openCommands();
+async function logout() {
+  try {
+    await ElMessageBox.confirm("确定退出当前账户？", "退出登录", {
+      confirmButtonText: "退出登录",
+      cancelButtonText: "取消",
+      type: "warning",
+      lockScroll: false,
+    });
+  } catch {
+    return;
+  }
+  try {
+    await user.logout();
+    await router.push({ path: "/login", query: { redirect: route.fullPath } });
+  } catch {
+    /* Request layer reports API failures. */
   }
 }
-onMounted(() => window.addEventListener("keydown", shortcut));
-onBeforeUnmount(() => window.removeEventListener("keydown", shortcut));
+const commands = computed<CommandItem[]>(() => [
+  ...navigation.value.flatMap((group) =>
+    flattenNavigation([group]).map((item) => ({
+      id: item.path,
+      label: item.label,
+      group: group.label !== item.label ? group.label : undefined,
+      icon: item.icon,
+      keywords: item.path,
+      run: () => {
+        if (isExternal(item.path)) window.location.assign(item.path);
+        else return router.push(item.path);
+      },
+    }))
+  ),
+  { id: "theme", label: "切换主题", run: toggleTheme },
+  { id: "logout", label: "退出登录", run: logout },
+]);
+let statusTimer: ReturnType<typeof setTimeout> | undefined;
+let disposed = false;
+async function pollStatus() {
+  try {
+    const { data } = await GetTestStatus();
+    if (!disposed) {
+      testRunning.value = !!data;
+      statusError.value = false;
+    }
+  } catch {
+    if (!disposed) {
+      testRunning.value = false;
+      statusError.value = true;
+    }
+  } finally {
+    if (!disposed) statusTimer = setTimeout(pollStatus, 5000);
+  }
+}
+const dockNav = ref<HTMLElement>(),
+  indicator = ref<HTMLElement>();
+const { animate, stop } = useMotion();
+let previousY = 0;
+async function moveIndicator() {
+  await nextTick();
+  const entry = dockNav.value?.querySelector<HTMLElement>(
+    '[data-active="true"]'
+  );
+  if (!entry || !indicator.value) {
+    if (indicator.value) indicator.value.style.opacity = "0";
+    return;
+  }
+  indicator.value.style.opacity = "1";
+  const nextY = entry.offsetTop + (entry.offsetHeight - 24) / 2;
+  stop();
+  animate(
+    indicator.value,
+    { y: previousY },
+    { y: nextY, duration: 0.56, ease: "elastic.out(1,.6)" }
+  );
+  previousY = nextY;
+}
+let observer: ResizeObserver | undefined;
+onMounted(() => {
+  pollStatus();
+  moveIndicator();
+  observer = new ResizeObserver(moveIndicator);
+  if (dockNav.value) observer.observe(dockNav.value);
+});
+watch(
+  () => [route.path, navigation.value],
+  () => {
+    moreVisible.value = false;
+    moveIndicator();
+  }
+);
+onBeforeUnmount(() => {
+  disposed = true;
+  if (statusTimer) clearTimeout(statusTimer);
+  observer?.disconnect();
+});
 </script>
+<style scoped>
+.atlas-shell {
+  min-height: 100dvh;
+}
+.skip-link {
+  position: fixed;
+  top: 16px;
+  left: 96px;
+  z-index: var(--z-tools);
+  transform: translateY(-160%);
+  padding: 12px 20px;
+  border-radius: var(--radius-control);
+  background: var(--c-surface);
+  color: var(--c-ink);
+}
+.skip-link:focus {
+  transform: none;
+}
+.atlas-dock {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: var(--z-dock);
+  width: 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 24px 0 16px;
+  background: var(--c-surface);
+  border-right: 1px solid var(--c-line);
+}
+.dock-brand {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  min-height: 52px;
+  margin-bottom: 32px;
+}
+.dock-navigation {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0 12px;
+  min-height: 0;
+  flex: 1;
+}
+.dock-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 24px;
+  background: var(--c-signal);
+  border-radius: 999px;
+  pointer-events: none;
+}
+.dock-account {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-line);
+}
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--c-ink);
+}
+.icon-button svg {
+  width: 20px;
+  height: 20px;
+}
+.icon-button:hover {
+  border-color: var(--c-line);
+  background: var(--c-surface-2);
+}
+
+.atlas-topbar {
+  display: contents;
+}
+.mobile-brand {
+  display: none;
+}
+.atlas-tools {
+  position: fixed;
+  z-index: var(--z-tools);
+  top: 24px;
+  right: 48px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+}
+.search-button,
+.task-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 44px;
+  padding: 8px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+}
+.search-button:hover,
+.task-button:hover {
+  background: var(--c-surface-2);
+}
+.search-button svg {
+  width: 18px;
+  height: 18px;
+}
+.search-button kbd {
+  font-size: 13px;
+  color: var(--c-muted);
+}
+.task-button {
+  border-left: 1px solid var(--c-line);
+}
+.atlas-content {
+  margin-left: 76px;
+  padding: 112px 48px 64px;
+  max-width: 1536px;
+  min-width: 0;
+}
+.mobile-dock {
+  display: none;
+}
+.more-navigation {
+  display: grid;
+  gap: 32px;
+}
+.more-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.more-navigation h2 {
+  color: var(--c-muted);
+  font: 400 14px var(--font-mono);
+}
+.more-navigation a {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  min-height: 44px;
+  border-radius: var(--radius-control);
+  color: var(--c-ink);
+}
+.more-navigation a:hover,
+.more-navigation a[aria-current] {
+  background: var(--c-selected);
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .atlas-content {
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+  .atlas-tools {
+    right: 32px;
+  }
+}
+@media (max-width: 767px) {
+  .atlas-dock {
+    display: none;
+  }
+  .atlas-content {
+    margin-left: 0;
+    padding: calc(96px + env(safe-area-inset-top)) 16px
+      calc(var(--mobile-dock-height) + env(safe-area-inset-bottom) + 32px);
+  }
+  .atlas-topbar {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: var(--z-tools);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    border-bottom: 1px solid var(--c-line);
+    background: var(--c-canvas);
+  }
+  .mobile-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: 44px;
+    color: var(--c-ink);
+    font-size: 15px;
+  }
+  .mobile-brand span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .atlas-tools {
+    position: static;
+    flex-shrink: 0;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .search-button {
+    justify-content: center;
+    width: 44px;
+    padding: 12px;
+  }
+  .search-button kbd,
+  .atlas-tools .task-button,
+  .atlas-tools > .icon-button {
+    display: none;
+  }
+  .mobile-dock {
+    position: fixed;
+    inset: auto 0 0;
+    z-index: var(--z-dock);
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 4px;
+    height: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom));
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    background: var(--c-surface);
+    border-top: 1px solid var(--c-line);
+  }
+  .mobile-more {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 56px;
+    border: 0;
+    background: transparent;
+    border-radius: var(--radius-control);
+    color: var(--c-muted);
+    font-size: 13px;
+  }
+  .mobile-more svg {
+    width: 22px;
+    height: 22px;
+  }
+  .skip-link {
+    left: 16px;
+  }
+}
+</style>

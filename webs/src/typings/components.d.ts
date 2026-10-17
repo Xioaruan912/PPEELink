@@ -7,16 +7,9 @@ export {}
 
 declare module "vue" {
   export interface GlobalComponents {
-    AppLink: (typeof import("./../components/AppLink/index.vue"))["default"];
     AppMain: (typeof import("./../layout/components/AppMain/index.vue"))["default"];
-    BarChart: (typeof import("./../views/dashboard/components/BarChart.vue"))["default"];
-    Breadcrumb: (typeof import("./../components/Breadcrumb/index.vue"))["default"];
-    DeptTree: (typeof import("./../views/system/user/components/dept-tree.vue"))["default"];
     Dictionary: (typeof import("./../components/Dictionary/index.vue"))["default"];
-    DictItem: (typeof import("./../views/system/dict/components/dict-item.vue"))["default"];
     ElAlert: (typeof import("element-plus/es"))["ElAlert"];
-    ElBreadcrumb: (typeof import("element-plus/es"))["ElBreadcrumb"];
-    ElBreadcrumbItem: (typeof import("element-plus/es"))["ElBreadcrumbItem"];
     ElButton: (typeof import("element-plus/es"))["ElButton"];
     ElCard: (typeof import("element-plus/es"))["ElCard"];
     ElCol: (typeof import("element-plus/es"))["ElCol"];
@@ -59,11 +52,6 @@ declare module "vue" {
     ElTree: (typeof import("element-plus/es"))["ElTree"];
     ElTreeSelect: (typeof import("element-plus/es"))["ElTreeSelect"];
     ElUpload: (typeof import("element-plus/es"))["ElUpload"];
-    ElWatermark: (typeof import("element-plus/es"))["ElWatermark"];
-    FunnelChart: (typeof import("./../views/dashboard/components/FunnelChart.vue"))["default"];
-    GithubCorner: (typeof import("./../components/GithubCorner/index.vue"))["default"];
-    Hamburger: (typeof import("./../components/Hamburger/index.vue"))["default"];
-    IconSelect: (typeof import("./../components/IconSelect/index.vue"))["default"];
     IEpCaretBottom: (typeof import("~icons/ep/caret-bottom"))["default"];
     IEpCaretTop: (typeof import("~icons/ep/caret-top"))["default"];
     IEpClose: (typeof import("~icons/ep/close"))["default"];
@@ -80,31 +68,12 @@ declare module "vue" {
     IEpSetting: (typeof import("~icons/ep/setting"))["default"];
     IEpTop: (typeof import("~icons/ep/top"))["default"];
     IEpUploadFilled: (typeof import("~icons/ep/upload-filled"))["default"];
-    LangSelect: (typeof import("./../components/LangSelect/index.vue"))["default"];
-    LayoutSelect: (typeof import("./../layout/components/Settings/components/LayoutSelect.vue"))["default"];
     MultiUpload: (typeof import("./../components/Upload/MultiUpload.vue"))["default"];
-    NavBar: (typeof import("./../layout/components/NavBar/index.vue"))["default"];
-    NavbarLeft: (typeof import("./../layout/components/NavBar/components/NavbarLeft.vue"))["default"];
-    NavbarRight: (typeof import("./../layout/components/NavBar/components/NavbarRight.vue"))["default"];
     Pagination: (typeof import("./../components/Pagination/index.vue"))["default"];
-    PieChart: (typeof import("./../views/dashboard/components/PieChart.vue"))["default"];
-    RadarChart: (typeof import("./../views/dashboard/components/RadarChart.vue"))["default"];
-    RightPanel: (typeof import("./../components/RightPanel/index.vue"))["default"];
     RouterLink: (typeof import("vue-router"))["RouterLink"];
     RouterView: (typeof import("vue-router"))["RouterView"];
-    Settings: (typeof import("./../layout/components/Settings/index.vue"))["default"];
-    Sidebar: (typeof import("./../layout/components/Sidebar/index.vue"))["default"];
-    SidebarLogo: (typeof import("./../layout/components/Sidebar/components/SidebarLogo.vue"))["default"];
-    SidebarMenu: (typeof import("./../layout/components/Sidebar/components/SidebarMenu.vue"))["default"];
-    SidebarMenuItem: (typeof import("./../layout/components/Sidebar/components/SidebarMenuItem.vue"))["default"];
-    SidebarMenuItemTitle: (typeof import("./../layout/components/Sidebar/components/SidebarMenuItemTitle.vue"))["default"];
-    SidebarMixTopMenu: (typeof import("./../layout/components/Sidebar/components/SidebarMixTopMenu.vue"))["default"];
     SingleUpload: (typeof import("./../components/Upload/SingleUpload.vue"))["default"];
-    SizeSelect: (typeof import("./../components/SizeSelect/index.vue"))["default"];
     SvgIcon: (typeof import("./../components/SvgIcon/index.vue"))["default"];
-    TagsView: (typeof import("./../layout/components/TagsView/index.vue"))["default"];
-    ThemeColorPicker: (typeof import("./../layout/components/Settings/components/ThemeColorPicker.vue"))["default"];
-    WangEditor: (typeof import("./../components/WangEditor/index.vue"))["default"];
   }
   export interface ComponentCustomProperties {
     vLoading: (typeof import("element-plus/es"))["ElLoadingDirective"];
