@@ -4,9 +4,9 @@
       <slot name="label">{{ label }}</slot>
     </p>
     <div :class="['ui-stat__number', `is-${state}`]">
-      <span aria-hidden="true">{{ display }}</span
-      ><span class="sr-only">{{ value }}</span
-      ><span v-if="unit" class="ui-stat__unit">{{ unit }}</span>
+      <span aria-hidden="true">{{ empty ? "—" : display }}</span
+      ><span class="sr-only">{{ empty ? "暂无数据" : value }}</span
+      ><span v-if="unit && !empty" class="ui-stat__unit">{{ unit }}</span>
     </div>
     <p v-if="trend || $slots.trend" class="ui-stat__trend">
       <slot name="trend">{{ trend }}</slot>
@@ -19,7 +19,7 @@ import { useCountUp } from "@/motion";
 const props = withDefaults(
   defineProps<{
     label: string;
-    value: number;
+    value: number | null;
     size?: "hero" | "large" | "medium" | "small";
     decimals?: number;
     unit?: string;
@@ -29,15 +29,20 @@ const props = withDefaults(
   }>(),
   { decimals: 0, state: "default", size: "large" }
 );
-const display = useCountUp(() => props.value, props.decimals);
+const empty = computed(
+  () => props.value === null || !Number.isFinite(props.value)
+);
+const display = useCountUp(() => props.value ?? 0, props.decimals);
 const state = computed(() =>
-  props.thresholds
-    ? props.value >= props.thresholds.bad
-      ? "bad"
-      : props.value >= props.thresholds.warn
-        ? "warn"
-        : "ok"
-    : props.state
+  empty.value
+    ? "empty"
+    : props.thresholds
+      ? props.value! >= props.thresholds.bad
+        ? "bad"
+        : props.value! >= props.thresholds.warn
+          ? "warn"
+          : "ok"
+      : props.state
 );
 </script>
 <style scoped>
@@ -50,6 +55,8 @@ const state = computed(() =>
   margin-bottom: 16px;
 }
 .ui-stat__number {
+  display: flex;
+  align-items: baseline;
   font: 400 clamp(40px, 4vw, 56px)/1.1 var(--font-display);
   font-variant-numeric: lining-nums tabular-nums;
   transition: color var(--duration-medium);
@@ -67,8 +74,10 @@ const state = computed(() =>
   font-variant-numeric: lining-nums tabular-nums;
 }
 .ui-stat__unit {
+  flex-shrink: 0;
   margin-left: 8px;
-  font-size: 15px;
+  font: 400 15px/1.4 var(--font-mono);
+  letter-spacing: normal;
   color: var(--c-muted);
 }
 .ui-stat__trend {
@@ -84,5 +93,8 @@ const state = computed(() =>
 }
 .is-bad {
   color: var(--c-bad);
+}
+.is-empty {
+  color: var(--c-muted);
 }
 </style>

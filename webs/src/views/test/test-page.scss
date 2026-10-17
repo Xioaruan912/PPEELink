@@ -1,0 +1,74 @@
+.test-page {
+  min-width: 0;
+  color: var(--c-ink);
+}
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.section-heading h2 {
+  font-size: 22px;
+  line-height: 1.4;
+  margin: 0;
+  font-weight: 600;
+}
+.section-heading p {
+  font-size: 14px;
+  color: var(--c-muted);
+  margin: 8px 0 0;
+}
+.section-count {
+  font: 400 14px var(--font-mono);
+  color: var(--c-muted);
+  margin-left: 12px;
+}
+.field-label {
+  display: block;
+  font-size: 14px;
+  color: var(--c-muted);
+  margin-bottom: 12px;
+}
+.test-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 16px 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-bad);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.node-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.node-option > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node-option small {
+  color: var(--c-muted);
+  font: 400 13px var(--font-mono);
+}
+.result-ok {
+  color: var(--c-ok);
+}
+.result-warn {
+  color: var(--c-warn-ink);
+}
+.result-error {
+  color: var(--c-bad);
+}
