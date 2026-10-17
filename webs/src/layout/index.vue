@@ -481,8 +481,14 @@ onBeforeUnmount(() => {
   }
   .atlas-content {
     margin-left: 0;
-    padding: calc(96px + env(safe-area-inset-top)) 16px
-      calc(var(--mobile-dock-height) + env(safe-area-inset-bottom) + 32px);
+    min-height: 100dvh;
+    padding: calc(96px + env(safe-area-inset-top)) 16px 0;
+  }
+  /* Native focus scrolling must stop above the fixed dock too. */
+  :global(html) {
+    scroll-padding-bottom: calc(
+      var(--mobile-dock-height) + env(safe-area-inset-bottom) + 32px
+    );
   }
   .atlas-topbar {
     position: fixed;

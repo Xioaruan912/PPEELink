@@ -1,25 +1,542 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { createApiToken, exportSafeBackup, getApiTokens, getAuditLogs, importSafeBackup, inspectSafeBackup, revokeApiToken } from '@/api/ops'
-
-defineOptions({ name:'OpsCenter' })
-const tokens=ref<any[]>([]);const backup=ref<any>({});const loading=ref(false);const tokenDialog=ref(false);const tokenForm=ref({name:'',scopes:['read'] as string[],expiresInDays:90});const createdToken=ref('')
-const audits=ref<any[]>([])
-const load=async()=>{loading.value=true;try{const [t,b,a]=await Promise.all([getApiTokens(),inspectSafeBackup(),getAuditLogs()]);tokens.value=t?.data||[];backup.value=b?.data||{};audits.value=a?.data||[]}finally{loading.value=false}}
-const createToken=async()=>{const res=await createApiToken(tokenForm.value);createdToken.value=res?.data?.token||'';tokenDialog.value=false;await load()}
-const revoke=async(row:any)=>{await ElMessageBox.confirm(`撤销 API Token「${row.name}」？撤销后立即失效。`,'确认撤销',{type:'warning'});await revokeApiToken(row.id);ElMessage.success('已撤销');await load()}
-const downloadBackup=async()=>{const data=await exportSafeBackup();const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`sublinkx-safe-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url)}
-const importBackup=()=>{const input=document.createElement('input');input.type='file';input.accept='.json,application/json';input.onchange=async()=>{const file=input.files?.[0];if(!file)return;const parsed=JSON.parse(await file.text());await ElMessageBox.confirm('恢复采用合并模式：不会删除现有节点、订阅关系或任何敏感凭据。继续？','安全恢复',{type:'warning'});const res:any=await importSafeBackup(parsed);ElMessage.success(res?.msg||res?.data?.msg||'安全配置已恢复');await load()};input.click()}
-const openStatus=()=>window.open('/status','_blank')
-const copyCreatedToken=async()=>{if(!createdToken.value)return;await navigator.clipboard.writeText(createdToken.value);ElMessage.success('已复制')}
-onMounted(load)
+import { computed, onMounted, ref } from "vue";
+import { Delete, Plus, RefreshRight, TopRight } from "@element-plus/icons-vue";
+import {
+  createApiToken,
+  getApiTokens,
+  getAuditLogs,
+  inspectSafeBackup,
+  revokeApiToken,
+} from "@/api/ops";
+import {
+  EmptyState,
+  PageHeader,
+  StatusDot,
+  UiButton,
+  UiDialog,
+  UiDrawer,
+  UiStat,
+  UiTable,
+} from "@/ui";
+import RowIconButton from "@/ui/RowIconButton.vue";
+import BackupSection from "./BackupSection.vue";
+import { formatDateTime } from "@/utils/date";
+defineOptions({ name: "OpsCenter" });
+const tokens = ref<any[]>([]);
+const backup = ref<Record<string, any>>({});
+const audits = ref<any[]>([]);
+const loading = ref(false);
+const loadError = ref("");
+const tokenDialog = ref(false);
+const tokenForm = ref({
+  name: "",
+  scopes: ["read"] as string[],
+  expiresInDays: 90,
+});
+const formError = ref("");
+const creating = ref(false);
+const createdToken = ref("");
+const copying = ref(false);
+const revoking = ref<number[]>([]);
+const activeTokens = computed(
+  () => tokens.value.filter((row) => tokenState(row) === "ok").length
+);
+const formatTime = (value: string | undefined) =>
+  formatDateTime(value) || "暂无记录";
+const prefix = (row: any) =>
+  `${String(row.tokenPrefix || "").slice(0, 12) || "未记录"}••••`;
+const tokenState = (row: any): "ok" | "idle" | "warn" =>
+  !row.enabled
+    ? "idle"
+    : row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now()
+      ? "warn"
+      : "ok";
+const tokenLabel = (row: any) =>
+  !row.enabled ? "已撤销" : tokenState(row) === "warn" ? "已过期" : "有效";
+const scopes = (row: any) =>
+  Array.isArray(row.scopes) ? row.scopes.join(", ") : row.scopes || "无";
+async function load() {
+  if (loading.value) return;
+  loading.value = true;
+  try {
+    const results = await Promise.allSettled([
+      getApiTokens(),
+      inspectSafeBackup(),
+      getAuditLogs(),
+    ]);
+    if (results[0].status === "fulfilled")
+      tokens.value = results[0].value?.data || [];
+    if (results[1].status === "fulfilled")
+      backup.value = results[1].value?.data || {};
+    if (results[2].status === "fulfilled")
+      audits.value = results[2].value?.data || [];
+    const names = ["API Token", "备份摘要", "审计日志"];
+    loadError.value = results
+      .flatMap((item, index) =>
+        item.status === "rejected" ? names[index] : []
+      )
+      .join("、");
+  } finally {
+    loading.value = false;
+  }
+}
+function openToken() {
+  tokenForm.value = { name: "", scopes: ["read"], expiresInDays: 90 };
+  formError.value = "";
+  tokenDialog.value = true;
+}
+async function createToken() {
+  const form = tokenForm.value;
+  if (!form.name.trim()) {
+    formError.value = "请输入 Token 名称。";
+    return;
+  }
+  if (!form.scopes.length) {
+    formError.value = "请选择至少一项权限。";
+    return;
+  }
+  if (
+    !Number.isInteger(form.expiresInDays) ||
+    form.expiresInDays < 0 ||
+    form.expiresInDays > 3650
+  ) {
+    formError.value = "有效期应为 0 至 3650 之间的整数。";
+    return;
+  }
+  creating.value = true;
+  formError.value = "";
+  try {
+    const res = await createApiToken({ ...form, name: form.name.trim() });
+    createdToken.value = res?.data?.token || "";
+    tokenDialog.value = false;
+    await load();
+  } catch {
+    /* 保留已填写表单，API 层提示失败。 */
+  } finally {
+    creating.value = false;
+  }
+}
+async function revoke(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `撤销 API Token「${row.name}」？撤销后立即失效。`,
+      "确认撤销",
+      {
+        type: "warning",
+        confirmButtonText: "撤销 Token",
+        cancelButtonText: "保留",
+      }
+    );
+  } catch {
+    return;
+  }
+  revoking.value.push(row.id);
+  try {
+    await revokeApiToken(row.id);
+    ElMessage.success("已撤销");
+    await load();
+  } catch {
+    /* API 层显示错误，列表保留以便重试。 */
+  } finally {
+    revoking.value = revoking.value.filter((id) => id !== row.id);
+  }
+}
+const openStatus = () =>
+  window.open("/status", "_blank", "noopener,noreferrer");
+function setCreatedVisible(visible: boolean) {
+  if (!visible) createdToken.value = "";
+}
+async function copyCreatedToken() {
+  if (!createdToken.value) return;
+  copying.value = true;
+  try {
+    await navigator.clipboard.writeText(createdToken.value);
+    ElMessage.success("已复制");
+  } catch {
+    ElMessage.error("复制失败，请选中 Token 手动复制。");
+  } finally {
+    copying.value = false;
+  }
+}
+onMounted(load);
 </script>
-
-<template><div class="ops-page"><section class="hero"><div><span>SECURITY & OPERATIONS</span><h1>运维中心</h1><p>管理最小权限 API Token、安全配置备份与公开状态页。敏感凭据不会进入备份文件。</p></div><el-button @click="openStatus">打开公开状态页</el-button></section>
-<div class="ops-grid"><section class="panel"><header><div><b>API Token</b><small>只保存 SHA-256 哈希 · 支持权限与有效期</small></div><el-button type="primary" @click="tokenDialog=true">创建 Token</el-button></header><el-table v-loading="loading" :data="tokens" size="small"><el-table-column prop="name" label="名称"/><el-table-column prop="tokenPrefix" label="前缀"/><el-table-column prop="scopes" label="权限"/><el-table-column label="到期"><template #default="{row}">{{ row.expiresAt ? new Date(row.expiresAt).toLocaleString() : '永不过期' }}</template></el-table-column><el-table-column label="状态" width="80"><template #default="{row}"><el-tag :type="row.enabled?'success':'info'" size="small">{{row.enabled?'有效':'已撤销'}}</el-tag></template></el-table-column><el-table-column label="操作" width="90"><template #default="{row}"><el-button v-if="row.enabled" link type="danger" @click="revoke(row)">撤销</el-button></template></el-table-column></el-table></section>
-<section class="panel"><header><div><b>安全配置备份</b><small>默认排除密码、Token、节点链接、机场源 URL、Webhook</small></div></header><div class="backup-stats"><article><b>{{backup.templates||0}}</b><small>模板</small></article><article><b>{{backup.egressTargets||0}}</b><small>检测目标</small></article><article><b>{{backup.subscriptions||0}}</b><small>订阅配置</small></article><article><b>{{backup.airports||0}}</b><small>机场设置</small></article></div><el-alert type="info" :closable="false" title="恢复只合并安全配置；不会删除/覆盖节点链接、订阅 Token、机场源地址或用户密码。"/><div class="backup-actions"><el-button type="primary" @click="downloadBackup">导出安全备份</el-button><el-button @click="importBackup">从备份恢复</el-button></div></section></div>
-<section class="panel audit-panel"><header><div><b>管理操作审计</b><small>只记录操作者、IP、动作、路径、状态码与时间；不记录请求体和凭据</small></div><el-button @click="load">刷新</el-button></header><el-table :data="audits" size="small" max-height="420"><el-table-column prop="createdAt" label="时间" min-width="170"><template #default="{row}">{{new Date(row.createdAt).toLocaleString()}}</template></el-table-column><el-table-column prop="actor" label="操作者" min-width="130"/><el-table-column prop="authType" label="认证" width="90"/><el-table-column prop="ip" label="IP" min-width="130"/><el-table-column prop="method" label="方法" width="80"/><el-table-column prop="path" label="路径" min-width="260"/><el-table-column prop="status" label="状态" width="80"/></el-table></section>
-<el-dialog v-model="tokenDialog" title="创建 API Token" width="520px"><el-form label-position="top"><el-form-item label="名称"><el-input v-model="tokenForm.name"/></el-form-item><el-form-item label="权限"><el-checkbox-group v-model="tokenForm.scopes"><el-checkbox value="read">read 读取</el-checkbox><el-checkbox value="write">write 写入</el-checkbox><el-checkbox value="admin">admin 管理</el-checkbox></el-checkbox-group></el-form-item><el-form-item label="有效期（天，0=永久）"><el-input-number v-model="tokenForm.expiresInDays" :min="0" :max="3650"/></el-form-item></el-form><template #footer><el-button @click="tokenDialog=false">取消</el-button><el-button type="primary" @click="createToken">创建</el-button></template></el-dialog>
-<el-dialog :model-value="!!createdToken" title="API Token 已创建" width="620px" @close="createdToken=''" ><el-alert type="warning" :closable="false" title="明文 Token 只显示这一次，请立即保存。"/><el-input :model-value="createdToken" readonly class="token-value"><template #append><el-button @click="copyCreatedToken">复制</el-button></template></el-input></el-dialog></div></template>
-
-<style scoped>.ops-page{padding:28px}.hero,.panel{border:1px solid var(--el-border-color-lighter);border-radius:16px;background:var(--el-bg-color);box-shadow:var(--el-box-shadow-light)}.hero{display:flex;justify-content:space-between;align-items:flex-end;padding:26px;margin-bottom:16px}.hero span{color:var(--el-color-primary);font:800 11px ui-monospace;letter-spacing:.14em}.hero h1{margin:7px 0;font-size:28px}.hero p{margin:0;color:var(--el-text-color-secondary);font-size: 16px}.ops-grid{display:grid;gap:16px}.panel{padding:20px}.panel header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.panel header>div{display:flex;flex-direction:column;gap:3px}.panel header small{color:var(--el-text-color-secondary)}.backup-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}.backup-stats article{padding:14px;border:1px solid var(--el-border-color-lighter);border-radius:12px;display:flex;flex-direction:column}.backup-stats b{font:700 24px ui-monospace}.backup-stats small{color:var(--el-text-color-secondary)}.backup-actions{display:flex;gap:10px;margin-top:14px}.token-value{margin-top:14px;font-family:ui-monospace,monospace}@media(max-width:720px){.ops-page{padding:14px}.hero{align-items:stretch;flex-direction:column;gap:14px;padding:18px}.hero :deep(.el-button){width:100%;margin-left:0}.panel{padding:14px}.panel header{align-items:stretch;flex-direction:column;gap:10px}.panel header :deep(.el-button){width:100%;margin-left:0}.backup-stats{grid-template-columns:repeat(2,1fr)}.backup-actions{align-items:stretch;flex-direction:column}.backup-actions :deep(.el-button){width:100%;margin-left:0}.ops-page :deep(.el-checkbox-group){display:flex;flex-wrap:wrap;gap:6px 12px}.ops-page :deep(.el-checkbox){margin-right:0}.token-value :deep(.el-input-group__append){padding:0 10px}}</style>
+<template>
+  <div class="ops-page">
+    <PageHeader
+      title="运维中心"
+      description="管理访问权限、安全备份与操作记录。"
+      ><template #actions
+        ><UiButton :icon="TopRight" @click="openStatus"
+          >打开公开状态页</UiButton
+        ></template
+      ></PageHeader
+    >
+    <EmptyState
+      v-if="loadError"
+      size="section"
+      title="部分数据读取失败"
+      :description="`${loadError}未能加载，请重试。`"
+      ><template #action
+        ><UiButton @click="load">重新加载</UiButton></template
+      ></EmptyState
+    >
+    <div class="ops-layout">
+      <section class="token-section" data-enter>
+        <header class="section-heading">
+          <div>
+            <h2>API Token</h2>
+            <p>按需授权，明文仅在创建后显示一次。</p>
+          </div>
+          <UiButton variant="primary" :icon="Plus" @click="openToken"
+            >创建 Token</UiButton
+          >
+        </header>
+        <div class="token-summary">
+          <UiStat
+            size="large"
+            label="有效 Token"
+            :value="loading ? null : activeTokens"
+          />
+          <p>
+            服务端仅保存 SHA-256 哈希。<br />列表只展示前缀，撤销后立即失效。
+          </p>
+        </div>
+        <UiTable :rows="tokens" :loading="loading" label="API Token 列表">
+          <el-table-column label="名称 / 权限" min-width="160"
+            ><template #default="{ row }"
+              ><div class="table-name">{{ row.name }}</div>
+              <span class="muted mono">{{ scopes(row) }}</span></template
+            ></el-table-column
+          >
+          <el-table-column label="前缀" min-width="160"
+            ><template #default="{ row }"
+              ><span class="mono">{{ prefix(row) }}</span></template
+            ></el-table-column
+          >
+          <el-table-column label="到期" min-width="160"
+            ><template #default="{ row }"
+              ><span class="mono">{{
+                row.expiresAt ? formatTime(row.expiresAt) : "永不过期"
+              }}</span></template
+            ></el-table-column
+          >
+          <el-table-column label="状态" width="104"
+            ><template #default="{ row }"
+              ><StatusDot
+                :state="tokenState(row)"
+                :label="tokenLabel(row)" /></template
+          ></el-table-column>
+          <el-table-column label="操作" width="64" align="right"
+            ><template #default="{ row }"
+              ><RowIconButton
+                v-if="row.enabled"
+                :icon="Delete"
+                :label="`撤销 ${row.name}`"
+                :loading="revoking.includes(row.id)"
+                @click="revoke(row)" /></template
+          ></el-table-column>
+          <template #empty
+            ><EmptyState
+              size="section"
+              title="尚无 API Token"
+              description="创建仅包含所需权限的访问凭据。"
+              ><template #action
+                ><UiButton @click="openToken">创建 Token</UiButton></template
+              ></EmptyState
+            ></template
+          >
+          <template #mobile-card="{ row }"
+            ><div class="mobile-heading">
+              <h3>{{ row.name }}</h3>
+              <RowIconButton
+                v-if="row.enabled"
+                :icon="Delete"
+                :label="`撤销 ${row.name}`"
+                :loading="revoking.includes(row.id)"
+                @click="revoke(row)"
+              />
+            </div>
+            <StatusDot :state="tokenState(row)" :label="tokenLabel(row)" />
+            <dl class="mobile-fields">
+              <dt>前缀</dt>
+              <dd class="mono">{{ prefix(row) }}</dd>
+              <dt>权限</dt>
+              <dd class="mono">{{ scopes(row) }}</dd>
+              <dt>到期</dt>
+              <dd>
+                {{ row.expiresAt ? formatTime(row.expiresAt) : "永不过期" }}
+              </dd>
+            </dl></template
+          >
+        </UiTable>
+      </section>
+      <BackupSection :summary="backup" :loading="loading" @restored="load" />
+    </div>
+    <section class="audit-section" data-enter>
+      <header class="section-heading">
+        <div>
+          <h2>操作审计</h2>
+          <p>记录操作者与请求信息，不记录请求体及凭据。</p>
+        </div>
+        <UiButton :icon="RefreshRight" :loading="loading" @click="load"
+          >刷新记录</UiButton
+        >
+      </header>
+      <UiTable
+        :rows="audits"
+        :loading="loading"
+        label="管理操作审计"
+        max-height="560"
+      >
+        <el-table-column label="时间" min-width="180"
+          ><template #default="{ row }"
+            ><span class="mono">{{ formatTime(row.createdAt) }}</span></template
+          ></el-table-column
+        ><el-table-column
+          prop="actor"
+          label="操作者"
+          min-width="120"
+        /><el-table-column
+          prop="authType"
+          label="认证"
+          min-width="88"
+        /><el-table-column label="IP" min-width="144"
+          ><template #default="{ row }"
+            ><span class="mono">{{ row.ip }}</span></template
+          ></el-table-column
+        ><el-table-column
+          prop="method"
+          label="方法"
+          min-width="80"
+        /><el-table-column label="路径" min-width="220"
+          ><template #default="{ row }"
+            ><span class="mono audit-path">{{ row.path }}</span></template
+          ></el-table-column
+        ><el-table-column label="状态" width="96"
+          ><template #default="{ row }"
+            ><StatusDot
+              :state="Number(row.status) >= 400 ? 'bad' : 'idle'"
+              :label="String(row.status)" /></template
+        ></el-table-column>
+        <template #empty
+          ><EmptyState
+            size="section"
+            title="暂无操作记录"
+            description="后续管理请求会在这里留下审计记录。"
+        /></template>
+        <template #mobile-card="{ row }"
+          ><div class="mobile-heading">
+            <span class="mono">{{ formatTime(row.createdAt) }}</span
+            ><StatusDot
+              :state="Number(row.status) >= 400 ? 'bad' : 'idle'"
+              :label="String(row.status)"
+            />
+          </div>
+          <p class="mono audit-path">{{ row.method }} {{ row.path }}</p>
+          <dl class="mobile-fields">
+            <dt>操作者</dt>
+            <dd>{{ row.actor }}</dd>
+            <dt>认证</dt>
+            <dd>{{ row.authType }}</dd>
+            <dt>IP</dt>
+            <dd class="mono">{{ row.ip }}</dd>
+          </dl></template
+        >
+      </UiTable>
+    </section>
+    <UiDrawer
+      v-model="tokenDialog"
+      title="创建 API Token"
+      size="520px"
+      :close-on-click-modal="!creating"
+      :close-on-press-escape="!creating"
+      :show-close="!creating"
+      ><el-form label-position="top" @submit.prevent="createToken"
+        ><el-form-item label="名称" required
+          ><el-input
+            v-model="tokenForm.name"
+            maxlength="120"
+            placeholder="例如：监控服务"
+            :disabled="creating" /></el-form-item
+        ><el-form-item label="权限" required
+          ><el-checkbox-group v-model="tokenForm.scopes" :disabled="creating"
+            ><el-checkbox value="read">read 读取</el-checkbox
+            ><el-checkbox value="write">write 写入</el-checkbox
+            ><el-checkbox value="admin"
+              >admin 管理</el-checkbox
+            ></el-checkbox-group
+          ></el-form-item
+        >
+        <p class="muted form-note">
+          write 包含读取权限；admin 可执行全部管理操作。
+        </p>
+        <el-form-item label="有效期（天，0 = 永久）"
+          ><el-input-number
+            v-model="tokenForm.expiresInDays"
+            :min="0"
+            :max="3650"
+            :disabled="creating"
+        /></el-form-item>
+        <p v-if="formError" class="error-text" role="alert">
+          {{ formError }}
+        </p></el-form
+      ><template #footer
+        ><UiButton :disabled="creating" @click="tokenDialog = false"
+          >取消</UiButton
+        ><UiButton variant="primary" :loading="creating" @click="createToken"
+          >创建 Token</UiButton
+        ></template
+      ></UiDrawer
+    >
+    <UiDialog
+      :model-value="!!createdToken"
+      title="保存你的 Token"
+      width="620px"
+      @update:model-value="setCreatedVisible"
+      ><p class="token-warning">明文只显示这一次，关闭后无法再次查看。</p>
+      <el-input
+        :model-value="createdToken"
+        readonly
+        type="textarea"
+        :rows="3"
+        class="token-value"
+        aria-label="新建 API Token，请立即保存"
+      /><template #footer
+        ><div class="dialog-actions">
+          <UiButton @click="setCreatedVisible(false)">已保存，关闭</UiButton
+          ><UiButton
+            variant="primary"
+            :loading="copying"
+            @click="copyCreatedToken"
+            >复制 Token</UiButton
+          >
+        </div></template
+      ></UiDialog
+    >
+  </div>
+</template>
+<style scoped>
+.ops-page,
+.token-section {
+  min-width: 0;
+}
+.ops-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+.section-heading h2 {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+.section-heading p {
+  margin: 0;
+  color: var(--c-muted);
+  font-size: 14px;
+}
+.token-summary {
+  display: flex;
+  align-items: end;
+  gap: 40px;
+  margin-bottom: 24px;
+}
+.token-summary p {
+  color: var(--c-muted);
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.audit-section {
+  margin-top: 64px;
+  padding-top: 48px;
+  border-top: 1px solid var(--c-line);
+}
+.mono {
+  font: 400 13px/1.6 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.muted {
+  color: var(--c-muted);
+}
+.table-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.audit-path {
+  overflow-wrap: anywhere;
+}
+.mobile-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.mobile-heading h3 {
+  font-size: 16px;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.mobile-fields {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 12px;
+  font-size: 14px;
+  margin-top: 16px;
+}
+.mobile-fields dt {
+  color: var(--c-muted);
+}
+.mobile-fields dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.form-note {
+  font-size: 14px;
+  margin: 0 0 24px;
+}
+.error-text {
+  color: var(--c-bad);
+  font-size: 14px;
+}
+.token-warning {
+  color: var(--c-warn-ink);
+}
+.token-value {
+  font-family: var(--font-mono);
+  margin-top: 16px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+@media (max-width: 1279px) {
+  .ops-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+  }
+}
+@media (max-width: 767px) {
+  .section-heading {
+    flex-direction: column;
+    gap: 16px;
+  }
+  .token-summary {
+    align-items: start;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .audit-section {
+    margin-top: 48px;
+    padding-top: 32px;
+  }
+}
+</style>
