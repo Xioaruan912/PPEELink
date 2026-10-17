@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "at": "2026-10-17",
   "primarySkill": "https://github.com/leonxlnx/taste-skill/tree/main/skills/taste-skill-v1",
   "supportingSkill": "redesign-existing-projects",
@@ -8,19 +8,20 @@
     "MOTION_INTENSITY": 10,
     "VISUAL_DENSITY": 4
   },
-  "brief": "Completely redesign PPEELink's existing Vue network management console while retaining its real APIs and business workflows. Deploy the production build on port 8000.",
-  "direction": "Readable neutral workspace: larger text, generous spacing, fewer labels, plain-language copy, a contrasting atlas, and the approved original logo.",
+  "brief": "Full rewrite of PPEELink's Vue console; keep real APIs, routes and workflows. Executed by Codex (gpt-6.1-sol, high), reviewed by Claude.",
+  "direction": "Signal Atlas: editorial display type + precise instrument-like data, bone/graphite canvas, signal vermilion accent. See webs/DESIGN.md.",
   "palette": {
-    "canvas": "#f2f4f1",
-    "surface": "#fcfdfb",
-    "ink": "#22332a",
-    "muted": "#607066",
-    "accent": "#37654b",
-    "stage": "#e9eee8"
+    "canvas": "#F3F1EC",
+    "surface": "#FBFAF7",
+    "ink": "#17181A",
+    "muted": "#6B6A66",
+    "signal": "#E4472B",
+    "data": "#2F5BEA"
   },
   "type": {
-    "interface": "Manrope with local Chinese system fallbacks",
-    "numbers": "IBM Plex Mono",
+    "display": "Instrument Serif",
+    "interface": "Geist + Chinese system fallbacks",
+    "numbers": "JetBrains Mono",
     "hosting": "self-hosted woff2"
   },
   "motion": [
