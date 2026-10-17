@@ -8,7 +8,6 @@ export {}
 declare module "vue" {
   export interface GlobalComponents {
     AppMain: (typeof import("./../layout/components/AppMain/index.vue"))["default"];
-    Dictionary: (typeof import("./../components/Dictionary/index.vue"))["default"];
     ElAlert: (typeof import("element-plus/es"))["ElAlert"];
     ElButton: (typeof import("element-plus/es"))["ElButton"];
     ElCard: (typeof import("element-plus/es"))["ElCard"];
@@ -68,11 +67,8 @@ declare module "vue" {
     IEpSetting: (typeof import("~icons/ep/setting"))["default"];
     IEpTop: (typeof import("~icons/ep/top"))["default"];
     IEpUploadFilled: (typeof import("~icons/ep/upload-filled"))["default"];
-    MultiUpload: (typeof import("./../components/Upload/MultiUpload.vue"))["default"];
-    Pagination: (typeof import("./../components/Pagination/index.vue"))["default"];
     RouterLink: (typeof import("vue-router"))["RouterLink"];
     RouterView: (typeof import("vue-router"))["RouterView"];
-    SingleUpload: (typeof import("./../components/Upload/SingleUpload.vue"))["default"];
     SvgIcon: (typeof import("./../components/SvgIcon/index.vue"))["default"];
   }
   export interface ComponentCustomProperties {

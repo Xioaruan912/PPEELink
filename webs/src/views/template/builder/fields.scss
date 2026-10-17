@@ -1,0 +1,133 @@
+.builder-form {
+  min-width: 0;
+  :deep(.el-form-item__label) {
+    color: var(--c-muted);
+    font-size: 14px;
+  }
+  :deep(.el-form-item__content) {
+    min-width: 0;
+  }
+  :deep(.el-input-number),
+  :deep(.el-select),
+  .full {
+    width: 100%;
+  }
+}
+.builder-section {
+  min-width: 0;
+  &:not([style*="display: none"]) ~ &:not([style*="display: none"]) {
+    margin-top: 32px;
+    padding-top: 32px;
+    border-top: 1px solid var(--c-line);
+  }
+  h2 {
+    margin: 0 0 24px;
+    font: 600 22px/1.4 var(--font-ui);
+  }
+}
+.group-list {
+  width: 100%;
+}
+.group-row,
+.rp-row,
+.loon-row,
+.loon-group-row {
+  display: grid;
+  align-items: start;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
+  background: var(--c-surface-2);
+  :deep(.el-input),
+  :deep(.el-select) {
+    min-width: 0;
+  }
+}
+.group-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  .g-name {
+    grid-column: 1;
+  }
+  .g-type {
+    grid-column: 2;
+  }
+  .g-filter {
+    grid-column: 1 / 3;
+  }
+  :deep(.row-icon-button) {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  :deep(.el-checkbox) {
+    grid-column: 1 / 3;
+  }
+}
+.rp-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
+  .rp-url {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+  :deep(.row-icon-button) {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+.loon-row,
+.loon-group-row {
+  grid-template-columns: minmax(0, 1fr) 44px;
+  :deep(.row-icon-button) {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .loon-name,
+  .loon-regex,
+  .loon-type {
+    grid-column: 1;
+  }
+}
+.group-hint,
+.field-hint {
+  color: var(--c-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.group-hint {
+  margin-top: 16px;
+}
+.field-hint {
+  margin-left: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.group-list > :deep(.ui-button) {
+  margin: 0 8px 8px 0;
+}
+@media (max-width: 767px) {
+  .group-row,
+  .rp-row {
+    grid-template-columns: minmax(0, 1fr) 44px;
+    .g-name,
+    .g-type,
+    .g-filter,
+    .rp-name,
+    .rp-url,
+    .rp-behavior {
+      grid-column: 1;
+      grid-row: auto;
+    }
+    :deep(.row-icon-button) {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    :deep(.el-checkbox) {
+      grid-column: 1;
+    }
+  }
+  .field-hint {
+    flex-basis: 100%;
+    margin: 8px 0 0;
+  }
+}

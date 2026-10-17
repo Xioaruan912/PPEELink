@@ -174,12 +174,13 @@
   border-radius: 999px;
   font-size: 13px;
 }
-.el-switch {
+// Beat lazily loaded Element Plus defaults without page-specific overrides.
+:root .el-switch {
   --el-switch-on-color: var(--c-ink);
   --el-switch-off-color: var(--c-muted);
   min-height: 44px;
 }
-.el-switch__label.is-active {
+:root .el-switch__label.is-active {
   color: var(--c-ink);
 }
 .el-switch__input:focus-visible ~ .el-switch__core {

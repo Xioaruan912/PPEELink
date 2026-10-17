@@ -75,4 +75,12 @@ const cachedViews = computed(() =>
   min-width: 0;
   max-width: 100%;
 }
+@media (max-width: 767px) {
+  .app-main {
+    /* Keep the final route control inside the padded content box. */
+    padding-bottom: calc(
+      var(--mobile-dock-height) + env(safe-area-inset-bottom) + 32px
+    );
+  }
+}
 </style>
