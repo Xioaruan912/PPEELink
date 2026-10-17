@@ -12,7 +12,7 @@ import { useMotion, useStagger } from "@/motion";
 import { useSubscriptions } from "./useSubscriptions";
 import { Grid, Share, View, MoreFilled } from "@element-plus/icons-vue";
 import CopyLinkButton from "./CopyLinkButton.vue";
-import RowIconButton from "./RowIconButton.vue";
+import RowIconButton from "@/ui/RowIconButton.vue";
 const {
   tableData,
   filteredSubs,

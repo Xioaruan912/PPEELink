@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, type Component } from "vue";
-import { UiButton } from "@/ui";
+import UiButton from "./UiButton.vue";
 defineOptions({ inheritAttrs: false });
 defineProps<{ label: string; icon: Component }>();
 const tooltipVisible = ref(false);

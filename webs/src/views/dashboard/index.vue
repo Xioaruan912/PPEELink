@@ -1,6 +1,6 @@
 <template>
   <div class="network-overview" :aria-busy="loading">
-    <PageHeader eyebrow="总览 / 00" title="我的网络">
+    <PageHeader title="我的网络">
       <template #actions>
         <UiButton :icon="Refresh" :loading="loading" @click="loadOverview">
           {{ loading ? "正在同步" : "刷新" }}

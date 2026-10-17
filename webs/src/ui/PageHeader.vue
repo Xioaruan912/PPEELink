@@ -1,7 +1,9 @@
 <template>
   <header class="page-header" data-enter>
     <div class="page-header__copy">
-      <p v-if="eyebrow" class="page-header__eyebrow">{{ eyebrow }}</p>
+      <p v-if="resolvedEyebrow" class="page-header__eyebrow">
+        {{ resolvedEyebrow }}
+      </p>
       <h1>
         <slot>{{ title }}</slot>
       </h1>
@@ -15,7 +17,39 @@
   </header>
 </template>
 <script setup lang="ts">
-defineProps<{ title?: string; eyebrow?: string; description?: string }>();
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+import { translateRouteTitle } from "@/utils/i18n";
+const props = defineProps<{
+  title?: string;
+  eyebrow?: string;
+  description?: string;
+}>();
+const route = useRoute();
+const resolvedEyebrow = computed(() => {
+  if (props.eyebrow !== undefined) return props.eyebrow;
+  const matched = route?.matched || [];
+  const current = matched[matched.length - 1];
+  if (!current) return "";
+  const parent = matched[matched.length - 2];
+  const group = translateRouteTitle(
+    parent?.meta.title || current.meta.title || ""
+  );
+  if (!group) return "";
+  const record = current.aliasOf || current;
+  const parentRecord = parent?.aliasOf || parent;
+  const normalize = (path: string) => path.replace(/\/+$/, "") || "/";
+  const index = parentRecord
+    ? parentRecord.children.findIndex((child) => {
+        if (child.name != null && child.name === record.name) return true;
+        const path = child.path.startsWith("/")
+          ? child.path
+          : `${parentRecord.path.replace(/\/$/, "")}/${child.path}`;
+        return normalize(path) === normalize(record.path);
+      })
+    : 0;
+  return index < 0 ? group : `${group} / ${String(index + 1).padStart(2, "0")}`;
+});
 </script>
 <style scoped>
 .page-header {

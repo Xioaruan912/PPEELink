@@ -1,238 +1,267 @@
-<template>
-  <div class="app-container">
-    <el-card shadow="never">
-      <template #header>
-        <div class="card-header">
-          <span>解锁测试</span>
-        </div>
-      </template>
-
-      <div class="select-bar">
-        <el-select
-          v-model="selectedNodeId"
-          filterable
-          placeholder="选择要测试的节点"
-          class="node-select"
-          :loading="nodesLoading"
-          :disabled="nodesLoading"
-        >
-          <el-option
-            v-for="n in nodes"
-            :key="n.id"
-            :label="n.name"
-            :value="n.id"
-          >
-            <span>{{ n.name }}</span><small>{{ n.rtt }}ms</small>
-          </el-option>
-        </el-select>
-        <el-button type="primary" :loading="loading" @click="startTest">
-          开始测试
-        </el-button>
-      </div>
-
-      <!-- 测试结果 -->
-      <div v-loading="loading" class="unlock-loading-area">
-        <template v-if="result">
-          <div class="result-summary">
-            <el-tag :type="result.ok ? 'success' : 'danger'" effect="dark" size="large">
-              {{ result.ok ? "有可解锁服务" : "无可解锁服务" }}
-            </el-tag>
-          </div>
-
-          <div v-for="group in groups" :key="group.key" class="group-section">
-            <div class="group-title">{{ group.label }}</div>
-            <div class="group-grid">
-              <div v-for="r in resultByGroup(group.key)" :key="r.key" class="unlock-item">
-                <div class="unlock-item-top">
-                  <span class="status-dot" :class="r.ok ? 'ok' : 'fail'" />
-                  <span class="item-name">{{ r.name }}</span>
-                  <el-tag :type="r.ok ? 'success' : 'danger'" size="small" effect="light">
-                    {{ r.ok ? "解锁" : "未解锁" }}
-                  </el-tag>
-                </div>
-                <div class="item-meta">
-                  <span v-if="r.rtt > 0">延迟 {{ r.rtt }}ms</span>
-                  <span v-if="!r.ok && r.note" class="item-note">{{ shortNote(r.note) }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </template>
-
-        <el-empty v-else-if="!loading" :description="nodesLoading ? '正在检测可访问节点…' : '选择节点后点击「开始测试」'" />
-      </div>
-    </el-card>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onBeforeUnmount, watch } from "vue";
+import { ElMessage } from "element-plus";
+import { PageHeader, UiButton, UiSkeleton, StatusDot, EmptyState } from "@/ui";
 import { getNodeOverview, UnlockTest } from "@/api/subcription/node";
-
-defineOptions({
-  name: "Unlock",
-});
-
+import UnlockResults from "@/components/node-tests/UnlockResults.vue";
+import type { UnlockResult } from "@/components/node-tests/unlock";
+defineOptions({ name: "Unlock" });
 interface NodeItem {
   id: number;
   name: string;
   link: string;
   rtt: number;
 }
-interface UnlockCheckResult {
-  key: string;
-  name: string;
-  group: string;
-  ok: boolean;
-  rtt: number;
-  note: string;
+const nodes = ref<NodeItem[]>([]),
+  selectedNodeId = ref<number>();
+const loading = ref(false),
+  nodesLoading = ref(true),
+  nodesError = ref("");
+const result = ref<UnlockResult | null>(null),
+  testError = ref("");
+let alive = true;
+async function loadNodes() {
+  nodesLoading.value = true;
+  nodesError.value = "";
+  try {
+    const { data } = await getNodeOverview();
+    if (alive)
+      nodes.value = (data || [])
+        .filter((node: NodeItem) => node.rtt >= 0)
+        .sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
+  } catch {
+    if (alive) nodesError.value = "无法加载节点，请重试。";
+  } finally {
+    if (alive) nodesLoading.value = false;
+  }
 }
-interface UnlockResult {
-  nodeName: string;
-  ok: boolean;
-  results: UnlockCheckResult[];
-  error?: string;
-}
-
-const nodes = ref<NodeItem[]>([]);
-const selectedNodeId = ref<number | undefined>();
-const loading = ref(false);
-const nodesLoading = ref(true);
-const result = ref<UnlockResult | null>(null);
-
-const groups = [
-  { key: "ai", label: "AI 服务" },
-  { key: "video", label: "影视流媒体" },
-  { key: "forum", label: "论坛 / 其它" },
-];
-
-const resultByGroup = (g: string) =>
-  (result.value?.results || []).filter((r) => r.group === g);
-
-const shortNote = (note: string) => {
-  if (!note) return "";
-  if (note.includes("socks connect")) return "连接失败/超时";
-  return note.length > 40 ? note.slice(0, 40) + "..." : note;
-};
-
-const startTest = async () => {
+async function startTest() {
+  if (loading.value) return;
   if (!selectedNodeId.value) {
     ElMessage.warning("请先选择节点");
     return;
   }
   loading.value = true;
   result.value = null;
+  testError.value = "";
+  const id = selectedNodeId.value;
   try {
-    const { data } = await UnlockTest({ id: selectedNodeId.value });
-    result.value = data;
-  } catch (e: any) {
-    ElMessage.error(e?.message || "解锁测试失败");
+    const { data } = await UnlockTest({ id });
+    if (alive) result.value = data;
+  } catch (cause: any) {
+    if (alive) {
+      testError.value = cause?.message || "解锁检测失败，请重试。";
+      ElMessage.error(testError.value);
+    }
   } finally {
-    loading.value = false;
+    if (alive) loading.value = false;
   }
-};
-
-onMounted(async () => {
-  nodesLoading.value = true;
-  try {
-    const { data } = await getNodeOverview();
-    nodes.value = (data || []).filter((n: NodeItem) => n.rtt >= 0).sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
-  } catch {
-    nodes.value = [];
-  } finally { nodesLoading.value = false;
-  }
+}
+watch(selectedNodeId, () => {
+  result.value = null;
+  testError.value = "";
+});
+onMounted(loadNodes);
+onBeforeUnmount(() => {
+  alive = false;
 });
 </script>
-
-<style lang="scss" scoped>
-.unlock-loading-area { min-height: 300px; }
-.card-header {
-  font-size: 15px;
-  font-weight: 600;
+<template>
+  <div class="unlock-page">
+    <PageHeader
+      title="解锁检测"
+      description="检查节点的 AI、影视与论坛可用性。"
+    />
+    <section class="test-controls" data-enter>
+      <div class="node-picker">
+        <label for="unlock-node">选择节点</label
+        ><el-select
+          id="unlock-node"
+          v-model="selectedNodeId"
+          filterable
+          placeholder="搜索可访问节点"
+          :loading="nodesLoading"
+          :disabled="nodesLoading || loading"
+          aria-label="选择要检测的节点"
+          ><el-option
+            v-for="node in nodes"
+            :key="node.id"
+            :label="node.name"
+            :value="node.id"
+            ><span class="node-option"
+              ><span>{{ node.name }}</span
+              ><span class="mono">{{ node.rtt }} ms</span></span
+            ></el-option
+          ></el-select
+        >
+      </div>
+      <UiButton
+        variant="primary"
+        :loading="loading"
+        :disabled="nodesLoading || !!nodesError || !nodes.length"
+        @click="startTest"
+        >{{ result ? "重新检测" : "开始检测" }}</UiButton
+      >
+      <StatusDot
+        :state="loading ? 'warn' : result ? (result.ok ? 'ok' : 'bad') : 'idle'"
+        :running="loading"
+        :label="
+          loading
+            ? '正在检测服务'
+            : result
+              ? result.ok
+                ? '有可解锁服务'
+                : '无可解锁服务'
+              : '尚未检测'
+        "
+      />
+    </section>
+    <EmptyState
+      v-if="nodesError"
+      size="section"
+      title="无法加载节点"
+      :description="nodesError"
+      ><template #action
+        ><UiButton @click="loadNodes">重新加载</UiButton></template
+      ></EmptyState
+    >
+    <section
+      v-else
+      class="results-region"
+      :aria-busy="loading || nodesLoading"
+      data-enter
+    >
+      <template v-if="loading"
+        ><p class="waiting-hint" role="status">
+          等待服务检测完成，结果将统一显示。
+        </p>
+        <UiSkeleton :lines="4" height="64px"
+      /></template>
+      <UiSkeleton v-else-if="nodesLoading" :lines="3" height="64px" />
+      <EmptyState
+        v-else-if="testError"
+        size="section"
+        title="检测未完成"
+        :description="testError"
+        ><template #action
+          ><UiButton @click="startTest">重新检测</UiButton></template
+        ></EmptyState
+      >
+      <template v-else-if="result"
+        ><header class="result-heading">
+          <h2>
+            {{
+              result.nodeName ||
+              nodes.find((node) => node.id === selectedNodeId)?.name
+            }}
+          </h2>
+          <span class="mono"
+            >{{ result.results.filter((item) => item.ok).length }} /
+            {{ result.results.length }} 项可用</span
+          >
+        </header>
+        <p v-if="result.error" class="error" role="alert">{{ result.error }}</p>
+        <UnlockResults :result="result"
+      /></template>
+      <EmptyState
+        v-else-if="!nodes.length"
+        size="section"
+        title="暂无可访问节点"
+        description="请先添加节点或检查连接。"
+        ><template #action
+          ><UiButton @click="loadNodes">刷新节点</UiButton></template
+        ></EmptyState
+      >
+      <EmptyState
+        v-else
+        size="section"
+        title="选择节点开始检测"
+        description="检测结果会按服务分组显示。"
+      />
+    </section>
+  </div>
+</template>
+<style scoped>
+.unlock-page {
+  min-width: 0;
 }
-
-.select-bar {
+.test-controls {
   display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-
-  .node-select {
-    width: 320px;
-  }
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--c-line);
 }
-
-.result-summary {
-  margin-bottom: 16px;
-}
-
-.group-section {
-  margin-bottom: 20px;
-
-  .group-title {
-    margin-bottom: 10px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--el-text-color-secondary);
-  }
-}
-
-.group-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+.node-picker {
+  width: 360px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
-
-.unlock-item {
-  padding: 12px 14px;
-  background: #f8f9fa;
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 10px;
-
-  .unlock-item-top {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .status-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-
-    &.ok { background: #30a46c; }
-    &.fail { background: #e5484d; }
-  }
-
-  .item-name {
-    flex: 1;
-    overflow: hidden;
-    font-size: 16px;
-    font-weight: 500;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .item-meta {
-    margin-top: 6px;
-    font-size: 16px;
-    color: var(--el-text-color-secondary);
-  }
-
-  .item-note {
-    margin-left: 8px;
-    color: var(--el-text-color-placeholder);
-  }
+.node-picker label {
+  font-size: 15px;
 }
-
-html.dark .unlock-item {
-  background: #202425;
+.node-picker :deep(.el-select) {
+  width: 100%;
 }
-
-@media (max-width: 720px) {
-  .select-bar { align-items: stretch; flex-direction: column; gap: 8px; }
-  .select-bar .node-select { width: 100%; }
-  .select-bar :deep(.el-button) { width: 100%; margin-left: 0; }
-  .group-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.test-controls :deep(.status-dot) {
+  min-height: 44px;
+}
+.node-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.node-option > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.node-option .mono {
+  color: var(--c-muted);
+  flex-shrink: 0;
+}
+.mono {
+  font: 400 13px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.results-region {
+  min-height: 320px;
+  padding-top: 32px;
+}
+.waiting-hint {
+  margin: 0 0 24px;
+  font-size: 14px;
+  color: var(--c-muted);
+}
+.result-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+}
+.result-heading h2 {
+  margin: 0;
+  font: 600 22px/1.4 var(--font-ui);
+  overflow-wrap: anywhere;
+}
+.result-heading .mono {
+  color: var(--c-muted);
+}
+.error {
+  color: var(--c-bad);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 767px) {
+  .test-controls {
+    align-items: stretch;
+    gap: 16px;
+  }
+  .node-picker {
+    width: 100%;
+  }
 }
 </style>
