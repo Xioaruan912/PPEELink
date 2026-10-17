@@ -1,14 +1,31 @@
 @font-face {
-  font-family: Manrope;
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: swap;
-  src: url("/static/fonts/manrope-latin.woff2") format("woff2");
-}
-@font-face {
-  font-family: "IBM Plex Mono";
+  font-family: "Instrument Serif";
+  src: url("../assets/fonts/instrument-serif-latin-400-normal.woff2")
+    format("woff2");
   font-style: normal;
   font-weight: 400;
   font-display: swap;
-  src: url("/static/fonts/ibm-plex-mono-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("../assets/fonts/instrument-serif-latin-400-italic.woff2")
+    format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Geist";
+  src: url("../assets/fonts/geist-latin-wght-normal.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/jetbrains-mono-latin-wght-normal.woff2")
+    format("woff2");
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
 }

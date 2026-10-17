@@ -8,7 +8,7 @@ const { pkg } = __APP_INFO__;
 const defaultSettings: AppSettings = {
   title: "PPEELink",
   version: pkg.version,
-  showSettings: true,
+  showSettings: false,
   tagsView: false,
   fixedHeader: true,
   sidebarLogo: true,
@@ -16,7 +16,7 @@ const defaultSettings: AppSettings = {
   theme: ThemeEnum.LIGHT,
   size: SizeEnum.DEFAULT,
   language: LanguageEnum.ZH_CN,
-  themeColor: "#37654b",
+  themeColor: "var(--c-signal)",
   watermarkEnabled: false,
   watermarkContent: "PPEELink",
 };

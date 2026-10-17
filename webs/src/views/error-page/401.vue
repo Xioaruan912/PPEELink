@@ -1,129 +1,35 @@
-<script setup lang="ts">
-import { reactive, toRefs } from "vue";
-import { useRouter } from "vue-router";
-
-import { defineComponent } from "vue";
-
-defineComponent({
-  name: "Page401",
-});
-
-const state = reactive({
-  errGif: new URL(`../../assets/images/401.gif`, import.meta.url).href,
-
-  ewizardClap:
-    "https://wpimg.wallstcn.com/007ef517-bafd-4066-aae4-6883632d9646",
-  dialogVisible: false,
-});
-
-const { errGif, ewizardClap, dialogVisible } = toRefs(state);
-
-const router = useRouter();
-
-function back() {
-  router.back();
-}
-</script>
-
 <template>
-  <div class="errPage-container">
-    <el-button icon="el-icon-arrow-left" class="pan-back-btn" @click="back">
-      返回
-    </el-button>
-    <el-row>
-      <el-col :span="12">
-        <h1 class="text-jumbo text-ginormous">Oops!</h1>
-        gif来源<a href="https://zh.airbnb.com/" target="_blank">airbnb</a> 页面
-        <h2>你没有权限去该页面</h2>
-        <h6>如有不满请联系你领导</h6>
-        <ul class="list-unstyled">
-          <li>或者你可以去:</li>
-          <li class="link-type">
-            <router-link to="/dashboard"> 回首页 </router-link>
-          </li>
-          <li class="link-type">
-            <a href="https://www.taobao.com/">随便看看</a>
-          </li>
-          <li>
-            <a href="#" @click.prevent="dialogVisible = true">点我看图</a>
-          </li>
-        </ul>
-      </el-col>
-      <el-col :span="12">
-        <img
-          :src="errGif"
-          width="313"
-          height="428"
-          alt="Girl has dropped her ice cream."
-        />
-      </el-col>
-    </el-row>
-    <el-dialog v-model="dialogVisible" title="随便看">
-      <img :src="ewizardClap" class="pan-img" />
-    </el-dialog>
-  </div>
+  <section class="error-page">
+    <p class="error-code" data-enter>401</p>
+    <h1 data-enter>无权访问</h1>
+    <p class="error-description" data-enter>当前账户没有访问此页面的权限。</p>
+    <UiButton variant="primary" @click="router.push('/dashboard')"
+      >返回首页</UiButton
+    >
+  </section>
 </template>
-
-<style lang="scss" scoped>
-.errPage-container {
-  width: 800px;
-  max-width: 100%;
-  margin: 100px auto;
-
-  .pan-back-btn {
-    color: #fff;
-    background: #008489;
-    border: none !important;
-  }
-
-  .pan-gif {
-    display: block;
-    margin: 0 auto;
-  }
-
-  .pan-img {
-    display: block;
-    width: 100%;
-    margin: 0 auto;
-  }
-
-  .text-jumbo {
-    font-size: 60px;
-    font-weight: 700;
-    color: #484848;
-  }
-
-  .list-unstyled {
-    font-size: 14px;
-
-    li {
-      padding-bottom: 5px;
-    }
-
-    a {
-      color: #008489;
-      text-decoration: none;
-
-      &:hover {
-        text-decoration: underline;
-      }
-    }
-  }
+<script setup lang="ts">
+import { useRouter } from "vue-router";
+import { UiButton } from "@/ui";
+const router = useRouter();
+</script>
+<style scoped>
+.error-page {
+  min-height: 65dvh;
+  padding-top: 24px;
+  max-width: 720px;
 }
-
-@media (max-width: 720px) {
-  .errPage-container {
-    width: 100%;
-    margin: 30px auto;
-    padding: 0 16px;
-
-    :deep(.el-col) {
-      max-width: 100%;
-      flex: 0 0 100%;
-    }
-
-    .text-jumbo { font-size: 42px; }
-    .pan-gif { width: auto; max-width: 100%; height: auto; margin-top: 20px; }
-  }
+.error-code {
+  color: var(--c-signal);
+  font: 400 clamp(112px, 22vw, 240px)/0.9 var(--font-display);
+  margin: 0 0 48px;
+}
+.error-page h1 {
+  font-size: clamp(40px, 5vw, 72px);
+  margin-bottom: 24px;
+}
+.error-description {
+  color: var(--c-muted);
+  margin-bottom: 40px;
 }
 </style>

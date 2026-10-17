@@ -1,6 +1,4 @@
 import defaultSettings from "@/settings";
-import { genMixColor } from "@/utils/color";
-import { setStyleProperty } from "@/utils";
 import { ThemeEnum } from "@/enums/ThemeEnum";
 
 type SettingsValue = boolean | string;
@@ -27,60 +25,42 @@ export const useSettingsStore = defineStore("setting", () => {
     "themeColor",
     defaultSettings.themeColor
   );
-  // 将旧版橙色/蓝色主题平滑迁移到新的 EasyCLI 风格青绿色。
-  if (["#f97316", "#1890ff", "#3b82f6"].includes(themeColor.value.toLowerCase())) {
-    themeColor.value = defaultSettings.themeColor;
-  }
   // 主题：light-亮色(默认) dark-暗色
   const theme = useStorage<string>("theme", defaultSettings.theme);
-  const motionReduced = useStorage<boolean>('workspace-reduced-motion', false);
-  watch(motionReduced, (value) => {
-    document.documentElement.dataset.motion = value ? 'reduced' : 'full';
-    window.dispatchEvent(new Event('workspace-motion-change'));
-  }, { immediate: true });
-  // A single migration gives existing installations the new workspace palette.
-  // Later appearance choices remain persistent.
-  if (localStorage.getItem('workspace-visual-version') !== 'atlas-1') {
-    theme.value = ThemeEnum.LIGHT;
-    themeColor.value = defaultSettings.themeColor;
-    localStorage.setItem('workspace-visual-version', 'atlas-1');
-  }
+  const motionReduced = useStorage<boolean>("workspace-reduced-motion", false);
+  watch(
+    motionReduced,
+    (value) => {
+      document.documentElement.dataset.motion = value ? "reduced" : "full";
+      window.dispatchEvent(new Event("workspace-motion-change"));
+    },
+    { immediate: true }
+  );
   // 是否开启水印
   const watermarkEnabled = useStorage<boolean>(
     "watermarkEnabled",
     defaultSettings.watermarkEnabled
   );
 
-  function applyTheme(newTheme: string, newThemeColor: string) {
-    if (newTheme === ThemeEnum.DARK) {
-      document.documentElement.classList.add("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-    }
-    const { DEFAULT, dark, light } = genMixColor(newThemeColor);
-    setStyleProperty(`--el-color-primary`, DEFAULT);
-    setStyleProperty(`--el-color-primary-dark-2`, dark[2]);
-    setStyleProperty(`--el-color-primary-light-3`, light[3]);
-    setStyleProperty(`--el-color-primary-light-5`, light[5]);
-    setStyleProperty(`--el-color-primary-light-7`, light[7]);
-    setStyleProperty(`--el-color-primary-light-8`, light[8]);
-    setStyleProperty(`--el-color-primary-light-9`, light[9]);
+  // Keep themeColor API compatible; the stylesheet owns Signal Atlas colors.
+  function applyTheme(newTheme: string) {
+    [
+      "--el-color-primary",
+      "--el-color-primary-dark-2",
+      ...[3, 5, 7, 8, 9].map((n) => `--el-color-primary-light-${n}`),
+    ].forEach((name) => document.documentElement.style.removeProperty(name));
+    document.documentElement.classList.toggle(
+      "dark",
+      newTheme === ThemeEnum.DARK
+    );
+    const color = getComputedStyle(document.documentElement)
+      .getPropertyValue("--c-canvas")
+      .trim();
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", color);
   }
-
-  // 初始化即应用主题色，避免首次加载时保持 CSS 默认色（蓝色）
-  applyTheme(theme.value, themeColor.value);
-
-  watch(
-    [theme, themeColor],
-    ([newTheme, newThemeColor], [oldTheme, oldThemeColor]) => {
-      if (newTheme !== oldTheme || newThemeColor !== oldThemeColor) {
-        applyTheme(newTheme, newThemeColor);
-      }
-    },
-    {
-      immediate: true, // 立即执行，确保在侦听器创建时执行一次
-    }
-  );
+  watch(theme, applyTheme, { immediate: true });
 
   const settingsMap: Record<string, Ref<SettingsValue>> = {
     fixedHeader,

@@ -1,95 +1,112 @@
 <template>
-  <main class="access-page">
-    <section class="access-story">
-      <router-link to="/" class="workspace-brand access-brand"
-        ><span class="brand-symbol"><i></i><i></i><i></i></span
-        ><span>PPEELink<span class="brand-period">.</span></span></router-link
+  <main ref="page" class="login-page">
+    <section class="login-story" aria-labelledby="brand-title">
+      <a href="#/login" class="login-brand" aria-label="PPEELink"
+        ><img
+          class="brand-logo"
+          :src="logo"
+          width="44"
+          height="44"
+          alt="PPEELink"
+        /><span>PPEELink</span></a
       >
-      <div class="access-story-copy">
-        <h1><span>把连接，</span><span>掌握在手中。</span></h1>
-        <p>在一个地方，管理节点和订阅。</p>
+      <div class="login-statement">
+        <h1 id="brand-title" data-enter>连接，自有方向。</h1>
+        <p data-enter>在一处，掌握节点、订阅与网络。</p>
       </div>
-      <div class="access-globe"><NetworkGlobe /></div>
+      <svg
+        class="signal-atlas"
+        viewBox="0 0 800 480"
+        fill="none"
+        aria-hidden="true"
+      >
+        <g class="signal-path signal-path--muted">
+          <path d="M-40 400C160 400 180 80 460 80S740 170 850 10" />
+          <path d="M-40 430C200 430 210 150 470 150S680 300 850 80" />
+          <path d="M-40 460C260 460 240 220 490 220S720 400 850 150" />
+        </g>
+        <g class="signal-path signal-path--signal">
+          <path d="M-40 360C140 360 170 30 460 30S720 160 850 -20" />
+          <circle cx="460" cy="30" r="6" />
+          <circle cx="170" cy="230" r="4" />
+        </g>
+        <g class="signal-path signal-path--data">
+          <path d="M-40 480C230 480 290 290 520 290S730 460 850 250" />
+          <circle cx="520" cy="290" r="5" />
+        </g>
+      </svg>
     </section>
-    <section class="access-form-side">
-      <header class="access-topline">
-        <span>账户登录</span
+    <section class="login-form-side" aria-labelledby="login-title">
+      <header class="login-topline">
+        <span>个人网络工作台</span
         ><button
-          class="access-appearance"
+          class="theme-toggle"
+          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
           @click="toggleTheme"
-          :aria-label="isDark ? '切换浅色外观' : '切换深色外观'"
         >
-          <WorkIcon :name="isDark ? 'sun' : 'moon'" />
+          <component :is="isDark ? Sunny : Moon" />
         </button>
       </header>
-      <div class="access-form-wrap">
-        <span class="access-entry-mark"><WorkIcon name="diagonal" /></span>
-        <h2>登录</h2>
+      <div class="login-form-wrap" data-enter>
+        <p class="login-group">账户 / 登录</p>
+        <h2 id="login-title">欢迎回来</h2>
+        <p class="login-intro">登录你的 PPEELink。</p>
         <el-form
           ref="loginFormRef"
           :model="loginData"
           :rules="loginRules"
           label-position="top"
-          class="access-form"
           @submit.prevent="handleLogin"
         >
-          <el-form-item label="用户名" prop="username"
+          <el-form-item label="用户名" prop="username" for="login-username"
             ><el-input
               id="login-username"
               v-model="loginData.username"
-              placeholder="输入用户名"
               name="username"
+              placeholder="输入用户名"
               autocomplete="username"
               size="large"
           /></el-form-item>
-          <el-form-item label="密码" prop="password"
+          <el-form-item label="密码" prop="password" for="login-password"
             ><el-input
               id="login-password"
               v-model="loginData.password"
-              placeholder="输入密码"
               name="password"
+              placeholder="输入密码"
               autocomplete="current-password"
               type="password"
               show-password
               size="large"
               @keyup="checkCapslock"
-            /><span v-if="isCapslock" class="capslock-hint"
+            /><span v-if="isCapslock" class="capslock-hint" role="status"
               >大写锁定已开启</span
             ></el-form-item
           >
-          <div class="access-helper">
-            <button type="button" @click="quickFill">使用默认账户</button>
-          </div>
-          <p v-if="loginError" class="access-error" role="alert">
+          <button type="button" class="default-account" @click="quickFill">
+            使用默认账户
+          </button>
+          <p v-if="loginError" class="login-error" role="alert">
             {{ loginError }}
           </p>
-          <button
-            v-magnetic
-            class="access-submit"
+          <UiButton
+            class="login-submit"
             type="submit"
-            :disabled="loading"
-          >
-            <span>{{ loading ? "正在登录…" : "登录" }}</span
-            ><WorkIcon v-if="!loading" name="arrow" /><span
-              v-else
-              class="access-progress"
-              ><i></i><i></i><i></i
-            ></span>
-          </button>
+            variant="primary"
+            :loading="loading"
+            ><span>{{ loading ? "正在登录…" : "登录" }}</span
+            ><ArrowRight v-if="!loading" aria-hidden="true"
+          /></UiButton>
         </el-form>
       </div>
     </section>
   </main>
 </template>
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useSettingsStore, useUserStore } from "@/store";
 import { ThemeEnum } from "@/enums/ThemeEnum";
 import type { FormInstance, FormRules } from "element-plus";
-import WorkIcon from "@/components/workspace/WorkIcon.vue";
-import NetworkGlobe from "@/components/workspace/NetworkGlobe.vue";
-import { vMagnetic } from "@/utils/magnetic";
 const userStore = useUserStore(),
   settingsStore = useSettingsStore(),
   router = useRouter(),
@@ -140,456 +157,264 @@ async function handleLogin() {
     loading.value = false;
   }
 }
+import logo from "@/assets/logo.png";
+import { ArrowRight, Moon, Sunny } from "@element-plus/icons-vue";
+import { UiButton } from "@/ui";
+import { useMotion } from "@/motion";
+const page = ref<HTMLElement>();
+const { animate } = useMotion();
+onMounted(() => {
+  const elements = page.value?.querySelectorAll("[data-enter]");
+  if (elements)
+    animate(
+      Array.from(elements),
+      { opacity: 0, y: 24, clipPath: "inset(0 0 15% 0)" },
+      {
+        opacity: 1,
+        y: 0,
+        clipPath: "inset(0)",
+        duration: 0.48,
+        stagger: 0.04,
+        ease: "power3.out",
+        clearProps: "opacity,transform,clipPath",
+      }
+    );
+  const lines = page.value?.querySelectorAll(".signal-path");
+  if (lines)
+    animate(
+      Array.from(lines),
+      { clipPath: "inset(0 100% 0 0)", opacity: 0.3 },
+      {
+        clipPath: "inset(0)",
+        opacity: 1,
+        duration: 0.48,
+        stagger: 0.04,
+        ease: "power3.inOut",
+        clearProps: "clipPath,opacity",
+      }
+    );
+});
 </script>
 <style scoped>
-.access-page {
+.login-page {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(420px, 1fr);
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
   min-height: 100dvh;
 }
-.access-story {
+.login-story {
   position: relative;
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
-  padding: 36px 48px;
-  background: var(--ui-surface-strong);
   overflow: hidden;
+  padding: 40px 48px;
+  background: var(--c-canvas);
+  border-right: 1px solid var(--c-line);
 }
-.access-brand {
-  position: relative;
-  z-index: 2;
-  width: max-content;
-}
-.access-story-copy {
-  position: relative;
-  z-index: 2;
-  margin-top: clamp(40px, 10vh, 110px);
-  pointer-events: none;
-}
-.access-context {
-  display: flex;
+.login-brand {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  color: var(--ui-text-secondary);
+  gap: 16px;
+  width: fit-content;
+  color: var(--c-ink);
+  font: 400 32px/1 var(--font-display);
+  position: relative;
+  z-index: 1;
 }
-.access-context i {
-  height: 5px;
-  width: 5px;
-  border-radius: 50%;
-  background: var(--ui-accent);
+.login-statement {
+  position: relative;
+  z-index: 1;
+  margin-top: clamp(64px, 12vh, 112px);
 }
-.access-story h1 {
-  font-size: clamp(44px, 4.3vw, 72px);
-  line-height: 1.16;
-  letter-spacing: -3px;
-  font-weight: 550;
-  margin: 22px 0;
+.login-statement h1 {
+  font-size: clamp(40px, 4.8vw, 72px);
+  line-height: 1.1;
+  white-space: nowrap;
+  margin-bottom: 24px;
+  letter-spacing: -0.035em;
 }
-.access-story h1 span {
-  display: block;
-  animation: access-line-in 1s var(--ease-workspace) both;
-}
-.access-story h1 span:last-child {
-  animation-delay: 0.1s;
-}
-.access-story-copy p {
+.login-statement p {
   font-size: 16px;
-  line-height: 1.9;
-  color: var(--ui-text-secondary);
-  margin: 0;
-  animation: access-copy-in 1s 0.2s var(--ease-workspace) both;
+  color: var(--c-muted);
+  max-width: 25ch;
 }
-.access-globe {
-  position: relative;
-  align-self: flex-end;
-  width: 85%;
-  height: clamp(260px, 38vh, 420px);
-  margin-top: -70px;
-  margin-right: -60px;
-  flex: 1;
-  min-height: 300px;
+.signal-atlas {
+  width: calc(100% + 96px);
+  height: auto;
+  max-width: none;
+  margin-left: -48px;
+  min-height: 240px;
+  margin-top: 40px;
 }
-.access-globe:deep(.globe-caption),
-.access-globe:deep(.globe-hint),
-.access-globe:deep(.globe-play) {
-  display: none;
+.signal-path {
+  stroke-width: 1.2;
 }
-.access-capabilities {
-  display: flex;
-  align-items: center;
-  gap: 30px;
-  position: relative;
-  z-index: 2;
-  margin-top: 20px;
+.signal-path--muted {
+  stroke: var(--c-line);
 }
-.access-capabilities span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 15px;
-  color: var(--ui-text-secondary);
+.signal-path--signal {
+  stroke: var(--c-signal);
+  stroke-width: 1.8;
 }
-.access-capabilities svg {
-  height: 16px;
-  width: 16px;
+.signal-path--data {
+  stroke: var(--c-data);
 }
-.access-story-footer {
-  display: flex;
-  justify-content: space-between;
-  position: relative;
-  z-index: 2;
-  color: var(--ui-text-muted);
-  font-size: 14px;
-  padding-top: 28px;
-  margin-top: 25px;
-  border-top: 1px solid var(--ui-border-strong);
+.signal-path circle {
+  fill: var(--c-canvas);
 }
-.access-form-side {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 32px 40px;
-  background: var(--ui-surface);
+.login-form-side {
+  display: grid;
+  grid-template-rows: auto minmax(min-content, 1fr) 44px;
+  padding: 40px 48px;
+  background: var(--c-surface);
   min-width: 0;
 }
-.access-topline {
+.login-topline {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: var(--ui-text-muted);
+  gap: 16px;
+  color: var(--c-muted);
   font-size: 14px;
 }
-.access-appearance {
-  height: 30px;
-  width: 30px;
-  border: 1px solid var(--ui-border);
-  border-radius: 50%;
+.theme-toggle {
   display: grid;
   place-items: center;
-  background: none;
+  width: 44px;
+  height: 44px;
+  padding: 12px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
+  color: var(--c-ink);
+  background: transparent;
 }
-.access-appearance:hover {
-  background: var(--ui-hover);
-}
-.access-appearance svg {
-  width: 14px;
-  height: 14px;
-}
-.access-form-wrap {
-  width: 100%;
-  max-width: 320px;
-  margin: 50px auto 65px;
-  animation: access-form-in 0.8s 0.15s var(--ease-workspace) both;
-}
-.access-entry-mark {
-  display: grid;
-  place-items: center;
-  height: 40px;
-  width: 40px;
-  border: 1px solid var(--ui-border-strong);
-  border-radius: 11px;
-  transform: rotate(-7deg);
-  margin-bottom: 25px;
-}
-.access-entry-mark svg {
+.theme-toggle svg {
   width: 20px;
   height: 20px;
 }
-.access-form-wrap h2 {
-  font-size: 32px;
-  letter-spacing: -1.5px;
-  font-weight: 600;
-  margin: 0 0 12px;
+.theme-toggle:hover {
+  background: var(--c-surface-2);
 }
-.access-form-intro {
-  font-size: 16px;
-  color: var(--ui-text-secondary);
-  margin: 0 0 35px;
-}
-.access-form:deep(.el-form-item) {
-  margin-bottom: 22px;
-}
-.access-form:deep(.el-form-item__label) {
-  font-size: 15px;
-  padding-bottom: 7px;
-  line-height: 20px;
-  height: auto;
-}
-.access-form:deep(.el-form-item__label:before) {
-  display: none;
-}
-.access-form:deep(.el-input__wrapper) {
-  min-height: 45px;
-  background: var(--ui-canvas);
-  padding: 0 14px;
-  box-shadow: 0 0 0 1px var(--ui-border) inset;
-}
-.access-form:deep(.el-input__inner) {
-  font-size: 16px;
-}
-.access-helper {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  font-size: 14px;
-  margin-top: 3px;
-}
-.access-helper > span {
-  color: var(--ui-text-muted);
-}
-.access-helper button {
-  color: var(--ui-accent);
-  background: none;
-  font-size: 14px;
-  padding: 0;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.access-submit {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.login-form-wrap {
   width: 100%;
-  height: 45px;
-  padding: 0 17px;
-  margin-top: 25px;
-  border-radius: 6px;
-  background: var(--ui-accent);
-  color: var(--ui-surface);
-  font-size: 16px;
-  font-weight: 550;
-  transition:
-    background 0.2s,
-    transform 0.35s var(--ease-spring);
+  max-width: 360px;
+  align-self: center;
+  margin: 32px auto;
 }
-.access-submit:hover {
-  background: var(--ui-accent-strong);
-  transform: translateY(-2px);
+.login-group {
+  font: 400 13px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--c-muted);
+  margin-bottom: 24px;
 }
-.access-submit:disabled {
-  opacity: 0.7;
-  transform: none;
+.login-form-wrap h2 {
+  font: 400 40px/1.1 var(--font-display);
+  margin-bottom: 16px;
 }
-.access-submit svg {
-  width: 18px;
-  height: 18px;
-  transition: transform 0.3s var(--ease-spring);
+.login-intro {
+  color: var(--c-muted);
+  margin-bottom: 40px;
 }
-.access-submit:hover svg {
-  transform: translateX(3px);
+.login-form-wrap :deep(.el-form-item) {
+  margin-bottom: 28px;
 }
-.access-progress {
-  display: flex;
-  gap: 3px;
-  align-items: center;
+.login-form-wrap :deep(.el-form-item__label) {
+  padding-bottom: 8px;
 }
-.access-progress i {
-  height: 4px;
-  width: 4px;
-  background: currentColor;
-  border-radius: 50%;
-  animation: access-dot 0.8s infinite alternate;
-}
-.access-progress i:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.access-progress i:nth-child(3) {
-  animation-delay: 0.4s;
-}
-.access-local-note {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 30px;
-  color: var(--ui-text-muted);
+.default-account {
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-data);
   font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 4px;
 }
-.access-note-line {
-  height: 1px;
-  width: 25px;
-  background: var(--ui-border-strong);
-}
-.access-form-footer {
-  display: flex;
+.login-submit {
+  width: 100%;
+  margin-top: 24px;
   justify-content: space-between;
+}
+.login-submit svg {
+  width: 20px;
+  height: 20px;
+  margin-left: 16px;
+  vertical-align: middle;
+}
+.login-error {
+  padding: 12px 16px;
+  color: var(--c-bad);
+  background: var(--c-surface-2);
+  border-left: 2px solid var(--c-bad);
   font-size: 14px;
-  color: var(--ui-text-muted);
+  margin-top: 16px;
 }
 .capslock-hint {
+  color: var(--c-muted);
   font-size: 14px;
-  color: var(--ui-warning);
-  margin-top: 4px;
 }
-.access-error {
-  font-size: 15px;
-  color: var(--ui-danger);
-  background: var(--ui-danger-soft);
-  padding: 10px 12px;
-  line-height: 1.7;
-  margin: 15px 0 0;
-  border-radius: 5px;
-}
-@keyframes access-line-in {
-  from {
-    opacity: 0;
-    transform: translateY(35px);
-    clip-path: inset(0 0 100% 0);
+@media (min-width: 768px) and (max-width: 1023px) {
+  .login-story,
+  .login-form-side {
+    display: flex;
+    flex-direction: column;
+    padding: 32px;
   }
-  to {
-    opacity: 1;
-    transform: none;
-    clip-path: inset(0);
+  .login-statement h1 {
+    font-size: 40px;
+  }
+  .login-page {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
-@keyframes access-copy-in {
-  from {
-    opacity: 0;
-    transform: translateY(14px);
+@media (max-width: 767px) {
+  .login-page {
+    grid-template-columns: minmax(0, 1fr);
   }
-  to {
-    opacity: 1;
-    transform: none;
+  .login-story {
+    padding: 24px 16px 32px;
+    min-height: 296px;
+    border-right: 0;
+    border-bottom: 1px solid var(--c-line);
   }
-}
-@keyframes access-form-in {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes access-dot {
-  to {
-    opacity: 0.3;
-    transform: translateY(-3px);
-  }
-}
-@media (min-width: 1600px) {
-  .access-story {
-    padding: 45px 65px;
-  }
-  .access-form-side {
-    padding: 40px 55px;
-  }
-  .access-form-wrap {
-    max-width: 350px;
-  }
-  .access-globe {
-    margin-top: -120px;
-    width: 90%;
-    height: 440px;
-    max-height: 480px;
-  }
-}
-@media (max-width: 1100px) {
-  .access-page {
-    grid-template-columns: minmax(0, 1.1fr) minmax(360px, 1fr);
-  }
-  .access-story {
-    padding: 30px;
-  }
-  .access-story h1 {
-    font-size: 46px;
-    letter-spacing: -2px;
-  }
-  .access-form-side {
-    padding: 28px;
-  }
-  .access-globe {
-    width: 110%;
-    margin-top: -30px;
-    margin-right: -70px;
-    min-height: 270px;
-  }
-  .access-capabilities {
-    gap: 18px;
-  }
-  .access-capabilities span {
-    font-size: 14px;
-  }
-}
-@media (max-width: 760px) {
-  .access-page {
-    grid-template-columns: 1fr;
-  }
-  .access-story {
-    min-height: 0;
-    padding: 24px 26px 28px;
-  }
-  .access-brand {
-    font-size: 22px;
-  }
-  .access-story-copy {
-    margin-top: 33px;
-  }
-  .access-context {
-    font-size: 14px;
-  }
-  .access-story h1 {
-    font-size: 37px;
-    letter-spacing: -1.8px;
-    margin: 16px 0;
-  }
-  .access-story h1 span {
-    display: inline;
-  }
-  .access-story h1 span:first-child {
-    display: block;
-  }
-  .access-story-copy p {
-    font-size: 14px;
-    line-height: 1.8;
-    max-width: 165px;
-  }
-  .access-globe {
-    position: absolute;
-    right: -60px;
-    bottom: -10px;
-    width: 260px;
-    height: 260px;
-    min-height: 0;
-    margin: 0;
-    opacity: 0.7;
-  }
-  .access-capabilities,
-  .access-story-footer {
-    display: none;
-  }
-  .access-form-side {
-    padding: 23px 26px;
-    min-height: 500px;
-  }
-  .access-topline {
-    font-size: 14px;
-  }
-  .access-form-wrap {
-    max-width: 380px;
-    margin: 15px auto 50px;
-  }
-  .access-entry-mark {
-    display: none;
-  }
-  .access-form-wrap h2 {
+  .login-brand {
     font-size: 26px;
-    margin-top: 0;
+    gap: 8px;
   }
-  .access-form-intro {
-    font-size: 15px;
-    margin-bottom: 26px;
+  .login-brand img {
+    width: 36px;
+    height: 36px;
   }
-  .access-form:deep(.el-form-item) {
-    margin-bottom: 20px;
+  .login-statement {
+    margin-top: 40px;
   }
-  .access-form-footer {
-    font-size: 14px;
+  .login-statement h1 {
+    font-size: 40px;
+    margin-bottom: 16px;
   }
-  .access-local-note {
-    margin-top: 22px;
+  .login-statement p {
+    max-width: 23ch;
+    margin: 0;
+  }
+  .signal-atlas {
+    position: absolute;
+    width: 360px;
+    min-height: 0;
+    height: 216px;
+    right: -120px;
+    bottom: -80px;
+    margin: 0;
+    opacity: 0.65;
+  }
+  .login-form-side {
+    padding: 24px 16px;
+  }
+  .login-form-wrap {
+    margin: 40px 0 32px;
+    max-width: none;
+  }
+  .login-intro {
+    margin-bottom: 32px;
   }
 }
 </style>

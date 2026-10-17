@@ -1,30 +1,11 @@
-/** Shared workspace colors and compatibility dimensions. */
-
-:root {
-  --menu-background: var(--ui-surface, #fcfdfb);
-  --menu-text: var(--ui-text-secondary, #607066);
-  --menu-active-text: var(--ui-accent, #37654b);
-  --menu-hover: var(--ui-accent-soft, #e0e9dc);
-  --sidebar-logo-background: transparent;
-  --el-menu-active-color: var(--ui-accent, #37654b);
+// Vite additionalData imports this file: emit no CSS.
+@mixin mobile {
+  @media (max-width: 767px) {
+    @content;
+  }
 }
-
-html.dark {
-  --menu-background: var(--ui-surface, #1b2d23);
-  --menu-text: var(--ui-text-secondary, #a5b6a5);
-  --menu-active-text: var(--ui-accent, #b4caa1);
-  --menu-hover: var(--ui-accent-soft, #304633);
-  --sidebar-logo-background: transparent;
-  --el-menu-active-color: var(--ui-accent, #b4caa1);
+@mixin tablet {
+  @media (min-width: 768px) and (max-width: 1023px) {
+    @content;
+  }
 }
-
-$menu-background: var(--menu-background);
-$menu-text: var(--menu-text);
-$menu-active-text: var(--menu-active-text);
-$menu-hover: var(--menu-hover);
-$sidebar-logo-background: var(--sidebar-logo-background);
-
-$sidebar-width: 260px;
-$sidebar-width-collapsed: 72px;
-$navbar-height: 64px;
-$tags-view-height: 0px;

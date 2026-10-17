@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from "vue";
 import { ElMessage } from "element-plus";
-import WorkIcon from "@/components/workspace/WorkIcon.vue";
+import WorkIcon from "@/components/legacy/WorkIcon.vue";
 
 defineOptions({ name: "ClientsPage" });
 

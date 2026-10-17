@@ -5,7 +5,10 @@
       <div class="hero-copy">
         <span class="hero-eyebrow">HIGH-PRECISION BENCHMARK</span>
         <h1>真实节点出口测速</h1>
-        <p>通过服务端建立代理隧道，并发测量目标节点到真实公共 CDN (Cloudflare) 的 TCP 建立延迟、真实下载速度与耗时。</p>
+        <p>
+          通过服务端建立代理隧道，并发测量目标节点到真实公共 CDN (Cloudflare) 的
+          TCP 建立延迟、真实下载速度与耗时。
+        </p>
       </div>
 
       <div class="hero-stats" v-if="results.length">
@@ -15,11 +18,15 @@
         </div>
         <div class="stat-pill">
           <span class="pill-label">峰值吞吐</span>
-          <span class="pill-val font-mono text-cyan">{{ maxThroughput }} <small>Mbps</small></span>
+          <span class="pill-val font-mono text-cyan"
+            >{{ maxThroughput }} <small>Mbps</small></span
+          >
         </div>
         <div class="stat-pill">
           <span class="pill-label">平均速率</span>
-          <span class="pill-val font-mono">{{ avgThroughput }} <small>Mbps</small></span>
+          <span class="pill-val font-mono"
+            >{{ avgThroughput }} <small>Mbps</small></span
+          >
         </div>
       </div>
     </header>
@@ -30,7 +37,11 @@
       <div class="control-block node-picker spotlight-card">
         <div class="block-title">
           <span>选择节点</span>
-          <button class="select-all-btn" :disabled="nodesLoading" @click="selectAll">
+          <button
+            class="select-all-btn"
+            :disabled="nodesLoading"
+            @click="selectAll"
+          >
             选择全部可用节点 ({{ reachableNodesCount }})
           </button>
         </div>
@@ -44,71 +55,94 @@
           class="custom-select"
           :loading="nodesLoading"
         >
-          <el-option v-for="n in nodes" :key="n.id" :label="n.name" :value="n.id">
+          <el-option
+            v-for="n in nodes"
+            :key="n.id"
+            :label="n.name"
+            :value="n.id"
+          >
             <div class="option-row">
               <span class="opt-name">{{ n.name }}</span>
-              <span class="opt-rtt" :class="rttClass(n.rtt)">{{ n.rtt >= 0 ? n.rtt + 'ms' : '超时' }}</span>
+              <span class="opt-rtt" :class="rttClass(n.rtt)">{{
+                n.rtt >= 0 ? n.rtt + "ms" : "超时"
+              }}</span>
             </div>
           </el-option>
         </el-select>
       </div>
-
     </section>
-    <details class="speed-advanced"><summary>更多测速设置</summary><section class="control-panel">
-      <!-- 测速目标 URL -->
-      <div class="control-block target-picker spotlight-card">
-        <div class="block-title">
-          <span>测速地址</span>
-          <button class="reset-target-btn" @click="target = 'https://speed.cloudflare.com/__down?bytes=10000000'">恢复默认</button>
+    <details class="speed-advanced">
+      <summary>更多测速设置</summary>
+      <section class="control-panel">
+        <!-- 测速目标 URL -->
+        <div class="control-block target-picker spotlight-card">
+          <div class="block-title">
+            <span>测速地址</span>
+            <button
+              class="reset-target-btn"
+              @click="
+                target = 'https://speed.cloudflare.com/__down?bytes=10000000'
+              "
+            >
+              恢复默认
+            </button>
+          </div>
+          <el-input
+            v-model="target"
+            placeholder="https://speed.cloudflare.com/__down?bytes=10000000"
+            class="custom-input"
+          />
         </div>
-        <el-input
-          v-model="target"
-          placeholder="https://speed.cloudflare.com/__down?bytes=10000000"
-          class="custom-input"
-        />
-      </div>
 
-      <!-- 样本大小快捷选择 -->
-      <div class="control-block size-picker spotlight-card">
-        <div class="block-title">
-          <span>测试下载量</span>
-          <span class="current-label">{{ sizeMB }} MB</span>
+        <!-- 样本大小快捷选择 -->
+        <div class="control-block size-picker spotlight-card">
+          <div class="block-title">
+            <span>测试下载量</span>
+            <span class="current-label">{{ sizeMB }} MB</span>
+          </div>
+          <div class="preset-chips">
+            <button
+              v-for="s in [10, 25, 50, 100]"
+              :key="s"
+              class="chip-btn"
+              :class="{ active: sizeMB === s }"
+              @click="setSize(s)"
+            >
+              {{ s }} MB
+            </button>
+          </div>
         </div>
-        <div class="preset-chips">
-          <button
-            v-for="s in [10, 25, 50, 100]"
-            :key="s"
-            class="chip-btn"
-            :class="{ active: sizeMB === s }"
-            @click="setSize(s)"
-          >{{ s }} MB</button>
-        </div>
-      </div>
 
-      <!-- 超时控制 -->
-      <div class="control-block timeout-picker spotlight-card">
-        <div class="block-title">
-          <span>最长等待时间</span>
-          <span class="current-label">{{ timeoutSec }} 秒</span>
+        <!-- 超时控制 -->
+        <div class="control-block timeout-picker spotlight-card">
+          <div class="block-title">
+            <span>最长等待时间</span>
+            <span class="current-label">{{ timeoutSec }} 秒</span>
+          </div>
+          <div class="preset-chips">
+            <button
+              v-for="t in [10, 20, 30, 60]"
+              :key="t"
+              class="chip-btn"
+              :class="{ active: timeoutSec === t }"
+              @click="timeoutSec = t"
+            >
+              {{ t }}s
+            </button>
+          </div>
         </div>
-        <div class="preset-chips">
-          <button
-            v-for="t in [10, 20, 30, 60]"
-            :key="t"
-            class="chip-btn"
-            :class="{ active: timeoutSec === t }"
-            @click="timeoutSec = t"
-          >{{ t }}s</button>
-        </div>
-      </div>
-    </section></details>
+      </section>
+    </details>
 
     <!-- 操作执行条 -->
     <div class="action-bar">
       <div class="run-info">
         <template v-if="loading">
           <div class="progress-pulse"></div>
-          <span>正在测速中… 已完成 {{ results.length }} / {{ selectedIds.length }} 个节点</span>
+          <span
+            >正在测速中… 已完成 {{ results.length }} /
+            {{ selectedIds.length }} 个节点</span
+          >
         </template>
         <template v-else>
           <span class="ready-dot"></span>
@@ -117,11 +151,9 @@
       </div>
 
       <div class="btn-group">
-        <button
-          v-if="loading"
-          class="abort-btn"
-          @click="abortTest"
-        >中断测速</button>
+        <button v-if="loading" class="abort-btn" @click="abortTest">
+          中断测速
+        </button>
         <button
           class="launch-btn"
           :disabled="loading || !selectedIds.length"
@@ -138,7 +170,9 @@
       <div class="card-head">
         <div class="title-with-count">
           <h3>测速结果</h3>
-          <span class="count-badge" v-if="results.length">{{ results.length }} 条结果</span>
+          <span class="count-badge" v-if="results.length"
+            >{{ results.length }} 条结果</span
+          >
         </div>
       </div>
 
@@ -150,7 +184,12 @@
         v-loading="loading"
       >
         <el-table-column type="index" width="55" label="#" align="center" />
-        <el-table-column prop="name" label="节点名称" min-width="260" show-overflow-tooltip>
+        <el-table-column
+          prop="name"
+          label="节点名称"
+          min-width="260"
+          show-overflow-tooltip
+        >
           <template #default="{ row }">
             <span class="node-name-text">{{ row.name }}</span>
           </template>
@@ -158,7 +197,7 @@
         <el-table-column label="连接响应" width="120">
           <template #default="{ row }">
             <span class="tcp-pill" :class="rttClass(row.rtt)">
-              {{ row.rtt >= 0 ? row.rtt + ' ms' : '超时' }}
+              {{ row.rtt >= 0 ? row.rtt + " ms" : "超时" }}
             </span>
           </template>
         </el-table-column>
@@ -182,11 +221,18 @@
         </el-table-column>
         <el-table-column label="耗时" width="100">
           <template #default="{ row }">
-            <span v-if="row.seconds" class="font-mono text-muted">{{ row.seconds }}s</span>
+            <span v-if="row.seconds" class="font-mono text-muted"
+              >{{ row.seconds }}s</span
+            >
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="error" label="状态说明" min-width="200" show-overflow-tooltip>
+        <el-table-column
+          prop="error"
+          label="状态说明"
+          min-width="200"
+          show-overflow-tooltip
+        >
           <template #default="{ row }">
             <span v-if="row.error" class="error-text">{{ row.error }}</span>
             <span v-else-if="row.ok" class="success-text">✓ 连接正常</span>
@@ -209,7 +255,10 @@
         </div>
       </div>
       <div id="qualityTrend" class="trend-chart"></div>
-      <div v-if="!trendLoading && trendPoints.length === 0" class="empty-placeholder">
+      <div
+        v-if="!trendLoading && trendPoints.length === 0"
+        class="empty-placeholder"
+      >
         <p>暂无历史质量采样数据</p>
       </div>
     </section>
@@ -217,270 +266,320 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue"
-import { ElMessage } from "element-plus"
-import WorkIcon from "@/components/workspace/WorkIcon.vue"
-import * as echarts from "echarts/core"
-import { TooltipComponent, GridComponent, LegendComponent } from "echarts/components"
-import { LineChart } from "echarts/charts"
-import { CanvasRenderer } from "echarts/renderers"
-import { getNodeOverview } from "@/api/subcription/node"
-import { initSpotlight, staggerReveal } from "@/utils/vfx"
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { ElMessage } from "element-plus";
+import WorkIcon from "@/components/legacy/WorkIcon.vue";
+import * as echarts from "echarts/core";
+import {
+  TooltipComponent,
+  GridComponent,
+  LegendComponent,
+} from "echarts/components";
+import { LineChart } from "echarts/charts";
+import { CanvasRenderer } from "echarts/renderers";
+import { getNodeOverview } from "@/api/subcription/node";
+import { initSpotlight, useLegacyStagger } from "@/motion/compat";
+const staggerReveal = useLegacyStagger();
 
-defineOptions({ name: "SpeedTest" })
+defineOptions({ name: "SpeedTest" });
 
-echarts.use([TooltipComponent, GridComponent, LegendComponent, LineChart, CanvasRenderer])
+echarts.use([
+  TooltipComponent,
+  GridComponent,
+  LegendComponent,
+  LineChart,
+  CanvasRenderer,
+]);
 
-interface NodeItem { id: number; name: string; link: string; rtt: number }
+interface NodeItem {
+  id: number;
+  name: string;
+  link: string;
+  rtt: number;
+}
 
-const nodes = ref<NodeItem[]>([])
-const nodesLoading = ref(true)
-const selectedIds = ref<number[]>([])
-const target = ref("https://speed.cloudflare.com/__down?bytes=10000000")
-const sizeMB = ref(10)
-const timeoutSec = ref(20)
-const loading = ref(false)
-const results = ref<any[]>([])
-const abortCtrl = ref<AbortController | null>(null)
-const speedPageRef = ref<HTMLElement | null>(null)
-let cleanupSpotlight: (() => void) | null = null
+const nodes = ref<NodeItem[]>([]);
+const nodesLoading = ref(true);
+const selectedIds = ref<number[]>([]);
+const target = ref("https://speed.cloudflare.com/__down?bytes=10000000");
+const sizeMB = ref(10);
+const timeoutSec = ref(20);
+const loading = ref(false);
+const results = ref<any[]>([]);
+const abortCtrl = ref<AbortController | null>(null);
+const speedPageRef = ref<HTMLElement | null>(null);
+let cleanupSpotlight: (() => void) | null = null;
 
-const trendPoints = ref<any[]>([])
-const trendLoading = ref(false)
-let trendChart: any = null
+const trendPoints = ref<any[]>([]);
+const trendLoading = ref(false);
+let trendChart: any = null;
 
-const reachableNodesCount = computed(() => nodes.value.filter(n => n.rtt >= 0).length)
+const reachableNodesCount = computed(
+  () => nodes.value.filter((n) => n.rtt >= 0).length
+);
 
 const sortedResults = computed(() => {
-  return [...results.value].sort((a, b) => (b.mbps || 0) - (a.mbps || 0))
-})
+  return [...results.value].sort((a, b) => (b.mbps || 0) - (a.mbps || 0));
+});
 
 const maxThroughput = computed(() => {
-  if (!results.value.length) return "0"
-  const max = Math.max(...results.value.map(r => r.mbps || 0))
-  return max > 0 ? max.toFixed(1) : "0"
-})
+  if (!results.value.length) return "0";
+  const max = Math.max(...results.value.map((r) => r.mbps || 0));
+  return max > 0 ? max.toFixed(1) : "0";
+});
 
 const avgThroughput = computed(() => {
-  const valid = results.value.filter(r => r.ok && r.mbps > 0)
-  if (!valid.length) return "0"
-  const total = valid.reduce((acc, curr) => acc + curr.mbps, 0)
-  return (total / valid.length).toFixed(1)
-})
+  const valid = results.value.filter((r) => r.ok && r.mbps > 0);
+  if (!valid.length) return "0";
+  const total = valid.reduce((acc, curr) => acc + curr.mbps, 0);
+  return (total / valid.length).toFixed(1);
+});
 
 const setSize = (mb: number) => {
-  sizeMB.value = mb
+  sizeMB.value = mb;
   // 同步对齐 target URL 中的 bytes 参数
   if (target.value.includes("speed.cloudflare.com")) {
-    const bytes = mb >= 100 ? 99999999 : mb * 1048576
-    target.value = `https://speed.cloudflare.com/__down?bytes=${bytes}`
+    const bytes = mb >= 100 ? 99999999 : mb * 1048576;
+    target.value = `https://speed.cloudflare.com/__down?bytes=${bytes}`;
   }
-}
+};
 
 const rateType = (mbps: number) => {
-  if (mbps >= 50) return "rate-blazing"
-  if (mbps >= 20) return "rate-fast"
-  if (mbps >= 5) return "rate-moderate"
-  return "rate-slow"
-}
+  if (mbps >= 50) return "rate-blazing";
+  if (mbps >= 20) return "rate-fast";
+  if (mbps >= 5) return "rate-moderate";
+  return "rate-slow";
+};
 
 const rttClass = (rtt: number) => {
-  if (rtt < 0) return "rtt-timeout"
-  if (rtt < 100) return "rtt-fast"
-  if (rtt < 250) return "rtt-mid"
-  return "rtt-slow"
-}
+  if (rtt < 0) return "rtt-timeout";
+  if (rtt < 100) return "rtt-fast";
+  if (rtt < 250) return "rtt-mid";
+  return "rtt-slow";
+};
 
 const getToken = () => {
-  try { return localStorage.getItem("accessToken") || "" } catch { return "" }
-}
+  try {
+    return localStorage.getItem("accessToken") || "";
+  } catch {
+    return "";
+  }
+};
 
-const parseSSE = async (res: Response, onEvent: (type: string, data: any) => void) => {
-  const reader = res.body?.getReader()
-  if (!reader) return
-  const decoder = new TextDecoder()
-  let buf = ""
+const parseSSE = async (
+  res: Response,
+  onEvent: (type: string, data: any) => void
+) => {
+  const reader = res.body?.getReader();
+  if (!reader) return;
+  const decoder = new TextDecoder();
+  let buf = "";
   while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buf += decoder.decode(value, { stream: true })
-    const events = buf.split("\n\n")
-    buf = events.pop() || ""
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const events = buf.split("\n\n");
+    buf = events.pop() || "";
     for (const ev of events) {
-      const type = ev.match(/^event:\s*(\S+)/m)?.[1] || ""
-      const dataLine = ev.match(/^data:\s*(.*)$/m)
-      if (!dataLine) continue
-      try { onEvent(type, JSON.parse(dataLine[1])) } catch { /* ignore */ }
+      const type = ev.match(/^event:\s*(\S+)/m)?.[1] || "";
+      const dataLine = ev.match(/^data:\s*(.*)$/m);
+      if (!dataLine) continue;
+      try {
+        onEvent(type, JSON.parse(dataLine[1]));
+      } catch {
+        /* ignore */
+      }
     }
   }
-}
+};
 
 const selectAll = () => {
-  selectedIds.value = nodes.value.filter((n) => n.rtt >= 0).map((n) => n.id)
-}
+  selectedIds.value = nodes.value.filter((n) => n.rtt >= 0).map((n) => n.id);
+};
 
 const startTest = async () => {
   if (!selectedIds.value.length) {
-    ElMessage.warning("请先勾选需要测速的节点")
-    return
+    ElMessage.warning("请先勾选需要测速的节点");
+    return;
   }
-  loading.value = true
-  results.value = []
-  abortCtrl.value = new AbortController()
+  loading.value = true;
+  results.value = [];
+  abortCtrl.value = new AbortController();
 
-  const payload = new URLSearchParams()
-  payload.append("ids", selectedIds.value.join(","))
-  payload.append("target", target.value)
-  payload.append("size", String(sizeMB.value * 1048576))
-  payload.append("timeout", String(timeoutSec.value))
+  const payload = new URLSearchParams();
+  payload.append("ids", selectedIds.value.join(","));
+  payload.append("target", target.value);
+  payload.append("size", String(sizeMB.value * 1048576));
+  payload.append("timeout", String(timeoutSec.value));
 
   try {
-    const res = await fetch(import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/speedtest/stream", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Authorization: getToken() },
-      body: payload.toString(),
-      signal: abortCtrl.value.signal,
-    })
+    const res = await fetch(
+      import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/speedtest/stream",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: getToken(),
+        },
+        body: payload.toString(),
+        signal: abortCtrl.value.signal,
+      }
+    );
     if (!res.ok) {
-      const text = await res.text()
-      let msg = "请求失败: " + res.status
-      try { msg = JSON.parse(text).msg || msg } catch { /* ignore */ }
-      ElMessage.error(msg)
-      return
+      const text = await res.text();
+      let msg = "请求失败: " + res.status;
+      try {
+        msg = JSON.parse(text).msg || msg;
+      } catch {
+        /* ignore */
+      }
+      ElMessage.error(msg);
+      return;
     }
     await parseSSE(res, (type, data) => {
-      if (type === "node") results.value.push(data)
-      else if (type === "done") ElMessage.success("测速矩阵测试完成")
-    })
+      if (type === "node") results.value.push(data);
+      else if (type === "done") ElMessage.success("测速矩阵测试完成");
+    });
   } catch (e: any) {
-    if (e?.name !== "AbortError") ElMessage.error(e?.message || "测速失败")
+    if (e?.name !== "AbortError") ElMessage.error(e?.message || "测速失败");
   } finally {
-    loading.value = false
-    abortCtrl.value = null
+    loading.value = false;
+    abortCtrl.value = null;
   }
-}
+};
 
 const abortTest = () => {
-  abortCtrl.value?.abort()
-  loading.value = false
-  ElMessage.info("已中断测试")
-}
+  abortCtrl.value?.abort();
+  loading.value = false;
+  ElMessage.info("已中断测试");
+};
 
 const loadTrend = async () => {
-  trendLoading.value = true
+  trendLoading.value = true;
   try {
-    const res = await fetch(import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/quality/trend?hours=168", {
-      headers: { Authorization: getToken() },
-    })
-    const json = await res.json()
-    trendPoints.value = json?.data || []
+    const res = await fetch(
+      import.meta.env.VITE_APP_BASE_API +
+        "/api/v1/nodes/quality/trend?hours=168",
+      {
+        headers: { Authorization: getToken() },
+      }
+    );
+    const json = await res.json();
+    trendPoints.value = json?.data || [];
   } catch {
-    trendPoints.value = []
+    trendPoints.value = [];
   } finally {
-    trendLoading.value = false
+    trendLoading.value = false;
   }
-  await nextTick()
-  renderTrend()
-}
+  await nextTick();
+  renderTrend();
+};
 
 const renderTrend = () => {
-  const el = document.getElementById("qualityTrend") as HTMLDivElement
-  if (!el) return
-  if (!trendChart) trendChart = echarts.init(el)
-  const hours = trendPoints.value.map((p) => p.hour)
-  const availability = trendPoints.value.map((p) => (p.samples ? Math.round((p.successes / p.samples) * 1000) / 10 : 0))
-  const rtt = trendPoints.value.map((p) => Math.round(p.avgRtt || 0))
+  const el = document.getElementById("qualityTrend") as HTMLDivElement;
+  if (!el) return;
+  if (!trendChart) trendChart = echarts.init(el);
+  const hours = trendPoints.value.map((p) => p.hour);
+  const availability = trendPoints.value.map((p) =>
+    p.samples ? Math.round((p.successes / p.samples) * 1000) / 10 : 0
+  );
+  const rtt = trendPoints.value.map((p) => Math.round(p.avgRtt || 0));
 
-  trendChart.setOption({
-    tooltip: {
-      trigger: "axis",
-      backgroundColor: "rgba(19, 25, 38, 0.95)",
-      borderColor: "rgba(255, 255, 255, 0.1)",
-      textStyle: { color: "#f1f5f9" }
+  trendChart.setOption(
+    {
+      tooltip: {
+        trigger: "axis",
+        backgroundColor: "rgba(19, 25, 38, 0.95)",
+        borderColor: "rgba(255, 255, 255, 0.1)",
+        textStyle: { color: "#f1f5f9" },
+      },
+      legend: {
+        data: ["可用率(%)", "平均延迟(ms)"],
+        textStyle: { color: "#94a3b8" },
+      },
+      grid: { left: 45, right: 45, top: 40, bottom: 25 },
+      xAxis: {
+        type: "category",
+        data: hours,
+        axisLine: { lineStyle: { color: "rgba(255, 255, 255, 0.1)" } },
+        axisLabel: { color: "#64748b" },
+      },
+      yAxis: [
+        {
+          type: "value",
+          name: "可用率%",
+          min: 0,
+          max: 100,
+          splitLine: { lineStyle: { color: "rgba(255, 255, 255, 0.05)" } },
+          axisLabel: { color: "#64748b" },
+        },
+        {
+          type: "value",
+          name: "延迟 (ms)",
+          splitLine: { show: false },
+          axisLabel: { color: "#64748b" },
+        },
+      ],
+      series: [
+        {
+          name: "可用率(%)",
+          type: "line",
+          smooth: true,
+          data: availability,
+          itemStyle: { color: "#10b981" },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: "rgba(16, 185, 129, 0.25)" },
+              { offset: 1, color: "rgba(16, 185, 129, 0)" },
+            ]),
+          },
+        },
+        {
+          name: "平均延迟(ms)",
+          type: "line",
+          smooth: true,
+          yAxisIndex: 1,
+          data: rtt,
+          itemStyle: { color: "#6d9370" },
+          areaStyle: {
+            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+              { offset: 0, color: "rgba(56, 189, 248, 0.2)" },
+              { offset: 1, color: "rgba(56, 189, 248, 0)" },
+            ]),
+          },
+        },
+      ],
     },
-    legend: {
-      data: ["可用率(%)", "平均延迟(ms)"],
-      textStyle: { color: "#94a3b8" }
-    },
-    grid: { left: 45, right: 45, top: 40, bottom: 25 },
-    xAxis: {
-      type: "category",
-      data: hours,
-      axisLine: { lineStyle: { color: "rgba(255, 255, 255, 0.1)" } },
-      axisLabel: { color: "#64748b" }
-    },
-    yAxis: [
-      {
-        type: "value",
-        name: "可用率%",
-        min: 0,
-        max: 100,
-        splitLine: { lineStyle: { color: "rgba(255, 255, 255, 0.05)" } },
-        axisLabel: { color: "#64748b" }
-      },
-      {
-        type: "value",
-        name: "延迟 (ms)",
-        splitLine: { show: false },
-        axisLabel: { color: "#64748b" }
-      },
-    ],
-    series: [
-      {
-        name: "可用率(%)",
-        type: "line",
-        smooth: true,
-        data: availability,
-        itemStyle: { color: "#10b981" },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(16, 185, 129, 0.25)" },
-            { offset: 1, color: "rgba(16, 185, 129, 0)" }
-          ])
-        }
-      },
-      {
-        name: "平均延迟(ms)",
-        type: "line",
-        smooth: true,
-        yAxisIndex: 1,
-        data: rtt,
-        itemStyle: { color: "#6d9370" },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: "rgba(56, 189, 248, 0.2)" },
-            { offset: 1, color: "rgba(56, 189, 248, 0)" }
-          ])
-        }
-      },
-    ],
-  }, true)
-  window.addEventListener("resize", () => trendChart?.resize())
-}
+    true
+  );
+  window.addEventListener("resize", () => trendChart?.resize());
+};
 
 onMounted(async () => {
   if (speedPageRef.value) {
-    cleanupSpotlight = initSpotlight(speedPageRef.value)
+    cleanupSpotlight = initSpotlight(speedPageRef.value);
   }
-  staggerReveal(".control-block, .results-card, .trend-card", 0.05, 0.05)
+  staggerReveal(".control-block, .results-card, .trend-card", 0.05, 0.05);
   try {
-    const { data } = await getNodeOverview()
-    nodes.value = (data || []).filter((n: NodeItem) => n.rtt >= 0).sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt)
+    const { data } = await getNodeOverview();
+    nodes.value = (data || [])
+      .filter((n: NodeItem) => n.rtt >= 0)
+      .sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
   } catch {
-    nodes.value = []
+    nodes.value = [];
   } finally {
-    nodesLoading.value = false
+    nodesLoading.value = false;
   }
-  await loadTrend()
-})
+  await loadTrend();
+});
 
 onBeforeUnmount(() => {
-  if (cleanupSpotlight) cleanupSpotlight()
+  if (cleanupSpotlight) cleanupSpotlight();
   if (trendChart) {
-    trendChart.dispose()
-    trendChart = null
+    trendChart.dispose();
+    trendChart = null;
   }
-})
+});
 </script>
 
 <style lang="scss" scoped>
@@ -597,7 +696,8 @@ onBeforeUnmount(() => {
   }
 }
 
-.select-all-btn, .reset-target-btn {
+.select-all-btn,
+.reset-target-btn {
   background: transparent;
   border: none;
   font-size: 15px;
@@ -615,7 +715,8 @@ onBeforeUnmount(() => {
   }
 }
 
-.custom-select, .custom-input {
+.custom-select,
+.custom-input {
   width: 100%;
 
   :deep(.el-input__wrapper) {
@@ -721,9 +822,18 @@ onBeforeUnmount(() => {
 }
 
 @keyframes pulse-ring {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 var(--ui-focus-ring); }
-  70% { transform: scale(1.1); box-shadow: 0 0 0 8px transparent; }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 transparent; }
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 var(--ui-focus-ring);
+  }
+  70% {
+    transform: scale(1.1);
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 .btn-group {
@@ -775,7 +885,8 @@ onBeforeUnmount(() => {
 }
 
 /* 结果列表卡片 */
-.results-card, .trend-card {
+.results-card,
+.trend-card {
   background: var(--ui-surface);
   border: 1px solid var(--ui-border);
   border-radius: 18px;
@@ -848,10 +959,22 @@ onBeforeUnmount(() => {
   border-radius: 6px;
   font-weight: 600;
 
-  &.rtt-fast { background: var(--ui-success-soft); color: var(--ui-success); }
-  &.rtt-mid { background: var(--ui-warning-soft); color: var(--ui-warning); }
-  &.rtt-slow { background: var(--ui-danger-soft); color: var(--ui-danger); }
-  &.rtt-timeout { background: var(--ui-hover); color: var(--ui-text-muted); }
+  &.rtt-fast {
+    background: var(--ui-success-soft);
+    color: var(--ui-success);
+  }
+  &.rtt-mid {
+    background: var(--ui-warning-soft);
+    color: var(--ui-warning);
+  }
+  &.rtt-slow {
+    background: var(--ui-danger-soft);
+    color: var(--ui-danger);
+  }
+  &.rtt-timeout {
+    background: var(--ui-hover);
+    color: var(--ui-text-muted);
+  }
 }
 
 .mbps-badge {
@@ -958,7 +1081,8 @@ onBeforeUnmount(() => {
   .btn-group {
     width: 100%;
   }
-  .launch-btn, .abort-btn {
+  .launch-btn,
+  .abort-btn {
     flex: 1;
     text-align: center;
     justify-content: center;
