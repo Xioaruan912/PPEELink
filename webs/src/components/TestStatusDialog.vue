@@ -28,7 +28,9 @@
         </div>
         <div class="test-row">
           <span class="label">开始时间</span>
-          <span class="value">{{ fmtTime(status.startedAt) }}</span>
+          <time class="value mono" :datetime="status.startedAt">{{
+            fmtTime(status.startedAt)
+          }}</time>
         </div>
         <div class="test-row">
           <span class="label">已进行</span>
@@ -55,6 +57,7 @@
 </template>
 
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/date";
 import { ref, onMounted, onBeforeUnmount } from "vue";
 import { GetTestStatus, CancelTest } from "@/api/subcription/node";
 
@@ -72,11 +75,7 @@ const status = ref<TestStatus | null>(null);
 const canceling = ref(false);
 const now = ref(Date.now());
 
-const fmtTime = (s: string) => {
-  if (!s) return "-";
-  const d = new Date(s);
-  return d.toLocaleString();
-};
+const fmtTime = formatDateTime;
 
 const elapsed = ref("");
 
@@ -154,6 +153,10 @@ onBeforeUnmount(() => {
   color: var(--el-text-color-secondary);
   width: 70px;
   flex-shrink: 0;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 .value {
   font-weight: 500;

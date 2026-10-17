@@ -1,6 +1,6 @@
 <template>
   <div class="network-overview" :aria-busy="loading">
-    <PageHeader eyebrow="总览" title="我的网络">
+    <PageHeader eyebrow="总览 / 00" title="我的网络">
       <template #actions>
         <UiButton :icon="Refresh" :loading="loading" @click="loadOverview">
           {{ loading ? "正在同步" : "刷新" }}
@@ -152,7 +152,7 @@
               />
               <p>{{ event.message }}</p>
               <time :datetime="event.createdAt">{{
-                formatTime(event.createdAt)
+                formatDateTime(event.createdAt)
               }}</time>
             </li>
           </ol>
@@ -243,6 +243,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { formatDateTime } from "@/utils/date";
 import { useRouter } from "vue-router";
 import { computed, ref, onMounted, defineAsyncComponent } from "vue";
 import { getSubTotal, getNodeMap } from "@/api/total";
@@ -399,12 +400,7 @@ async function saveAlerts() {
     savingAlert.value = false;
   }
 }
-function formatTime(value: string) {
-  return new Date(value).toLocaleTimeString("zh-CN", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+
 function eventState(type: string): "ok" | "warn" | "bad" | "idle" {
   if (/recover|healthy|online/.test(type)) return "ok";
   if (/offline|fail|down/.test(type)) return "bad";
