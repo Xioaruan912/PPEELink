@@ -133,7 +133,7 @@ const load = async () => {
 
   .section-title {
     margin-bottom: 10px;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--el-text-color-secondary);
 
@@ -159,7 +159,7 @@ const load = async () => {
     border-radius: 8px;
 
     .target-name {
-      font-size: 13px;
+      font-size: 16px;
       font-weight: 500;
     }
   }
@@ -176,7 +176,7 @@ const load = async () => {
     .node-name {
       flex: 0 0 180px;
       overflow: hidden;
-      font-size: 13px;
+      font-size: 16px;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
@@ -184,7 +184,7 @@ const load = async () => {
     .node-server {
       flex: 1;
       overflow: hidden;
-      font-size: 12px;
+      font-size: 16px;
       color: var(--el-text-color-secondary);
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -193,7 +193,7 @@ const load = async () => {
 }
 
 .manual-load { display:grid; gap:12px; place-items:center; min-height:180px; padding:24px; text-align:center; color:var(--el-text-color-secondary); }
-.manual-load p { margin:0; font-size:13px; line-height:1.6; }
+.manual-load p { margin:0; font-size: 16px; line-height:1.6; }
 
 html.dark .target-item {
   background: #202425;

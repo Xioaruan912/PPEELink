@@ -1,10 +1,10 @@
 <template>
-  <div class="p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
-    <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] flex flex-col overflow-hidden min-h-[500px]">
+  <div class="airport-workbench p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
+    <div class="bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-2xl shadow-[var(--ui-panel-shadow)] flex flex-col overflow-hidden min-h-[500px]">
       
       <!-- Toolbar -->
-      <div class="p-5 border-b border-gray-100 dark:border-white/5 flex gap-3 items-center justify-between">
-        <div class="text-lg font-medium text-gray-800 dark:text-gray-200">机场数据源管理</div>
+      <div class="p-5 border-b border-[var(--ui-border)] flex gap-3 items-center justify-between">
+        <div class="text-lg font-bold text-[var(--ui-text)]">机场订阅</div>
         <el-button type="primary" @click="handleAdd"><el-icon class="mr-1"><Plus /></el-icon>添加机场</el-button>
       </div>
 
@@ -378,8 +378,8 @@ onMounted(() => {
   display: flex; flex-direction: column; gap: 2px;
   padding: 8px 10px; background: var(--el-fill-color-light); border-radius: 8px; min-width: 0;
 }
-.detail-body .info-label { font-size: 12px; color: var(--el-text-color-secondary); }
-.detail-body .info-val { font-size: 13px; font-weight: 500; color: var(--el-text-color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .info-label { font-size: 16px; color: var(--el-text-color-secondary); }
+.detail-body .info-val { font-size: 16px; font-weight: 500; color: var(--el-text-color-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-body .section-title { font-weight: 600; margin: 14px 0 8px; color: var(--el-text-color-primary); }
 .detail-body .node-select-head { display: flex; align-items: center; justify-content: space-between; }
 .detail-body .node-select-actions { font-weight: 400; }
@@ -391,10 +391,10 @@ onMounted(() => {
 .detail-body .node-check-item:hover { background: var(--el-fill-color); }
 .detail-body .node-cell { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .detail-body .node-cell-main { display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0; }
-.detail-body .node-name { font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.detail-body .node-link { font-size: 11px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .node-name { font-weight: 500; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-body .node-link { font-size: 15px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .detail-body .node-cell-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
-.detail-body .node-rtt { font-size: 11px; padding: 1px 6px; border-radius: 6px; font-weight: 600; }
+.detail-body .node-rtt { font-size: 15px; padding: 1px 6px; border-radius: 6px; font-weight: 600; }
 .detail-body .node-rtt-loading { background: var(--el-fill-color); color: var(--el-text-color-secondary); }
 .gemini-testing { animation: geminiPulse 1s ease-in-out infinite; }
 @keyframes geminiPulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }

@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-16",
+  "deployment": { "url": "http://localhost:8000/", "type": "Vite production build embedded in the existing Go server", "port": 8000 },
+  "checks": {
+    "viteProductionBuild": "passed",
+    "vueTypecheck": "passed",
+    "rewrittenCoreComponentsEslint": "passed",
+    "gitDiffWhitespaceCheck": "passed",
+    "deployedAssetsHttpSmoke": "passed",
+    "browserConsoleErrors": 0
+  },
+  "browserInteractions": ["login required-field validation", "login via Enter", "node creation dialog", "subscription creation dialog", "command search and Enter navigation", "client category and keyword filters", "appearance switching", "reduced motion preference", "atlas pause", "recommendation tabs via arrow keys"],
+  "viewports": [
+    { "cssWidth": 390, "documentScrollWidth": 385, "horizontalOverflow": false },
+    { "cssWidth": 768, "documentScrollWidth": 763, "horizontalOverflow": false },
+    { "cssWidth": 1440, "documentScrollWidth": 1435, "horizontalOverflow": false }
+  ],
+  "canvasResizeRegression": { "beforeDesktopAtlasHeight": 663.4, "afterDesktopAtlasHeight": 367.5, "maximumExpected": 420, "passed": true },
+  "existingBuildWarning": "Monaco editor vendor chunk exceeds the existing 2000 kB threshold.",
+  "data": "Existing database contained zero nodes and zero subscriptions; empty states were checked without adding sample records."
+}

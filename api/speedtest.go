@@ -15,7 +15,10 @@ import (
 )
 
 // normalizeSpeedTarget 将目标 URL 中 Cloudflare 风格的 bytes 参数对齐到本次
-// 选择的下载大小，避免“选了 MB 但实际仍按 URL 固定大小”的问题。
+// 选择的下载大小。注意：Cloudflare speed 测速端点限制 bytes < 100,000,000，
+// 当选择 100MB（104857600 bytes）时若直接传参会导致 Cloudflare 返回 403/404。
+// 针对 Cloudflare 域名，当请求大小达到或超过 100,000,000 时，将 bytes 自动收敛至 99,999,999，
+// 确保测速顺畅完成且不报 403/404。
 func normalizeSpeedTarget(raw string, size int64) string {
 	u, err := url.Parse(raw)
 	if err != nil {
@@ -23,7 +26,11 @@ func normalizeSpeedTarget(raw string, size int64) string {
 	}
 	q := u.Query()
 	if q.Has("bytes") {
-		q.Set("bytes", strconv.FormatInt(size, 10))
+		effectiveBytes := size
+		if strings.Contains(strings.ToLower(u.Host), "cloudflare.com") && effectiveBytes >= 100000000 {
+			effectiveBytes = 99999999
+		}
+		q.Set("bytes", strconv.FormatInt(effectiveBytes, 10))
 		u.RawQuery = q.Encode()
 		return u.String()
 	}

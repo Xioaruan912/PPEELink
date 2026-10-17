@@ -33,6 +33,18 @@ export const useSettingsStore = defineStore("setting", () => {
   }
   // 主题：light-亮色(默认) dark-暗色
   const theme = useStorage<string>("theme", defaultSettings.theme);
+  const motionReduced = useStorage<boolean>('workspace-reduced-motion', false);
+  watch(motionReduced, (value) => {
+    document.documentElement.dataset.motion = value ? 'reduced' : 'full';
+    window.dispatchEvent(new Event('workspace-motion-change'));
+  }, { immediate: true });
+  // A single migration gives existing installations the new workspace palette.
+  // Later appearance choices remain persistent.
+  if (localStorage.getItem('workspace-visual-version') !== 'atlas-1') {
+    theme.value = ThemeEnum.LIGHT;
+    themeColor.value = defaultSettings.themeColor;
+    localStorage.setItem('workspace-visual-version', 'atlas-1');
+  }
   // 是否开启水印
   const watermarkEnabled = useStorage<boolean>(
     "watermarkEnabled",
@@ -123,6 +135,7 @@ export const useSettingsStore = defineStore("setting", () => {
     layout,
     themeColor,
     theme,
+    motionReduced,
     watermarkEnabled,
     changeSetting,
     changeTheme,

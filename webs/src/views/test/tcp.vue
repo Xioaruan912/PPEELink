@@ -434,7 +434,7 @@ onMounted(async () => {
   gap: 12px;
   align-items: center;
   margin-bottom: 14px;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--el-text-color-secondary);
 
   .legend-item {
@@ -478,7 +478,7 @@ onMounted(async () => {
     font-weight: 600;
 
     .province-meta {
-      font-size: 11px;
+      font-size: 15px;
       font-weight: 400;
       color: var(--el-text-color-secondary);
     }
@@ -498,7 +498,7 @@ onMounted(async () => {
   min-width: 0;
 
   .cell-city {
-    font-size: 11px;
+    font-size: 15px;
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
@@ -507,7 +507,7 @@ onMounted(async () => {
 
   .cell-rtt {
     margin-top: 2px;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 700;
   }
 }

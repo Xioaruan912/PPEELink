@@ -1,7 +1,8 @@
 <script setup lang='ts'>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { getNodes, getNodeOverview, AddNodes, DelNode, UpdateNode, GetGroupFull, SetGroup, UnbindGroup, DelGroup, SetNodeVisibility, SetGroupVisibility } from "@/api/subcription/node"
 import { countryFlag } from "@/utils/flag"
+import { initSpotlight, staggerReveal } from "@/utils/vfx"
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue"
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue"
 import NodeQualityDialog from "@/components/NodeQualityDialog.vue"
@@ -33,7 +34,7 @@ interface GroupDetail { id:number; name:string; node_count:number; hidden:boolea
 
 // ===== 状态 =====
 const loading = ref(false)
-const viewMode = ref<'card' | 'list'>('card')   // 卡片/列表
+const viewMode = ref<'card' | 'list'>('list')   // 卡片/列表
 const overviewList = ref<OverviewItem[]>([])     // 概览（含国家/延迟）
 const fullNodes = ref<NodeItem[]>([])            // 完整节点（含 Link 供编辑/复制）
 const allGroupNames = ref<string[]>([])          // 分组名列表
@@ -199,8 +200,11 @@ const loadAll = async () => {
     groupDetails.value = Array.isArray(gp?.data) ? gp.data : []
     allGroupNames.value = groupDetails.value.filter(g => !g.hidden).map(g => g.name)
     if (!manageGroupId.value && groupDetails.value.length) manageGroupId.value = groupDetails.value[0].id
-    
+
     triggerLocalPing()
+    nextTick(() => {
+      staggerReveal(".node-card", 0.05, 0.02)
+    })
   } catch { /* ignore */ } finally {
     loading.value = false
   }
@@ -395,39 +399,49 @@ const cardGroups = computed(() => {
 
 const handleSelectionChange = (val: any[]) => { multipleSelection.value = val }
 
-onMounted(loadAll)
+const nodePageRef = ref<HTMLElement | null>(null)
+let cleanupSpotlight: (() => void) | null = null
+
+onMounted(() => {
+  cleanupSpotlight = initSpotlight(nodePageRef.value)
+  loadAll()
+})
+
+onBeforeUnmount(() => {
+  if (cleanupSpotlight) cleanupSpotlight()
+})
 </script>
 
 <template>
-  <div class="p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
+  <div ref="nodePageRef" class="nodes-workbench p-4 md:p-6 lg:p-8 h-full flex flex-col gap-6">
     <el-row :gutter="24">
       <!-- 左侧分组树 -->
       <el-col :span="5" :xs="24">
-        <div class="group-sidebar-panel bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] p-5 sticky top-6">
+        <div class="group-sidebar-panel bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-2xl shadow-[var(--ui-panel-shadow)] p-5 sticky top-6">
           <div class="flex justify-between items-center mb-4">
-            <div><span class="font-semibold text-gray-700 dark:text-gray-200">分组</span><small class="group-coverage">已分组 {{ groupedVisibleCount }}/{{ overviewList.length }}</small></div>
+            <div><span class="font-bold text-[var(--ui-text)]">分组</span><small class="group-coverage">已分组 {{ groupedVisibleCount }}/{{ overviewList.length }}</small></div>
             <el-button link type="primary" size="small" @click="openGroupManager">管理</el-button>
           </div>
           <div class="flex flex-col gap-1">
             <div
-              class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
+              class="px-3 py-2 rounded-xl cursor-pointer transition-all duration-150 flex justify-between items-center"
               :class="activeGroup === '全部' ? 'group-filter-active' : 'group-filter-idle'"
               @click="activeGroup = '全部'"
             >
               <span>全部</span>
-              <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ loading ? '…' : overviewList.length }}</span>
+              <span class="text-xs bg-[var(--ui-canvas)] px-2 py-0.5 rounded-full text-[var(--ui-text-secondary)] font-mono">{{ loading ? '…' : overviewList.length }}</span>
             </div>
             <div
               v-for="g in groupTree"
               :key="g.id"
-              class="px-3 py-2 rounded-lg cursor-pointer transition-all duration-150 flex justify-between items-center"
+              class="px-3 py-2 rounded-xl cursor-pointer transition-all duration-150 flex justify-between items-center"
               :class="activeGroup === g.id ? 'group-filter-active' : 'group-filter-idle'"
               @click="activeGroup = g.id"
             >
               <span class="truncate pr-2">{{ g.label }}</span>
               <span class="group-tree-actions">
                 <el-button link type="warning" size="small" class="group-hide-btn" @click.stop="hideGroupByName(g.id)">隐藏</el-button>
-                <span class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full text-gray-600 dark:text-gray-300">{{ g.count }}</span>
+                <span class="text-xs bg-[var(--ui-canvas)] px-2 py-0.5 rounded-full text-[var(--ui-text-secondary)] font-mono">{{ g.count }}</span>
               </span>
             </div>
           </div>
@@ -436,9 +450,9 @@ onMounted(loadAll)
 
       <!-- 主区 -->
       <el-col :span="19" :xs="24">
-        <div class="bg-white dark:bg-[#1a1d1b] rounded-xl shadow-[inset_0_0_0_1px_rgba(0,0,0,0.06)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] flex flex-col overflow-hidden min-h-[500px]">
+        <div class="bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-2xl shadow-[var(--ui-panel-shadow)] flex flex-col overflow-hidden min-h-[500px]">
           <!-- 工具条 -->
-          <div class="node-toolbar p-5 border-b border-gray-100 dark:border-white/5 flex flex-wrap gap-3 items-center">
+          <div class="node-toolbar p-5 border-b border-[var(--ui-border)] flex flex-wrap gap-3 items-center">
             <el-input v-model="searchText" placeholder="搜索节点名" clearable class="w-64" />
             <el-select v-model="filterCountries" multiple collapse-tags placeholder="国家筛选" class="w-48">
               <el-option v-for="c in countryOptions" :key="c" :label="c" :value="c" />
@@ -458,16 +472,14 @@ onMounted(loadAll)
               <el-button size="small" type="danger" @click="cardSelectDel" :disabled="!selectedCount">删除选中({{ selectedCount }})</el-button>
             </template>
             <div class="flex-1"></div>
-            <el-button :loading="localTesting" type="success" @click="triggerLocalPing">测本地</el-button>
-            <el-button :loading="loading" @click="loadAll">刷新</el-button>
             <el-button type="primary" @click="handleAddNode">添加节点</el-button>
           </div>
 
-          <div class="p-5 bg-gray-50/30 dark:bg-black/10 flex-1 node-loading-area" v-loading="loading">
+          <div class="p-5 bg-[var(--ui-canvas)] flex-1 node-loading-area" v-loading="loading">
           <!-- 卡片视图 -->
           <template v-if="viewMode === 'card'">
             <div v-for="g in cardGroups" :key="g.country" class="mb-6 last:mb-0">
-              <div class="flex items-center gap-2 text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3 ml-1">
+              <div class="flex items-center gap-2 text-sm font-semibold text-[var(--ui-text-secondary)] mb-3 ml-1">
                 <el-checkbox
                   :model-value="countryAllSelected(g.items)"
                   @change="() => toggleCountrySelect(g.items)"
@@ -479,7 +491,7 @@ onMounted(loadAll)
                 </el-button>
               </div>
               <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                <div v-for="n in g.items" :key="n.id" class="bg-white dark:bg-[#202322] rounded-xl p-4 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.02)] dark:shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] hover:shadow-md transition-all duration-150 group" :class="selectedIds.has(n.id) ? 'node-card-selected' : ''">
+                <div v-for="n in g.items" :key="n.id" class="node-card spotlight-card hologram-border bg-[var(--ui-surface)] border border-[var(--ui-border)] rounded-2xl p-4 shadow-[var(--ui-panel-shadow)] hover:border-[var(--ui-accent)] hover:shadow-lg transition-all duration-200 group" :class="selectedIds.has(n.id) ? 'node-card-selected' : ''">
                   <div class="flex justify-between items-start mb-2">
                     <div class="flex items-center gap-2 overflow-hidden flex-1 pr-2">
                       <el-checkbox :model-value="selectedIds.has(n.id)" @change="() => toggleCardSelect(n.id)" size="small" class="node-check" />
@@ -512,6 +524,7 @@ onMounted(loadAll)
           <!-- 列表视图 -->
           <template v-else>
             <el-table
+              v-if="filteredNodes.length || loading"
               ref="multipleTable"
               :data="filteredNodes"
               stripe
@@ -553,7 +566,14 @@ onMounted(loadAll)
                 </template>
               </el-table-column>
             </el-table>
-            <div class="mt-4 flex gap-2">
+            <div v-else class="workbench-empty">
+              <span class="workbench-empty-symbol"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="5" r="3"/><circle cx="5" cy="18" r="3"/><circle cx="19" cy="18" r="3"/><path d="M12 8v4H5v3m7-3h7v3"/></svg></span>
+              <h2>{{ overviewList.length ? '没有匹配的节点' : '节点工作台已准备好。' }}</h2>
+              <p>{{ overviewList.length ? '调整搜索、地区或分组筛选，重新查看节点。' : '粘贴节点链接，或接入机场数据源，建立你的连接版图。' }}</p>
+              <el-button v-if="!overviewList.length" type="primary" @click="handleAddNode">添加第一个节点</el-button>
+              <el-button v-else @click="searchText = ''; filterCountries = []; activeGroup = '全部'">清除筛选</el-button>
+            </div>
+            <div v-if="filteredNodes.length" class="mt-4 flex gap-2 node-bulk-actions">
               <el-button size="small" @click="selectAll">全选</el-button>
               <el-button size="small" @click="selectClear">取消</el-button>
               <el-button size="small" type="primary" @click="selectCopy">复制选中</el-button>
@@ -687,8 +707,7 @@ onMounted(loadAll)
   padding: 8px 10px; margin-bottom: 4px; border-radius: 8px; cursor: pointer;
   color: var(--el-text-color-regular);
 }
-.tree-item:hover { background: var(--el-fill-color-light); }
-.tree-item.active { background: #f97316; color: #fff; }
+.tree-item.active { background: var(--ui-accent); color: #fff; box-shadow: 0 2px 8px var(--ui-accent-shadow); }
 .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 16px; }
 .toolbar .search { width: 200px; }
 .toolbar .country { width: 200px; }
@@ -704,16 +723,16 @@ onMounted(loadAll)
 .card-top { display: flex; align-items: center; gap: 8px; }
 .card-flag { font-size: 20px; }
 .card-name { flex: 1; font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rtt-badge { padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
-.card-country { margin-top: 6px; font-size: 12px; color: var(--el-text-color-secondary); }
+.rtt-badge { padding: 2px 8px; border-radius: 6px; font-size: 16px; font-weight: 600; }
+.card-country { margin-top: 6px; font-size: 16px; color: var(--el-text-color-secondary); }
 .unlock-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.unlock-item { font-size: 12px; color: var(--el-text-color-regular); }
-.group-node-visibility{display:flex;flex-direction:column;gap:10px;margin-top:14px}.visibility-tip{color:var(--el-text-color-secondary);font-size:11px;line-height:1.6}
-.group-coverage{display:block;margin-top:2px;color:var(--el-text-color-secondary);font-size:10px;font-weight:400}
+.unlock-item { font-size: 16px; color: var(--el-text-color-regular); }
+.group-node-visibility{display:flex;flex-direction:column;gap:10px;margin-top:14px}.visibility-tip{color:var(--el-text-color-secondary);font-size: 15px;line-height:1.6}
+.group-coverage{display:block;margin-top:2px;color:var(--el-text-color-secondary);font-size: 14px;font-weight:400}
 .card-actions { margin-top: 10px; display: flex; gap: 4px; }
 .row-flag { margin-right: 6px; }
 .row-name { font-weight: 500; }
-.muted { color: var(--el-text-color-placeholder); font-size: 12px; }
+.muted { color: var(--el-text-color-placeholder); font-size: 16px; }
 .list-actions { margin-top: 12px; display: flex; gap: 8px; }
 .dialog-actions { margin-top: 12px; }
 .del-group-row { display: flex; gap: 10px; align-items: center; }
@@ -730,10 +749,10 @@ onMounted(loadAll)
 .group-filter-active { color:var(--ui-accent-strong); background:var(--ui-accent-soft); font-weight:700; box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ui-accent) 18%,transparent); }
 .group-filter-idle { color:var(--ui-text-secondary); transition:background 140ms ease,color 140ms ease,transform 140ms ease; }
 .group-filter-idle:hover { color:var(--ui-text); background:var(--ui-hover); transform:translateX(2px); }
-.group-tree-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}.group-hide-btn{font-size:11px;padding:0 2px!important}
+.group-tree-actions{display:flex;align-items:center;gap:5px;flex-shrink:0}.group-hide-btn{font-size: 15px;padding:0 2px!important}
 .node-card-actions { flex-wrap: wrap; row-gap: 2px; margin-top: 8px; min-width: 0; }
 .node-card-actions .el-button { margin-left: 0 !important; padding: 3px 5px; }
-.quality-strip { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--el-text-color-secondary); font-size:11px; }
+.quality-strip { display:flex; align-items:center; gap:8px; margin-bottom:10px; color:var(--el-text-color-secondary); font-size: 15px; }
 .quality-score { padding:2px 7px; border-radius:999px; font-weight:700; }
 .quality-score.good { color:#16803c; background:#dcfce7; }
 .quality-score.warn { color:#a16207; background:#fef3c7; }
@@ -747,7 +766,7 @@ onMounted(loadAll)
   border-radius: 10px;
 }
 html.dark .del-group-card { background: rgba(245, 108, 108, 0.08); border-color: rgba(245, 108, 108, 0.2); }
-.del-group-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--el-color-danger); }
+.del-group-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; color: var(--el-color-danger); }
 .del-group-row .el-select { flex: 1; }
 @media (max-width: 720px) {
   .group-sidebar-panel { position: static !important; top: auto !important; padding: 14px !important; margin-bottom: 12px; }
@@ -763,6 +782,6 @@ html.dark .del-group-card { background: rgba(245, 108, 108, 0.08); border-color:
   .del-group-row { flex-direction: column; align-items: stretch; }
   .del-group-row :deep(.el-button) { width: 100%; margin-left: 0; }
   .group-tabs { display: flex; flex-wrap: wrap; }
-  .group-node-visibility :deep(.el-table) { font-size: 12px; }
+  .group-node-visibility :deep(.el-table) { font-size: 16px; }
 }
 </style>

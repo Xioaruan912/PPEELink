@@ -1,88 +1,47 @@
 <template>
   <section class="app-main">
-    <router-view>
-      <template #default="{ Component, route }">
-        <transition name="page-shift">
-          <keep-alive :include="cachedViews">
-            <component :is="Component" :key="route.path" />
-          </keep-alive>
-        </transition>
-      </template>
-    </router-view>
+    <router-view v-slot="{ Component, route }"
+      ><transition name="workspace-page" mode="out-in"
+        ><keep-alive :include="cachedViews"
+          ><component
+            :is="Component"
+            :key="route.path" /></keep-alive></transition
+    ></router-view>
   </section>
 </template>
-
 <script setup lang="ts">
+import { computed } from "vue";
 import { useTagsViewStore } from "@/store";
-
-const cachedViews = computed(() => useTagsViewStore().cachedViews); // 缓存页面集合
+const cachedViews = computed(() => useTagsViewStore().cachedViews);
 </script>
-
-<style lang="scss" scoped>
+<style scoped>
 .app-main {
   position: relative;
+  min-width: 0;
   width: 100%;
-  min-height: calc(100vh - $navbar-height);
-  overflow: hidden;
-  /* 移除原有的固定白色背景，融入全局底色 */
-  background-color: transparent;
 }
-
-.hasTagsView .app-main {
-  min-height: calc(100vh - $navbar-height - $tags-view-height);
+.workspace-page-enter-active {
+  transition:
+    opacity 0.3s,
+    transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
 }
-
-.fixed-header + .app-main {
-  min-height: 100vh;
-  padding-top: $navbar-height;
+.workspace-page-leave-active {
+  transition:
+    opacity 0.12s,
+    transform 0.12s;
 }
-
-.hasTagsView .fixed-header + .app-main {
-  min-height: 100vh;
-  padding-top: $navbar-height + $tags-view-height;
+.workspace-page-enter-from {
+  opacity: 0;
+  transform: translateY(14px);
 }
-
-.layout-mix,
-.layout-top {
-  .fixed-header + .app-main {
-    padding-top: 0;
+.workspace-page-leave-to {
+  opacity: 0;
+  transform: translateY(-5px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace-page-enter-active,
+  .workspace-page-leave-active {
+    transition: none;
   }
 }
-
-.layout-mix {
-  .app-main {
-    height: calc(100vh - $navbar-height);
-    padding-top: 0;
-    overflow-y: auto;
-  }
-
-  .hasTagsView .app-main {
-    height: calc(100vh - $navbar-height - $tags-view-height);
-    min-height: calc(100vh - $navbar-height - $tags-view-height);
-  }
-
-  .fixed-header + .app-main {
-    min-height: calc(100vh - $navbar-height);
-  }
-
-  .hasTagsView .fixed-header + .app-main {
-    height: calc(100vh - $navbar-height);
-    min-height: calc(100vh - $navbar-height);
-    padding-top: $tags-view-height;
-  }
-}
-
-.layout-top {
-  .hasTagsView .fixed-header + .app-main {
-    padding-top: $tags-view-height;
-  }
-}
-</style>
-
-<style>
-.page-shift-enter-active { transition: opacity 180ms ease, transform 220ms cubic-bezier(.22,1,.36,1); }
-.page-shift-leave-active { transition: opacity 110ms ease; }
-.page-shift-enter-from { opacity:0; transform:translateY(7px); }
-.page-shift-leave-to { opacity:0; }
-@media (prefers-reduced-motion: reduce) { .page-shift-enter-active,.page-shift-leave-active { transition:none; } }
 </style>

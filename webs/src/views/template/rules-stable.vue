@@ -134,7 +134,7 @@ async function openImpact(row:RuleItem) {
   try {
     const [previewRes, snapshotsRes] = await Promise.all([getRuleUpdateImpact(row.externalId), getRuleSnapshots(row.externalId)]);
     impact.value = previewRes?.data || null; snapshots.value = Array.isArray(snapshotsRes?.data) ? snapshotsRes.data : [];
-  } catch (e:any) { impact.value = { error: typeof e === 'string' ? e : e?.message || '更新影响预览失败' }; }
+  } catch (e:any) { impact.value = { error: typeof e === 'string' ? e : e?.message || '查看变化预览失败' }; }
   finally { impactLoading.value = false; }
 }
 async function applyUpdateNow() {
@@ -215,11 +215,11 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page rules-workbench">
     <header class="hero">
       <div>
         <h2>规则中心</h2>
-        <p>从 ShuntRules 与 ios_rule_script 选择规则，预览后导入现有模板。</p>
+        <p>选择需要的规则，加入连接设置。</p>
       </div>
       <button class="btn" :disabled="syncing" @click="doSync">{{ syncing ? "同步中…" : "立即同步" }}</button>
     </header>
@@ -235,13 +235,13 @@ onMounted(async () => {
     </section>
 
     <section class="filters">
-      <input v-model="keyword" class="input search" placeholder="搜索 OpenAI / Netflix / Telegram…" @keyup.enter="loadCatalog" />
-      <select v-model="source" class="input" @change="loadCatalog">
+      <input v-model="keyword" aria-label="搜索分流规则" class="input search" placeholder="搜索 OpenAI / Netflix / Telegram…" @keyup.enter="loadCatalog" />
+      <select v-model="source" aria-label="规则来源" class="input" @change="loadCatalog">
         <option value="">全部来源</option>
         <option value="shunt_rules">ShuntRules</option>
         <option value="ios_rule_script">ios_rule_script</option>
       </select>
-      <select v-model="platform" class="input" @change="loadCatalog">
+      <select v-model="platform" aria-label="目标客户端" class="input" @change="loadCatalog">
         <option value="Clash">Clash</option>
         <option value="Surge">Surge</option>
         <option value="Loon">Loon</option>
@@ -264,25 +264,25 @@ onMounted(async () => {
         <div v-else class="grid">
           <article v-for="r in rules" :key="r.externalId" class="rule-card">
             <div class="rule-head">
-              <input type="checkbox" :checked="selectedIds.includes(r.externalId)" @change="toggleSelected(r.externalId)" />
+              <input type="checkbox" :aria-label="`选择规则 ${r.name}`" :checked="selectedIds.includes(r.externalId)" @change="toggleSelected(r.externalId)" />
               <div><strong>{{ r.name || '未命名规则' }}</strong><small>{{ r.category || '其他' }}</small></div>
             </div>
             <div class="tags"><span>{{ sourceLabel(r.sourceKey) }}</span><span>{{ r.platform }}</span><span>{{ r.format }}</span></div>
             <div class="meta"><span>{{ r.checksum ? `${r.ruleCount} 条规则` : '自动缓存中…' }}</span><span>{{ r.remoteUpdate || '' }}</span></div>
             <div v-if="metadataSummary(r)" class="summary">{{ metadataSummary(r) }}</div>
-            <div class="actions"><button @click="openPreview(r)">预览</button><button @click="openImpact(r)">更新影响</button><button class="primary-link" @click="openImport([r])">导入模板</button></div>
+            <div class="actions"><button @click="openPreview(r)">预览</button><button @click="openImpact(r)">查看变化</button><button class="primary-link" @click="openImport([r])">加入模板</button></div>
           </article>
         </div>
       </main>
 
       <aside class="batch">
-        <h3>批量导入</h3>
-        <p>勾选多个规则后统一绑定策略组。</p>
+        <h3>一起添加</h3>
+        <p>选中规则后，可以一起加入模板。</p>
         <div class="selected">
           <div v-for="r in selectedRules" :key="r.externalId" class="selected-row"><span><strong>{{ r.name }}</strong><small>{{ sourceLabel(r.sourceKey) }} · {{ r.platform }}</small></span><button @click="toggleSelected(r.externalId)">移除</button></div>
           <div v-if="!selectedRules.length" class="empty small">暂未选择</div>
         </div>
-        <button class="btn primary full" :disabled="!selectedRules.length" @click="openImport(selectedRules)">导入已选 {{ selectedRules.length ? `(${selectedRules.length})` : '' }}</button>
+        <button class="btn primary full" :disabled="!selectedRules.length" @click="openImport(selectedRules)">添加已选 {{ selectedRules.length ? `(${selectedRules.length})` : '' }}</button>
       </aside>
     </div>
 
@@ -317,7 +317,7 @@ onMounted(async () => {
 
     <div v-if="impactOpen" class="overlay" @click.self="impactOpen=false">
       <section class="modal impact-modal">
-        <header><strong>{{ impactRule?.name || '规则更新影响' }}</strong><button @click="impactOpen=false">×</button></header>
+        <header><strong>{{ impactRule?.name || '规则查看变化' }}</strong><button @click="impactOpen=false">×</button></header>
         <div class="modal-body">
           <div v-if="impactLoading" class="empty">正在拉取远端规则并与当前缓存比较…</div>
           <div v-else-if="impact?.error" class="alert">{{ impact.error }}</div>
@@ -346,6 +346,6 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.page{padding:10px;color:var(--el-text-color-primary)}.hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}.hero h2{margin:0 0 5px;font-size:24px}.hero p,.muted-text,.batch p{margin:0;color:var(--el-text-color-secondary);font-size:13px}.btn{border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-primary);border-radius:8px;padding:9px 13px;cursor:pointer}.btn:disabled{opacity:.55;cursor:not-allowed}.btn.primary{background:var(--el-color-primary);border-color:var(--el-color-primary);color:#fff}.btn.ghost{border-color:transparent}.alert{border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:9px;padding:11px 13px;margin-bottom:12px}.sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}.source-card,.filters,.batch,.rule-card{border:1px solid var(--el-border-color-lighter);background:var(--el-bg-color);border-radius:12px}.source-card{padding:14px}.source-head,.source-foot,.list-title,.meta{display:flex;justify-content:space-between;gap:10px}.source-foot{margin-top:9px;font-size:12px;color:var(--el-text-color-secondary)}.status{font-size:12px;border-radius:999px;padding:4px 8px}.status.ok{background:#ecfdf5;color:#047857}.status.muted{background:var(--el-fill-color-light);color:var(--el-text-color-secondary)}.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:13px;margin-bottom:14px}.input{height:38px;border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-primary);border-radius:8px;padding:0 10px}.search{min-width:260px;flex:1}.chips{display:flex;gap:7px;flex-wrap:wrap;width:100%;margin-top:4px}.chip{border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-regular);padding:6px 10px;border-radius:999px;cursor:pointer}.chip.active{border-color:var(--el-color-primary);color:var(--el-color-primary);background:var(--el-color-primary-light-9)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:14px}.list-title{font-size:13px;margin-bottom:10px;color:var(--el-text-color-secondary)}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}.rule-card{padding:14px}.rule-head{display:flex;gap:9px;align-items:flex-start}.rule-head div{display:flex;flex-direction:column;gap:3px}.rule-head small{color:var(--el-text-color-secondary)}.tags{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0}.tags span{font-size:12px;background:var(--el-fill-color-light);padding:4px 7px;border-radius:6px}.meta,.summary{font-size:12px;color:var(--el-text-color-secondary)}.summary{margin-top:7px}.actions{display:flex;justify-content:flex-end;gap:12px;border-top:1px solid var(--el-border-color-lighter);padding-top:9px;margin-top:10px}.actions button,.selected-row button,.modal header button{border:0;background:transparent;color:var(--el-text-color-regular);cursor:pointer}.actions .primary-link{color:var(--el-color-primary)}.batch{padding:14px;height:max-content;position:sticky;top:12px}.batch h3{margin:0 0 5px}.selected{max-height:360px;overflow:auto;margin:12px 0}.selected-row{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--el-border-color-lighter)}.selected-row span{display:flex;flex-direction:column}.selected-row small{color:var(--el-text-color-secondary);margin-top:2px}.full{width:100%}.empty{text-align:center;color:var(--el-text-color-secondary);padding:32px 12px}.empty.small{padding:20px 8px}.skeleton{height:150px;border:1px solid var(--el-border-color-lighter);border-radius:12px;padding:14px}.skeleton i{display:block;height:14px;border-radius:7px;background:var(--el-fill-color);margin-bottom:12px;animation:pulse 1.2s infinite}.skeleton i:nth-child(1){width:45%;height:18px}.skeleton i:nth-child(2){width:70%}.skeleton i:nth-child(3){width:55%}.skeleton i:nth-child(4){width:85%}@keyframes pulse{50%{opacity:.45}}.overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}.modal{width:min(820px,95vw);max-height:88vh;overflow:auto;background:var(--el-bg-color);border-radius:14px;box-shadow:0 25px 60px rgba(0,0,0,.25)}.modal header,.modal footer{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:15px 18px;border-bottom:1px solid var(--el-border-color-lighter)}.modal footer{justify-content:flex-end;border-bottom:0;border-top:1px solid var(--el-border-color-lighter)}.modal header button{font-size:22px}.modal-body{padding:18px}.preview-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;margin-bottom:12px}.modal pre{background:#0f172a;color:#d1fae5;border-radius:9px;padding:14px;min-height:260px;max-height:50vh;overflow:auto;font-size:12px;line-height:1.55}.form{display:grid;gap:13px}.form label{display:grid;gap:6px;font-size:13px;font-weight:600}.field-tip{font-weight:400;color:var(--el-text-color-secondary);line-height:1.5}.notice{padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46}.notice.warn{background:#fffbeb;color:#92400e}@media(max-width:1000px){.layout{grid-template-columns:1fr}.batch{position:static}.sources{grid-template-columns:1fr}}@media(max-width:700px){.hero{flex-direction:column}.grid{grid-template-columns:1fr}.search{min-width:100%}}
-.impact-modal{width:min(1050px,96vw)}.impact-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}.impact-stats article{padding:10px;border:1px solid var(--el-border-color-lighter);border-radius:9px;display:flex;flex-direction:column}.impact-stats small{color:var(--el-text-color-secondary)}.impact-stats b{font-size:18px}.impact-tags{display:flex;flex-wrap:wrap;gap:7px}.impact-tags span{padding:5px 8px;border-radius:7px;background:var(--el-fill-color-light);font-size:12px}.impact-tags i{color:var(--el-text-color-secondary);font-style:normal}.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.diff-grid pre{min-height:140px;max-height:220px}.snapshot-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--el-border-color-lighter)}@media(max-width:800px){.impact-stats{grid-template-columns:repeat(2,1fr)}.diff-grid{grid-template-columns:1fr}}
+.page{padding:10px;color:var(--el-text-color-primary)}.hero{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:14px}.hero h2{margin:0 0 5px;font-size:24px}.hero p,.muted-text,.batch p{margin:0;color:var(--el-text-color-secondary);font-size: 16px}.btn{border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-primary);border-radius:8px;padding:9px 13px;cursor:pointer}.btn:disabled{opacity:.55;cursor:not-allowed}.btn.primary{background:var(--el-color-primary);border-color:var(--el-color-primary);color:#fff}.btn.ghost{border-color:transparent}.alert{border:1px solid #fecaca;background:#fef2f2;color:#991b1b;border-radius:9px;padding:11px 13px;margin-bottom:12px}.sources{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:12px}.source-card,.filters,.batch,.rule-card{border:1px solid var(--el-border-color-lighter);background:var(--el-bg-color);border-radius:12px}.source-card{padding:14px}.source-head,.source-foot,.list-title,.meta{display:flex;justify-content:space-between;gap:10px}.source-foot{margin-top:9px;font-size: 16px;color:var(--el-text-color-secondary)}.status{font-size: 16px;border-radius:999px;padding:4px 8px}.status.ok{background:#ecfdf5;color:#047857}.status.muted{background:var(--el-fill-color-light);color:var(--el-text-color-secondary)}.filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:13px;margin-bottom:14px}.input{height:38px;border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-primary);border-radius:8px;padding:0 10px}.search{min-width:260px;flex:1}.chips{display:flex;gap:7px;flex-wrap:wrap;width:100%;margin-top:4px}.chip{border:1px solid var(--el-border-color);background:var(--el-bg-color);color:var(--el-text-color-regular);padding:6px 10px;border-radius:999px;cursor:pointer}.chip.active{border-color:var(--el-color-primary);color:var(--el-color-primary);background:var(--el-color-primary-light-9)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:14px}.list-title{font-size: 16px;margin-bottom:10px;color:var(--el-text-color-secondary)}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}.rule-card{padding:14px}.rule-head{display:flex;gap:9px;align-items:flex-start}.rule-head div{display:flex;flex-direction:column;gap:3px}.rule-head small{color:var(--el-text-color-secondary)}.tags{display:flex;gap:6px;flex-wrap:wrap;margin:11px 0}.tags span{font-size: 16px;background:var(--el-fill-color-light);padding:4px 7px;border-radius:6px}.meta,.summary{font-size: 16px;color:var(--el-text-color-secondary)}.summary{margin-top:7px}.actions{display:flex;justify-content:flex-end;gap:12px;border-top:1px solid var(--el-border-color-lighter);padding-top:9px;margin-top:10px}.actions button,.selected-row button,.modal header button{border:0;background:transparent;color:var(--el-text-color-regular);cursor:pointer}.actions .primary-link{color:var(--el-color-primary)}.batch{padding:14px;height:max-content;position:sticky;top:12px}.batch h3{margin:0 0 5px}.selected{max-height:360px;overflow:auto;margin:12px 0}.selected-row{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--el-border-color-lighter)}.selected-row span{display:flex;flex-direction:column}.selected-row small{color:var(--el-text-color-secondary);margin-top:2px}.full{width:100%}.empty{text-align:center;color:var(--el-text-color-secondary);padding:32px 12px}.empty.small{padding:20px 8px}.skeleton{height:150px;border:1px solid var(--el-border-color-lighter);border-radius:12px;padding:14px}.skeleton i{display:block;height:14px;border-radius:7px;background:var(--el-fill-color);margin-bottom:12px;animation:pulse 1.2s infinite}.skeleton i:nth-child(1){width:45%;height:18px}.skeleton i:nth-child(2){width:70%}.skeleton i:nth-child(3){width:55%}.skeleton i:nth-child(4){width:85%}@keyframes pulse{50%{opacity:.45}}.overlay{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:3000;display:flex;align-items:center;justify-content:center;padding:20px}.modal{width:min(820px,95vw);max-height:88vh;overflow:auto;background:var(--el-bg-color);border-radius:14px;box-shadow:0 25px 60px rgba(0,0,0,.25)}.modal header,.modal footer{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:15px 18px;border-bottom:1px solid var(--el-border-color-lighter)}.modal footer{justify-content:flex-end;border-bottom:0;border-top:1px solid var(--el-border-color-lighter)}.modal header button{font-size:22px}.modal-body{padding:18px}.preview-meta{display:flex;gap:16px;flex-wrap:wrap;font-size: 16px;margin-bottom:12px}.modal pre{background:#0f172a;color:#d1fae5;border-radius:9px;padding:14px;min-height:260px;max-height:50vh;overflow:auto;font-size: 16px;line-height:1.55}.form{display:grid;gap:13px}.form label{display:grid;gap:6px;font-size: 16px;font-weight:600}.field-tip{font-weight:400;color:var(--el-text-color-secondary);line-height:1.5}.notice{padding:10px 12px;border-radius:8px;background:#ecfdf5;color:#065f46}.notice.warn{background:#fffbeb;color:#92400e}@media(max-width:1000px){.layout{grid-template-columns:1fr}.batch{position:static}.sources{grid-template-columns:1fr}}@media(max-width:700px){.hero{flex-direction:column}.grid{grid-template-columns:1fr}.search{min-width:100%}}
+.impact-modal{width:min(1050px,96vw)}.impact-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px}.impact-stats article{padding:10px;border:1px solid var(--el-border-color-lighter);border-radius:9px;display:flex;flex-direction:column}.impact-stats small{color:var(--el-text-color-secondary)}.impact-stats b{font-size:18px}.impact-tags{display:flex;flex-wrap:wrap;gap:7px}.impact-tags span{padding:5px 8px;border-radius:7px;background:var(--el-fill-color-light);font-size: 16px}.impact-tags i{color:var(--el-text-color-secondary);font-style:normal}.diff-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.diff-grid pre{min-height:140px;max-height:220px}.snapshot-list>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--el-border-color-lighter)}@media(max-width:800px){.impact-stats{grid-template-columns:repeat(2,1fr)}.diff-grid{grid-template-columns:1fr}}
 </style>

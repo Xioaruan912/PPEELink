@@ -1,0 +1,46 @@
+{
+  "version": 2,
+  "at": "2026-10-17",
+  "primarySkill": "https://github.com/leonxlnx/taste-skill/tree/main/skills/taste-skill-v1",
+  "supportingSkill": "redesign-existing-projects",
+  "configuration": {
+    "DESIGN_VARIANCE": 10,
+    "MOTION_INTENSITY": 10,
+    "VISUAL_DENSITY": 4
+  },
+  "brief": "Completely redesign PPEELink's existing Vue network management console while retaining its real APIs and business workflows. Deploy the production build on port 8000.",
+  "direction": "Readable neutral workspace: larger text, generous spacing, fewer labels, plain-language copy, a contrasting atlas, and the approved original logo.",
+  "palette": {
+    "canvas": "#f2f4f1",
+    "surface": "#fcfdfb",
+    "ink": "#22332a",
+    "muted": "#607066",
+    "accent": "#37654b",
+    "stage": "#e9eee8"
+  },
+  "type": {
+    "interface": "Manrope with local Chinese system fallbacks",
+    "numbers": "IBM Plex Mono",
+    "hosting": "self-hosted woff2"
+  },
+  "motion": [
+    "orthographic canvas globe",
+    "keyboard and pointer rotation",
+    "magnetic primary actions",
+    "spring dock",
+    "route transitions",
+    "tab and filtered-list transitions",
+    "skeleton and status feedback"
+  ],
+  "constraints": [
+    "existing Vue stack",
+    "no invented data",
+    "single-column phone composition",
+    "reduced motion",
+    "keyboard access",
+    "no backend changes",
+    "Preserve the original logo",
+    "16px body / 15px controls / 14px secondary text",
+    "Remove repetitive microcopy"
+  ]
+}

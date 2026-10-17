@@ -31,11 +31,6 @@ type Menu struct {
 func GetMenus(c *gin.Context) {
 	menus := []Menu{
 		{
-			Path: "/ops", Component: "Layout", Redirect: "/ops/security", Name: "ops",
-			Meta:     Meta{Title: "运维", Icon: "setting", Hidden: false, Roles: []string{"ADMIN"}},
-			Children: []Child{{Path: "security", Component: "ops/index", Name: "OpsCenter", Meta: Meta{Title: "运维中心", Icon: "security", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true}}},
-		},
-		{
 			Path:      "/system",
 			Component: "Layout",
 			// Redirect:  "/system/user",
@@ -150,30 +145,12 @@ func GetMenus(c *gin.Context) {
 			},
 			Children: []Child{
 				{
-					Path:      "tasks",
-					Component: "task/index",
-					Name:      "TaskCenter",
-					Meta:      Meta{Title: "任务中心", Icon: "todolist", Hidden: false, Roles: []string{"ADMIN"}, KeepAlive: true},
-				},
-				{
 					Path:      "speed",
 					Component: "test/speed",
 					Name:      "SpeedTest",
 					Meta: Meta{
 						Title:     "真实测速",
 						Icon:      "monitor",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
-					Path:      "egress",
-					Component: "test/egress",
-					Name:      "EgressTest",
-					Meta: Meta{
-						Title:     "分流检测",
-						Icon:      "connection",
 						Hidden:    false,
 						Roles:     []string{"ADMIN"},
 						KeepAlive: true,

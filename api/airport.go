@@ -254,5 +254,5 @@ func AirportSync(c *gin.Context) {
 		finishTaskRun(task.ID, err, nil)
 	}()
 
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"taskId": task.ID}, "msg": "已在后台启动同步和测活任务，请在任务中心查看进度。"})
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"taskId": task.ID}, "msg": "已在后台启动同步和测活任务。"})
 }

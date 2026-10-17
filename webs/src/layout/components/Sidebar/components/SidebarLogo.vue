@@ -1,13 +1,22 @@
 <template>
   <div class="logo-container">
     <transition enter-active-class="animate__animated animate__fadeInLeft">
-      <router-link v-if="collapse" class="wh-full flex-center" to="/">
-        <img v-if="settingsStore.sidebarLogo" :src="logo" class="logo-image" />
+      <router-link v-if="collapse" class="wh-full flex-center monogram-link" to="/">
+        <span class="monogram font-mono">PL</span>
       </router-link>
 
       <router-link v-else class="wh-full logo-link" to="/">
-        <img v-if="settingsStore.sidebarLogo" :src="logo" class="logo-image" />
-        <span class="logo-copy"><strong>{{ defaultSettings.title }}</strong><small>节点与订阅控制台</small></span>
+        <div class="brand-badge font-mono">CORE</div>
+        <div class="logo-copy">
+          <div class="brand-row">
+            <strong class="brand-title">{{ defaultSettings.title }}</strong>
+            <span class="status-indicator">
+              <span class="beacon-live"></span>
+              <small>LIVE</small>
+            </span>
+          </div>
+          <small class="brand-sub font-mono">TELEMETRY & SUB v{{ defaultSettings.version }}</small>
+        </div>
       </router-link>
     </transition>
   </div>
@@ -15,9 +24,6 @@
 
 <script lang="ts" setup>
 import defaultSettings from "@/settings";
-import { useSettingsStore } from "@/store";
-
-const settingsStore = useSettingsStore();
 
 defineProps({
   collapse: {
@@ -25,48 +31,100 @@ defineProps({
     required: true,
   },
 });
-
-const logo = ref(new URL(`../../../../assets/logo.png`, import.meta.url).href);
 </script>
 
 <style lang="scss" scoped>
 .logo-container {
   width: 100%;
   height: $navbar-height;
-  background-color: $sidebar-logo-background;
+  background-color: transparent;
+  border-bottom: 1px solid var(--ui-border);
+  display: flex;
+  align-items: center;
+}
 
-  .logo-image {
-    width: 42px;
-    height: 42px;
-    border-radius: 12px;
-    object-fit: cover;
-    box-shadow: 0 6px 16px var(--ui-accent-shadow);
-  }
-
-  .logo-title {
-    flex-shrink: 0; /* 防止容器在空间不足时缩小 */
-    margin-left: 10px;
-    font-size: 14px;
-    font-weight: bold;
-    color: var(--menu-text);
+.monogram-link {
+  text-decoration: none;
+  .monogram {
+    width: 38px;
+    height: 38px;
+    border-radius: 9px;
+    background: var(--ui-surface-strong);
+    border: 1px solid var(--ui-border-strong);
+    color: var(--ui-accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
 }
-.logo-link { display:flex; align-items:center; justify-content:flex-start; gap:11px; padding:9px 18px; text-decoration:none; }
-.logo-copy { min-width:0; }
-.logo-copy strong,.logo-copy small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.logo-copy strong { color:var(--ui-text); font-size:15px; }
-.logo-copy small { margin-top:3px; color:var(--ui-text-muted); font-size:11px; font-weight:500; }
 
-.layout-top,
-.layout-mix {
-  .logo-container {
-    width: $sidebar-width;
+.logo-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 18px;
+  text-decoration: none;
+  width: 100%;
+}
+
+.brand-badge {
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: var(--ui-surface-strong);
+  border: 1px solid var(--ui-border-strong);
+  color: var(--ui-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.logo-copy {
+  min-width: 0;
+  flex: 1;
+
+  .brand-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    .brand-title {
+      color: var(--ui-text);
+      font-size: 16px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
+    }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 6px;
+      border-radius: 9999px;
+      background: var(--ui-success-soft);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      color: var(--ui-success);
+
+      small {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+      }
+    }
   }
 
-  &.hideSidebar {
-    .logo-container {
-      width: $sidebar-width-collapsed;
-    }
+  .brand-sub {
+    display: block;
+    margin-top: 2px;
+    color: var(--ui-text-muted);
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 </style>

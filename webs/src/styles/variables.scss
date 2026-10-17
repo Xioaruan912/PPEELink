@@ -1,31 +1,30 @@
-/** 全局SCSS变量 */
+/** Shared workspace colors and compatibility dimensions. */
 
 :root {
-  /* 侧边栏和顶栏背景完全透明，融入 html 的 f6f7f5 / 111412 背景 */
-  --menu-background: transparent;
-  --menu-text: #465049;
-  --menu-active-text: #0f766e;
-  --menu-hover: rgba(0, 0, 0, 0.04);
+  --menu-background: var(--ui-surface, #fcfdfb);
+  --menu-text: var(--ui-text-secondary, #607066);
+  --menu-active-text: var(--ui-accent, #37654b);
+  --menu-hover: var(--ui-accent-soft, #e0e9dc);
   --sidebar-logo-background: transparent;
-  --el-menu-active-color: #0f766e;
+  --el-menu-active-color: var(--ui-accent, #37654b);
 }
 
-/** 暗黑主题 */
 html.dark {
-  --menu-background: transparent;
-  --menu-text: #a1a1aa;
-  --menu-active-text: #5dd3c7;
-  --menu-hover: rgba(255, 255, 255, 0.04);
+  --menu-background: var(--ui-surface, #1b2d23);
+  --menu-text: var(--ui-text-secondary, #a5b6a5);
+  --menu-active-text: var(--ui-accent, #b4caa1);
+  --menu-hover: var(--ui-accent-soft, #304633);
   --sidebar-logo-background: transparent;
+  --el-menu-active-color: var(--ui-accent, #b4caa1);
 }
 
-$menu-background: var(--menu-background); 
-$menu-text: var(--menu-text); 
+$menu-background: var(--menu-background);
+$menu-text: var(--menu-text);
 $menu-active-text: var(--menu-active-text);
-$menu-hover: var(--menu-hover); 
+$menu-hover: var(--menu-hover);
 $sidebar-logo-background: var(--sidebar-logo-background);
 
-$sidebar-width: 264px;
-$sidebar-width-collapsed: 64px; 
-$navbar-height: 60px; 
-$tags-view-height: 0px; /* Hide tags view space */
+$sidebar-width: 260px;
+$sidebar-width-collapsed: 72px;
+$navbar-height: 64px;
+$tags-view-height: 0px;

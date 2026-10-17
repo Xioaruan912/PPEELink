@@ -207,7 +207,7 @@ onMounted(async () => {
   .item-name {
     flex: 1;
     overflow: hidden;
-    font-size: 13px;
+    font-size: 16px;
     font-weight: 500;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -215,7 +215,7 @@ onMounted(async () => {
 
   .item-meta {
     margin-top: 6px;
-    font-size: 12px;
+    font-size: 16px;
     color: var(--el-text-color-secondary);
   }
 

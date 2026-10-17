@@ -1,8 +1,9 @@
 <script setup lang='ts'>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { getSubs, getSubPreviewNodes, previewSubPipeline, startSubscriptionBuild, getSubscriptionArtifacts, rollbackSubscriptionArtifact, safePublishSubscription, AddSub, DelSub, UpdateSub, ResetToken, SetExpire, getImportLinks, createShortLink } from "@/api/subcription/subs"
 import { getTemp } from "@/api/subcription/temp"
 import { getNodes, getNodeOverview, GetGroupFull } from "@/api/subcription/node"
+import { initSpotlight, staggerReveal } from "@/utils/vfx"
 import QrcodeVue from 'qrcode.vue'
 import { VueDraggable } from 'vue-draggable-plus'
 import { countryFlag } from "@/utils/flag"
@@ -287,8 +288,15 @@ async function gettemps() {
   const { data } = await getTemp()
   templist.value = data || []
 }
+const subsPageRef = ref<HTMLElement | null>(null)
+let cleanupSpotlight: (() => void) | null = null
+
 onMounted(async () => {
+  cleanupSpotlight = initSpotlight(subsPageRef.value)
   await getsubs()
+  nextTick(() => {
+    staggerReveal(".sub-card", 0.05, 0.06)
+  })
   gettemps()
   const { data } = await getNodes()
   NodesList.value = data || []
@@ -297,6 +305,10 @@ onMounted(async () => {
     allGroups.value = Array.isArray(gp.data) ? gp.data.map((g: any) => ({ ID: g.id, Name: g.name, NodeCount: g.node_count || 0 })) : []
     overview.value = Array.isArray(ov.data) ? ov.data : []
   } catch { /* quality/group metadata is non-blocking */ }
+})
+
+onBeforeUnmount(() => {
+  if (cleanupSpotlight) cleanupSpotlight()
 })
 
 // ---- 添加/编辑 ----
@@ -558,7 +570,7 @@ const saveExpire = async () => {
 </script>
 
 <template>
-  <div class="subs-page">
+  <div ref="subsPageRef" class="subs-page">
     <!-- 顶部工具栏 -->
     <div class="toolbar">
       <el-input v-model="searchKey" placeholder="搜索订阅名称…" clearable class="search" />
@@ -567,9 +579,14 @@ const saveExpire = async () => {
 
     <!-- 订阅卡片 -->
     <div v-loading="loading" class="subs-loading-area">
-      <el-empty v-if="!loading && !filteredSubs.length" description="暂无订阅，点击右上角「添加订阅」" />
+      <div v-if="!loading && !filteredSubs.length" class="workbench-empty subscription-empty">
+        <span class="workbench-empty-symbol"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10 13a5 5 0 0 0 7 .4l3-3a5 5 0 0 0-7-7l-2 2M14 11a5 5 0 0 0-7-.4l-3 3a5 5 0 0 0 7 7l2-2"/></svg></span>
+        <h2>{{ searchKey ? '没有找到这份订阅' : '把节点，连接到你的设备。' }}</h2>
+        <p>{{ searchKey ? '试试其他名称，或清除搜索条件。' : '创建订阅并选择节点，生成 Clash、Surge 或 Loon 配置。' }}</p>
+        <el-button v-if="!searchKey" type="primary" @click="handleAddSub">创建第一份订阅</el-button><el-button v-else @click="searchKey = ''">清除搜索</el-button>
+      </div>
       <div v-if="filteredSubs.length" class="card-grid">
-      <el-card v-for="sub in filteredSubs" :key="sub.ID" shadow="hover" class="sub-card">
+      <el-card v-for="sub in filteredSubs" :key="sub.ID" shadow="hover" class="sub-card spotlight-card hologram-border">
         <template #header>
           <div class="card-head">
             <div class="card-title">
@@ -601,16 +618,7 @@ const saveExpire = async () => {
             <el-button link type="info" size="small">更多 ▾</el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item command="publish">
-                  <div class="more-item"><span class="more-title">发布验证</span><span class="more-desc">预检 + 回归 + 实测通过后上线</span></div>
-                </el-dropdown-item>
-                <el-dropdown-item command="build">
-                  <div class="more-item"><span class="more-title">生成产物</span><span class="more-desc">保存一份不可变快照用于对比/回滚</span></div>
-                </el-dropdown-item>
-                <el-dropdown-item command="artifacts">
-                  <div class="more-item"><span class="more-title">版本与回滚</span><span class="more-desc">查看历史产物并切换 Last Known Good</span></div>
-                </el-dropdown-item>
-                <el-dropdown-item command="reset" divided>
+                <el-dropdown-item command="reset">
                   <div class="more-item"><span class="more-title">重置订阅链接</span><span class="more-desc">重新生成令牌，旧链接立即失效</span></div>
                 </el-dropdown-item>
                 <el-dropdown-item command="edit">
@@ -948,19 +956,31 @@ const saveExpire = async () => {
 .subs-loading-area { min-height: 400px; }
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-  gap: 14px;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 18px;
 }
-.sub-card { border-radius: 12px; }
-.card-head { display: flex; flex-direction: column; gap: 6px; }
-.card-title { display: flex; align-items: center; gap: 8px; }
-.sub-name { font-weight: 600; font-size: 15px; cursor: pointer; }
-.sub-name:hover { color: var(--el-color-primary); }
-.card-stats { display: flex; gap: 6px; }
+.sub-card {
+  border-radius: 16px !important;
+  background: var(--ui-surface) !important;
+  border: 1px solid var(--ui-border) !important;
+  box-shadow: var(--ui-panel-shadow) !important;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+
+  &:hover {
+    transform: translateY(-2px);
+    border-color: var(--ui-accent) !important;
+    box-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.25) !important;
+  }
+}
+.card-head { display: flex; flex-direction: column; gap: 8px; }
+.card-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sub-name { font-weight: 750; font-size: 16px; cursor: pointer; color: var(--ui-text); transition: color 140ms ease; }
+.sub-name:hover { color: var(--ui-accent); }
+.card-stats { display: flex; gap: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .link-area { margin-bottom: 6px; }
-.client-tabs { margin-bottom: 8px; }
+.client-tabs { margin-bottom: 10px; width: 100%; }
 .link-row .el-input { width: 100%; }
-.card-actions { display: flex; justify-content: flex-end; gap: 2px; border-top: 1px solid var(--el-border-color-lighter); padding-top: 8px; }
+.card-actions { display: flex; justify-content: flex-end; gap: 6px; border-top: 1px solid var(--ui-border-subtle); padding-top: 10px; }
 .qr-body { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .qr-actions { display: flex; gap: 8px; }
 .drawer-body .section-title { font-weight: 600; margin: 16px 0 8px; color: var(--el-text-color-primary); }
@@ -968,15 +988,15 @@ const saveExpire = async () => {
 .node-list { display: flex; flex-direction: column; gap: 6px; }
 .node-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--el-fill-color-light); border-radius: 8px; }
 .node-flag { font-size: 18px; }
-.node-name { flex: 1; font-weight: 500; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.node-country { font-size: 12px; color: var(--el-text-color-secondary); }
+.node-name { flex: 1; font-weight: 500; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-country { font-size: 16px; color: var(--el-text-color-secondary); }
 .cfg-grid { display: flex; flex-direction: column; gap: 6px; }
-.cfg-item { display: flex; gap: 8px; font-size: 13px; }
+.cfg-item { display: flex; gap: 8px; font-size: 16px; }
 .cfg-label { color: var(--el-text-color-secondary); width: 48px; flex-shrink: 0; }
 .cfg-val { word-break: break-all; }
 .expire-row { display: flex; align-items: center; gap: 10px; }
 .mt { margin-top: 12px; }
-.field-label { font-size: 13px; color: var(--el-text-color-secondary); margin-bottom: 6px; }
+.field-label { font-size: 16px; color: var(--el-text-color-secondary); margin-bottom: 6px; }
 .sub-form .el-divider { margin: 6px 0 16px; }
 .sub-form .el-form-item { margin-bottom: 16px; }
 .src-tabs { margin-bottom: 8px; display: block; }
@@ -987,8 +1007,8 @@ const saveExpire = async () => {
   border-radius: 10px; background: var(--el-fill-color-light); margin-bottom: 16px;
 }
 .switch-main { display: flex; align-items: center; justify-content: space-between; }
-.switch-label { font-size: 13px; font-weight: 500; }
-.switch-hint { font-size: 12px; color: var(--el-text-color-secondary); }
+.switch-label { font-size: 16px; font-weight: 500; }
+.switch-hint { font-size: 16px; color: var(--el-text-color-secondary); }
 .order-list { display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
 .order-item {
   display: flex; align-items: center; gap: 10px;
@@ -1000,16 +1020,16 @@ const saveExpire = async () => {
 .order-badge {
   width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
   background: var(--el-color-primary-light-8); color: var(--el-color-primary);
-  font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center;
 }
 html.dark .order-badge { background: var(--el-color-primary-light-3); color: #fff; }
-.order-name { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.order-confidence { flex-shrink:0; font-size:11px; font-weight:600; color:var(--el-color-success); }
+.order-name { flex: 1; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-confidence { flex-shrink:0; font-size: 15px; font-weight:600; color:var(--el-color-success); }
 .order-confidence.empty { color:var(--el-text-color-placeholder); font-weight:400; }
 .order-drag { cursor: grab; color: var(--el-text-color-placeholder); font-size: 14px; }
 .order-remove { cursor: pointer; color: var(--el-text-color-placeholder); font-size: 14px; }
 .order-remove:hover { color: var(--el-color-danger); }
-.order-empty { padding: 14px 0; text-align: center; font-size: 12px; color: var(--el-text-color-placeholder); }
+.order-empty { padding: 14px 0; text-align: center; font-size: 16px; color: var(--el-text-color-placeholder); }
 .ghost { opacity: 0.5; background: var(--el-color-primary-light-8); }
 .group-checkbox-list { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; padding-right: 4px; }
 .group-checkbox { margin-right: 0; width: 100%; padding: 4px 8px; border-radius: 6px; }
@@ -1019,38 +1039,38 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 .node-group-picker { width: 100%; margin-top: 8px; border: 1px solid var(--el-border-color-lighter); border-radius: 8px; overflow: hidden; }
 .node-group-picker :deep(.el-collapse-item__header) { padding: 0 10px; height: 38px; line-height: 38px; }
 .picker-group-title { font-weight: 600; }
-.picker-group-count { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 12px; }
-.picker-group-confidence { margin-left:auto; margin-right:8px; color:var(--el-color-success); font-size:11px; font-weight:600; }
+.picker-group-count { margin-left: 8px; color: var(--el-text-color-secondary); font-size: 16px; }
+.picker-group-confidence { margin-left:auto; margin-right:8px; color:var(--el-color-success); font-size: 15px; font-weight:600; }
 .picker-group-confidence.empty { color:var(--el-text-color-placeholder); font-weight:400; }
 .picker-node-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
 .picker-node-list .el-checkbox { min-width: 0; margin-right: 0; overflow: hidden; align-items:flex-start; }
 .picker-node-list :deep(.el-checkbox__label) { min-width:0; width:100%; padding-left:7px; }
 .picker-node-label { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:2px 8px; width:100%; }
-.picker-node-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
-.picker-node-confidence { color:var(--el-color-success); font-size:11px; font-weight:600; white-space:nowrap; }
+.picker-node-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size: 16px; }
+.picker-node-confidence { color:var(--el-color-success); font-size: 15px; font-weight:600; white-space:nowrap; }
 .picker-node-confidence.empty { color:var(--el-text-color-placeholder); font-weight:400; }
-.picker-node-samples { grid-column:1 / -1; color:var(--el-text-color-placeholder); font-size:10px; line-height:1.2; }
+.picker-node-samples { grid-column:1 / -1; color:var(--el-text-color-placeholder); font-size: 14px; line-height:1.2; }
 .country-node-groups { display: flex; flex-direction: column; gap: 16px; max-height: 400px; overflow-y: auto; padding-right: 4px; }
-.country-group-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--el-text-color-primary); }
-.country-group-count { color: var(--el-text-color-secondary); font-size: 12px; font-weight: normal; }
-.gc-name { font-size: 13px; }
-.gc-count { margin-left: 8px; font-size: 12px; color: var(--el-text-color-secondary); }
+.country-group-title { display: flex; align-items: center; gap: 6px; font-size: 16px; font-weight: 600; margin-bottom: 6px; color: var(--el-text-color-primary); }
+.country-group-count { color: var(--el-text-color-secondary); font-size: 16px; font-weight: normal; }
+.gc-name { font-size: 16px; }
+.gc-count { margin-left: 8px; font-size: 16px; color: var(--el-text-color-secondary); }
 .pipeline-section { margin-top:8px; padding-top:18px; border-top:1px solid var(--el-border-color-lighter); }
 .pipeline-section-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:10px; }
 .pipeline-title { display:flex; align-items:center; gap:8px; font-size:14px; font-weight:600; color:var(--el-text-color-primary); }
-.pipeline-desc { margin-top:4px; color:var(--el-text-color-secondary); font-size:12px; line-height:1.6; }
-.pipeline-hint { flex-shrink:0; padding:4px 8px; border-radius:999px; background:var(--el-fill-color-light); color:var(--el-text-color-secondary); font-size:11px; }
+.pipeline-desc { margin-top:4px; color:var(--el-text-color-secondary); font-size: 16px; line-height:1.6; }
+.pipeline-hint { flex-shrink:0; padding:4px 8px; border-radius:999px; background:var(--el-fill-color-light); color:var(--el-text-color-secondary); font-size: 15px; }
 .pipeline-card { padding:14px; border:1px solid var(--el-border-color-lighter); border-radius:12px; background:var(--el-bg-color); box-shadow:0 1px 2px rgba(0,0,0,.02); }
 .pipeline-card .el-form-item { margin-bottom:12px; }
 .pipeline-footer { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; padding-top:2px; }
 .flag-row { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
-.flag-label { color:var(--el-text-color-secondary); font-size:12px; }
+.flag-label { color:var(--el-text-color-secondary); font-size: 16px; }
 .flag-select { width:110px; }
 .emoji-rules { margin-top:8px; }
 .import-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .import-row { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
 .import-tag { width:96px; flex-shrink:0; }
-.reject-stat { margin-right:12px; font-size:12px; }
+.reject-stat { margin-right:12px; font-size: 16px; }
 @media (max-width: 720px) {
   .subs-page { padding: 6px; }
   .toolbar { flex-wrap: wrap; }
@@ -1087,7 +1107,7 @@ html.dark .order-badge { background: var(--el-color-primary-light-3); color: #ff
 <style>
 .sub-more-item,
 .more-item { display: flex; flex-direction: column; line-height: 1.25; padding: 2px 0; }
-.more-title { font-size: 13px; }
-.more-desc { font-size: 11px; color: var(--el-text-color-secondary); }
+.more-title { font-size: 16px; }
+.more-desc { font-size: 15px; color: var(--el-text-color-secondary); }
 .more-danger .more-title { color: var(--el-color-danger); }
 </style>
