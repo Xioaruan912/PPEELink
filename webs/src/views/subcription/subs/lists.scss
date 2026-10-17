@@ -1,0 +1,218 @@
+.subscription-summary {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(32px, 8vw, 128px);
+  margin: 0 0 40px;
+  padding: 16px 0 32px;
+  border-bottom: 1px solid var(--c-line);
+}
+.summary-secondary {
+  display: flex;
+  gap: 32px;
+  padding-bottom: 4px;
+}
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 0 0 32px;
+}
+.list-toolbar > .el-input {
+  max-width: 320px;
+  flex: 1 1 200px;
+}
+.list-heading,
+.subscription-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px 128px 128px 322px;
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+}
+.list-heading {
+  min-height: 48px;
+  font: 13px/1.6 var(--font-mono);
+  color: var(--c-muted);
+  background: var(--c-surface-2);
+  border-radius: var(--radius-control);
+}
+.actions-heading {
+  text-align: right;
+}
+.subscription-list {
+  position: relative;
+}
+.subscription-row {
+  position: relative;
+  min-width: 0;
+  min-height: 72px;
+  border-bottom: 1px solid var(--c-line);
+  transition: background var(--duration-fast);
+}
+.subscription-row:hover {
+  background: var(--c-surface-2);
+}
+.name-button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  text-align: left;
+  font: 600 15px/20px var(--font-ui);
+  background: transparent;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+.name-button:hover {
+  color: var(--c-data);
+}
+.name-text {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.name-meta {
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--c-muted);
+  font-weight: 400;
+  line-height: 18px;
+}
+.name-meta :deep(.status-dot) {
+  flex-shrink: 0;
+}
+.name-meta :deep(.status-dot),
+.access-count {
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.access-count {
+  color: var(--c-muted);
+}
+.mono {
+  font: 13px/1.6 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.row-value {
+  min-width: 0;
+  font-size: 14px;
+}
+.row-value time {
+  white-space: nowrap;
+}
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+.mobile-label {
+  display: none;
+}
+.danger-text {
+  color: var(--c-bad);
+}
+.subscription-move,
+.subscription-enter-active,
+.subscription-leave-active {
+  transition:
+    transform var(--duration-slow) var(--ease-spring),
+    opacity var(--duration-medium);
+}
+.subscription-enter-from,
+.subscription-leave-to {
+  opacity: 0;
+  transform: translateY(16px);
+}
+.subscription-leave-active {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+@media (max-width: 1199px) and (min-width: 1024px) {
+  .list-heading,
+  .subscription-row {
+    column-gap: 8px;
+  }
+  .name-meta {
+    gap: 8px;
+  }
+}
+@media (max-width: 1023px) {
+  .subscription-summary {
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .list-toolbar {
+    gap: 8px;
+  }
+  .list-toolbar > .el-input {
+    max-width: none;
+  }
+  .list-heading {
+    display: none;
+  }
+  .subscription-list {
+    display: grid;
+    gap: 16px;
+  }
+  .subscription-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    padding: 16px;
+    border: 1px solid var(--c-line);
+    border-radius: var(--radius-panel);
+    background: var(--c-surface);
+  }
+  .name-button {
+    margin-bottom: 4px;
+  }
+  .row-value {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .mobile-label {
+    display: inline;
+    font-size: 14px;
+    color: var(--c-muted);
+  }
+  .row-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) repeat(4, 44px);
+    margin-top: 4px;
+    gap: 4px;
+  }
+  .row-actions :deep(.copy-split) {
+    width: 100%;
+  }
+  .collection-actions {
+    grid-template-columns: minmax(0, 1fr) repeat(2, 44px);
+  }
+}
+@media (max-width: 767px) {
+  .list-toolbar > .el-input {
+    flex-basis: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .subscription-move,
+  .subscription-enter-active,
+  .subscription-leave-active {
+    transition: none;
+  }
+}
