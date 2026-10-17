@@ -31,7 +31,7 @@ import {
 import { useMotion, useStagger } from "@/motion";
 import SecretLink from "./subs/SecretLink.vue";
 import CopyLinkButton from "./subs/CopyLinkButton.vue";
-import RowIconButton from "./subs/RowIconButton.vue";
+import RowIconButton from "@/ui/RowIconButton.vue";
 import { formatDateTime } from "@/utils/date";
 defineOptions({ name: "Collections" });
 interface Collection {
@@ -257,7 +257,7 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div class="collections-page">
-    <PageHeader eyebrow="订阅 / 02 合集" title="多订阅合集"
+    <PageHeader title="多订阅合集"
       ><template #actions
         ><UiButton variant="primary" :icon="Plus" @click="openEdit()"
           >新建合集</UiButton

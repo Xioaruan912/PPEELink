@@ -13,7 +13,7 @@
       ></template
     ><slot></slot
     ><template v-if="$slots.footer" #footer
-      ><slot name="footer"></slot></template
+      ><div class="drawer-actions"><slot name="footer"></slot></div></template
   ></el-drawer>
 </template>
 <script setup lang="ts">
@@ -31,6 +31,15 @@ withDefaults(
 const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 </script>
 <style scoped>
+.drawer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.drawer-actions :deep(.el-button + .el-button) {
+  margin-left: 0;
+}
 .overlay-heading {
   margin: 0;
   padding-right: 32px;

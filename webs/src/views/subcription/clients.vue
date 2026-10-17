@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { ElMessage } from "element-plus";
-import WorkIcon from "@/components/legacy/WorkIcon.vue";
+import {
+  Download,
+  ArrowDown,
+  TopRight,
+  Search,
+  CopyDocument,
+  MoreFilled,
+} from "@element-plus/icons-vue";
+import { PageHeader, UiSegmented, UiButton, EmptyState, UiDrawer } from "@/ui";
+import RowIconButton from "@/ui/RowIconButton.vue";
+import { useMotion, useStagger } from "@/motion";
 
 defineOptions({ name: "ClientsPage" });
 
@@ -363,61 +373,92 @@ const copyUrl = async (url: string) => {
   }
 };
 
-const categories: {
-  key: "all" | "desktop" | "mobile";
-  label: string;
-  icon: string;
-}[] = [
-  { key: "all", label: "全部客户端", icon: "grid" },
-  { key: "desktop", label: "桌面设备", icon: "network" },
-  { key: "mobile", label: "移动设备", icon: "link" },
+const categories = [
+  { value: "all", label: "全部客户端" },
+  { value: "desktop", label: "桌面设备" },
+  { value: "mobile", label: "移动设备" },
 ];
+const platformGroups = computed(() =>
+  [
+    {
+      key: "desktop",
+      label: "桌面与跨平台 / 01",
+      clients: filteredClients.value.filter(
+        (client) => client.category === "desktop"
+      ),
+    },
+    {
+      key: "mobile",
+      label: "移动平台 / 02",
+      clients: filteredClients.value.filter(
+        (client) => client.category === "mobile"
+      ),
+    },
+  ].filter((group) => group.clients.length)
+);
+const catalog = ref<HTMLElement>();
+const detailsClient = ref<ClientCard>();
+const detailsOpen = ref(false);
+function showDetails(client: ClientCard) {
+  detailsClient.value = client;
+  detailsOpen.value = true;
+}
+const { reduced } = useMotion();
+const stagger = useStagger();
+onMounted(() => {
+  if (catalog.value) stagger(catalog.value.querySelectorAll(".client-row"));
+});
+function clearFilters() {
+  searchQuery.value = "";
+  activeCategory.value = "all";
+}
 </script>
 <template>
-  <div class="client-library">
-    <aside class="library-filter">
-      <span class="library-filter-label">适用设备</span
-      ><button
-        v-for="category in categories"
-        :key="category.key"
-        :class="{ active: activeCategory === category.key }"
-        @click="activeCategory = category.key"
+  <div class="client-library" :class="{ 'client-library--reduced': reduced }">
+    <PageHeader title="客户端" description="按设备选择，前往官方来源获取。" />
+    <div class="library-toolbar">
+      <UiSegmented
+        v-model="activeCategory"
+        :options="categories"
+        label="客户端分类"
+      />
+      <el-input
+        v-model="searchQuery"
+        placeholder="搜索客户端、协议或平台"
+        clearable
+        aria-label="搜索客户端、协议或平台"
       >
-        <WorkIcon :name="category.icon" />{{ category.label
-        }}<span class="data-number">{{
-          category.key === "all"
-            ? clients.length
-            : clients.filter((c) => c.category === category.key).length
-        }}</span>
-      </button>
-    </aside>
-    <section class="library-content">
-      <header class="library-toolbar">
-        <el-input
-          v-model="searchQuery"
-          placeholder="搜索客户端、协议或平台…"
-          clearable
-          aria-label="搜索客户端"
-          ><template #prefix><WorkIcon name="search" /></template></el-input
-        ><span
-          >找到
-          <b class="data-number">{{ filteredClients.length }}</b> 个客户端</span
+        <template #prefix><Search aria-hidden="true" /></template>
+      </el-input>
+    </div>
+    <div class="library-summary" role="status" aria-live="polite">
+      <span
+        >找到 <b>{{ filteredClients.length }}</b> 个客户端</span
+      >
+      <span>下载与价格以官方发布为准</span>
+    </div>
+    <div ref="catalog" class="library-catalog">
+      <section
+        v-for="group in platformGroups"
+        :key="group.key"
+        class="platform-group"
+        :aria-label="group.label.split(' / ')[0]"
+      >
+        <p class="platform-eyebrow">
+          {{ group.label }}<span>{{ group.clients.length }} 个客户端</span>
+        </p>
+        <TransitionGroup
+          name="catalog"
+          tag="div"
+          class="library-list"
+          :css="!reduced"
         >
-      </header>
-      <TransitionGroup name="catalog" tag="div" class="library-list"
-        ><article
-          v-for="item in filteredClients"
-          :key="item.id"
-          class="library-client"
-        >
-          <div class="client-identity">
-            <span class="client-monogram">{{
-              item.name
-                .replace(/[^a-zA-Z]/g, "")
-                .slice(0, 2)
-                .toUpperCase()
-            }}</span>
-            <div>
+          <article
+            v-for="item in group.clients"
+            :key="item.id"
+            class="client-row"
+          >
+            <div class="client-identity">
               <h2>{{ item.name }}</h2>
               <div class="client-platforms">
                 <span v-for="platform in item.platforms" :key="platform">{{
@@ -425,432 +466,393 @@ const categories: {
                 }}</span>
               </div>
             </div>
+            <p class="client-description">{{ item.description }}</p>
+            <div class="client-actions">
+              <details class="client-downloads">
+                <summary>
+                  <Download aria-hidden="true" /><span>{{
+                    item.price ? "查看商店" : "下载客户端"
+                  }}</span
+                  ><ArrowDown aria-hidden="true" />
+                </summary>
+                <div class="client-download-links">
+                  <a
+                    v-for="download in item.downloads"
+                    :key="download.label"
+                    :href="download.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    ><span
+                      >{{ download.label
+                      }}<small>{{ download.arch }}</small></span
+                    ><TopRight aria-hidden="true"
+                  /></a>
+                  <a
+                    :href="item.releaseUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >查看官方发布页<TopRight aria-hidden="true"
+                  /></a>
+                </div>
+              </details>
+              <RowIconButton
+                class="client-more"
+                label="技术详情与项目链接"
+                :icon="MoreFilled"
+                @click="showDetails(item)"
+              />
+            </div>
+          </article>
+        </TransitionGroup>
+      </section>
+    </div>
+    <UiDrawer
+      v-model="detailsOpen"
+      :title="detailsClient?.name || '技术详情'"
+      size="min(560px, 100vw)"
+    >
+      <template v-if="detailsClient">
+        <p class="detail-description">{{ detailsClient.description }}</p>
+        <div class="client-specifications">
+          <dl>
+            <div>
+              <dt>内核</dt>
+              <dd>{{ detailsClient.kernel }}</dd>
+            </div>
+            <div>
+              <dt>协议</dt>
+              <dd>{{ detailsClient.protocols.join(" / ") }}</dd>
+            </div>
+            <div v-if="detailsClient.badge">
+              <dt>特点</dt>
+              <dd>{{ detailsClient.badge }}</dd>
+            </div>
+            <div v-if="detailsClient.price">
+              <dt>付费说明</dt>
+              <dd>
+                {{ detailsClient.price }} · {{ detailsClient.region }} ·
+                价格以商店为准
+              </dd>
+            </div>
+          </dl>
+          <div class="client-source">
             <a
-              :href="item.homepage"
+              :href="detailsClient.homepage"
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="打开客户端官方网站"
-              ><WorkIcon name="diagonal"
-            /></a>
+              >访问官方网站<TopRight aria-hidden="true" /></a
+            ><UiButton
+              variant="ghost"
+              :icon="CopyDocument"
+              @click="copyUrl(detailsClient.homepage)"
+              >复制项目链接</UiButton
+            >
           </div>
-          <p class="client-description">{{ item.description }}</p>
-          <details class="client-technical">
-            <summary>技术详情</summary>
-            <div class="client-specifications">
-              <span><small>内核</small>{{ item.kernel }}</span
-              ><span><small>协议</small>{{ item.protocols.join(" / ") }}</span>
-            </div>
-          </details>
-          <details class="client-downloads">
-            <summary>
-              <span
-                ><WorkIcon name="diagonal" />{{
-                  item.price ? "在 App Store 查看" : "获取客户端"
-                }}</span
-              ><WorkIcon name="down" />
-            </summary>
-            <div class="client-download-links">
-              <a
-                v-for="download in item.downloads"
-                :key="download.label"
-                :href="download.url"
-                target="_blank"
-                rel="noopener noreferrer"
-                >{{ download.label }}<WorkIcon name="diagonal" /></a
-              ><a
-                :href="item.releaseUrl"
-                target="_blank"
-                rel="noopener noreferrer"
-                >查看官方发布页<WorkIcon name="diagonal"
-              /></a>
-            </div>
-          </details>
-          <div class="client-source">
-            <span>{{
-              item.price ? "付费应用 · 价格以商店为准" : "从官方来源获取"
-            }}</span
-            ><button @click="copyUrl(item.homepage)">复制项目链接</button>
-          </div>
-        </article></TransitionGroup
-      >
-      <div v-if="!filteredClients.length" class="library-empty">
-        <WorkIcon name="search" />
-        <h3>没有找到匹配的客户端</h3>
-        <p>试试按设备名称或协议搜索。</p>
-        <button
-          @click="
-            searchQuery = '';
-            activeCategory = 'all';
-          "
-        >
-          清除筛选
-        </button>
-      </div>
-    </section>
+        </div>
+      </template>
+    </UiDrawer>
+    <EmptyState
+      v-if="!filteredClients.length"
+      title="没有匹配客户端"
+      description="试试设备名称、内核或协议。"
+      ><template #action
+        ><UiButton @click="clearFilters">清除筛选</UiButton></template
+      ></EmptyState
+    >
   </div>
 </template>
 <style scoped>
 .client-library {
-  display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 35px;
-  padding-top: 5px;
-}
-.library-filter {
-  padding-top: 10px;
-}
-.library-filter-label {
-  font-size: 14px;
-  color: var(--ui-text-muted);
-  display: block;
-  margin-bottom: 15px;
-}
-.library-filter > button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 13px;
-  margin-bottom: 5px;
-  width: 100%;
-  text-align: left;
-  background: transparent;
-  border-radius: 6px;
-  font-size: 15px;
-  color: var(--ui-text-secondary);
-}
-.library-filter > button.active {
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent);
-  font-weight: 600;
-}
-.library-filter > button > svg {
-  height: 15px;
-  width: 15px;
-}
-.library-filter > button > span {
-  margin-left: auto;
-  font-size: 14px;
-  opacity: 0.7;
-}
-.library-note {
-  padding: 25px 12px;
-  margin-top: 26px;
-  border-top: 1px solid var(--ui-border);
-}
-.library-note > svg {
-  height: 15px;
-  width: 15px;
-  color: var(--ui-text-muted);
-}
-.library-note p {
-  font-size: 14px;
-  line-height: 1.9;
-  color: var(--ui-text-muted);
+  min-width: 0;
 }
 .library-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 15px;
-  padding-bottom: 18px;
+  gap: 24px;
 }
 .library-toolbar > .el-input {
-  max-width: 390px;
+  width: min(360px, 100%);
 }
-.library-toolbar:deep(svg) {
-  width: 15px;
-  height: 15px;
+.library-toolbar :deep(svg) {
+  width: 18px;
+  height: 18px;
 }
-.library-toolbar > span {
+.library-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 24px 0 48px;
+  color: var(--c-muted);
   font-size: 14px;
-  color: var(--ui-text-muted);
-  white-space: nowrap;
 }
-.library-toolbar b {
+.library-summary b {
+  color: var(--c-ink);
+  font-family: var(--font-mono);
   font-weight: 400;
-  color: var(--ui-text);
+}
+.platform-group + .platform-group {
+  margin-top: 56px;
+}
+.platform-eyebrow {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0 0 16px;
+  color: var(--c-muted);
+  font: 400 13px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+}
+.platform-eyebrow > span {
+  letter-spacing: 0;
+  font: 400 14px/1.4 var(--font-ui);
 }
 .library-list {
+  position: relative;
+  border-top: 1px solid var(--c-line);
+}
+.client-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  border-top: 1px solid var(--ui-border);
+  grid-template-columns: minmax(220px, 3fr) minmax(0, 5fr) auto;
+  align-items: center;
+  column-gap: 32px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--c-line);
+  transition: background var(--duration-fast);
 }
-.library-client {
-  padding: 25px 25px 20px 0;
-  min-width: 0;
-  border-bottom: 1px solid var(--ui-border);
-  display: flex;
-  flex-direction: column;
-}
-.library-client:nth-child(even) {
-  padding-left: 27px;
-  padding-right: 0;
-  border-left: 1px solid var(--ui-border);
+.client-row:hover {
+  background: var(--c-surface-2);
 }
 .client-identity {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.client-monogram {
-  height: 39px;
-  width: 39px;
-  display: grid;
-  place-items: center;
-  font-weight: 600;
-  font-size: 14px;
-  letter-spacing: -1px;
-  background: var(--ui-accent-soft);
-  color: var(--ui-accent);
-  border-radius: 10px;
-  flex-shrink: 0;
-}
-.library-client:nth-child(3n) .client-monogram {
-  border-radius: 50%;
-  background: var(--ui-surface);
-  border: 1px solid var(--ui-border-strong);
+  min-width: 0;
 }
 .client-identity h2 {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.5px;
-  margin: 0 0 6px;
+  margin: 0 0 8px;
+  font: 600 18px/1.4 var(--font-ui);
+  overflow-wrap: anywhere;
 }
 .client-platforms {
   display: flex;
-  gap: 7px;
   flex-wrap: wrap;
-  color: var(--ui-text-muted);
+  gap: 4px;
+}
+.client-platforms > span {
+  padding: 4px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
   font-size: 14px;
-}
-.client-platforms > span + span:before {
-  content: "/";
-  margin-right: 7px;
-  color: var(--ui-border-strong);
-}
-.client-identity > a {
-  margin-left: auto;
-  color: var(--ui-text-muted);
-}
-.client-identity > a > svg {
-  height: 15px;
-  width: 15px;
+  line-height: 1.4;
+  color: var(--c-muted);
 }
 .client-description {
-  font-size: 15px;
-  line-height: 1.9;
-  color: var(--ui-text-secondary);
-  margin: 20px 0 16px;
-  min-height: 62px;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--c-muted);
 }
-.client-specifications {
+.client-actions {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
-  font-size: 14px;
-  line-height: 1.8;
-  margin-bottom: 20px;
-  color: var(--ui-text-secondary);
-}
-.client-specifications > span {
-  display: grid;
-  grid-template-columns: 33px 1fr;
-}
-.client-specifications small {
-  font-size: 14px;
-  color: var(--ui-text-muted);
 }
 .client-downloads {
-  margin-top: auto;
-  background: var(--ui-surface);
-  border: 1px solid var(--ui-border);
-  border-radius: 6px;
-  overflow: hidden;
+  position: relative;
 }
-.client-downloads summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  list-style: none;
-  cursor: pointer;
-  padding: 11px 13px;
-  font-size: 14px;
-  font-weight: 550;
+.detail-description {
+  color: var(--c-muted);
+  font-size: 16px;
+  line-height: 1.6;
+  margin: 0 0 24px;
 }
-.client-downloads summary::-webkit-details-marker {
-  display: none;
-}
-.client-downloads summary > span {
+summary {
+  min-height: 44px;
   display: flex;
   align-items: center;
   gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 15px;
 }
-.client-downloads summary svg {
-  height: 13px;
-  width: 13px;
+summary::-webkit-details-marker {
+  display: none;
 }
-.client-downloads summary > svg {
-  height: 11px;
-  width: 11px;
-  transition: transform 0.25s var(--ease-workspace);
+summary svg,
+.client-source svg,
+.client-download-links svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
 }
-.client-downloads[open] summary > svg {
+summary > svg:last-child {
+  transition: transform var(--duration-medium) var(--ease-out);
+}
+details[open] > summary > svg:last-child {
   transform: rotate(180deg);
 }
-.client-downloads[open] summary {
-  background: var(--ui-accent-soft);
+.client-downloads > summary {
+  padding: 8px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
+  background: var(--c-surface);
 }
 .client-download-links {
-  display: flex;
-  flex-direction: column;
-  padding: 5px 13px;
+  position: absolute;
+  z-index: 2;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+  padding: 8px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-overlay);
 }
 .client-download-links a {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 0;
-  font-size: 14px;
-  gap: 10px;
-  border-bottom: 1px solid var(--ui-border-subtle);
+  gap: 16px;
+  min-height: 44px;
+  padding: 8px 0;
+  color: var(--c-data);
+  font-size: 15px;
+  border-bottom: 1px solid var(--c-line);
+  overflow-wrap: anywhere;
 }
 .client-download-links a:last-child {
   border: 0;
 }
-.client-download-links svg {
-  width: 11px;
-  height: 11px;
-  flex-shrink: 0;
+.client-download-links small {
+  display: block;
+  color: var(--c-muted);
+  font: 400 14px/1.4 var(--font-mono);
+}
+.client-specifications {
+  padding: 16px 24px;
+  background: var(--c-surface);
+  border-radius: var(--radius-panel);
+}
+dl {
+  margin: 0;
+}
+dl > div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 16px;
+  padding: 8px 0;
+  font-size: 14px;
+}
+dt {
+  color: var(--c-muted);
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 .client-source {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 11px;
-  color: var(--ui-text-muted);
-  font-size: 14px;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 16px;
+  border-top: 1px solid var(--c-line);
+  padding-top: 8px;
 }
-.client-source button {
-  background: none;
-  color: var(--ui-text-secondary);
-  font-size: 14px;
-}
-.library-empty {
-  text-align: center;
-  padding: 80px 15px;
-}
-.library-empty > svg {
-  height: 28px;
-  width: 28px;
-  color: var(--ui-text-muted);
-}
-.library-empty h3 {
+.client-source > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  color: var(--c-data);
   font-size: 15px;
-  font-weight: 550;
 }
-.library-empty p {
-  font-size: 15px;
-  color: var(--ui-text-muted);
-}
-.library-empty button {
-  font-size: 15px;
-  color: var(--ui-accent);
-  background: none;
-  margin-top: 8px;
+summary:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--c-signal);
+  outline-offset: 2px;
 }
 .catalog-enter-active,
 .catalog-leave-active,
 .catalog-move {
   transition:
-    opacity 0.25s,
-    transform 0.45s var(--ease-workspace);
+    opacity 320ms var(--ease-out),
+    transform 560ms var(--ease-out);
 }
 .catalog-enter-from,
 .catalog-leave-to {
   opacity: 0;
-  transform: translateY(15px);
+  transform: translateY(16px);
 }
 .catalog-leave-active {
-  display: none;
   position: absolute;
+  width: 100%;
   pointer-events: none;
 }
-@media (max-width: 1000px) {
-  .client-library {
-    grid-template-columns: 150px minmax(0, 1fr);
-    gap: 25px;
-  }
-  .library-list {
-    grid-template-columns: 1fr;
-  }
-  .library-client:nth-child(even) {
-    padding-left: 0;
-    border-left: 0;
-  }
-  .library-client {
-    padding-right: 0;
+.client-library--reduced *,
+.client-library--reduced *::before,
+.client-library--reduced *::after {
+  transition: none !important;
+  animation: none !important;
+}
+@media (max-width: 1023px) {
+  .client-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px 24px;
   }
   .client-description {
-    min-height: 0;
+    grid-column: 1;
+  }
+  .client-actions {
+    grid-column: 2;
+    grid-row: 1 / 3;
   }
 }
-@media (max-width: 650px) {
-  .client-library {
-    grid-template-columns: 1fr;
-    gap: 0;
-    padding-top: 0;
-  }
-  .library-filter {
-    display: flex;
-    gap: 5px;
-    padding: 0 0 18px;
-  }
-  .library-filter-label,
-  .library-note {
-    display: none;
-  }
-  .library-filter > button {
-    width: auto;
-    font-size: 14px;
-    padding: 9px 10px;
-    gap: 7px;
-    margin: 0;
-  }
-  .library-filter > button > span {
-    margin-left: 4px;
-  }
-  .library-filter > button > svg {
-    height: 12px;
-    width: 12px;
-  }
+@media (max-width: 767px) {
   .library-toolbar {
-    gap: 9px;
-    padding-bottom: 16px;
-  }
-  .library-toolbar > span {
-    font-size: 14px;
-  }
-  .library-client {
-    padding: 22px 0 18px;
-  }
-  .client-description {
-    font-size: 14px;
-  }
-  .client-identity h2 {
-    font-size: 15px;
-  }
-  .client-platforms {
-    font-size: 14px;
-  }
-  .client-specifications {
-    font-size: 14px;
-  }
-  .client-monogram {
-    width: 36px;
-    height: 36px;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 16px;
   }
   .library-toolbar > .el-input {
-    min-width: 0;
+    width: 100%;
+  }
+  .library-summary {
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .client-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .client-description,
+  .client-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .client-specifications {
+    padding: 16px;
+  }
+  dl > div {
+    grid-template-columns: 64px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .client-download-links {
+    right: auto;
+    left: 0;
+  }
+  .platform-group + .platform-group {
+    margin-top: 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
   }
 }
 </style>

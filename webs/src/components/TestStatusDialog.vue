@@ -1,165 +1,195 @@
 <template>
-  <el-dialog
+  <UiDialog
     :model-value="visible"
     title="测试状态"
-    width="400px"
+    width="520px"
     append-to-body
-    destroy-on-close
     :close-on-click-modal="false"
-    @update:model-value="(v: boolean) => emit('update:visible', v)"
+    @update:model-value="emit('update:visible', $event)"
   >
-    <!-- 有测试进行中 -->
-    <template v-if="status">
-      <div class="test-item">
-        <div class="test-row">
-          <span class="dot running"></span>
-          <span class="label">测试进行中</span>
-          <el-tag
-            size="small"
-            :type="status.type === 'unlock' ? 'primary' : 'success'"
-            effect="dark"
-          >
-            {{ status.type === "unlock" ? "解锁" : "TCP" }}
-          </el-tag>
-        </div>
-        <div class="test-row">
-          <span class="label">节点</span>
-          <span class="value">{{ status.nodeName }}</span>
-        </div>
-        <div class="test-row">
-          <span class="label">开始时间</span>
-          <time class="value mono" :datetime="status.startedAt">{{
-            fmtTime(status.startedAt)
-          }}</time>
-        </div>
-        <div class="test-row">
-          <span class="label">已进行</span>
-          <span class="value">{{ elapsed }}</span>
-        </div>
+    <template v-if="status && !failed"
+      ><div class="test-context">
+        <StatusDot state="warn" running label="测试进行中" /><span>{{
+          status.type === "unlock" ? "解锁检测" : "TCP 测速"
+        }}</span>
       </div>
-    </template>
-    <!-- 空闲 -->
-    <template v-else>
-      <el-empty description="当前无测试进行中" :image-size="60" />
-    </template>
-
-    <template #footer>
-      <el-button @click="emit('update:visible', false)">关闭</el-button>
-      <el-button
-        v-if="status"
-        type="danger"
-        :loading="canceling"
-        @click="cancel"
-        >停止测试</el-button
-      >
-    </template>
-  </el-dialog>
+      <div class="elapsed">
+        <span>已进行</span><strong class="test-mono">{{ elapsed }}</strong>
+      </div>
+      <dl class="status-details">
+        <div>
+          <dt>检测节点</dt>
+          <dd>{{ status.nodeName }}</dd>
+        </div>
+        <div>
+          <dt>开始时间</dt>
+          <dd>
+            <time class="test-mono" :datetime="status.startedAt">{{
+              formatDateTime(status.startedAt)
+            }}</time>
+          </dd>
+        </div>
+      </dl></template
+    >
+    <EmptyState
+      v-else
+      size="section"
+      :title="
+        failed ? '无法读取状态' : refreshing ? '正在读取状态' : '当前没有测试'
+      "
+      :description="failed ? '状态读取失败，请重试' : '可从节点列表发起检测'"
+    />
+    <template #footer
+      ><div class="test-footer">
+        <UiButton v-if="failed" :loading="refreshing" @click="refresh"
+          >重试</UiButton
+        ><UiButton @click="emit('update:visible', false)">关闭</UiButton
+        ><UiButton
+          v-if="status"
+          variant="danger"
+          :loading="canceling"
+          @click="cancel"
+          >停止测试</UiButton
+        >
+      </div></template
+    >
+  </UiDialog>
 </template>
-
 <script setup lang="ts">
+import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import { formatDateTime } from "@/utils/date";
-import { ref, onMounted, onBeforeUnmount } from "vue";
 import { GetTestStatus, CancelTest } from "@/api/subcription/node";
-
-defineProps<{ visible: boolean }>();
-const emit = defineEmits<{ (e: "update:visible", v: boolean): void }>();
-
+import UiDialog from "@/ui/UiDialog.vue";
+import UiButton from "@/ui/UiButton.vue";
+import StatusDot from "@/ui/StatusDot.vue";
+import EmptyState from "@/ui/EmptyState.vue";
+const props = defineProps<{ visible: boolean }>();
+const emit = defineEmits<{ "update:visible": [value: boolean] }>();
 interface TestStatus {
   nodeName: string;
   nodeId: number;
   type: string;
   startedAt: string;
 }
-
 const status = ref<TestStatus | null>(null);
 const canceling = ref(false);
+const refreshing = ref(false);
+const failed = ref(false);
 const now = ref(Date.now());
-
-const fmtTime = formatDateTime;
-
-const elapsed = ref("");
-
-const refresh = async () => {
+let version = 0;
+let disposed = false;
+let poll: ReturnType<typeof setTimeout> | undefined;
+let clock: ReturnType<typeof setInterval> | undefined;
+const elapsed = computed(() => {
+  const start = new Date(status.value?.startedAt || "").getTime();
+  const seconds = Number.isFinite(start)
+    ? Math.max(0, Math.floor((now.value - start) / 1000))
+    : 0;
+  return seconds < 60
+    ? `${seconds} 秒`
+    : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+});
+async function refresh() {
+  if (disposed || !props.visible || refreshing.value) return;
+  clearTimeout(poll);
+  const own = version;
+  refreshing.value = true;
   try {
-    const { data } = await GetTestStatus();
-    status.value = data || null;
-    if (status.value) {
-      const start = new Date(status.value.startedAt).getTime();
-      const sec = Math.floor((Date.now() - start) / 1000);
-      elapsed.value =
-        sec < 60
-          ? sec + " 秒"
-          : Math.floor(sec / 60) + " 分 " + (sec % 60) + " 秒";
+    const response = await GetTestStatus();
+    if (!disposed && own === version) {
+      status.value = response?.data || null;
+      failed.value = false;
+      now.value = Date.now();
     }
   } catch {
-    status.value = null;
+    if (!disposed && own === version) failed.value = true;
+  } finally {
+    if (!disposed && own === version) {
+      refreshing.value = false;
+      if (props.visible) poll = setTimeout(refresh, 3000);
+    }
   }
-};
-
-const cancel = async () => {
+}
+async function cancel() {
+  const own = ++version;
+  clearTimeout(poll);
+  refreshing.value = false;
   canceling.value = true;
   try {
     await CancelTest();
-    ElMessage.success("已停止测试");
-    status.value = null;
-  } catch (e: any) {
-    ElMessage.error(e?.message || "停止失败");
+    if (!disposed && own === version) {
+      status.value = null;
+      ElMessage.success("已停止测试");
+    }
+  } catch (cause: any) {
+    if (!disposed && own === version)
+      ElMessage.error(cause?.message || "停止失败");
   } finally {
-    canceling.value = false;
+    if (!disposed && own === version) {
+      canceling.value = false;
+      void refresh();
+    }
   }
-};
-
-let timer: any = null;
-onMounted(() => {
-  refresh();
-  timer = setInterval(refresh, 3000);
-});
+}
+function clearTimers() {
+  clearTimeout(poll);
+  clearInterval(clock);
+}
+watch(
+  () => props.visible,
+  (visible) => {
+    version++;
+    clearTimers();
+    refreshing.value = false;
+    canceling.value = false;
+    if (visible) {
+      void refresh();
+      clock = setInterval(() => {
+        now.value = Date.now();
+      }, 1000);
+    }
+  },
+  { immediate: true }
+);
 onBeforeUnmount(() => {
-  if (timer) clearInterval(timer);
+  disposed = true;
+  version++;
+  clearTimers();
 });
 </script>
-
-<style scoped>
-.test-item {
-  padding: 4px 0;
+<style scoped lang="scss">
+@use "./node-tests/dialog.scss";
+.elapsed {
+  margin: 32px 0;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--c-line);
 }
-.test-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 0;
+.elapsed > span {
+  display: block;
+  margin-bottom: 16px;
+  color: var(--c-muted);
   font-size: 14px;
 }
-.dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
+.elapsed strong {
+  font-size: clamp(28px, 6vw, 40px);
+  font-weight: 400;
 }
-.dot.running {
-  background: var(--c-ok);
-  animation: pulse 1.5s infinite;
+.status-details {
+  margin: 0;
 }
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.3;
-  }
+.status-details div {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 16px;
+  margin: 16px 0;
+  font-size: 14px;
 }
-.label {
-  color: var(--el-text-color-secondary);
-  width: 70px;
-  flex-shrink: 0;
+.status-details dt {
+  color: var(--c-muted);
 }
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.value {
-  font-weight: 500;
-  word-break: break-all;
+.status-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
 }
 </style>
