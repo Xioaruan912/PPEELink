@@ -453,15 +453,15 @@ async function refreshTargets() {
 <style lang="scss" scoped>
 @use "./test-page.scss";
 .egress-source {
-  margin-bottom: 48px;
+  margin-bottom: 28px;
   min-width: 0;
 }
 .source-selectors {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 32px;
+  gap: 20px;
   align-items: end;
-  margin-top: 32px;
+  margin-top: 20px;
 }
 .source-selectors > div {
   min-width: 0;
@@ -477,25 +477,25 @@ async function refreshTargets() {
   padding: 8px 0;
 }
 .local-note {
-  margin-top: 24px;
+  margin-top: 16px;
   max-width: 720px;
 }
 .egress-summary {
-  margin: 48px 0 56px;
+  margin: 28px 0 32px;
   border-top: 1px solid var(--c-line);
-  padding-top: 32px;
+  padding-top: 20px;
 }
 .egress-groups {
   position: relative;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 .egress-group {
   display: flex;
   align-items: start;
-  gap: 16px;
-  padding: 24px;
+  gap: 12px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
@@ -505,14 +505,14 @@ async function refreshTargets() {
   min-width: 0;
 }
 .egress-group strong {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 400;
   overflow-wrap: anywhere;
 }
 .egress-group p {
   color: var(--c-muted);
   font-size: 14px;
-  margin: 12px 0 8px;
+  margin: 10px 0 8px;
 }
 .egress-group div > span {
   color: var(--c-muted);
@@ -525,14 +525,14 @@ async function refreshTargets() {
 .target-title {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
 }
 .target-title > div {
   min-width: 0;
 }
 .target-title strong {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
 }
 .target-title small {
@@ -550,7 +550,7 @@ async function refreshTargets() {
   place-items: center;
   background: var(--c-surface-2);
   border-radius: 10px;
-  font-size: 16px;
+  font-size: 14px;
   overflow: hidden;
 }
 .muted {
@@ -566,8 +566,8 @@ async function refreshTargets() {
 }
 .privacy-note {
   border-top: 1px solid var(--c-line);
-  padding-top: 24px;
-  margin: 32px 0 0;
+  padding-top: 16px;
+  margin: 20px 0 0;
   font-size: 14px;
   line-height: 1.7;
   color: var(--c-muted);
@@ -579,12 +579,12 @@ async function refreshTargets() {
       0,
       1fr
     );
-  gap: 24px;
+  gap: 16px;
 }
 .explain-query label {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   color: var(--c-muted);
   font-size: 14px;
   min-width: 0;
@@ -596,13 +596,13 @@ async function refreshTargets() {
   display: flex;
   justify-content: space-between;
   align-items: start;
-  gap: 12px;
+  gap: 10px;
 }
 .mobile-result {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
-  gap: 16px;
-  margin: 24px 0 0;
+  gap: 12px;
+  margin: 16px 0 0;
 }
 .mobile-result dt {
   color: var(--c-muted);
@@ -622,7 +622,7 @@ async function refreshTargets() {
 @media (max-width: 1023px) {
   .source-selectors,
   .source-selectors.has-node {
-    gap: 24px;
+    gap: 16px;
   }
   .explain-query {
     grid-template-columns: 1fr 1fr;
@@ -632,7 +632,7 @@ async function refreshTargets() {
   .source-selectors,
   .source-selectors.has-node {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 16px;
   }
   .egress-source :deep(.ui-segmented) {
     display: grid;
@@ -648,10 +648,10 @@ async function refreshTargets() {
     grid-template-columns: 1fr;
   }
   .egress-group {
-    padding: 24px;
+    padding: 16px;
   }
   .egress-summary {
-    margin: 40px 0;
+    margin: 24px 0;
   }
   .explain-query {
     grid-template-columns: 1fr;

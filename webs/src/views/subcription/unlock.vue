@@ -189,8 +189,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-end;
   flex-wrap: wrap;
-  gap: 24px;
-  padding-bottom: 32px;
+  gap: 16px;
+  padding-bottom: 20px;
   border-bottom: 1px solid var(--c-line);
 }
 .node-picker {
@@ -198,22 +198,22 @@ onBeforeUnmount(() => {
   max-width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 .node-picker label {
-  font-size: 15px;
+  font-size: 14px;
 }
 .node-picker :deep(.el-select) {
   width: 100%;
 }
 .test-controls :deep(.status-dot) {
-  min-height: 44px;
+  min-height: 36px;
 }
 .node-option {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 .node-option > span:first-child {
   overflow: hidden;
@@ -229,10 +229,10 @@ onBeforeUnmount(() => {
 }
 .results-region {
   min-height: 320px;
-  padding-top: 32px;
+  padding-top: 20px;
 }
 .waiting-hint {
-  margin: 0 0 24px;
+  margin: 0 0 16px;
   font-size: 14px;
   color: var(--c-muted);
 }
@@ -241,11 +241,11 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 .result-heading h2 {
   margin: 0;
-  font: 600 22px/1.4 var(--font-ui);
+  font: 600 17px/1.4 var(--font-ui);
   overflow-wrap: anywhere;
 }
 .result-heading .mono {
@@ -258,7 +258,7 @@ onBeforeUnmount(() => {
 @media (max-width: 767px) {
   .test-controls {
     align-items: stretch;
-    gap: 16px;
+    gap: 12px;
   }
   .node-picker {
     width: 100%;

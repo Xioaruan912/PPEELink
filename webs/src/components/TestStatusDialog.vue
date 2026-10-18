@@ -161,13 +161,13 @@ onBeforeUnmount(() => {
 <style scoped lang="scss">
 @use "./node-tests/dialog.scss";
 .elapsed {
-  margin: 32px 0;
-  padding: 24px 0;
+  margin: 20px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--c-line);
 }
 .elapsed > span {
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   color: var(--c-muted);
   font-size: 14px;
 }
@@ -181,8 +181,8 @@ onBeforeUnmount(() => {
 .status-details div {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
-  gap: 16px;
-  margin: 16px 0;
+  gap: 12px;
+  margin: 12px 0;
   font-size: 14px;
 }
 .status-details dt {

@@ -18,7 +18,7 @@ withDefaults(defineProps<{ lines?: number; height?: string }>(), {
 <style scoped>
 .ui-skeleton {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 .ui-skeleton span {
   display: block;

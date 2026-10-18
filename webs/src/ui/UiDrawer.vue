@@ -35,14 +35,14 @@ const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
 }
 .drawer-actions :deep(.el-button + .el-button) {
   margin-left: 0;
 }
 .overlay-heading {
   margin: 0;
-  padding-right: 32px;
-  font-size: 22px;
+  padding-right: 20px;
+  font-size: 17px;
 }
 </style>

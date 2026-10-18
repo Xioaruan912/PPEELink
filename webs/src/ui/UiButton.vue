@@ -33,17 +33,17 @@ withDefaults(
 </script>
 <style scoped>
 .ui-button {
-  min-height: 44px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 24px;
+  padding: 8px 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-control);
   color: var(--c-ink);
   background: var(--c-surface);
-  font: 500 15px/1.4 var(--font-ui);
+  font: 500 14px/1.4 var(--font-ui);
   white-space: nowrap;
   transition:
     background var(--duration-fast),

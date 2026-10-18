@@ -315,36 +315,36 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  padding-bottom: 24px;
+  gap: 16px;
+  padding-bottom: 16px;
 }
 .ping-heading p {
   margin: 0;
   color: var(--c-muted);
-  font-size: 15px;
+  font-size: 14px;
 }
 .ping-targets {
-  margin-bottom: 48px;
+  margin-bottom: 28px;
 }
 h3 {
-  margin: 0 0 24px;
-  font-size: 16px;
+  margin: 0 0 16px;
+  font-size: 14px;
   font-weight: 500;
 }
 .target-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px 48px;
+  gap: 16px 28px;
 }
 .target-item {
   display: grid;
   grid-template-columns: auto auto;
-  gap: 16px 24px;
-  padding: 16px 0;
+  gap: 12px 16px;
+  padding: 12px 0;
   min-width: 160px;
 }
 .target-item > strong {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -352,7 +352,7 @@ h3 {
   grid-column: 1 / -1;
 }
 .target-item :deep(.ui-stat__number) {
-  font-size: 32px;
+  font-size: 24px;
 }
 .target-item :deep(.ui-stat__label) {
   position: absolute;
@@ -365,7 +365,7 @@ h3 {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 .nodes-heading > span {
   font: 13px/1.6 var(--font-mono);
@@ -383,15 +383,15 @@ h3 {
 .node-list {
   max-height: 260px;
   overflow-y: auto;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .node-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   min-height: 64px;
-  padding: 16px 8px;
+  padding: 12px 8px;
   border-bottom: 1px solid var(--c-line);
 }
 .node-address {
@@ -400,7 +400,7 @@ h3 {
   min-width: 0;
 }
 .node-address strong {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -416,7 +416,7 @@ h3 {
   justify-items: end;
 }
 .node-result :deep(.ui-stat__number) {
-  font-size: 16px;
+  font-size: 14px;
 }
 .node-result :deep(.ui-stat__unit) {
   font-size: 14px;
@@ -429,7 +429,7 @@ h3 {
   clip-path: inset(50%);
 }
 .ping-empty {
-  padding: 24px 0;
+  padding: 16px 0;
 }
 @media (max-width: 767px) {
   .ping-heading {
@@ -437,13 +437,13 @@ h3 {
     flex-direction: column;
   }
   .target-list {
-    gap: 16px 24px;
+    gap: 12px 16px;
   }
   .target-item {
     width: 100%;
   }
   .node-item {
-    gap: 16px;
+    gap: 12px;
     padding-inline: 0;
   }
 }

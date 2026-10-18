@@ -570,7 +570,7 @@ function clearFilters() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
 }
 .library-toolbar > .el-input {
   width: min(360px, 100%);
@@ -582,8 +582,8 @@ function clearFilters() {
 .library-summary {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  margin: 24px 0 48px;
+  gap: 12px;
+  margin: 16px 0 28px;
   color: var(--c-muted);
   font-size: 14px;
 }
@@ -593,13 +593,13 @@ function clearFilters() {
   font-weight: 400;
 }
 .platform-group + .platform-group {
-  margin-top: 56px;
+  margin-top: 32px;
 }
 .platform-eyebrow {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  margin: 0 0 16px;
+  gap: 12px;
+  margin: 0 0 12px;
   color: var(--c-muted);
   font: 400 13px/1.4 var(--font-mono);
   letter-spacing: 0.08em;
@@ -616,8 +616,8 @@ function clearFilters() {
   display: grid;
   grid-template-columns: minmax(220px, 3fr) minmax(0, 5fr) auto;
   align-items: center;
-  column-gap: 32px;
-  padding: 24px 0;
+  column-gap: 20px;
+  padding: 16px 0;
   border-bottom: 1px solid var(--c-line);
   transition: background var(--duration-fast);
 }
@@ -629,7 +629,7 @@ function clearFilters() {
 }
 .client-identity h2 {
   margin: 0 0 8px;
-  font: 600 18px/1.4 var(--font-ui);
+  font: 600 15px/1.4 var(--font-ui);
   overflow-wrap: anywhere;
 }
 .client-platforms {
@@ -647,7 +647,7 @@ function clearFilters() {
 }
 .client-description {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
   color: var(--c-muted);
 }
@@ -661,18 +661,18 @@ function clearFilters() {
 }
 .detail-description {
   color: var(--c-muted);
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.6;
-  margin: 0 0 24px;
+  margin: 0 0 16px;
 }
 summary {
-  min-height: 44px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   gap: 8px;
   cursor: pointer;
   list-style: none;
-  font-size: 15px;
+  font-size: 14px;
 }
 summary::-webkit-details-marker {
   display: none;
@@ -691,7 +691,7 @@ details[open] > summary > svg:last-child {
   transform: rotate(180deg);
 }
 .client-downloads > summary {
-  padding: 8px 16px;
+  padding: 8px 12px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-control);
   background: var(--c-surface);
@@ -703,7 +703,7 @@ details[open] > summary > svg:last-child {
   right: 0;
   width: 320px;
   max-width: calc(100vw - 32px);
-  padding: 8px 16px;
+  padding: 8px 12px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);
@@ -713,11 +713,11 @@ details[open] > summary > svg:last-child {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  min-height: 44px;
+  gap: 12px;
+  min-height: 36px;
   padding: 8px 0;
   color: var(--c-data);
-  font-size: 15px;
+  font-size: 14px;
   border-bottom: 1px solid var(--c-line);
   overflow-wrap: anywhere;
 }
@@ -730,7 +730,7 @@ details[open] > summary > svg:last-child {
   font: 400 14px/1.4 var(--font-mono);
 }
 .client-specifications {
-  padding: 16px 24px;
+  padding: 12px 16px;
   background: var(--c-surface);
   border-radius: var(--radius-panel);
 }
@@ -740,7 +740,7 @@ dl {
 dl > div {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
   padding: 8px 0;
   font-size: 14px;
 }
@@ -756,8 +756,8 @@ dd {
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-top: 12px;
   border-top: 1px solid var(--c-line);
   padding-top: 8px;
 }
@@ -765,9 +765,9 @@ dd {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  min-height: 44px;
+  min-height: 36px;
   color: var(--c-data);
-  font-size: 15px;
+  font-size: 14px;
 }
 summary:focus-visible,
 a:focus-visible {
@@ -800,7 +800,7 @@ a:focus-visible {
 @media (max-width: 1023px) {
   .client-row {
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 16px 24px;
+    gap: 12px 16px;
   }
   .client-description {
     grid-column: 1;
@@ -814,19 +814,19 @@ a:focus-visible {
   .library-toolbar {
     align-items: stretch;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
   .library-toolbar > .el-input {
     width: 100%;
   }
   .library-summary {
-    margin-bottom: 32px;
+    margin-bottom: 20px;
     flex-wrap: wrap;
     gap: 8px;
   }
   .client-row {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    gap: 12px;
   }
   .client-description,
   .client-actions {
@@ -834,7 +834,7 @@ a:focus-visible {
     grid-row: auto;
   }
   .client-specifications {
-    padding: 16px;
+    padding: 12px;
   }
   dl > div {
     grid-template-columns: 64px minmax(0, 1fr);
@@ -845,7 +845,7 @@ a:focus-visible {
     left: 0;
   }
   .platform-group + .platform-group {
-    margin-top: 40px;
+    margin-top: 24px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

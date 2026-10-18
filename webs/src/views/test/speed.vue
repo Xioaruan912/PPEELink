@@ -551,14 +551,14 @@ onBeforeUnmount(() => {
 .speed-stage {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  gap: 48px;
-  margin-bottom: 64px;
+  gap: 28px;
+  margin-bottom: 32px;
 }
 .speed-instrument {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  padding: 32px;
+  padding: 20px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
@@ -567,7 +567,7 @@ onBeforeUnmount(() => {
 .instrument-foot {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   color: var(--c-muted);
   font-size: 14px;
 }
@@ -575,7 +575,7 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .instrument-reading {
-  padding: 32px 0 28px;
+  padding: 20px 0 20px;
 }
 .instrument-reading :deep(.ui-stat--hero .ui-stat__number) {
   font-size: clamp(80px, 9vw, 132px);
@@ -593,12 +593,12 @@ onBeforeUnmount(() => {
   margin-bottom: 8px;
 }
 .current-node {
-  font-size: 18px;
-  margin: 24px 0 8px;
+  font-size: 15px;
+  margin: 16px 0 8px;
   overflow-wrap: anywhere;
 }
 .reading-note {
-  min-height: 44px;
+  min-height: 36px;
   color: var(--c-muted);
   font-size: 14px;
   margin: 0;
@@ -610,7 +610,7 @@ onBeforeUnmount(() => {
   grid-template-columns: repeat(25, 1fr);
   gap: 8px;
   align-items: end;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .instrument-scale i {
   height: 16px;
@@ -627,7 +627,7 @@ onBeforeUnmount(() => {
   height: 2px;
   background: var(--c-line);
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .instrument-progress i {
   display: block;
@@ -658,24 +658,24 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 1.2fr 1fr;
   align-items: end;
-  gap: 16px;
-  padding: 32px 0;
+  gap: 12px;
+  padding: 20px 0;
 }
 .speed-advanced {
   border-top: 1px solid var(--c-line);
-  padding-top: 16px;
+  padding-top: 12px;
 }
 .speed-advanced summary {
-  min-height: 44px;
+  min-height: 36px;
   cursor: pointer;
-  font-size: 15px;
-  line-height: 44px;
+  font-size: 14px;
+  line-height: 36px;
 }
 .advanced-fields {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding-top: 16px;
+  gap: 10px;
+  padding-top: 12px;
 }
 .advanced-fields .field-label {
   margin: 8px 0 0;
@@ -687,11 +687,11 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .results-section {
-  margin-bottom: 64px;
+  margin-bottom: 32px;
 }
 .result-filters {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   max-width: 100%;
 }
 .result-filters .el-input {
@@ -706,11 +706,11 @@ onBeforeUnmount(() => {
   grid-template-columns:
     minmax(0, 2.4fr) minmax(0, 1.4fr) minmax(0, 1fr)
     minmax(0, 1.2fr);
-  gap: 24px;
+  gap: 16px;
   align-items: center;
 }
 .result-columns {
-  padding: 16px 0;
+  padding: 12px 0;
   color: var(--c-muted);
   font: 400 13px var(--font-mono);
   border-bottom: 1px solid var(--c-line);
@@ -721,14 +721,14 @@ onBeforeUnmount(() => {
 .speed-result {
   min-height: 96px;
   border-bottom: 1px solid var(--c-line);
-  padding: 24px 0;
+  padding: 16px 0;
 }
 .speed-result:hover {
   background: var(--c-surface-2);
 }
 .result-node {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
   min-width: 0;
 }
@@ -738,7 +738,7 @@ onBeforeUnmount(() => {
 .result-node strong {
   display: block;
   overflow-wrap: anywhere;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
 }
 .result-node div > span {
@@ -751,7 +751,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .result-speed > .mono {
-  font-size: 22px;
+  font-size: 17px;
 }
 .result-speed small {
   font: 400 14px var(--font-mono);
@@ -761,7 +761,7 @@ onBeforeUnmount(() => {
   display: block;
   height: 2px;
   background: var(--c-line);
-  margin-top: 12px;
+  margin-top: 10px;
   overflow: hidden;
 }
 .speed-line i {
@@ -807,27 +807,27 @@ onBeforeUnmount(() => {
 }
 @media (max-width: 1023px) {
   .speed-stage {
-    gap: 24px;
+    gap: 16px;
   }
   .result-filters {
     flex-wrap: wrap;
   }
   .result-columns,
   .speed-result {
-    gap: 16px;
+    gap: 12px;
   }
 }
 @media (max-width: 767px) {
   .speed-stage {
     grid-template-columns: 1fr;
-    gap: 32px;
-    margin-bottom: 48px;
+    gap: 20px;
+    margin-bottom: 28px;
   }
   .speed-instrument {
-    padding: 24px;
+    padding: 16px;
   }
   .instrument-reading {
-    padding: 24px 0;
+    padding: 16px 0;
   }
   .result-columns {
     display: none;
@@ -841,7 +841,7 @@ onBeforeUnmount(() => {
   }
   .speed-result {
     grid-template-columns: 1fr 1fr;
-    gap: 24px 16px;
+    gap: 16px 12px;
   }
   .result-node {
     grid-column: 1 / -1;
@@ -860,10 +860,10 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
   }
   .speed-summary {
-    padding: 24px 0;
+    padding: 16px 0;
   }
   .results-section {
-    margin-bottom: 48px;
+    margin-bottom: 28px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

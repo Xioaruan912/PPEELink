@@ -188,8 +188,8 @@ function command(value: string, row: Temp) {
 .template-summary {
   display: flex;
   align-items: end;
-  gap: 64px;
-  margin-bottom: 40px;
+  gap: 32px;
+  margin-bottom: 24px;
 }
 .template-summary p {
   margin: 0 0 4px;
@@ -199,8 +199,8 @@ function command(value: string, row: Temp) {
 .template-toolbar {
   display: flex;
   align-items: center;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 .template-toolbar :deep(.el-input) {
   width: min(360px, 100%);
@@ -214,17 +214,17 @@ function command(value: string, row: Temp) {
   grid-template-columns:
     minmax(160px, 1.6fr) minmax(160px, 1fr) minmax(85px, 0.6fr)
     minmax(110px, 0.8fr) 88px;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
 }
 .template-heading {
-  padding: 12px 16px;
+  padding: 10px 12px;
   font: 400 13px/1.4 var(--font-mono);
   color: var(--c-muted);
   border-bottom: 1px solid var(--c-line);
 }
 .template-row {
-  padding: 12px 16px;
+  padding: 10px 12px;
   min-height: 80px;
   border-bottom: 1px solid var(--c-line);
 }
@@ -233,7 +233,7 @@ function command(value: string, row: Temp) {
 }
 .template-name {
   min-width: 0;
-  min-height: 44px;
+  min-height: 36px;
   display: grid;
   text-align: left;
   gap: 4px;
@@ -243,7 +243,7 @@ function command(value: string, row: Temp) {
   color: var(--c-ink);
 }
 .template-name strong {
-  font-size: 15px;
+  font-size: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -300,8 +300,8 @@ function command(value: string, row: Temp) {
   .template-summary {
     align-items: start;
     flex-direction: column;
-    gap: 24px;
-    margin-bottom: 32px;
+    gap: 16px;
+    margin-bottom: 20px;
   }
   .template-toolbar {
     flex-wrap: wrap;
@@ -316,8 +316,8 @@ function command(value: string, row: Temp) {
   }
   .template-row {
     grid-template-columns: minmax(0, 1fr) 88px;
-    gap: 12px;
-    padding: 16px 0;
+    gap: 10px;
+    padding: 12px 0;
   }
   .template-name {
     grid-column: 1;
@@ -326,7 +326,7 @@ function command(value: string, row: Temp) {
     grid-column: 1 / -1;
     display: flex;
     justify-content: space-between;
-    gap: 16px;
+    gap: 12px;
   }
   .mobile-label {
     display: inline;

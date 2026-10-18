@@ -17,7 +17,7 @@ defineProps<{ title?: string }>();
 <style scoped>
 .ui-panel {
   min-width: 0;
-  padding: 24px;
+  padding: 16px;
   background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
@@ -27,20 +27,20 @@ defineProps<{ title?: string }>();
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 h2 {
   margin: 0;
 }
 .ui-panel__footer {
-  margin-top: 24px;
-  padding-top: 24px;
+  margin-top: 16px;
+  padding-top: 16px;
   border-top: 1px solid var(--c-line);
 }
 @media (max-width: 767px) {
   .ui-panel {
-    padding: 16px;
+    padding: 12px;
   }
 }
 </style>

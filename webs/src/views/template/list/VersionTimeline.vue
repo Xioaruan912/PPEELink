@@ -54,13 +54,13 @@ const {
 <style scoped>
 .timeline {
   list-style: none;
-  padding: 0 0 0 16px;
+  padding: 0 0 0 12px;
   margin: 0;
   border-left: 1px solid var(--c-line);
 }
 .timeline li {
   position: relative;
-  padding: 0 0 20px;
+  padding: 0 0 16px;
 }
 .timeline li::before {
   content: "";
@@ -75,7 +75,7 @@ const {
 }
 .version-link {
   width: 100%;
-  min-height: 44px;
+  min-height: 36px;
   display: flex;
   text-align: left;
   flex-wrap: wrap;
@@ -92,7 +92,7 @@ const {
   font-variant-numeric: tabular-nums;
 }
 .version-link strong {
-  font-size: 15px;
+  font-size: 14px;
   color: var(--c-data);
 }
 .version-link span {
@@ -109,7 +109,7 @@ const {
   gap: 4px;
 }
 .version-actions .ui-button {
-  padding: 8px 12px;
+  padding: 8px 10px;
 }
 .danger-text {
   color: var(--c-bad);

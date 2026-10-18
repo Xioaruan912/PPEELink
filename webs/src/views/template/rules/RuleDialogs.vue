@@ -156,13 +156,13 @@ const {
 <style scoped>
 .import-summary,
 .confirmation-copy {
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.7;
   overflow-wrap: anywhere;
-  margin: 0 0 24px;
+  margin: 0 0 16px;
 }
 .notice {
-  padding: 12px 16px;
+  padding: 10px 12px;
   background: var(--c-surface-2);
   border-left: 2px solid var(--c-warn);
   font-size: 14px;
@@ -184,6 +184,6 @@ const {
   width: 100%;
 }
 :deep(.el-form-item) {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 </style>

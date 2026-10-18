@@ -177,7 +177,7 @@ import { usePermissionStore, useSettingsStore, useUserStore } from "@/store";
 import { ThemeEnum } from "@/enums/ThemeEnum";
 import { translateRouteTitle } from "@/utils/i18n";
 import { GetTestStatus } from "@/api/subcription/node";
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo.svg";
 import SvgIcon from "@/components/SvgIcon/index.vue";
 import TestStatusDialog from "@/components/TestStatusDialog.vue";
 import {
@@ -355,16 +355,16 @@ onBeforeUnmount(() => {
 .public-error-content {
   min-height: 100dvh;
   max-width: 1440px;
-  padding: 48px;
+  padding: 28px;
 }
 @media (min-width: 768px) and (max-width: 1023px) {
   .public-error-content {
-    padding: 32px;
+    padding: 20px;
   }
 }
 @media (max-width: 767px) {
   .public-error-content {
-    padding: 32px 16px;
+    padding: 20px 12px;
   }
 }
 
@@ -377,7 +377,7 @@ onBeforeUnmount(() => {
   left: 96px;
   z-index: var(--z-tools);
   transform: translateY(-160%);
-  padding: 12px 20px;
+  padding: 10px 16px;
   border-radius: var(--radius-control);
   background: var(--c-surface);
   color: var(--c-ink);
@@ -389,20 +389,20 @@ onBeforeUnmount(() => {
   position: fixed;
   inset: 0 auto 0 0;
   z-index: var(--z-dock);
-  width: 76px;
+  width: 60px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 24px 0 16px;
+  padding: 16px 0 12px;
   background: var(--c-surface);
   border-right: 1px solid var(--c-line);
 }
 .dock-brand {
   display: grid;
   place-items: center;
-  width: 52px;
-  min-height: 52px;
-  margin-bottom: 32px;
+  width: 40px;
+  min-height: 40px;
+  margin-bottom: 16px;
 }
 .dock-navigation {
   position: relative;
@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 8px;
   width: 100%;
-  padding: 0 12px;
+  padding: 0 10px;
   min-height: 0;
   flex: 1;
 }
@@ -428,7 +428,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--c-line);
 }
 .icon-button {
@@ -436,8 +436,8 @@ onBeforeUnmount(() => {
   place-items: center;
   flex: 0 0 auto;
   width: 44px;
-  height: 44px;
-  padding: 12px;
+  height: 36px;
+  padding: 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
@@ -476,9 +476,9 @@ onBeforeUnmount(() => {
 .task-button {
   display: inline-flex;
   align-items: center;
-  gap: 16px;
-  min-height: 44px;
-  padding: 8px 12px;
+  gap: 12px;
+  min-height: 36px;
+  padding: 8px 10px;
   background: transparent;
   border: 0;
   border-radius: var(--radius-control);
@@ -499,8 +499,8 @@ onBeforeUnmount(() => {
   border-left: 1px solid var(--c-line);
 }
 .atlas-content {
-  margin-left: 76px;
-  padding: 112px 48px 64px;
+  margin-left: 48px;
+  padding: 112px 28px 32px;
   max-width: 1536px;
   min-width: 0;
 }
@@ -509,7 +509,7 @@ onBeforeUnmount(() => {
 }
 .more-navigation {
   display: grid;
-  gap: 32px;
+  gap: 20px;
 }
 .more-actions {
   display: flex;
@@ -522,10 +522,10 @@ onBeforeUnmount(() => {
 }
 .more-navigation a {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
-  padding: 12px;
-  min-height: 44px;
+  padding: 10px;
+  min-height: 36px;
   border-radius: var(--radius-control);
   color: var(--c-ink);
 }
@@ -535,8 +535,8 @@ onBeforeUnmount(() => {
 }
 @media (min-width: 768px) and (max-width: 1023px) {
   .atlas-content {
-    padding-left: 32px;
-    padding-right: 32px;
+    padding-left: 20px;
+    padding-right: 20px;
   }
   .atlas-tools {
     right: 32px;
@@ -549,12 +549,12 @@ onBeforeUnmount(() => {
   .atlas-content {
     margin-left: 0;
     min-height: 100dvh;
-    padding: calc(96px + env(safe-area-inset-top)) 16px 0;
+    padding: calc(56px + env(safe-area-inset-top)) 12px 0;
   }
   /* Native focus scrolling must stop above the fixed dock too. */
   :global(html) {
     scroll-padding-bottom: calc(
-      var(--mobile-dock-height) + env(safe-area-inset-bottom) + 32px
+      var(--mobile-dock-height) + env(safe-area-inset-bottom) + 20px
     );
   }
   .atlas-topbar {
@@ -564,8 +564,8 @@ onBeforeUnmount(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    padding: calc(12px + env(safe-area-inset-top)) 16px 12px;
+    gap: 12px;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
     border-bottom: 1px solid var(--c-line);
     background: var(--c-canvas);
   }
@@ -574,9 +574,9 @@ onBeforeUnmount(() => {
     align-items: center;
     gap: 8px;
     min-width: 0;
-    min-height: 44px;
+    min-height: 36px;
     color: var(--c-ink);
-    font-size: 15px;
+    font-size: 14px;
   }
   .mobile-brand span {
     overflow: hidden;
@@ -595,7 +595,7 @@ onBeforeUnmount(() => {
   .search-button {
     justify-content: center;
     width: 44px;
-    padding: 12px;
+    padding: 10px;
   }
   .search-button kbd,
   .atlas-tools .task-button,
@@ -611,7 +611,7 @@ onBeforeUnmount(() => {
     grid-auto-columns: minmax(0, 1fr);
     gap: 4px;
     height: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom));
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
     background: var(--c-surface);
     border-top: 1px solid var(--c-line);
   }
@@ -621,7 +621,7 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: center;
     gap: 4px;
-    min-height: 56px;
+    min-height: 48px;
     border: 0;
     background: transparent;
     border-radius: var(--radius-control);

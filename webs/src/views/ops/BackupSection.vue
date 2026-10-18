@@ -299,13 +299,13 @@ function clearPreview() {
 <style scoped>
 .backup-section {
   min-width: 0;
-  padding: 32px;
+  padding: 20px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
 }
 .section-heading h2 {
-  font-size: 22px;
+  font-size: 17px;
   margin: 0 0 8px;
 }
 .section-heading p,
@@ -314,22 +314,22 @@ function clearPreview() {
   font-size: 14px;
 }
 .section-heading p {
-  margin: 0 0 24px;
+  margin: 0 0 16px;
 }
 .backup-summary {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 .backup-actions,
 .confirm-actions {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 .backup-actions {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .confirm-actions {
   justify-content: flex-end;
@@ -347,13 +347,13 @@ function clearPreview() {
   overflow-wrap: anywhere;
 }
 .preview-summary {
-  margin-top: 32px;
+  margin-top: 20px;
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 .preview-details {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
   font-size: 14px;
 }
 .preview-details dt {
@@ -366,7 +366,7 @@ function clearPreview() {
 .backup-json {
   max-height: 45vh;
   overflow: auto;
-  padding: 24px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface-2);
@@ -377,7 +377,7 @@ function clearPreview() {
 }
 :deep(.el-checkbox) {
   height: auto;
-  min-height: 44px;
+  min-height: 36px;
   white-space: normal;
 }
 :deep(.el-checkbox__label) {
@@ -385,7 +385,7 @@ function clearPreview() {
 }
 @media (max-width: 767px) {
   .backup-section {
-    padding: 24px 16px;
+    padding: 16px 12px;
   }
   .preview-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));

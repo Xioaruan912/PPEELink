@@ -115,11 +115,11 @@ watch(() => [props.modelValue, props.options], position);
 .ui-segmented button {
   z-index: 1;
   min-width: 44px;
-  min-height: 44px;
-  padding: 8px 16px;
+  min-height: 36px;
+  padding: 8px 12px;
   border: 0;
   background: transparent;
-  font-size: 15px;
+  font-size: 14px;
   border-radius: var(--radius-control);
 }
 .ui-segmented button:disabled {

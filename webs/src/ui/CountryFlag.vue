@@ -53,7 +53,7 @@ onMounted(() => {
   width: 36px;
   height: 28px;
   overflow: hidden;
-  font-size: 22px;
+  font-size: 17px;
   line-height: 1;
 }
 .is-code {

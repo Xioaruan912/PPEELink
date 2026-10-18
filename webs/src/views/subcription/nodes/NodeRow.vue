@@ -133,8 +133,8 @@ const {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 78px 112px 52px 132px;
   align-items: center;
-  gap: 12px;
-  padding: 16px 0;
+  gap: 10px;
+  padding: 12px 0;
   min-height: 88px;
   border-bottom: 1px solid var(--c-line);
   transition: background var(--duration-fast);
@@ -163,7 +163,7 @@ const {
 }
 .node-name button {
   text-align: left;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .node-name button,
@@ -218,8 +218,8 @@ const {
 }
 .is-card {
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px 8px;
-  padding: 24px;
+  gap: 12px 8px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);
@@ -253,8 +253,8 @@ const {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
-  padding-top: 16px;
+  gap: 8px 12px;
+  padding-top: 12px;
   border-top: 1px solid var(--c-line);
   font-size: 14px;
   color: var(--c-muted);
@@ -275,8 +275,8 @@ const {
 @media (max-width: 767px) {
   .node-row:not(.is-card) {
     grid-template-columns: minmax(0, 1fr) auto;
-    padding: 24px 0;
-    gap: 12px;
+    padding: 16px 0;
+    gap: 10px;
   }
   .node-identity {
     grid-column: 1 / -1;
@@ -296,7 +296,7 @@ const {
     justify-self: end;
   }
   .row-visibility {
-    gap: 12px;
+    gap: 10px;
   }
   .row-actions {
     justify-self: end;

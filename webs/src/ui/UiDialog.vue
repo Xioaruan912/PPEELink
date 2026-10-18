@@ -31,7 +31,7 @@ const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 <style scoped>
 .overlay-heading {
   margin: 0;
-  padding-right: 32px;
-  font-size: 22px;
+  padding-right: 20px;
+  font-size: 17px;
 }
 </style>

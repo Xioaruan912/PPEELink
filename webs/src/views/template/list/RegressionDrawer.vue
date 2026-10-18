@@ -227,8 +227,8 @@ const {
 .regression-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 24px;
-  margin-top: 24px;
+  column-gap: 16px;
+  margin-top: 16px;
 }
 .regression-form :deep(.el-input-number),
 .regression-form :deep(.el-select) {
@@ -238,7 +238,7 @@ const {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 16px 0 24px;
+  margin: 12px 0 16px;
 }
 .danger-text {
   color: var(--c-bad);
@@ -254,18 +254,18 @@ p {
   font-family: var(--font-mono);
 }
 section {
-  margin-top: 32px;
-  padding-top: 24px;
+  margin-top: 20px;
+  padding-top: 16px;
   border-top: 1px solid var(--c-line);
 }
 h3 {
-  font-size: 20px;
+  font-size: 16px;
 }
 .card-title {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 dl {
   display: grid;

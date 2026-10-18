@@ -424,9 +424,9 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-control);
   background: var(--c-surface);
@@ -434,7 +434,7 @@ onMounted(() => {
 .overview-stage {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 24px;
+  gap: 16px;
   align-items: stretch;
 }
 .network-situation {
@@ -442,7 +442,7 @@ onMounted(() => {
   flex-direction: column;
 }
 .network-situation :deep(.ui-panel__header) {
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 .total-stat :deep(.ui-stat__label) {
   margin-bottom: 8px;
@@ -450,8 +450,8 @@ onMounted(() => {
 .secondary-metrics {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  gap: 24px;
-  margin-top: 32px;
+  gap: 16px;
+  margin-top: 20px;
 }
 .metric-link {
   display: flex;
@@ -484,39 +484,39 @@ onMounted(() => {
 }
 .score-empty > span {
   display: block;
-  margin-top: 16px;
-  font-size: 16px;
+  margin-top: 12px;
+  font-size: 14px;
 }
 .situation-action {
-  margin: 32px 0 0;
+  margin: 20px 0 0;
 }
 .network-situation :deep(.ui-panel__footer) {
   margin-top: auto;
-  padding-top: 24px;
+  padding-top: 16px;
 }
 .alert-action {
-  margin-top: 16px;
-  margin-left: -16px;
+  margin-top: 12px;
+  margin-left: -12px;
 }
 .overview-details {
   display: grid;
   grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
-  gap: 64px;
-  margin-top: 64px;
-  padding-top: 48px;
+  gap: 32px;
+  margin-top: 32px;
+  padding-top: 28px;
   border-top: 1px solid var(--c-line);
 }
 .section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
-  min-height: 44px;
+  gap: 12px;
+  margin-bottom: 16px;
+  min-height: 36px;
 }
 h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 600;
 }
 .network-history {
@@ -530,14 +530,14 @@ h2 {
 }
 .region-list {
   border-left: 1px solid var(--c-line);
-  padding-left: 24px;
+  padding-left: 16px;
 }
 .region-list li {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 8px 16px;
+  gap: 8px 12px;
   position: relative;
-  padding: 0 0 24px;
+  padding: 0 0 16px;
 }
 .region-list li::before {
   content: "";
@@ -551,11 +551,11 @@ h2 {
   border-radius: 50%;
 }
 .region-name {
-  font-size: 15px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 .region-source {
-  margin-left: -16px;
+  margin-left: -12px;
 }
 .region-list :deep(.ui-stat__label) {
   position: absolute;
@@ -565,7 +565,7 @@ h2 {
   clip-path: inset(50%);
 }
 .region-list :deep(.ui-stat__number) {
-  font-size: 16px;
+  font-size: 14px;
 }
 .region-list :deep(.ui-stat__unit) {
   font-size: 14px;
@@ -582,8 +582,8 @@ h2 {
   transform-origin: left;
 }
 .activity-section {
-  margin-top: 32px;
-  padding-top: 32px;
+  margin-top: 20px;
+  padding-top: 20px;
   border-top: 1px solid var(--c-line);
 }
 .activity-list {
@@ -592,7 +592,7 @@ h2 {
 }
 .activity-list li {
   position: relative;
-  padding: 0 0 24px 24px;
+  padding: 0 0 16px 16px;
 }
 .activity-list li:last-child {
   padding-bottom: 0;
@@ -600,7 +600,7 @@ h2 {
 .activity-list :deep(.status-dot) {
   display: flex;
   align-items: flex-start;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--c-ink);
   overflow-wrap: anywhere;
 }
@@ -620,34 +620,34 @@ h2 {
   color: var(--c-muted);
 }
 .aside-empty {
-  padding: 24px 0;
+  padding: 16px 0;
 }
 .aside-empty :deep(p) {
   font-size: 14px;
 }
 .diagnostics-section {
-  margin-top: 64px;
-  padding-top: 48px;
+  margin-top: 32px;
+  padding-top: 28px;
   border-top: 1px solid var(--c-line);
 }
 .section-eyebrow {
   font: 13px/1.4 var(--font-mono);
   letter-spacing: 0.08em;
   color: var(--c-muted);
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 .maintenance-fields {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 12px;
 }
 @media (min-width: 768px) and (max-width: 1100px) {
   .overview-stage {
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
-    gap: 16px;
+    gap: 12px;
   }
   .overview-details {
-    gap: 32px;
+    gap: 20px;
   }
   .secondary-metrics {
     gap: 8px;
@@ -656,7 +656,7 @@ h2 {
     gap: 4px;
   }
   .metric-link :deep(.ui-stat__number) {
-    font-size: 26px;
+    font-size: 20px;
   }
   .metric-link {
     flex-wrap: wrap;
@@ -671,15 +671,15 @@ h2 {
     grid-template-columns: minmax(0, 1fr);
   }
   .overview-stage {
-    gap: 24px;
+    gap: 16px;
   }
   .overview-details {
-    gap: 48px;
-    margin-top: 48px;
-    padding-top: 32px;
+    gap: 28px;
+    margin-top: 28px;
+    padding-top: 20px;
   }
   .network-situation :deep(.ui-panel__footer) {
-    margin-top: 32px;
+    margin-top: 20px;
   }
   .overview-notice {
     align-items: flex-start;
@@ -687,14 +687,14 @@ h2 {
   }
   .network-history {
     display: grid;
-    gap: 48px;
+    gap: 28px;
   }
   .activity-section {
     margin-top: 0;
   }
   .diagnostics-section {
-    margin-top: 48px;
-    padding-top: 32px;
+    margin-top: 28px;
+    padding-top: 20px;
   }
   .diagnostics-section .section-heading {
     flex-wrap: wrap;

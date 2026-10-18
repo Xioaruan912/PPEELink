@@ -52,7 +52,7 @@ const options = computed(() =>
 </template>
 <style scoped>
 .group-fields :deep(.ui-segmented) {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .group-fields :deep(.el-select) {
   width: 100%;

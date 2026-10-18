@@ -355,13 +355,13 @@ onUnmounted(() => {
 .task-summary {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-  gap: 32px;
-  padding-bottom: 48px;
+  gap: 20px;
+  padding-bottom: 28px;
 }
 .summary-side {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
   align-content: end;
 }
 .summary-side p {
@@ -374,27 +374,27 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 24px;
-  padding: 24px 0;
+  gap: 16px;
+  padding: 16px 0;
   border-top: 1px solid var(--c-line);
 }
 h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: 17px;
 }
 .task-heading,
 .task-row {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1.4fr) minmax(0, 1fr) 88px;
-  gap: 24px;
+  gap: 16px;
 }
 .task-heading {
-  padding: 16px 0;
+  padding: 12px 0;
   color: var(--c-muted);
   font: 400 13px/1.4 var(--font-mono);
 }
 .task-row {
-  padding: 24px 0;
+  padding: 16px 0;
   min-height: 120px;
   align-items: center;
   border-bottom: 1px solid var(--c-line);
@@ -416,7 +416,7 @@ h2 {
   background: transparent;
   color: var(--c-ink);
   text-align: left;
-  font: 600 16px/1.4 var(--font-ui);
+  font: 600 14px/1.4 var(--font-ui);
   overflow-wrap: anywhere;
   cursor: pointer;
 }
@@ -470,8 +470,8 @@ h2 {
 .task-fields {
   display: grid;
   grid-template-columns: 120px minmax(0, 1fr);
-  gap: 16px;
-  padding: 24px 0;
+  gap: 12px;
+  padding: 16px 0;
   border-block: 1px solid var(--c-line);
 }
 .task-fields dt {
@@ -485,7 +485,7 @@ h2 {
   font-size: 14px;
 }
 .detail-name {
-  font-size: 22px;
+  font-size: 17px;
   overflow-wrap: anywhere;
 }
 .detail-error {
@@ -495,7 +495,7 @@ h2 {
 .task-result {
   max-height: 50vh;
   overflow: auto;
-  padding: 24px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface-2);
@@ -526,22 +526,22 @@ h2 {
   }
   .task-heading,
   .task-row {
-    gap: 16px;
+    gap: 12px;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) 88px;
   }
 }
 @media (max-width: 767px) {
   .task-summary {
     grid-template-columns: minmax(0, 1fr);
-    gap: 24px;
-    padding-bottom: 32px;
+    gap: 16px;
+    padding-bottom: 20px;
   }
   .task-heading {
     display: none;
   }
   .task-row {
     grid-template-columns: minmax(0, 1fr) 88px;
-    gap: 24px 16px;
+    gap: 16px 12px;
   }
   .task-identity {
     grid-column: 1;
@@ -557,7 +557,7 @@ h2 {
   }
   .task-outcome {
     display: flex;
-    gap: 16px;
+    gap: 12px;
     align-items: baseline;
   }
   .task-outcome p {

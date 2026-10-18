@@ -77,11 +77,11 @@ const states = computed(() => [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 h3 {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   margin: 0;
 }
@@ -90,7 +90,7 @@ h3 {
   color: var(--c-muted);
 }
 .health-strip > :deep(.ui-stat) {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .health-strip > :deep(.ui-stat .ui-stat__label),
 .health-legend :deep(.ui-stat__label) {
@@ -101,7 +101,7 @@ h3 {
   clip-path: inset(50%);
 }
 .health-strip > :deep(.ui-stat .ui-stat__number) {
-  font-size: 32px;
+  font-size: 24px;
 }
 .health-ratio {
   height: 8px;
@@ -123,8 +123,8 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 16px;
-  margin: 16px 0 0;
+  gap: 12px;
+  margin: 12px 0 0;
 }
 .health-legend > div {
   display: flex;
@@ -135,10 +135,10 @@ dd {
   margin: 0;
 }
 .health-legend :deep(.ui-stat__number) {
-  font-size: 15px;
+  font-size: 14px;
 }
 .health-empty {
-  padding: 16px 0 0;
+  padding: 12px 0 0;
 }
 .health-empty :deep(p) {
   margin-bottom: 0;

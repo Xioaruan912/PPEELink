@@ -172,19 +172,19 @@ const {
 </template>
 <style scoped>
 .form-section {
-  padding: 8px 0 24px;
+  padding: 8px 0 16px;
   border-bottom: 1px solid var(--c-line);
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 h3 {
-  margin: 0 0 24px;
-  font: 600 22px/1.4 var(--font-ui);
+  margin: 0 0 16px;
+  font: 600 17px/1.4 var(--font-ui);
 }
 .field-hint {
   color: var(--c-muted);
   font-size: 14px;
   line-height: 1.6;
-  margin: 12px 0 24px;
+  margin: 10px 0 16px;
 }
 .mono {
   font: 400 14px/1.6 var(--font-mono);
@@ -196,7 +196,7 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 16px;
+  gap: 8px 12px;
   min-height: 64px;
   border-bottom: 1px solid var(--c-line);
   padding: 8px 0;
@@ -217,12 +217,12 @@ h3 {
 .managed-nodes {
   max-height: 320px;
   overflow-y: auto;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 .delete-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .delete-group :deep(.el-select) {
   flex: 1;

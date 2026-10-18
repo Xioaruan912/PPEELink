@@ -163,8 +163,8 @@ onBeforeUnmount(() => {
 .matrix-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin: 24px 0;
+  gap: 10px;
+  margin: 16px 0;
 }
 .matrix-error {
   color: var(--c-bad);
@@ -185,13 +185,13 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .node-title {
-  font-size: 16px;
-  margin: 0 0 16px;
+  font-size: 14px;
+  margin: 0 0 12px;
 }
 .matrix-mobile {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
-  gap: 16px;
+  gap: 12px;
   margin: 0;
 }
 .matrix-mobile dt {

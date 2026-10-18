@@ -129,7 +129,7 @@ function selectClient(value: string) {
 .copy-client {
   width: 44px;
   min-width: 44px;
-  padding: 12px;
+  padding: 10px;
   gap: 0;
   border-left: 0;
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
@@ -144,7 +144,7 @@ function selectClient(value: string) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
 }
 .client-check {
   width: 16px;

@@ -166,8 +166,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", shortcut));
 .command-search {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding-bottom: 24px;
+  gap: 12px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--c-line);
 }
 .command-search svg {
@@ -177,11 +177,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", shortcut));
 .command-search input {
   width: 100%;
   min-width: 0;
-  min-height: 44px;
+  min-height: 36px;
   border: 0;
   color: var(--c-ink);
   background: transparent;
-  font-size: 16px;
+  font-size: 14px;
 }
 .command-search input::placeholder {
   color: var(--c-muted);
@@ -200,9 +200,9 @@ kbd {
 .command-results button {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
-  padding: 12px 16px;
+  padding: 10px 12px;
   min-height: 56px;
   border: 0;
   border-radius: var(--radius-control);
@@ -222,7 +222,7 @@ kbd {
 }
 .command-help {
   display: flex;
-  gap: 24px;
+  gap: 16px;
   color: var(--c-muted);
   font-size: 14px;
   margin: 0;

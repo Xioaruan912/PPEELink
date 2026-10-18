@@ -279,15 +279,15 @@ watch(
 <style scoped lang="scss">
 @use "./node-tests/dialog.scss";
 .method-hint {
-  margin: 0 0 24px;
+  margin: 0 0 16px;
   color: var(--c-muted);
   font-size: 14px;
 }
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin: 0 0 24px;
+  gap: 12px;
+  margin: 0 0 16px;
   font: 400 14px/1.5 var(--font-mono);
   color: var(--c-muted);
 }
@@ -323,7 +323,7 @@ watch(
 .tcp-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 24px;
+  gap: 16px;
 }
 .province-scroll {
   max-height: 440px;
@@ -331,19 +331,19 @@ watch(
   padding-right: 8px;
 }
 .province {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .province-heading {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 8px 12px;
   padding: 0 0 8px;
   border-bottom: 1px solid var(--c-line);
 }
 .province-heading h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 14px;
 }
 .province-heading > span {
   font-size: 14px;
@@ -355,7 +355,7 @@ watch(
 .target {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
   min-height: 56px;
   padding: 8px 0;
@@ -382,14 +382,14 @@ watch(
 }
 .zstatic-results {
   display: flex;
-  gap: 24px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 .zstatic-results article {
   display: flex;
-  gap: 24px;
+  gap: 16px;
   align-items: center;
-  padding: 16px;
+  padding: 12px;
   border: 1px solid var(--c-line);
   border-left: 3px solid var(--latency);
   border-radius: 10px;
@@ -405,7 +405,7 @@ watch(
     padding: 0;
   }
   .target {
-    padding: 16px;
+    padding: 12px;
     margin-top: 8px;
     border: 1px solid var(--c-line);
     border-radius: 10px;

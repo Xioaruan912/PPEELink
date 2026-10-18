@@ -4,11 +4,11 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
 }
 .test-toolbar {
   justify-content: space-between;
-  margin: 24px 0;
+  margin: 16px 0;
 }
 .test-context {
   color: var(--c-muted);
@@ -24,24 +24,24 @@
 .test-title {
   margin: 0;
   color: var(--c-ink);
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 600;
 }
 .test-section {
-  margin-top: 32px;
-  padding-top: 24px;
+  margin-top: 20px;
+  padding-top: 16px;
   border-top: 1px solid var(--c-line);
 }
 .test-section-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 .test-section-heading h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 600;
 }
 .test-section-heading span {

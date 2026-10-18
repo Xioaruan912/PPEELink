@@ -236,17 +236,17 @@ const recent = computed(() => samples.value.slice(-10).reverse());
 .quality-metrics {
   display: grid;
   grid-template-columns: 1fr 2fr;
-  gap: 32px;
-  padding: 24px 0;
+  gap: 20px;
+  padding: 16px 0;
 }
 .empty-p95 span {
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   color: var(--c-muted);
   font-size: 14px;
 }
 .empty-p95 strong {
-  font-size: 24px;
+  font-size: 18px;
   font-weight: 400;
 }
 .quality-score {
@@ -255,7 +255,7 @@ const recent = computed(() => samples.value.slice(-10).reverse());
 .quality-secondary {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  gap: 16px;
   align-content: center;
 }
 .quality-secondary > :last-child {
@@ -272,20 +272,20 @@ const recent = computed(() => samples.value.slice(-10).reverse());
 .quality-table-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 100px 100px;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
 }
 .quality-list {
   position: relative;
 }
 .quality-table-head {
-  padding: 0 0 16px;
+  padding: 0 0 12px;
   color: var(--c-muted);
   font: 400 13px/1.5 var(--font-mono);
 }
 .quality-row {
   min-height: 56px;
-  padding: 16px 0;
+  padding: 12px 0;
   border-top: 1px solid var(--c-line);
   font-size: 14px;
 }
@@ -295,7 +295,7 @@ const recent = computed(() => samples.value.slice(-10).reverse());
 @media (max-width: 767px) {
   .quality-metrics {
     grid-template-columns: 1fr;
-    gap: 24px;
+    gap: 16px;
   }
   .quality-score {
     border-right: 0;
@@ -311,8 +311,8 @@ const recent = computed(() => samples.value.slice(-10).reverse());
   }
   .quality-row {
     grid-template-columns: 1fr auto;
-    padding: 16px;
-    margin-bottom: 16px;
+    padding: 12px;
+    margin-bottom: 12px;
     border: 1px solid var(--c-line);
     border-radius: 16px;
   }

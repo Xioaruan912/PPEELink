@@ -448,8 +448,8 @@ onBeforeUnmount(() => {
       0,
       1fr
     );
-  gap: 24px;
-  margin-bottom: 32px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 .tcp-controls > div {
   min-width: 0;
@@ -458,15 +458,15 @@ onBeforeUnmount(() => {
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 40px;
+  gap: 10px;
+  margin-bottom: 24px;
   color: var(--c-muted);
   font-size: 14px;
 }
 .tcp-stage {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  gap: 40px;
+  gap: 24px;
 }
 .tcp-map-section,
 .tcp-rankings {
@@ -503,8 +503,8 @@ onBeforeUnmount(() => {
 .latency-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 24px;
+  gap: 12px;
+  margin-top: 16px;
   color: var(--c-muted);
   font: 400 14px var(--font-mono);
 }
@@ -561,7 +561,7 @@ onBeforeUnmount(() => {
   padding-right: 8px;
 }
 .ranking-row {
-  padding: 24px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--c-line);
 }
 .ranking-row:first-child {
@@ -570,29 +570,29 @@ onBeforeUnmount(() => {
 .ranking-summary {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 .rank-index {
   color: var(--c-muted);
   font-size: 14px;
 }
 .ranking-summary strong {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 500;
 }
 .rank-rtt {
   margin-left: auto;
-  font-size: 18px;
+  font-size: 15px;
 }
 .ranking-row p {
   color: var(--c-muted);
   font-size: 14px;
-  margin: 8px 0 16px 34px;
+  margin: 8px 0 12px 34px;
 }
 .target-cells {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 16px;
+  gap: 8px 12px;
 }
 .target-cell {
   display: flex;
@@ -614,12 +614,12 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  margin-top: 32px;
+  gap: 12px;
+  margin-top: 20px;
   font-size: 14px;
 }
 .zstatic-results h3 {
-  font-size: 16px;
+  font-size: 14px;
   margin: 0;
 }
 .tcp-result-move {
@@ -642,23 +642,23 @@ onBeforeUnmount(() => {
     grid-template-columns: 1fr 1fr;
   }
   .tcp-stage {
-    gap: 24px;
+    gap: 16px;
   }
 }
 @media (max-width: 767px) {
   .tcp-controls {
     grid-template-columns: 1fr;
-    gap: 16px;
+    gap: 12px;
   }
   .tcp-stage {
     grid-template-columns: 1fr;
-    gap: 40px;
+    gap: 24px;
   }
   .tcp-map-wrap :deep(.china-map) {
     height: 330px;
   }
   .tcp-meta {
-    margin-bottom: 32px;
+    margin-bottom: 20px;
   }
   .ranking-list {
     max-height: none;

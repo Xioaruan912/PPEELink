@@ -265,14 +265,14 @@ const counts = computed(() => {
   color: var(--c-ink);
 }
 h3 {
-  font-size: 22px;
+  font-size: 17px;
   line-height: 1.4;
   margin: 0 0 8px;
   overflow-wrap: anywhere;
 }
 h4 {
-  font-size: 16px;
-  margin: 28px 0 12px;
+  font-size: 14px;
+  margin: 20px 0 10px;
 }
 .muted,
 .metadata dt {
@@ -287,18 +287,18 @@ h4 {
 .analysis-tabs {
   display: flex;
   gap: 8px;
-  margin: 20px 0 24px;
+  margin: 16px 0 16px;
   flex-wrap: wrap;
 }
 .analysis-tabs :deep(.ui-button) {
-  padding-inline: 12px;
+  padding-inline: 10px;
 }
 .count-line,
 .detail-row {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 0;
+  gap: 12px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--c-line);
   font-size: 14px;
 }
@@ -307,8 +307,8 @@ h4 {
   overflow-wrap: anywhere;
 }
 .rule-code {
-  margin: 12px 0;
-  padding: 16px;
+  margin: 10px 0;
+  padding: 12px;
   max-height: 360px;
   overflow: auto;
   background: var(--c-surface-2);
@@ -322,13 +322,13 @@ h4 {
   min-width: 0;
 }
 .metadata {
-  margin: 24px 0;
+  margin: 16px 0;
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 .metadata > div {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   justify-content: space-between;
   font-size: 14px;
 }
@@ -338,8 +338,8 @@ h4 {
 .impact-counts {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px 24px;
-  padding: 24px 0;
+  gap: 12px 16px;
+  padding: 16px 0;
 }
 .impact-counts > div {
   display: grid;
@@ -350,7 +350,7 @@ h4 {
   font-size: 14px;
 }
 .impact-counts strong {
-  font-size: 22px;
+  font-size: 17px;
 }
 .added {
   color: var(--c-ok);
@@ -362,8 +362,8 @@ h4 {
   color: var(--c-data);
 }
 .notice {
-  padding: 12px 16px;
-  margin: 16px 0;
+  padding: 10px 12px;
+  margin: 12px 0;
   border-left: 2px solid var(--c-data);
   background: var(--c-surface-2);
   font-size: 14px;
@@ -376,24 +376,24 @@ h4 {
   display: grid;
   gap: 8px;
   font-size: 14px;
-  padding: 16px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--c-line);
   overflow-wrap: anywhere;
 }
 .diff-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
+  gap: 16px;
 }
 .diff-grid section {
   min-width: 0;
 }
 .snapshot-row {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--c-line);
 }
 .snapshot-row > div {
@@ -408,7 +408,7 @@ h4 {
   overflow-wrap: anywhere;
 }
 .update-button {
-  margin-top: 24px;
+  margin-top: 16px;
   max-width: 100%;
   white-space: normal;
 }
@@ -420,7 +420,7 @@ h4 {
   border-radius: 0;
 }
 .modification {
-  margin: 12px 0;
+  margin: 10px 0;
 }
 .modification .deleted {
   color: var(--c-bad);

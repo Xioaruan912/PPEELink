@@ -77,7 +77,7 @@ watch(() => [props.rows, props.loading], reveal);
   display: none;
 }
 .ui-table__card {
-  padding: 24px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--c-line);
   overflow-wrap: anywhere;
 }

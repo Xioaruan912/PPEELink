@@ -161,7 +161,7 @@ async function handleLogin() {
     loading.value = false;
   }
 }
-import logo from "@/assets/logo.png";
+import logo from "@/assets/logo.svg";
 import { ArrowRight, Moon, Sunny } from "@element-plus/icons-vue";
 import { UiButton } from "@/ui";
 import { useMotion } from "@/motion";
@@ -210,34 +210,34 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 40px 48px;
+  padding: 24px 28px;
   background: var(--c-canvas);
   border-right: 1px solid var(--c-line);
 }
 .login-brand {
   display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   width: fit-content;
   color: var(--c-ink);
-  font: 400 32px/1 var(--font-display);
+  font: 400 24px/1 var(--font-display);
   position: relative;
   z-index: 1;
 }
 .login-statement {
   position: relative;
   z-index: 1;
-  margin-top: clamp(64px, 12vh, 112px);
+  margin-top: clamp(32px, 12vh, 112px);
 }
 .login-statement h1 {
   font-size: clamp(40px, 4.8vw, 72px);
   line-height: 1.1;
   white-space: nowrap;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   letter-spacing: -0.035em;
 }
 .login-statement p {
-  font-size: 16px;
+  font-size: 14px;
   color: var(--c-muted);
   max-width: 25ch;
 }
@@ -245,9 +245,9 @@ onMounted(() => {
   width: calc(100% + 96px);
   height: auto;
   max-width: none;
-  margin-left: -48px;
+  margin-left: -28px;
   min-height: 240px;
-  margin-top: 40px;
+  margin-top: 24px;
 }
 .signal-path {
   stroke-width: 1.2;
@@ -268,7 +268,7 @@ onMounted(() => {
 .login-form-side {
   display: grid;
   grid-template-rows: auto minmax(min-content, 1fr) 44px;
-  padding: 40px 48px;
+  padding: 24px 28px;
   background: var(--c-surface);
   min-width: 0;
 }
@@ -276,7 +276,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   color: var(--c-muted);
   font-size: 14px;
 }
@@ -284,8 +284,8 @@ onMounted(() => {
   display: grid;
   place-items: center;
   width: 44px;
-  height: 44px;
-  padding: 12px;
+  height: 36px;
+  padding: 10px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-control);
   color: var(--c-ink);
@@ -302,30 +302,30 @@ onMounted(() => {
   width: 100%;
   max-width: 360px;
   align-self: center;
-  margin: 32px auto;
+  margin: 20px auto;
 }
 .login-group {
   font: 400 13px/1.4 var(--font-mono);
   letter-spacing: 0.08em;
   color: var(--c-muted);
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .login-form-wrap h2 {
-  font: 400 40px/1.1 var(--font-display);
-  margin-bottom: 16px;
+  font: 400 28px/1.1 var(--font-display);
+  margin-bottom: 12px;
 }
 .login-intro {
   color: var(--c-muted);
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 }
 .login-form-wrap :deep(.el-form-item) {
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 .login-form-wrap :deep(.el-form-item__label) {
   padding-bottom: 8px;
 }
 .default-account {
-  min-height: 44px;
+  min-height: 36px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -336,22 +336,22 @@ onMounted(() => {
 }
 .login-submit {
   width: 100%;
-  margin-top: 24px;
+  margin-top: 16px;
   justify-content: space-between;
 }
 .login-submit svg {
   width: 20px;
   height: 20px;
-  margin-left: 16px;
+  margin-left: 12px;
   vertical-align: middle;
 }
 .login-error {
-  padding: 12px 16px;
+  padding: 10px 12px;
   color: var(--c-bad);
   background: var(--c-surface-2);
   border-left: 2px solid var(--c-bad);
   font-size: 14px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 .capslock-hint {
   color: var(--c-muted);
@@ -362,10 +362,10 @@ onMounted(() => {
   .login-form-side {
     display: flex;
     flex-direction: column;
-    padding: 32px;
+    padding: 20px;
   }
   .login-statement h1 {
-    font-size: 40px;
+    font-size: 28px;
   }
   .login-page {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -376,13 +376,13 @@ onMounted(() => {
     grid-template-columns: minmax(0, 1fr);
   }
   .login-story {
-    padding: 24px 16px 32px;
+    padding: 16px 12px 20px;
     min-height: 296px;
     border-right: 0;
     border-bottom: 1px solid var(--c-line);
   }
   .login-brand {
-    font-size: 26px;
+    font-size: 20px;
     gap: 8px;
   }
   .login-brand img {
@@ -390,11 +390,11 @@ onMounted(() => {
     height: 36px;
   }
   .login-statement {
-    margin-top: 40px;
+    margin-top: 24px;
   }
   .login-statement h1 {
-    font-size: 40px;
-    margin-bottom: 16px;
+    font-size: 28px;
+    margin-bottom: 12px;
   }
   .login-statement p {
     max-width: 23ch;
@@ -411,14 +411,14 @@ onMounted(() => {
     opacity: 0.65;
   }
   .login-form-side {
-    padding: 24px 16px;
+    padding: 16px 12px;
   }
   .login-form-wrap {
-    margin: 40px 0 32px;
+    margin: 24px 0 20px;
     max-width: none;
   }
   .login-intro {
-    margin-bottom: 32px;
+    margin-bottom: 20px;
   }
 }
 </style>
