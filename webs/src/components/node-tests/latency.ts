@@ -16,9 +16,9 @@ export interface ProvinceGroup {
 }
 export const latencyLegend = [
   "< 50 ms",
-  "50–100 ms",
-  "100–200 ms",
-  "200–300 ms",
+  "50-100 ms",
+  "100-200 ms",
+  "200-300 ms",
   "≥ 300 ms",
   "超时",
 ];

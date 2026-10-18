@@ -291,7 +291,7 @@ h3 {
     color var(--duration-fast);
 }
 .bulk-zone.is-over {
-  border-color: var(--c-signal);
+  border-color: var(--c-focus);
   background: var(--c-selected);
   color: var(--c-ink);
 }
@@ -322,7 +322,7 @@ h3 {
     opacity var(--duration-fast);
 }
 .group-card.is-over {
-  border-color: var(--c-signal);
+  border-color: var(--c-focus);
   box-shadow: 0 0 0 3px var(--c-selected);
 }
 .group-card.is-dragging {
@@ -385,7 +385,7 @@ h3 {
   height: 26px;
   padding: 0 4px 0 8px;
   border: 1px solid var(--c-line);
-  border-radius: 6px;
+  border-radius: var(--radius-pill);
   background: var(--c-surface);
   font-size: 13px;
   cursor: grab;

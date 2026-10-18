@@ -1,118 +1,110 @@
 <template>
-  <div
-    v-if="authenticated"
-    class="console-shell"
-    :class="{ 'is-collapsed': collapsed, 'is-drawer-open': drawerOpen }"
-  >
-    <a href="#console-content" class="skip-link" @click.prevent="focusMain"
+  <div v-if="authenticated" class="ion-shell">
+    <a href="#ion-content" class="skip-link" @click.prevent="focusMain"
       >跳到主要内容</a
     >
-    <div
-      class="console-scrim"
-      aria-hidden="true"
-      @click="drawerOpen = false"
-    ></div>
-    <aside
-      id="console-sidebar"
-      class="console-sidebar"
-      aria-label="工作区"
-      @keydown.esc="drawerOpen = false"
-    >
-      <div class="sidebar-brand">
-        <router-link
-          to="/dashboard"
-          class="brand-link"
-          aria-label="PPEELink 首页"
-          ><img
-            class="brand-logo"
-            :src="logo"
-            width="32"
-            height="32"
-            alt=""
-          /><span class="brand-copy"
-            ><strong>PPEELink</strong><small>订阅控制台</small></span
-          ></router-link
+    <header class="ion-header">
+      <div class="header-inner">
+        <router-link to="/dashboard" class="brand" aria-label="PPEELink 首页"
+          ><img class="brand-logo" :src="logo" width="28" height="28" alt="" />
+          <span class="brand-name">PPEELink</span></router-link
         >
-        <button
-          class="icon-button collapse-button"
-          :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
-          :aria-expanded="!collapsed"
-          aria-controls="console-sidebar"
-          @click="toggleCollapsed"
-        >
-          <component :is="collapsed ? Expand : Fold" />
-        </button>
-      </div>
-      <div class="sidebar-scroll">
-        <SideNav
-          :items="navigation"
-          :collapsed="collapsed && !drawerOpen"
-          @navigate="drawerOpen = false"
-        />
-      </div>
-      <footer class="sidebar-footer">
-        <button
-          class="sidebar-row"
-          :aria-label="`测试任务：${taskLabel}`"
-          @click="testVisible = true"
-        >
-          <StatusDot
-            :state="statusError ? 'warn' : testRunning ? 'ok' : 'idle'"
-            :running="testRunning"
-            :label="taskLabel"
-          />
-        </button>
-        <button
-          class="sidebar-row"
-          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-          @click="toggleTheme"
-        >
-          <component :is="isDark ? Sunny : Moon" class="row-icon" /><span
-            class="row-label"
-            >{{ isDark ? "浅色主题" : "深色主题" }}</span
+        <TopNav class="desktop-nav" :items="navigation" />
+        <div class="header-tools">
+          <button
+            class="search-pill"
+            aria-label="搜索页面，Command K 或 Control K"
+            @click="commandVisible = true"
           >
-        </button>
-        <AccountMenu
-          :username="user.user.username"
-          :compact="collapsed && !drawerOpen"
-          @logout="logout"
-        />
-      </footer>
-    </aside>
-    <div class="console-main">
-      <header class="console-topbar">
-        <button
-          class="icon-button menu-button"
-          aria-label="打开导航"
-          aria-controls="console-sidebar"
-          :aria-expanded="drawerOpen"
-          @click="drawerOpen = true"
-        >
-          <Menu />
-        </button>
-        <nav class="crumbs" aria-label="当前位置">
-          <span v-if="currentGroup" class="crumbs__group">{{
-            currentGroup
-          }}</span>
-          <span v-if="currentGroup" class="crumbs__sep" aria-hidden="true"
-            >/</span
+            <IconSearch /><span>搜索</span><kbd>{{ shortcutLabel }}K</kbd>
+          </button>
+          <el-tooltip
+            :content="`测试任务：${taskLabel}`"
+            :trigger-keys="[]"
+            placement="bottom"
           >
-          <span class="crumbs__page" aria-current="page">{{
-            currentPageTitle
-          }}</span>
-        </nav>
-        <button
-          class="search-field"
-          aria-label="搜索页面，Command K 或 Control K"
-          @click="commandVisible = true"
-        >
-          <Search /><span>搜索页面或操作</span><kbd>{{ shortcutLabel }} K</kbd>
-        </button>
-      </header>
-      <main id="console-content" class="console-content" tabindex="-1">
-        <AppMain />
-      </main>
-    </div>
+            <button
+              class="tool-button"
+              :class="{ 'is-running': testRunning, 'is-warn': statusError }"
+              :aria-label="`测试任务：${taskLabel}`"
+              @click="testVisible = true"
+            >
+              <IconPulse />
+            </button>
+          </el-tooltip>
+          <el-tooltip
+            :content="isDark ? '切换浅色主题' : '切换深色主题'"
+            :trigger-keys="[]"
+            placement="bottom"
+          >
+            <button
+              class="tool-button"
+              :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
+              @click="toggleTheme"
+            >
+              <Transition name="swap" mode="out-in"
+                ><component
+                  :is="isDark ? IconSun : IconMoon"
+                  :key="String(isDark)"
+              /></Transition>
+            </button>
+          </el-tooltip>
+          <AccountMenu :username="user.user.username" @logout="logout" />
+          <button
+            class="tool-button menu-button"
+            :aria-label="sheetOpen ? '关闭导航' : '打开导航'"
+            :aria-expanded="sheetOpen"
+            aria-controls="ion-sheet"
+            @click="sheetOpen = !sheetOpen"
+          >
+            <component :is="sheetOpen ? IconClose : IconList" />
+          </button>
+        </div>
+      </div>
+    </header>
+    <Transition name="sheet">
+      <nav
+        v-if="sheetOpen"
+        id="ion-sheet"
+        class="mobile-sheet"
+        aria-label="全部页面"
+        @keydown.esc="sheetOpen = false"
+      >
+        <section v-for="group in navigation" :key="group.path">
+          <h2 v-if="group.children.length">{{ group.label }}</h2>
+          <router-link
+            v-for="item in flattenNavigation([group])"
+            :key="item.path"
+            :to="item.path"
+            class="sheet-link"
+            :aria-current="route.path === item.path ? 'page' : undefined"
+            @click="sheetOpen = false"
+            ><span class="sheet-icon"><component :is="item.icon" /></span
+            ><span
+              ><strong>{{ item.label }}</strong
+              ><small v-if="item.hint">{{ item.hint }}</small></span
+            ></router-link
+          >
+        </section>
+        <div class="sheet-actions">
+          <UiButton @click="toggleTheme">{{
+            isDark ? "浅色主题" : "深色主题"
+          }}</UiButton>
+          <UiButton
+            @click="
+              testVisible = true;
+              sheetOpen = false;
+            "
+            >测试任务：{{ taskLabel }}</UiButton
+          >
+          <UiButton @click="router.push('/system/user/set')">修改密码</UiButton
+          ><UiButton variant="ghost" @click="logout">退出登录</UiButton>
+        </div>
+      </nav>
+    </Transition>
+    <main id="ion-content" class="ion-content" tabindex="-1">
+      <AppMain />
+    </main>
     <CommandPalette v-model="commandVisible" :items="commands" />
     <TestStatusDialog v-if="testVisible" v-model:visible="testVisible" />
   </div>
@@ -122,23 +114,20 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessageBox } from "element-plus";
-import {
-  Expand,
-  Fold,
-  Menu,
-  Moon,
-  Search,
-  Sunny,
-} from "@element-plus/icons-vue";
+import IconSearch from "~icons/ph/magnifying-glass";
+import IconPulse from "~icons/ph/pulse";
+import IconSun from "~icons/ph/sun";
+import IconMoon from "~icons/ph/moon-stars";
+import IconList from "~icons/ph/list";
+import IconClose from "~icons/ph/x";
 import { usePermissionStore, useSettingsStore, useUserStore } from "@/store";
 import { ThemeEnum } from "@/enums/ThemeEnum";
-import { translateRouteTitle } from "@/utils/i18n";
 import { GetTestStatus } from "@/api/subcription/node";
 import logo from "@/assets/logo.svg";
 import TestStatusDialog from "@/components/TestStatusDialog.vue";
-import { CommandPalette, StatusDot, type CommandItem } from "@/ui";
+import { CommandPalette, UiButton, type CommandItem } from "@/ui";
 import AppMain from "./components/AppMain/index.vue";
-import SideNav from "./components/SideNav.vue";
+import TopNav from "./components/TopNav.vue";
 import AccountMenu from "./components/AccountMenu.vue";
 import { buildNavigation, flattenNavigation } from "./navigation";
 const permission = usePermissionStore(),
@@ -149,51 +138,23 @@ const permission = usePermissionStore(),
 const authenticated = !!localStorage.getItem("accessToken");
 const isDark = computed(() => settings.theme === ThemeEnum.DARK);
 const navigation = computed(() => buildNavigation(permission.routes));
-const currentGroup = computed(
-  () =>
-    navigation.value.find(
-      (group) =>
-        group.children.length &&
-        flattenNavigation([group]).some((item) => item.path === route.path)
-    )?.label
-);
-const currentPageTitle = computed(
-  () =>
-    flattenNavigation(navigation.value).find((item) => item.path === route.path)
-      ?.label || String(translateRouteTitle(route.meta.title || "PPEELink"))
-);
 const isExternal = (path: string) => /^(https?:)?\/\//.test(path);
 const commandVisible = ref(false),
-  drawerOpen = ref(false),
+  sheetOpen = ref(false),
   testVisible = ref(false),
   testRunning = ref(false),
   statusError = ref(false);
 const taskLabel = computed(() =>
-  testRunning.value ? "测试进行中" : statusError.value ? "状态未知" : "任务空闲"
+  testRunning.value ? "进行中" : statusError.value ? "状态未知" : "空闲"
 );
-const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
-const COLLAPSE_KEY = "console-sidebar-collapsed";
-const readCollapsed = () => {
-  try {
-    return localStorage.getItem(COLLAPSE_KEY) === "1";
-  } catch {
-    return false;
-  }
-};
-const collapsed = ref(readCollapsed());
-function toggleCollapsed() {
-  collapsed.value = !collapsed.value;
-  try {
-    localStorage.setItem(COLLAPSE_KEY, collapsed.value ? "1" : "0");
-  } catch {
-    /* Preference is optional. */
-  }
-}
+const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)
+  ? "⌘"
+  : "Ctrl ";
 function toggleTheme() {
   settings.changeTheme(isDark.value ? ThemeEnum.LIGHT : ThemeEnum.DARK);
 }
 function focusMain() {
-  document.getElementById("console-content")?.focus();
+  document.getElementById("ion-content")?.focus();
 }
 async function logout() {
   try {
@@ -220,7 +181,7 @@ const commands = computed<CommandItem[]>(() => [
       label: item.label,
       group: group.label !== item.label ? group.label : undefined,
       icon: item.icon,
-      keywords: item.path,
+      keywords: `${item.path} ${item.hint || ""}`,
       run: () => {
         if (isExternal(item.path)) window.location.assign(item.path);
         else return router.push(item.path);
@@ -228,7 +189,6 @@ const commands = computed<CommandItem[]>(() => [
     }))
   ),
   { id: "theme", label: "切换主题", run: toggleTheme },
-  { id: "collapse", label: "收起或展开侧栏", run: toggleCollapsed },
   { id: "tasks", label: "查看测试任务", run: () => (testVisible.value = true) },
   {
     id: "password",
@@ -260,15 +220,15 @@ onMounted(() => {
 });
 watch(
   () => route.path,
-  () => (drawerOpen.value = false)
+  () => (sheetOpen.value = false)
 );
-watch(drawerOpen, (open) =>
-  document.documentElement.classList.toggle("console-drawer-lock", open)
+watch(sheetOpen, (open) =>
+  document.documentElement.classList.toggle("ion-sheet-lock", open)
 );
 onBeforeUnmount(() => {
   disposed = true;
   if (statusTimer) clearTimeout(statusTimer);
-  document.documentElement.classList.remove("console-drawer-lock");
+  document.documentElement.classList.remove("ion-sheet-lock");
 });
 </script>
 <style scoped>
@@ -277,12 +237,12 @@ onBeforeUnmount(() => {
   max-width: 1440px;
   padding: 28px;
 }
-.console-shell {
-  --sidebar-w: 236px;
+.ion-shell {
   min-height: 100dvh;
-}
-.console-shell.is-collapsed {
-  --sidebar-w: 68px;
+  /* One faint accent bloom anchors the top of every page. */
+  background:
+    radial-gradient(60% 420px at 85% -120px, var(--c-glow), transparent 70%),
+    var(--c-canvas);
 }
 .skip-link {
   position: fixed;
@@ -291,304 +251,263 @@ onBeforeUnmount(() => {
   z-index: calc(var(--z-tools) + 2);
   transform: translateY(-160%);
   padding: 10px 16px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   background: var(--c-surface);
   color: var(--c-ink);
 }
 .skip-link:focus {
   transform: none;
 }
-
-/* Sidebar */
-.console-sidebar {
-  position: fixed;
-  inset: 0 auto 0 0;
-  z-index: var(--z-dock);
-  width: var(--sidebar-w);
-  display: flex;
-  flex-direction: column;
-  background: var(--c-surface);
-  border-right: 1px solid var(--c-line);
-  transition: width var(--duration-medium) var(--ease-out);
-  overflow: hidden;
-}
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  height: 60px;
-  padding: 0 12px 0 16px;
-  border-bottom: 1px solid var(--c-line);
-}
-.brand-link {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  color: var(--c-ink);
-}
-.brand-copy {
-  display: grid;
-  line-height: 1.15;
-  white-space: nowrap;
-}
-.brand-copy strong {
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.brand-copy small {
-  color: var(--c-muted);
-  font: 400 12px var(--font-mono);
-}
-.sidebar-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-bottom: 12px;
-}
-.sidebar-footer {
-  display: grid;
-  gap: 2px;
-  padding: 10px 12px 14px;
-  border-top: 1px solid var(--c-line);
-}
-.sidebar-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--c-muted);
-  font-size: 14px;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.sidebar-row:hover {
-  background: var(--c-surface-2);
-  color: var(--c-ink);
-}
-.row-icon {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-}
-.is-collapsed .brand-copy,
-.is-collapsed .row-label,
-.is-collapsed .sidebar-row :deep(.status-dot__label) {
-  display: none;
-}
-.is-collapsed .sidebar-brand {
-  flex-direction: column;
-  justify-content: center;
-  height: auto;
-  padding: 14px 0 10px;
-}
-.is-collapsed .sidebar-row {
-  justify-content: center;
-  padding: 0;
-}
-.icon-button {
-  display: inline-grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 36px;
-  height: 36px;
-  padding: 9px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--c-muted);
-}
-.icon-button:hover {
-  color: var(--c-ink);
-  background: var(--c-surface-2);
-}
-.icon-button svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* Main column */
-.console-main {
-  margin-left: var(--sidebar-w);
-  min-width: 0;
-  transition: margin-left var(--duration-medium) var(--ease-out);
-}
-.console-topbar {
+.ion-header {
   position: sticky;
   top: 0;
   z-index: var(--z-tools);
-  display: flex;
+  backdrop-filter: blur(14px) saturate(1.4);
+  background: color-mix(in srgb, var(--c-canvas) 72%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
+}
+.header-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
-  height: 60px;
-  padding: 0 28px;
-  background: color-mix(in srgb, var(--c-canvas) 86%, transparent);
-  backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--c-line);
+  max-width: 1400px;
+  height: 64px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: start;
+  color: var(--c-ink);
+}
+.brand-name {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.header-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.search-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 6px 0 12px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-pill);
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 13px;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+.search-pill:hover {
+  border-color: var(--c-muted);
+  color: var(--c-ink);
+}
+.search-pill svg {
+  width: 16px;
+  height: 16px;
+}
+.search-pill kbd {
+  margin-left: 18px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--c-surface-2);
+  font: 500 12px var(--font-mono);
+}
+.tool-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-pill);
+  color: var(--c-muted);
+  transition:
+    color var(--duration-fast),
+    background-color var(--duration-fast);
+}
+.tool-button:hover {
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+}
+.tool-button svg {
+  width: 18px;
+  height: 18px;
+}
+/* A running task is real state, so it earns the one live indicator. */
+.tool-button.is-running::after,
+.tool-button.is-warn::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-ok);
+  box-shadow: 0 0 0 2px var(--c-canvas);
+  animation: ion-ping 1.6s var(--ease-out) infinite;
+}
+.tool-button.is-warn::after {
+  background: var(--c-warn);
+  animation: none;
+}
+@keyframes ion-ping {
+  50% {
+    transform: scale(1.5);
+    opacity: 0.6;
+  }
+}
+.swap-enter-active,
+.swap-leave-active {
+  transition:
+    transform var(--duration-medium) var(--ease-spring),
+    opacity var(--duration-fast);
+}
+.swap-enter-from {
+  transform: rotate(-90deg) scale(0.6);
+  opacity: 0;
+}
+.swap-leave-to {
+  transform: rotate(90deg) scale(0.6);
+  opacity: 0;
 }
 .menu-button {
   display: none;
 }
-.crumbs {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.ion-content {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 32px 32px 56px;
   min-width: 0;
-  font-size: 14px;
-  white-space: nowrap;
 }
-.crumbs__group,
-.crumbs__sep {
+.mobile-sheet {
+  position: fixed;
+  inset: 64px 0 0;
+  z-index: calc(var(--z-tools) - 1);
+  display: grid;
+  align-content: start;
+  gap: 20px;
+  padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--c-canvas);
+}
+.mobile-sheet h2 {
+  margin: 0 0 6px;
   color: var(--c-muted);
-}
-.crumbs__page {
+  font-size: 12px;
   font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
-.search-field {
+.sheet-link {
   display: flex;
   align-items: center;
-  gap: 10px;
-  width: min(320px, 40vw);
-  height: 36px;
-  margin-left: auto;
-  padding: 0 8px 0 12px;
+  gap: 12px;
+  padding: 10px 8px;
+  border-radius: 14px;
+  color: var(--c-ink);
+}
+.sheet-link[aria-current="page"] {
+  background: var(--c-surface);
+  box-shadow: var(--edge-highlight);
+}
+.sheet-link strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+}
+.sheet-link small {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+.sheet-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-control);
+  border-radius: 12px;
   background: var(--c-surface);
   color: var(--c-muted);
-  font-size: 14px;
+}
+.sheet-link[aria-current="page"] .sheet-icon {
+  border-color: transparent;
+  background: var(--c-signal);
+  color: var(--c-on-signal);
+}
+.sheet-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.sheet-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.sheet-enter-active,
+.sheet-leave-active {
   transition:
-    border-color var(--duration-fast) var(--ease-out),
-    box-shadow var(--duration-fast) var(--ease-out);
+    opacity var(--duration-medium) var(--ease-out),
+    transform var(--duration-medium) var(--ease-out);
 }
-.search-field:hover {
-  border-color: var(--c-muted);
+.sheet-enter-from,
+.sheet-leave-to {
+  opacity: 0;
+  transform: translateY(-12px);
 }
-.search-field svg {
-  width: 16px;
-  height: 16px;
-}
-.search-field kbd {
-  margin-left: auto;
-  padding: 2px 6px;
-  border: 1px solid var(--c-line);
-  border-radius: 6px;
-  background: var(--c-surface-2);
-  font: 500 12px var(--font-mono);
-}
-.console-content {
-  max-width: 1480px;
-  padding: 24px 28px 40px;
-  min-width: 0;
-}
-.console-scrim {
-  display: none;
-}
-
-@media (max-width: 1023px) {
-  .console-shell,
-  .console-shell.is-collapsed {
-    --sidebar-w: 0px;
+@media (max-width: 1099px) {
+  .header-inner {
+    grid-template-columns: auto 1fr;
+    padding: 0 20px;
   }
-  .console-sidebar {
-    width: 272px;
-    transform: translateX(-100%);
-    transition: transform var(--duration-medium) var(--ease-out);
-    box-shadow: var(--shadow-overlay);
-    z-index: calc(var(--z-tools) + 1);
-  }
-  .is-drawer-open .console-sidebar {
-    transform: none;
-  }
-  /* Drawer always shows labels, even when the desktop rail is collapsed. */
-  .is-collapsed .brand-copy,
-  .is-collapsed .row-label,
-  .is-collapsed .sidebar-row :deep(.status-dot__label) {
-    display: revert;
-  }
-  .is-collapsed .brand-copy {
-    display: grid;
-  }
-  .is-collapsed .sidebar-brand {
-    flex-direction: row;
-    justify-content: space-between;
-    height: 60px;
-    padding: 0 12px 0 16px;
-  }
-  .is-collapsed .sidebar-row {
-    justify-content: flex-start;
-    padding: 0 10px;
-  }
-  .collapse-button {
+  .desktop-nav {
     display: none;
   }
-  .console-scrim {
-    position: fixed;
-    inset: 0;
-    z-index: var(--z-tools);
-    display: block;
-    background: rgb(0 0 0 / 0.32);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity var(--duration-medium) var(--ease-out);
-  }
-  .is-drawer-open .console-scrim {
-    opacity: 1;
-    pointer-events: auto;
-  }
   .menu-button {
-    display: inline-grid;
-    margin-left: -8px;
+    display: grid;
   }
-  .console-topbar {
-    padding: 0 20px;
-    gap: 8px;
-  }
-  .console-content {
-    padding: 20px 20px 32px;
+  .ion-content {
+    padding: 24px 20px 40px;
   }
 }
 @media (max-width: 767px) {
-  .console-topbar {
-    height: calc(56px + env(safe-area-inset-top));
-    padding: env(safe-area-inset-top) 12px 0;
+  .header-inner {
+    padding: 0 12px;
+    gap: 8px;
   }
-  .search-field {
+  .search-pill {
     width: 36px;
     padding: 0;
     justify-content: center;
-    border-color: transparent;
-    background: transparent;
   }
-  .search-field span,
-  .search-field kbd,
-  .crumbs__group,
-  .crumbs__sep {
+  .search-pill span,
+  .search-pill kbd,
+  .header-tools > :deep(.account-dropdown) {
     display: none;
   }
-  .console-content {
-    padding: 16px 12px 28px;
+  .ion-content {
+    padding: 20px 12px 32px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .console-sidebar,
-  .console-main,
-  .console-scrim {
+  .tool-button.is-running::after {
+    animation: none;
+  }
+  .sheet-enter-active,
+  .sheet-leave-active,
+  .swap-enter-active,
+  .swap-leave-active {
     transition: none;
   }
 }
-:global(html.console-drawer-lock) {
+:global(html.ion-sheet-lock) {
   overflow: hidden;
 }
 </style>

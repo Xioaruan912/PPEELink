@@ -118,7 +118,7 @@ export default defineConfig(({ mode }: ConfigEnv): UserConfig => {
           // 自动注册图标组件
           IconsResolver({
             // element-plus图标库，其他图标库 https://icon-sets.iconify.design/
-            enabledCollections: ["ep"],
+            enabledCollections: ["ep", "ph"],
           }),
         ],
         // 指定自定义组件位置(默认:src/components)

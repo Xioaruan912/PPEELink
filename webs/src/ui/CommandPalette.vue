@@ -47,7 +47,11 @@
           @pointermove="selected = index"
           @click="execute(item)"
         >
-          <SvgIcon v-if="item.icon" :icon-class="item.icon" /><span
+          <component
+            :is="item.icon"
+            v-if="item.icon"
+            class="command-icon"
+          /><span
             >{{ item.label
             }}<small v-if="item.group">{{ item.group }}</small></span
           ><span aria-hidden="true">↵</span>
@@ -66,11 +70,12 @@
   </UiDialog>
 </template>
 <script lang="ts">
+import type { Component } from "vue";
 export interface CommandItem {
   id: string;
   label: string;
   group?: string;
-  icon?: string;
+  icon?: Component;
   keywords?: string;
   run: () => void | Promise<unknown>;
 }
@@ -86,7 +91,6 @@ import {
   watch,
 } from "vue";
 import { Search } from "@element-plus/icons-vue";
-import SvgIcon from "@/components/SvgIcon/index.vue";
 import UiDialog from "./UiDialog.vue";
 import EmptyState from "./EmptyState.vue";
 const props = defineProps<{ modelValue: boolean; items: CommandItem[] }>();

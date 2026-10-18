@@ -3,7 +3,7 @@
     <PageHeader title="我的网络" :description="greeting">
       <template #actions>
         <UiButton :icon="Refresh" :loading="loading" @click="loadOverview">
-          {{ loading ? "正在同步" : "刷新" }}
+          {{ loading ? "同步中" : "刷新" }}
         </UiButton>
         <UiButton
           variant="primary"
@@ -21,8 +21,8 @@
       >
     </div>
 
-    <div class="overview-hero" data-enter>
-      <div class="hero-total">
+    <div class="bento">
+      <section class="cell cell-hero" aria-label="节点总数" data-enter>
         <UiStat
           size="hero"
           label="节点总数"
@@ -31,16 +31,46 @@
         <p class="hero-caption">
           {{
             summary.total
-              ? `分布在 ${countries.length} 个地区，连接正常率 ${survivalRate}%`
-              : "添加节点或同步机场后，这里会显示网络规模。"
+              ? `分布在 ${countries.length} 个地区`
+              : "添加节点或同步机场后显示网络规模"
           }}
         </p>
-      </div>
-      <RouterLink to="/subcription/subs" class="hero-metric">
+        <div class="hero-health">
+          <HealthStrip
+            :summary="summary"
+            :loading="loading"
+            :rate="survivalRate"
+          />
+        </div>
+      </section>
+
+      <RouterLink
+        to="/subcription/subs"
+        class="cell cell-link cell-subs"
+        data-enter
+      >
+        <span class="cell-icon"><IconLink /></span>
         <UiStat size="large" label="订阅" :value="loading ? null : subTotal" />
-        <TopRight aria-hidden="true" />
+        <IconArrow class="cell-arrow" aria-hidden="true" />
       </RouterLink>
-      <RouterLink to="/subcription/nodes" class="hero-metric">
+
+      <RouterLink
+        to="/subcription/nodes"
+        class="cell cell-link cell-score"
+        data-enter
+      >
+        <div class="score-ring" aria-hidden="true">
+          <svg viewBox="0 0 120 120">
+            <circle class="ring-track" cx="60" cy="60" r="52" />
+            <circle
+              class="ring-value"
+              cx="60"
+              cy="60"
+              r="52"
+              :style="{ '--score': scoreRatio }"
+            />
+          </svg>
+        </div>
         <UiStat
           size="large"
           label="连接评分"
@@ -49,101 +79,76 @@
           "
           unit="/100"
         />
-        <TopRight aria-hidden="true" />
+        <IconArrow class="cell-arrow" aria-hidden="true" />
       </RouterLink>
-      <RouterLink to="/subcription/airport" class="hero-metric">
-        <UiStat
-          size="large"
-          label="机场剩余流量"
-          :value="traffic.reported ? remaining.value : null"
-          :decimals="1"
-          :unit="remaining.unit"
-        />
-        <TopRight aria-hidden="true" />
-      </RouterLink>
-    </div>
 
-    <div class="overview-grid" data-enter>
+      <section class="cell cell-traffic" aria-label="机场流量" data-enter>
+        <header class="cell-head">
+          <div>
+            <h2>机场流量</h2>
+            <p>
+              剩余
+              <strong class="mono">{{
+                traffic.reported ? formatBytes(traffic.remaining) : "未知"
+              }}</strong>
+            </p>
+          </div>
+          <UiButton variant="ghost" @click="router.push('/subcription/airport')"
+            >全部机场</UiButton
+          >
+        </header>
+        <UiSkeleton v-if="loading" :lines="2" height="40px" />
+        <ul v-else-if="airports.length" class="airport-traffic">
+          <li v-for="airport in airports.slice(0, 4)" :key="airport.ID">
+            <span class="airport-name">{{ airport.Name }}</span>
+            <TrafficMeter :traffic="trafficOf(airport)" />
+          </li>
+        </ul>
+        <EmptyState
+          v-else
+          size="inline"
+          title="还没有机场"
+          description="添加机场订阅后显示流量与到期。"
+        />
+      </section>
+
       <WorldMap
-        class="overview-map"
+        class="cell-map"
         :points="mapPoints"
         :loading="loading"
+        data-enter
         @refresh="loadOverview"
       />
-      <div class="overview-side">
-        <UiPanel title="连接健康" description="最近一次质量采样的结果。">
-          <HealthStrip
-            :summary="summary"
-            :loading="loading"
-            :rate="survivalRate"
-          />
-        </UiPanel>
-        <UiPanel
-          title="机场流量"
-          :count="airports.length"
-          description="同步机场时自动读取。"
-          flush
-        >
-          <template #actions
-            ><UiButton
-              variant="ghost"
-              @click="router.push('/subcription/airport')"
-              >全部</UiButton
-            ></template
-          >
-          <UiSkeleton v-if="loading" :lines="3" height="40px" />
-          <ul v-else-if="airports.length" class="airport-traffic">
-            <li v-for="airport in airports.slice(0, 5)" :key="airport.ID">
-              <span class="airport-name">{{ airport.Name }}</span>
-              <TrafficMeter :traffic="trafficOf(airport)" />
-            </li>
-          </ul>
-          <EmptyState
-            v-else
-            size="inline"
-            title="还没有机场"
-            description="添加机场订阅后显示流量与到期。"
-          />
-        </UiPanel>
-      </div>
-    </div>
 
-    <UiPanel
-      class="region-panel"
-      title="所在地区"
-      :count="countries.length"
-      description="按节点定位统计。"
-      data-enter
-    >
-      <template #actions
-        ><UiButton
-          variant="ghost"
-          :icon="Plus"
-          @click="router.push('/subcription/airport')"
-          >添加机场订阅</UiButton
-        ></template
-      >
-      <UiSkeleton v-if="loading" :lines="4" height="32px" />
-      <ol v-else-if="countries.length" class="region-list">
-        <li v-for="country in countries.slice(0, 12)" :key="country.name">
-          <span class="region-name">{{ country.name }}</span>
-          <span class="region-count mono">{{ country.count }}</span>
-          <span class="region-track" aria-hidden="true"
-            ><i
-              :style="{
-                transform: `scaleX(${country.count / (countries[0]?.count || 1)})`,
-              }"
-            ></i
-          ></span>
-        </li>
-      </ol>
-      <EmptyState
-        v-else
-        size="inline"
-        title="暂无地区"
-        description="节点定位后会显示所在地区。"
-      />
-    </UiPanel>
+      <section class="cell cell-regions" aria-label="所在地区" data-enter>
+        <header class="cell-head">
+          <div>
+            <h2>所在地区</h2>
+            <p>{{ countries.length }} 个地区</p>
+          </div>
+        </header>
+        <UiSkeleton v-if="loading" :lines="5" height="28px" />
+        <ol v-else-if="countries.length" class="region-list">
+          <li v-for="country in countries.slice(0, 8)" :key="country.name">
+            <span class="region-name">{{ country.name }}</span>
+            <span class="region-count mono">{{ country.count }}</span>
+            <span class="region-bar" aria-hidden="true"
+              ><i
+                :style="{
+                  transform: `scaleX(${country.count / (countries[0]?.count || 1)})`,
+                }"
+              ></i
+            ></span>
+          </li>
+        </ol>
+        <EmptyState
+          v-else
+          size="inline"
+          title="暂无地区"
+          description="节点定位后会显示所在地区。"
+        />
+      </section>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
@@ -155,11 +160,12 @@ import { getAirports } from "@/api/subcription/airport";
 import TrafficMeter from "@/views/subcription/airport/TrafficMeter.vue";
 import type { Airport } from "@/views/subcription/airport/useAirports";
 import { formatBytes, trafficOf } from "@/utils/traffic";
-import { Refresh, TopRight, Plus } from "@element-plus/icons-vue";
+import { Refresh, TopRight } from "@element-plus/icons-vue";
+import IconLink from "~icons/ph/link-simple";
+import IconArrow from "~icons/ph/arrow-up-right";
 import {
   PageHeader,
   UiButton,
-  UiPanel,
   UiStat,
   UiSkeleton,
   StatusDot,
@@ -190,10 +196,9 @@ const traffic = computed(() => {
     remaining: reports.reduce((sum, t) => sum + t!.remaining, 0),
   };
 });
-const remaining = computed(() => {
-  const [value, unit] = formatBytes(traffic.value.remaining).split(" ");
-  return { value: Number(value), unit };
-});
+const scoreRatio = computed(() =>
+  summary.value.total ? Math.min(summary.value.averageScore / 100, 1) : 0
+);
 const greeting = computed(() => {
   const hour = new Date().getHours();
   const part =
@@ -204,7 +209,7 @@ const greeting = computed(() => {
         : hour < 18
           ? "下午好"
           : "晚上好";
-  return `${part}，这是你的节点、订阅与机场流量概况。`;
+  return `${part}，网络运行概况如下。`;
 });
 const survivalRate = computed(() => {
   const { total, offline } = summary.value;
@@ -257,84 +262,173 @@ onMounted(loadOverview);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px;
-  margin-bottom: 16px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-control);
-  background: var(--c-surface);
-}
-.overview-hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  padding: 12px 16px;
   margin-bottom: 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);
+}
+.bento {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  grid-auto-rows: minmax(150px, auto);
+  gap: 14px;
+}
+.cell {
+  position: relative;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-panel), var(--edge-highlight);
   overflow: hidden;
 }
-.hero-total {
-  position: relative;
-  padding: 20px 24px;
+.cell-hero {
+  grid-column: span 5;
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
   background:
     radial-gradient(
-      120% 140% at 0% 100%,
-      color-mix(in srgb, var(--c-signal) 14%, transparent),
+      90% 70% at 100% 0%,
+      color-mix(in srgb, var(--c-signal) 26%, transparent),
+      transparent 65%
+    ),
+    radial-gradient(
+      60% 60% at 0% 100%,
+      color-mix(in srgb, var(--c-data) 16%, transparent),
+      transparent 70%
+    ),
+    var(--c-surface);
+}
+.cell-hero :deep(.ui-stat--hero .ui-stat__number) {
+  font: 600 clamp(72px, 7.4vw, 112px) / 0.9 var(--font-ui);
+  letter-spacing: -0.06em;
+}
+.hero-caption {
+  margin-top: 10px;
+  color: var(--c-muted);
+  font-size: 14px;
+}
+.hero-health {
+  margin-top: auto;
+  padding-top: 20px;
+}
+.cell-link {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--c-ink);
+  transition:
+    transform var(--duration-medium) var(--ease-spring),
+    border-color var(--duration-fast);
+}
+.cell-link:hover {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--c-focus) 60%, var(--c-line));
+}
+.cell-subs {
+  grid-column: span 3;
+}
+.cell-score {
+  grid-column: span 4;
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: flex-start;
+  gap: 18px;
+}
+.cell-icon {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--c-signal);
+  color: var(--c-on-signal);
+}
+.cell-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.cell-arrow {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 18px;
+  height: 18px;
+  color: var(--c-muted);
+  transition: transform var(--duration-medium) var(--ease-spring);
+}
+.cell-link:hover .cell-arrow {
+  color: var(--c-ink);
+  transform: translate(3px, -3px);
+}
+.score-ring {
+  width: 92px;
+  height: 92px;
+  flex: 0 0 auto;
+}
+.score-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.ring-track,
+.ring-value {
+  fill: none;
+  stroke-width: 10;
+}
+.ring-track {
+  stroke: var(--c-surface-2);
+}
+.ring-value {
+  stroke: var(--c-signal);
+  stroke-linecap: round;
+  stroke-dasharray: 326.7;
+  stroke-dashoffset: calc(326.7 * (1 - var(--score)));
+  transition: stroke-dashoffset 1.2s var(--ease-out);
+}
+.cell-traffic {
+  grid-column: span 7;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--c-surface-2) 70%, transparent),
       transparent 60%
     ),
     var(--c-surface);
 }
-.hero-caption {
-  margin-top: 8px;
-  color: var(--c-muted);
-  font-size: 13px;
-}
-.hero-metric {
+.cell-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  padding: 20px;
-  border-left: 1px solid var(--c-line);
-  color: var(--c-ink);
-  transition: background-color var(--duration-fast) var(--ease-out);
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.hero-metric:hover {
-  background: var(--c-surface-2);
+.cell-head h2 {
+  font-size: 15px;
+  font-weight: 600;
 }
-.hero-metric > svg {
-  flex: 0 0 auto;
-  width: 16px;
-  height: 16px;
+.cell-head p {
+  margin-top: 2px;
   color: var(--c-muted);
-  transition: transform var(--duration-medium) var(--ease-spring);
+  font-size: 13px;
 }
-.hero-metric:hover > svg {
-  color: var(--c-data);
-  transform: translate(2px, -2px);
+.cell-head strong {
+  color: var(--c-ink);
+  font-weight: 500;
 }
-.hero-metric :deep(.ui-stat) {
-  align-self: end;
-}
-.overview-grid {
+.airport-traffic {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(300px, 4fr);
-  gap: 16px;
-  align-items: start;
-  margin-bottom: 16px;
-}
-.overview-side {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 16px 20px;
 }
 .airport-traffic li {
   display: grid;
   gap: 6px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--c-line);
-}
-.airport-traffic li:last-child {
-  border-bottom: 0;
+  min-width: 0;
 }
 .airport-name {
   overflow: hidden;
@@ -343,10 +437,15 @@ onMounted(loadOverview);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.cell-map {
+  grid-column: span 8;
+}
+.cell-regions {
+  grid-column: span 4;
+}
 .region-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 14px 24px;
+  gap: 12px;
 }
 .region-list li {
   display: grid;
@@ -355,60 +454,76 @@ onMounted(loadOverview);
 }
 .region-name {
   font-size: 14px;
-  overflow-wrap: anywhere;
 }
 .region-count {
   color: var(--c-muted);
   font: 13px var(--font-mono);
 }
-.region-track {
+.region-bar {
   grid-column: 1 / -1;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--c-surface-2);
-  overflow: hidden;
+  height: 6px;
 }
-.region-track i {
+.region-bar i {
   display: block;
   height: 100%;
-  border-radius: inherit;
-  background: var(--c-data);
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--c-signal), var(--c-data));
   transform-origin: left;
   transition: transform var(--duration-slow) var(--ease-out);
 }
 @media (max-width: 1199px) {
-  .overview-hero {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .cell-hero {
+    grid-column: span 12;
+    grid-row: auto;
   }
-  .hero-total {
-    grid-column: 1 / -1;
-    border-bottom: 1px solid var(--c-line);
+  .cell-subs {
+    grid-column: span 5;
   }
-  .hero-metric:nth-child(2) {
-    border-left: 0;
+  .cell-score {
+    grid-column: span 7;
   }
-  .overview-grid {
-    grid-template-columns: minmax(0, 1fr);
+  .cell-traffic,
+  .cell-map,
+  .cell-regions {
+    grid-column: span 12;
   }
 }
 @media (max-width: 767px) {
-  .overview-hero {
+  .bento {
     grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+    gap: 10px;
   }
-  .hero-metric {
-    border-left: 0;
-    border-top: 1px solid var(--c-line);
-    padding: 14px 16px;
+  .cell-subs {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 14px;
   }
-  .hero-metric:nth-child(2) {
-    border-top: 0;
+  .score-ring {
+    width: 64px;
+    height: 64px;
   }
-  .hero-total {
+  .cell-hero,
+  .cell-subs,
+  .cell-score,
+  .cell-traffic,
+  .cell-map,
+  .cell-regions {
+    grid-column: auto;
+  }
+  .cell {
     padding: 16px;
   }
   .overview-notice {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ring-value,
+  .cell-link {
+    transition: none;
   }
 }
 </style>

@@ -110,7 +110,7 @@ watch(() => [props.modelValue, props.options], position);
   gap: 4px;
   background: var(--c-surface-2);
   overflow-x: auto;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
 }
 .ui-segmented button {
   z-index: 1;
@@ -120,7 +120,7 @@ watch(() => [props.modelValue, props.options], position);
   border: 0;
   background: transparent;
   font-size: 14px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
 }
 .ui-segmented button:disabled {
   color: var(--c-muted);
@@ -131,7 +131,7 @@ watch(() => [props.modelValue, props.options], position);
   bottom: 4px;
   left: 0;
   background: var(--c-surface);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   box-shadow: var(--shadow-panel);
 }
 </style>

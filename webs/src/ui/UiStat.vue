@@ -4,7 +4,7 @@
       <slot name="label">{{ label }}</slot>
     </p>
     <div :class="['ui-stat__number', `is-${state}`]">
-      <span aria-hidden="true">{{ empty ? "—" : display }}</span
+      <span aria-hidden="true">{{ empty ? "--" : display }}</span
       ><span class="sr-only">{{ empty ? "暂无数据" : value }}</span
       ><span v-if="unit && !empty" class="ui-stat__unit">{{ unit }}</span>
     </div>
