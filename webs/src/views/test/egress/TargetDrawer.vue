@@ -263,18 +263,18 @@ async function remove(item: Record<string, any>) {
 .drawer-note {
   color: var(--c-muted);
   font-size: 14px;
-  margin: 0 0 24px;
+  margin: 0 0 16px;
   line-height: 1.6;
 }
 .drawer-error {
   color: var(--c-bad);
   font-size: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .target-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px 16px;
+  gap: 16px 12px;
 }
 .target-form label {
   display: flex;
@@ -294,22 +294,22 @@ async function remove(item: Record<string, any>) {
   display: flex;
   flex-direction: column;
   justify-content: end;
-  gap: 12px;
+  gap: 10px;
 }
 .form-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
   margin-top: 8px;
 }
 .list-title {
-  font-size: 18px;
-  margin: 40px 0 16px;
+  font-size: 15px;
+  margin: 24px 0 12px;
 }
 .list-title span {
   font: 400 14px var(--font-mono);
   color: var(--c-muted);
-  margin-left: 12px;
+  margin-left: 10px;
 }
 .row-actions {
   display: flex;
@@ -321,7 +321,7 @@ async function remove(item: Record<string, any>) {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 .mobile-target > span {
   font-size: 14px;

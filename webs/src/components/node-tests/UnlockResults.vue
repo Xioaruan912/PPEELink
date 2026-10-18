@@ -65,7 +65,7 @@ const resultByGroup = (group: string) =>
 <style scoped lang="scss">
 @use "./dialog.scss";
 .result-error {
-  padding: 16px;
+  padding: 12px;
   border-left: 3px solid var(--c-bad);
   color: var(--c-bad);
   font-size: 14px;
@@ -75,11 +75,11 @@ const resultByGroup = (group: string) =>
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 16px 24px;
+  gap: 12px 16px;
 }
 .unlock-item {
   min-width: 0;
-  padding: 24px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
@@ -89,18 +89,18 @@ const resultByGroup = (group: string) =>
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
 }
 .unlock-item-heading strong {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
 .unlock-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-top: 12px;
   color: var(--c-muted);
   font-size: 14px;
 }
@@ -116,7 +116,7 @@ const resultByGroup = (group: string) =>
     grid-template-columns: 1fr;
   }
   .unlock-item {
-    padding: 16px;
+    padding: 12px;
   }
 }
 </style>

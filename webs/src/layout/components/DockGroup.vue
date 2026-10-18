@@ -169,8 +169,8 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
 }
 .dock-trigger {
   position: relative;
-  width: 52px;
-  min-height: 52px;
+  width: 40px;
+  min-height: 40px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -204,7 +204,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
   width: 240px;
   max-height: 70dvh;
   overflow-y: auto;
-  padding: 24px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);
@@ -222,12 +222,12 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
 .dock-panel a {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 44px;
+  gap: 10px;
+  min-height: 36px;
   padding: 8px;
   border-radius: var(--radius-control);
   color: var(--c-ink);
-  font-size: 15px;
+  font-size: 14px;
 }
 .dock-panel a:hover,
 .dock-panel a[aria-current] {
@@ -236,7 +236,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
 .dock-panel--label {
   width: max-content;
   max-width: 240px;
-  padding: 12px 20px;
+  padding: 10px 16px;
 }
 .dock-panel--label p {
   margin: 0;
@@ -259,7 +259,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
 @media (max-width: 767px) {
   .dock-trigger {
     width: 100%;
-    min-height: 56px;
+    min-height: 48px;
     padding: 4px;
   }
   .mobile-label {

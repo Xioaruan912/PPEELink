@@ -486,10 +486,10 @@ onBeforeUnmount(() => {
 }
 .collection-link {
   max-width: 760px;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .collection-form {
-  margin-top: 32px;
+  margin-top: 20px;
 }
 .collection-form :deep(.el-select),
 .collection-form :deep(.el-date-editor) {

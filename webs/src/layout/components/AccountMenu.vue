@@ -43,7 +43,7 @@ const tooltipVisible = ref(false);
   display: inline-grid;
   place-items: center;
   width: 44px;
-  height: 44px;
+  height: 36px;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: var(--c-surface-2);

@@ -234,9 +234,9 @@ watch(savedRevision, async () => {
 .builder-source {
   display: grid;
   grid-template-columns: minmax(160px, 0.7fr) minmax(0, 1.3fr) minmax(0, 1fr);
-  gap: 24px;
-  margin-bottom: 32px;
-  padding-bottom: 32px;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 20px;
   border-bottom: 1px solid var(--c-line);
 }
 .source-field {
@@ -259,7 +259,7 @@ watch(savedRevision, async () => {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   align-items: start;
-  gap: 24px;
+  gap: 16px;
 }
 .builder-controls,
 .builder-fields {
@@ -269,8 +269,8 @@ watch(savedRevision, async () => {
   display: flex;
   flex-direction: column;
   align-items: start;
-  gap: 16px;
-  margin-bottom: 32px;
+  gap: 12px;
+  margin-bottom: 20px;
 }
 .step-count {
   font: 400 14px/1.4 var(--font-mono);
@@ -280,7 +280,7 @@ watch(savedRevision, async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 .step-finish {
   color: var(--c-muted);
@@ -298,7 +298,7 @@ watch(savedRevision, async () => {
   }
 }
 .preview-note {
-  margin: 0 0 24px;
+  margin: 0 0 16px;
   font-size: 14px;
   color: var(--c-muted);
   overflow-wrap: anywhere;
@@ -318,22 +318,22 @@ watch(savedRevision, async () => {
 }
 .builder-alert {
   display: flex;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   color: var(--c-bad);
   font-size: 14px;
 }
 .build-error {
   color: var(--c-bad);
   font-size: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 @media (max-width: 1100px) {
   .builder-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
+    gap: 20px;
   }
   .builder-preview {
     position: relative;
@@ -343,7 +343,7 @@ watch(savedRevision, async () => {
 @media (max-width: 767px) {
   .builder-source {
     grid-template-columns: minmax(0, 1fr);
-    gap: 16px;
+    gap: 12px;
   }
   .step-actions {
     align-items: start;

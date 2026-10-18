@@ -43,7 +43,7 @@ const {
 </template>
 <style scoped>
 .diff-caption {
-  margin: 0 0 24px;
+  margin: 0 0 16px;
   color: var(--c-muted);
   font-size: 14px;
 }

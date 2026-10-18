@@ -14,7 +14,7 @@ withDefaults(
   align-items: center;
   gap: 4px;
   border: 1px solid color-mix(in srgb, var(--tag-color) 35%, var(--c-line));
-  padding: 4px 12px;
+  padding: 4px 10px;
   border-radius: 999px;
   font-size: 14px;
   line-height: 1.4;

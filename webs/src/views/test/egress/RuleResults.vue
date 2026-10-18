@@ -157,23 +157,23 @@ const succeeded = (row: any) =>
 </script>
 <style scoped>
 .rule-results {
-  margin-top: 32px;
+  margin-top: 20px;
   min-width: 0;
 }
 .rule-flow {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 24px;
+  gap: 10px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
   overflow-wrap: anywhere;
   background: var(--c-surface);
 }
 .rule-flow span {
-  font-size: 15px;
+  font-size: 14px;
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -187,8 +187,8 @@ const succeeded = (row: any) =>
 .rule-meta {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 24px;
-  margin: 0 0 40px;
+  gap: 16px;
+  margin: 0 0 24px;
 }
 .rule-meta dt {
   font-size: 14px;
@@ -196,7 +196,7 @@ const succeeded = (row: any) =>
   margin-bottom: 8px;
 }
 .rule-meta dd {
-  font-size: 15px;
+  font-size: 14px;
   margin: 0;
   overflow-wrap: anywhere;
 }
@@ -204,15 +204,15 @@ const succeeded = (row: any) =>
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin: 24px 0;
+  gap: 12px;
+  margin: 16px 0;
 }
 .rule-heading h2 {
-  font-size: 22px;
+  font-size: 17px;
   margin: 0;
 }
 .rule-heading h3 {
-  font-size: 18px;
+  font-size: 15px;
   margin: 0;
 }
 .rule-heading p,
@@ -226,7 +226,7 @@ const succeeded = (row: any) =>
   overflow-wrap: anywhere;
 }
 .rule-warning {
-  padding: 16px 0;
+  padding: 12px 0;
   color: var(--c-warn-ink);
   font-size: 14px;
   line-height: 1.6;
@@ -248,14 +248,14 @@ const succeeded = (row: any) =>
 .plan-mobile-head {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  font-size: 15px;
+  gap: 10px;
+  font-size: 14px;
 }
 .plan-mobile {
   display: grid;
   grid-template-columns: 90px minmax(0, 1fr);
-  gap: 16px;
-  margin: 24px 0 0;
+  gap: 12px;
+  margin: 16px 0 0;
 }
 .plan-mobile dt {
   font-size: 14px;
@@ -270,7 +270,7 @@ const succeeded = (row: any) =>
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .rule-flow {
-    padding: 16px;
+    padding: 12px;
   }
   .rule-heading {
     align-items: start;

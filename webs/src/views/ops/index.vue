@@ -423,19 +423,19 @@ onMounted(load);
 .ops-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
-  gap: 40px;
+  gap: 24px;
   align-items: start;
 }
 .section-heading {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 24px;
-  margin-bottom: 32px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 .section-heading h2 {
   margin: 0 0 8px;
-  font-size: 22px;
+  font-size: 17px;
 }
 .section-heading p {
   margin: 0;
@@ -445,8 +445,8 @@ onMounted(load);
 .token-summary {
   display: flex;
   align-items: end;
-  gap: 40px;
-  margin-bottom: 24px;
+  gap: 24px;
+  margin-bottom: 16px;
 }
 .token-summary p {
   color: var(--c-muted);
@@ -454,8 +454,8 @@ onMounted(load);
   margin: 0 0 8px;
 }
 .audit-section {
-  margin-top: 64px;
-  padding-top: 48px;
+  margin-top: 32px;
+  padding-top: 28px;
   border-top: 1px solid var(--c-line);
 }
 .mono {
@@ -476,19 +476,19 @@ onMounted(load);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 .mobile-heading h3 {
-  font-size: 16px;
+  font-size: 14px;
   overflow-wrap: anywhere;
   margin: 0;
 }
 .mobile-fields {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
-  gap: 12px;
+  gap: 10px;
   font-size: 14px;
-  margin-top: 16px;
+  margin-top: 12px;
 }
 .mobile-fields dt {
   color: var(--c-muted);
@@ -499,7 +499,7 @@ onMounted(load);
 }
 .form-note {
   font-size: 14px;
-  margin: 0 0 24px;
+  margin: 0 0 16px;
 }
 .error-text {
   color: var(--c-bad);
@@ -510,33 +510,33 @@ onMounted(load);
 }
 .token-value {
   font-family: var(--font-mono);
-  margin-top: 16px;
+  margin-top: 12px;
 }
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 @media (max-width: 1279px) {
   .ops-layout {
     grid-template-columns: minmax(0, 1fr);
-    gap: 48px;
+    gap: 28px;
   }
 }
 @media (max-width: 767px) {
   .section-heading {
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
   .token-summary {
     align-items: start;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
   .audit-section {
-    margin-top: 48px;
-    padding-top: 32px;
+    margin-top: 28px;
+    padding-top: 20px;
   }
 }
 </style>

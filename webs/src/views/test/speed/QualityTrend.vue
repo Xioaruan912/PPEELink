@@ -202,11 +202,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 h2 {
-  font-size: 22px;
+  font-size: 17px;
   margin: 0;
 }
 p {

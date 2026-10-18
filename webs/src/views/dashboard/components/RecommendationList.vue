@@ -129,7 +129,7 @@ function simpleReason(reasons: string[]) {
 .recommendation-head {
   display: flex;
   justify-content: space-between;
-  padding: 32px 0 16px;
+  padding: 20px 0 12px;
   font: 13px/1.4 var(--font-mono);
   color: var(--c-muted);
 }
@@ -140,9 +140,9 @@ function simpleReason(reasons: string[]) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: 16px;
   min-height: 96px;
-  padding: 16px 8px;
+  padding: 12px 8px;
   border-top: 1px solid var(--c-line);
   border-radius: var(--radius-control);
   color: var(--c-ink);
@@ -156,7 +156,7 @@ function simpleReason(reasons: string[]) {
   min-width: 0;
 }
 .node-copy strong {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -168,7 +168,7 @@ function simpleReason(reasons: string[]) {
 .node-score {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   flex-shrink: 0;
 }
 .node-score svg {
@@ -184,7 +184,7 @@ function simpleReason(reasons: string[]) {
   clip-path: inset(50%);
 }
 .node-score :deep(.ui-stat__number) {
-  font-size: 24px;
+  font-size: 18px;
 }
 .node-score :deep(.ui-stat__unit) {
   font-size: 14px;
@@ -218,7 +218,7 @@ function simpleReason(reasons: string[]) {
 }
 @media (max-width: 767px) {
   .recommendation-row {
-    gap: 16px;
+    gap: 12px;
     padding-inline: 0;
   }
   .node-score {

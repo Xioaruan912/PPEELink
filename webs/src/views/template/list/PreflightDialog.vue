@@ -303,7 +303,7 @@ const compatibilityLabel = (value: string) =>
 </template>
 <style scoped>
 .query {
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 .query :deep(.el-form-item) {
   margin-bottom: 8px;
@@ -328,7 +328,7 @@ small {
   color: var(--c-bad);
 }
 .stale-note {
-  padding: 16px;
+  padding: 12px;
   border-left: 2px solid var(--c-warn);
   background: var(--c-surface-2);
 }
@@ -336,14 +336,14 @@ small {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 24px;
-  padding: 24px 0;
+  gap: 16px;
+  padding: 16px 0;
   border-top: 1px solid var(--c-line);
 }
 .report-summary dl {
   display: grid;
   grid-template-columns: auto auto;
-  gap: 8px 24px;
+  gap: 8px 16px;
   margin: 0;
 }
 .report-summary dt {
@@ -356,8 +356,8 @@ small {
   font: 500 16px var(--font-mono);
 }
 .report-section {
-  margin-top: 32px;
-  padding-top: 24px;
+  margin-top: 20px;
+  padding-top: 16px;
   border-top: 1px solid var(--c-line);
   min-width: 0;
 }
@@ -366,26 +366,26 @@ small {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 .report-section h3 {
-  font-size: 20px;
+  font-size: 16px;
   margin: 0;
 }
 .report-section > header {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   font-size: 14px;
 }
 .compat-list article {
-  padding: 16px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--c-line);
 }
 .compat-list article > div {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
 }
 .compat-list p {
   margin: 8px 0 0;
@@ -394,15 +394,15 @@ small {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin: 24px 0;
+  margin: 16px 0;
 }
 .issue-row {
   display: flex;
   width: 100%;
-  gap: 16px;
+  gap: 12px;
   align-items: center;
-  padding: 16px 0;
-  min-height: 48px;
+  padding: 12px 0;
+  min-height: 40px;
   border: 0;
   border-bottom: 1px solid var(--c-line);
   background: transparent;
@@ -429,8 +429,8 @@ small {
 .mobile-facts {
   display: grid;
   grid-template-columns: 90px minmax(0, 1fr);
-  gap: 12px;
-  margin: 16px 0 0;
+  gap: 10px;
+  margin: 12px 0 0;
   font-size: 14px;
 }
 .mobile-facts dt {

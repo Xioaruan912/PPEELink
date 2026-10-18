@@ -23,17 +23,17 @@ const authenticated = !!localStorage.getItem("accessToken");
 <style scoped>
 .error-page {
   min-height: 65dvh;
-  padding-top: 24px;
+  padding-top: 16px;
   max-width: 720px;
 }
 .error-code {
   color: var(--c-signal-text);
   font: 400 clamp(112px, 22vw, 240px)/0.9 var(--font-display);
-  margin: 0 0 48px;
+  margin: 0 0 28px;
 }
 .error-header {
   padding: 0;
   border: 0;
-  margin-bottom: 40px;
+  margin-bottom: 24px;
 }
 </style>

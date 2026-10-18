@@ -158,9 +158,9 @@ onMounted(loadUser);
 .current-account {
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding-bottom: 32px;
-  margin-bottom: 32px;
+  gap: 16px;
+  padding-bottom: 20px;
+  margin-bottom: 20px;
   border-bottom: 1px solid var(--c-line);
 }
 .account-avatar {
@@ -173,7 +173,7 @@ onMounted(loadUser);
   border-radius: 16px;
   background: var(--c-surface-2);
   color: var(--c-signal-text);
-  font: 400 32px/1 var(--font-display);
+  font: 400 24px/1 var(--font-display);
 }
 .current-account p {
   margin: 0 0 4px;
@@ -181,7 +181,7 @@ onMounted(loadUser);
   font-size: 14px;
 }
 .current-account strong {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 500;
   overflow-wrap: anywhere;
 }
@@ -189,10 +189,10 @@ onMounted(loadUser);
   min-width: 0;
 }
 .account-form :deep(.el-form-item) {
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 .password-strength {
-  margin: -16px 0 24px;
+  margin: -12px 0 16px;
   color: var(--c-muted);
   font-size: 14px;
 }
@@ -203,10 +203,10 @@ onMounted(loadUser);
 .account-note {
   font-size: 14px;
   color: var(--c-muted);
-  margin: 0 0 32px;
+  margin: 0 0 20px;
 }
 .account-error {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   font-size: 14px;
 }
 @media (max-width: 767px) {

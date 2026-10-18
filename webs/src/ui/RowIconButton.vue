@@ -35,7 +35,7 @@ const tooltipVisible = ref(false);
 .row-icon-button {
   width: 44px;
   min-width: 44px;
-  height: 44px;
+  height: 36px;
   padding: 0;
   gap: 0;
 }

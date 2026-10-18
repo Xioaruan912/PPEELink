@@ -222,8 +222,8 @@ const tabs = [
   display: flex;
   align-items: end;
   justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 24px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 .filename-form {
   flex: 1;
@@ -242,7 +242,7 @@ const tabs = [
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 30%);
   align-items: start;
-  gap: 24px;
+  gap: 16px;
 }
 .editor-pane,
 .inspect-pane {
@@ -261,7 +261,7 @@ const tabs = [
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 0 12px;
+  padding: 0 0 10px;
   font-size: 14px;
   color: var(--c-muted);
 }
@@ -269,21 +269,21 @@ const tabs = [
   width: 100%;
 }
 .inspect-body {
-  padding-top: 24px;
+  padding-top: 16px;
 }
 .inspect-body h2 {
-  font-size: 18px;
+  font-size: 15px;
   line-height: 1.4;
-  margin: 0 0 16px;
+  margin: 0 0 12px;
 }
 .inspect-body p {
   font-size: 14px;
-  margin: 16px 0;
+  margin: 12px 0;
 }
 .inspect-section {
   border-top: 1px solid var(--c-line);
-  padding-top: 24px;
-  margin-top: 24px;
+  padding-top: 16px;
+  margin-top: 16px;
 }
 .mono,
 .check-stats dd {
@@ -296,9 +296,9 @@ const tabs = [
 .check-stats {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 12px;
+  gap: 10px;
   font-size: 14px;
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .check-stats dt {
   color: var(--c-muted);
@@ -308,7 +308,7 @@ const tabs = [
 }
 .error-list {
   font-size: 14px;
-  padding-left: 20px;
+  padding-left: 16px;
   overflow-wrap: anywhere;
   color: var(--c-bad);
 }
@@ -328,10 +328,10 @@ const tabs = [
 .outline-item {
   display: flex;
   width: 100%;
-  min-height: 44px;
+  min-height: 36px;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   padding: 8px;
   border: 0;
   border-bottom: 1px solid var(--c-line);
@@ -356,7 +356,7 @@ const tabs = [
   .workspace-toolbar {
     align-items: stretch;
     flex-direction: column;
-    gap: 16px;
+    gap: 12px;
   }
   .filename-form {
     max-width: none;
@@ -365,7 +365,7 @@ const tabs = [
 @media (max-width: 1023px) {
   .workspace-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
+    gap: 20px;
   }
   .editor-pane {
     height: 65vh;
@@ -373,13 +373,13 @@ const tabs = [
   }
   .inspect-pane {
     border-top: 1px solid var(--c-line);
-    padding-top: 24px;
+    padding-top: 16px;
   }
   .workspace-actions {
     gap: 8px;
   }
   .workspace-actions .ui-button {
-    padding: 8px 12px;
+    padding: 8px 10px;
   }
 }
 </style>

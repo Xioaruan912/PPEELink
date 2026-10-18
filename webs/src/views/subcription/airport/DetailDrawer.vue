@@ -206,8 +206,8 @@ const geminiText = {
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 24px;
-  margin: 0 0 40px;
+  gap: 16px;
+  margin: 0 0 24px;
 }
 .detail-grid > div {
   min-width: 0;
@@ -222,7 +222,7 @@ dt {
 }
 dd {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 .mono {
@@ -230,18 +230,18 @@ dd {
 }
 .node-section {
   border-top: 1px solid var(--c-line);
-  padding-top: 24px;
+  padding-top: 16px;
 }
 .section-heading,
 .latency-heading {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 h3 {
   margin: 0;
-  font-size: 22px;
+  font-size: 17px;
 }
 .section-heading p,
 .latency-heading p,
@@ -251,7 +251,7 @@ h3 {
   margin: 8px 0;
 }
 .latency-heading {
-  margin: 16px 0;
+  margin: 12px 0;
 }
 .node-list {
   display: grid;
@@ -259,7 +259,7 @@ h3 {
 .node-row {
   min-width: 0;
   position: relative;
-  padding: 16px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--c-line);
   overflow: hidden;
 }
@@ -275,7 +275,7 @@ h3 {
 .node-row :deep(.el-checkbox) {
   display: flex;
   width: 100%;
-  min-height: 44px;
+  min-height: 36px;
   height: auto;
   margin: 0;
 }
@@ -285,7 +285,7 @@ h3 {
 }
 .node-name {
   display: block;
-  font-size: 15px;
+  font-size: 14px;
   white-space: normal;
   overflow-wrap: anywhere;
 }
@@ -294,7 +294,7 @@ h3 {
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  padding-left: 24px;
+  padding-left: 16px;
 }
 .node-metrics :deep(.ui-tag) {
   font-family: var(--font-mono);
@@ -321,7 +321,7 @@ h3 {
   overflow-wrap: anywhere;
 }
 .selection-hint {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .is-testing::after {
   content: "";
@@ -346,7 +346,7 @@ h3 {
 }
 @media (max-width: 480px) {
   .detail-grid {
-    gap: 24px 16px;
+    gap: 16px 12px;
   }
   .latency-heading {
     align-items: flex-start;

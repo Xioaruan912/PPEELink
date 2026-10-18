@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
 .map-selector {
   width: 100%;
   min-width: 0;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .map-skeleton {
   position: absolute;
@@ -618,8 +618,8 @@ onBeforeUnmount(() => {
   left: 0;
   bottom: 8px;
   max-width: calc(100% - 64px);
-  padding: 8px 12px;
-  gap: 8px 16px;
+  padding: 8px 10px;
+  gap: 8px 12px;
   background: color-mix(in srgb, var(--c-surface-2) 92%, transparent);
   border-radius: var(--radius-control);
 }
@@ -642,14 +642,14 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-control);
 }
 .map-controls :deep(.ui-button) {
-  padding: 8px 16px;
+  padding: 8px 12px;
 }
 .map-location {
   display: flex;
   align-items: flex-start;
   gap: 8px;
   min-height: 64px;
-  padding-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid var(--c-line);
 }
 .map-location > svg {
@@ -665,7 +665,7 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 .map-location strong {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
 }
 .map-location div span {
@@ -682,7 +682,7 @@ onBeforeUnmount(() => {
 .map-error {
   font-size: 14px;
   color: var(--c-muted);
-  margin-top: 16px;
+  margin-top: 12px;
 }
 @media (max-width: 767px) {
   .map-stage {

@@ -311,19 +311,19 @@ function leaveBar(element: Element, done: () => void) {
 <style scoped>
 .nodes-workbench {
   min-width: 0;
-  padding-bottom: 96px;
+  padding-bottom: 56px;
 }
 .workbench-grid {
   display: grid;
   grid-template-columns: minmax(230px, 4fr) minmax(0, 8fr);
-  gap: 40px;
+  gap: 24px;
   align-items: start;
 }
 .group-sidebar {
   position: sticky;
   top: 32px;
   min-width: 0;
-  padding-right: 32px;
+  padding-right: 20px;
   border-right: 1px solid var(--c-line);
 }
 .group-heading {
@@ -332,7 +332,7 @@ function leaveBar(element: Element, done: () => void) {
   justify-content: space-between;
   align-items: center;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .eyebrow,
 .mono {
@@ -350,16 +350,16 @@ function leaveBar(element: Element, done: () => void) {
   line-height: 1.6;
 }
 .coverage {
-  margin: 16px 0 32px;
+  margin: 12px 0 20px;
 }
 .group-hint {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .group-navigation {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   max-height: 50dvh;
   overflow-y: auto;
 }
@@ -367,10 +367,10 @@ function leaveBar(element: Element, done: () => void) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px;
   width: 100%;
-  min-height: 48px;
-  padding: 12px 16px;
+  min-height: 40px;
+  padding: 10px 12px;
   border-radius: var(--radius-control);
   text-align: left;
   transition:
@@ -395,14 +395,14 @@ function leaveBar(element: Element, done: () => void) {
 .node-toolbar {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 .view-toolbar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 8px;
 }
 .result-count {
@@ -412,8 +412,8 @@ function leaveBar(element: Element, done: () => void) {
 .probe-status {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 24px;
+  gap: 10px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
 }
 .probe-status :deep(.ui-button) {
@@ -422,8 +422,8 @@ function leaveBar(element: Element, done: () => void) {
 .list-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 78px 112px 52px 132px;
-  gap: 12px;
-  padding: 12px 0;
+  gap: 10px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--c-line);
   color: var(--c-muted);
   font: 400 13px/1.4 var(--font-mono);
@@ -432,17 +432,17 @@ function leaveBar(element: Element, done: () => void) {
   text-align: right;
 }
 .country-section + .country-section {
-  margin-top: 32px;
+  margin-top: 20px;
 }
 .country-heading {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 .country-heading h2 {
   margin: 0;
-  font: 600 18px/1.4 var(--font-ui);
+  font: 600 15px/1.4 var(--font-ui);
 }
 .country-heading :deep(.el-checkbox) {
   margin: 0;
@@ -456,7 +456,7 @@ function leaveBar(element: Element, done: () => void) {
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 .node-list,
 .card-grid {
@@ -493,9 +493,9 @@ function leaveBar(element: Element, done: () => void) {
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   max-width: 100%;
-  padding: 16px 20px;
+  padding: 12px 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);
@@ -507,11 +507,11 @@ function leaveBar(element: Element, done: () => void) {
 }
 @media (max-width: 1199px) {
   .workbench-grid {
-    gap: 24px;
+    gap: 16px;
     grid-template-columns: minmax(190px, 4fr) minmax(0, 8fr);
   }
   .group-sidebar {
-    padding-right: 20px;
+    padding-right: 16px;
   }
   .list-heading {
     grid-template-columns: minmax(0, 1fr) 65px 100px 44px 132px;
@@ -540,18 +540,18 @@ function leaveBar(element: Element, done: () => void) {
     display: none;
   }
   .group-heading {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
 }
 @media (max-width: 767px) {
   .workbench-grid {
     grid-template-columns: minmax(0, 1fr);
-    gap: 32px;
+    gap: 20px;
   }
   .group-sidebar {
     position: static;
     border: 0;
-    padding: 0 0 24px;
+    padding: 0 0 16px;
     border-bottom: 1px solid var(--c-line);
   }
   .group-sidebar :deep(.ui-stat),
@@ -569,7 +569,7 @@ function leaveBar(element: Element, done: () => void) {
     max-width: 100%;
   }
   .group-heading {
-    margin-bottom: 12px;
+    margin-bottom: 10px;
   }
   .node-toolbar {
     grid-template-columns: minmax(0, 1fr);
@@ -585,10 +585,10 @@ function leaveBar(element: Element, done: () => void) {
   .bulk-bar {
     justify-content: flex-start;
     gap: 8px;
-    padding: 12px;
+    padding: 10px;
   }
   .bulk-bar :deep(.ui-button) {
-    padding: 8px 16px;
+    padding: 8px 12px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

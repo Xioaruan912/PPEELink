@@ -52,36 +52,36 @@ const state = computed(() =>
 .ui-stat__label {
   font-size: 14px;
   color: var(--c-muted);
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 .ui-stat__number {
   display: flex;
   align-items: baseline;
-  font: 400 clamp(40px, 4vw, 56px)/1.1 var(--font-display);
+  font: 400 clamp(28px, 2.6vw, 34px)/1.1 var(--font-display);
   font-variant-numeric: lining-nums tabular-nums;
   transition: color var(--duration-medium);
 }
 .ui-stat--hero .ui-stat__number {
-  font-size: clamp(64px, 7vw, 96px);
+  font-size: clamp(36px, 3.4vw, 44px);
   letter-spacing: -0.03em;
 }
 .ui-stat--medium .ui-stat__number {
-  font: 400 32px/1.1 var(--font-mono);
+  font: 400 20px/1.1 var(--font-mono);
   font-variant-numeric: lining-nums tabular-nums;
 }
 .ui-stat--small .ui-stat__number {
-  font: 400 24px/1.1 var(--font-mono);
+  font: 400 16px/1.1 var(--font-mono);
   font-variant-numeric: lining-nums tabular-nums;
 }
 .ui-stat__unit {
   flex-shrink: 0;
   margin-left: 8px;
-  font: 400 15px/1.4 var(--font-mono);
+  font: 400 14px/1.4 var(--font-mono);
   letter-spacing: normal;
   color: var(--c-muted);
 }
 .ui-stat__trend {
-  margin: 16px 0 0;
+  margin: 12px 0 0;
   font-size: 14px;
   color: var(--c-muted);
 }

@@ -6,7 +6,7 @@
 }
 :deep(.el-checkbox) {
   height: auto;
-  min-height: 44px;
+  min-height: 36px;
   white-space: normal;
 }
 :deep(.el-checkbox__label) {
@@ -15,7 +15,7 @@
   font-size: 14px;
 }
 :deep(.el-form-item__label) {
-  font-size: 15px;
+  font-size: 14px;
 }
 :deep(.el-form-item__content) {
   min-width: 0;
@@ -33,18 +33,18 @@
 :deep(.ui-segmented) {
   max-width: 100%;
   flex-wrap: wrap;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 :deep(.ui-segmented button) {
-  min-height: 44px;
+  min-height: 36px;
 }
 h3 {
-  margin: 24px 0 16px;
-  font: 600 22px/1.4 var(--font-ui);
+  margin: 16px 0 12px;
+  font: 600 17px/1.4 var(--font-ui);
 }
 h4 {
-  margin: 16px 0 8px;
-  font: 500 15px/1.6 var(--font-ui);
+  margin: 12px 0 8px;
+  font: 500 14px/1.6 var(--font-ui);
 }
 p {
   line-height: 1.6;
@@ -59,7 +59,7 @@ p {
   line-height: 1.6;
 }
 .field-hint {
-  margin: 8px 0 24px;
+  margin: 8px 0 16px;
 }
 .mono {
   font: 14px/1.6 var(--font-mono);
@@ -70,15 +70,15 @@ p {
   padding: 8px 0;
 }
 .sub-form {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .src-tabs {
   display: block;
   margin-bottom: 8px;
 }
 .switch-item {
-  margin: 8px 0 24px;
-  padding: 16px 0;
+  margin: 8px 0 16px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--c-line);
 }
 .switch-main,
@@ -89,23 +89,23 @@ p {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 8px 12px;
 }
 .switch-main {
   justify-content: space-between;
 }
 .node-group-picker {
   width: 100%;
-  margin: 16px 0;
+  margin: 12px 0;
 }
 .node-group-picker :deep(.el-collapse-item__header) {
-  min-height: 48px;
+  min-height: 40px;
   height: auto;
   line-height: 1.6;
   flex-wrap: wrap;
 }
 .picker-group-title {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
 }
 .picker-group-count,
@@ -129,7 +129,7 @@ p {
   gap: 4px;
 }
 .picker-node-name {
-  font-size: 15px;
+  font-size: 14px;
 }
 .picker-node-confidence,
 .order-confidence {
@@ -140,8 +140,8 @@ p {
   color: var(--c-muted);
 }
 .field-label {
-  margin: 24px 0 16px;
-  font-size: 15px;
+  margin: 16px 0 12px;
+  font-size: 14px;
 }
 .order-list {
   display: grid;
@@ -165,7 +165,7 @@ p {
   flex: 1;
   min-width: 100px;
   overflow-wrap: anywhere;
-  font-size: 15px;
+  font-size: 14px;
 }
 .order-confidence {
   flex-basis: 100%;
@@ -187,15 +187,15 @@ p {
   margin-left: 8px;
 }
 .pipeline-section {
-  margin-top: 24px;
+  margin-top: 16px;
 }
 .pipeline-section-head {
   display: grid;
   gap: 8px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 .pipeline-title {
-  font-size: 22px;
+  font-size: 17px;
   font-weight: 600;
 }
 .pipeline-hint {
@@ -203,23 +203,23 @@ p {
   font: 14px var(--font-mono);
 }
 .pipeline-footer {
-  margin: 16px 0;
+  margin: 12px 0;
   justify-content: space-between;
 }
 .flag-select {
   max-width: 120px;
 }
 .emoji-rules {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 .reject-stat {
   display: inline-block;
-  margin-right: 16px;
+  margin-right: 12px;
   font-size: 14px;
 }
 .qr-body {
   display: grid;
-  gap: 24px;
+  gap: 16px;
   justify-items: center;
 }
 .qr-body > .secret-link {
@@ -228,21 +228,21 @@ p {
 .import-entry,
 .artifact-item,
 .country-group {
-  padding: 16px 0 24px;
+  padding: 12px 0 16px;
   border-bottom: 1px solid var(--c-line);
 }
 .group-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 16px;
+  gap: 8px 12px;
   font-size: 14px;
 }
 .detail-node {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-  padding: 16px 0;
+  gap: 12px;
+  padding: 12px 0;
   border-bottom: 1px solid var(--c-line);
   overflow-wrap: anywhere;
 }
@@ -256,7 +256,7 @@ p {
 .config-list {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
-  gap: 16px;
+  gap: 12px;
   font-size: 14px;
 }
 .config-list dt {
@@ -269,7 +269,7 @@ p {
 .log-row {
   display: grid;
   gap: 8px;
-  padding: 16px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--c-line);
 }
 .artifact-toolbar .el-select {
@@ -279,7 +279,7 @@ p {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
 }
 .artifact-item h3 {
   margin: 0;

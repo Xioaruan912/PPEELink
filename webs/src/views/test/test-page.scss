@@ -7,11 +7,11 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 24px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 .section-heading h2 {
-  font-size: 22px;
+  font-size: 17px;
   line-height: 1.4;
   margin: 0;
   font-weight: 600;
@@ -24,22 +24,22 @@
 .section-count {
   font: 400 14px var(--font-mono);
   color: var(--c-muted);
-  margin-left: 12px;
+  margin-left: 10px;
 }
 .field-label {
   display: block;
   font-size: 14px;
   color: var(--c-muted);
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 .test-notice {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 16px;
-  padding: 16px 0;
-  margin-bottom: 24px;
+  gap: 12px;
+  padding: 12px 0;
+  margin-bottom: 16px;
   border-bottom: 1px solid var(--c-line);
   color: var(--c-bad);
   font-size: 14px;
@@ -53,7 +53,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
 .node-option > span {
   overflow: hidden;

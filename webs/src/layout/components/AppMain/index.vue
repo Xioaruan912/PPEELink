@@ -79,7 +79,7 @@ const cachedViews = computed(() =>
   .app-main {
     /* Keep the final route control inside the padded content box. */
     padding-bottom: calc(
-      var(--mobile-dock-height) + env(safe-area-inset-bottom) + 32px
+      var(--mobile-dock-height) + env(safe-area-inset-bottom) + 20px
     );
   }
 }
