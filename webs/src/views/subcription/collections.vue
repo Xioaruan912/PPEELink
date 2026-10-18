@@ -23,7 +23,7 @@ import {
   UiDrawer,
   UiDialog,
   UiSegmented,
-  UiStat,
+  UiPanel,
   UiSkeleton,
   StatusDot,
   EmptyState,
@@ -257,127 +257,134 @@ onBeforeUnmount(() => {
 </script>
 <template>
   <div class="collections-page">
-    <PageHeader title="多订阅合集"
+    <PageHeader title="多订阅合集" description="一个链接，聚合多份订阅的节点。"
       ><template #actions
         ><UiButton variant="primary" :icon="Plus" @click="openEdit()"
           >新建合集</UiButton
         ></template
       ></PageHeader
     >
-    <div class="subscription-summary" data-enter>
-      <UiStat size="large" label="合集总数" :value="items.length" />
-      <p class="collection-intro">合并订阅，统一下发到设备。</p>
-    </div>
-    <div class="list-toolbar" data-enter>
-      <el-input
-        v-model="search"
-        placeholder="搜索合集名称"
-        aria-label="搜索合集名称"
-        clearable
-      /><UiButton :loading="loading" @click="load">刷新</UiButton>
-    </div>
-    <EmptyState
-      v-if="loadError"
-      size="section"
-      title="合集加载失败"
-      :description="loadError"
-      ><template #action
-        ><UiButton @click="load">重新加载</UiButton></template
-      ></EmptyState
-    ><UiSkeleton v-else-if="loading" :lines="4" height="80px" />
-    <div v-else ref="root">
+    <UiPanel
+      title="合集列表"
+      :count="filtered.length"
+      description="合并多份订阅，统一下发到设备。"
+      flush
+      data-enter
+      ><template #actions
+        ><el-input
+          v-model="search"
+          class="list-search"
+          placeholder="搜索合集名称"
+          aria-label="搜索合集名称"
+          clearable
+        /><UiButton :loading="loading" @click="load">刷新</UiButton></template
+      >
       <EmptyState
-        v-if="!items.length"
-        size="page"
-        title="把订阅汇在一起"
-        description="选择成员订阅，生成统一链接。"
-        ><template #action
-          ><UiButton @click="openEdit()">新建合集</UiButton></template
-        ></EmptyState
-      ><EmptyState
-        v-else-if="!filtered.length"
+        v-if="loadError"
         size="section"
-        title="没有匹配合集"
+        title="合集加载失败"
+        :description="loadError"
         ><template #action
-          ><UiButton @click="search = ''">清除搜索</UiButton></template
+          ><UiButton @click="load">重新加载</UiButton></template
         ></EmptyState
-      >
-      <div v-if="filtered.length" class="list-heading" aria-hidden="true">
-        <span>名称 / 状态</span><span>成员数</span><span>过期时间</span
-        ><span>节点去重</span><span class="actions-heading">操作</span>
-      </div>
-      <TransitionGroup
-        tag="div"
-        class="subscription-list"
-        :name="reduced ? '' : 'subscription'"
-        ><article
-          v-for="row in filtered"
-          :key="row.id"
-          class="subscription-row"
+      ><UiSkeleton v-else-if="loading" :lines="4" height="80px" />
+      <div v-else ref="root">
+        <EmptyState
+          v-if="!items.length"
+          size="page"
+          title="把订阅汇在一起"
+          description="选择成员订阅，生成统一链接。"
+          ><template #action
+            ><UiButton @click="openEdit()">新建合集</UiButton></template
+          ></EmptyState
+        ><EmptyState
+          v-else-if="!filtered.length"
+          size="section"
+          title="没有匹配合集"
+          ><template #action
+            ><UiButton @click="search = ''">清除搜索</UiButton></template
+          ></EmptyState
         >
-          <button
-            class="name-button"
-            :title="row.note ? `${row.name} · ${row.note}` : row.name"
-            @click="openEdit(row)"
+        <div v-if="filtered.length" class="list-heading" aria-hidden="true">
+          <span>名称 / 状态</span><span>成员数</span><span>过期时间</span
+          ><span>节点去重</span><span class="actions-heading">操作</span>
+        </div>
+        <TransitionGroup
+          tag="div"
+          class="subscription-list"
+          :name="reduced ? '' : 'subscription'"
+          ><article
+            v-for="row in filtered"
+            :key="row.id"
+            class="subscription-row"
           >
-            <span class="name-text">{{ row.name }}</span
-            ><span class="name-meta"
-              ><StatusDot
-                :state="expired(row) ? 'bad' : 'ok'"
-                :label="expired(row) ? '已过期' : '有效'"
-              /><span v-if="row.note" class="collection-note">{{
-                row.note
-              }}</span></span
-            >
-          </button>
-          <div class="row-value">
-            <span class="mobile-label">成员数</span
-            ><span class="mono">{{ memberIds(row).length }}</span>
-          </div>
-          <div class="row-value">
-            <span class="mobile-label">过期时间</span
-            ><time class="mono">{{
-              row.expiresAt ? formatDateTime(row.expiresAt) : "永不过期"
-            }}</time>
-          </div>
-          <div class="row-value">
-            <span class="mobile-label">节点去重</span
-            ><span>{{ row.dedupe ? "开启" : "关闭" }}</span>
-          </div>
-          <div class="row-actions collection-actions">
-            <CopyLinkButton
-              v-model="client"
-              :value="collectionLink(row)"
-              :options="clientOptions"
-              :label="row.name"
-            />
-            <RowIconButton
-              :icon="Edit"
-              :label="`编辑 ${row.name}`"
+            <button
+              class="name-button"
+              :title="row.note ? `${row.name} · ${row.note}` : row.name"
               @click="openEdit(row)"
-            />
-            <el-dropdown
-              trigger="click"
-              @command="
-                (command: string) =>
-                  command === 'reset' ? resetToken(row) : remove(row)
-              "
-              ><RowIconButton
-                :icon="MoreFilled"
-                :label="`${row.name} 更多操作`"
-              /><template #dropdown
-                ><el-dropdown-menu
-                  ><el-dropdown-item command="reset">重置令牌</el-dropdown-item
-                  ><el-dropdown-item command="delete"
-                    ><span class="danger-text">删除合集</span></el-dropdown-item
-                  ></el-dropdown-menu
-                ></template
-              ></el-dropdown
             >
-          </div>
-        </article></TransitionGroup
-      >
-    </div>
+              <span class="name-text">{{ row.name }}</span
+              ><span class="name-meta"
+                ><StatusDot
+                  :state="expired(row) ? 'bad' : 'ok'"
+                  :label="expired(row) ? '已过期' : '有效'"
+                /><span v-if="row.note" class="collection-note">{{
+                  row.note
+                }}</span></span
+              >
+            </button>
+            <div class="row-value">
+              <span class="mobile-label">成员数</span
+              ><span class="mono">{{ memberIds(row).length }}</span>
+            </div>
+            <div class="row-value">
+              <span class="mobile-label">过期时间</span
+              ><time class="mono">{{
+                row.expiresAt ? formatDateTime(row.expiresAt) : "永不过期"
+              }}</time>
+            </div>
+            <div class="row-value">
+              <span class="mobile-label">节点去重</span
+              ><span>{{ row.dedupe ? "开启" : "关闭" }}</span>
+            </div>
+            <div class="row-actions collection-actions">
+              <CopyLinkButton
+                v-model="client"
+                :value="collectionLink(row)"
+                :options="clientOptions"
+                :label="row.name"
+              />
+              <RowIconButton
+                :icon="Edit"
+                :label="`编辑 ${row.name}`"
+                @click="openEdit(row)"
+              />
+              <el-dropdown
+                trigger="click"
+                @command="
+                  (command: string) =>
+                    command === 'reset' ? resetToken(row) : remove(row)
+                "
+                ><RowIconButton
+                  :icon="MoreFilled"
+                  :label="`${row.name} 更多操作`"
+                /><template #dropdown
+                  ><el-dropdown-menu
+                    ><el-dropdown-item command="reset"
+                      >重置令牌</el-dropdown-item
+                    ><el-dropdown-item command="delete"
+                      ><span class="danger-text"
+                        >删除合集</span
+                      ></el-dropdown-item
+                    ></el-dropdown-menu
+                  ></template
+                ></el-dropdown
+              >
+            </div>
+          </article></TransitionGroup
+        >
+      </div>
+    </UiPanel>
     <UiDrawer
       v-model="dialog"
       :title="form.id ? '编辑合集' : '新建合集'"
@@ -470,7 +477,6 @@ onBeforeUnmount(() => {
 .collections-page {
   min-width: 0;
 }
-.collection-intro,
 .collection-note {
   color: var(--c-muted);
   font-size: 14px;

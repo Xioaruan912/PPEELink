@@ -38,17 +38,16 @@
   - 展示：**Instrument Serif**（400 normal/italic）→ `--font-display`。用于页面大标题、英雄数字、关键大数字旁的标签、页面级空状态标题。中文回退 `"Songti SC","Noto Serif SC",serif`。
   - 界面：**Geist**（variable）→ `--font-ui`，回退 `"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif`。
   - 数字/代码/链接/IP：**JetBrains Mono**（variable）→ `--font-mono`，统一 `font-variant-numeric: tabular-nums`。
-- `UiStat` 通过 `size` 控制数字层级：`hero` / `large`（≥40px）使用 `--font-display` 与 `font-variant-numeric: lining-nums tabular-nums`；`medium`（32px）/ `small`（≤24px）继续使用 mono。
-- 字号：正文 16 / 控件 15 / 次要 14 / 小标签 13（仅 mono 大写 eyebrow 用，letter-spacing .08em）；页面标题 clamp(40px, 5vw, 72px) display 字体，行高 1.0；区块标题 22px UI 字体 600。最小字号 13，禁止 12 及以下。
+- `UiStat` 通过 `size` 控制数字层级：仅 `hero`（仪表盘节点总数）使用 `--font-display`；`large` 为 Geist 26px 600；`medium` / `small` 使用 mono。
+- 字号：正文 14 / 次要 13 / 元信息 12（行内副标题、列表表头、徽标、计数）；页面标题 22px UI 字体 600（不用 display 字体）；面板标题 15px 600。最小字号 12。
 - 行高：正文 1.6，控件 1.4。
 
-## 4. 布局（VARIANCE 10，DENSITY 4）
-- 间距栅格 8px（4 仅用于图标与文字间）。页面左右留白：桌面 48px，平板 32px，手机 16px。内容最大宽 1440px，但**不居中对称**：标题区左对齐并允许出血到左侧 dock 边。
-- **外壳**：桌面 = 左侧 76px 竖向 dock（图标 + hover/focus 展开 tooltip 标签，分组之间发丝分隔），顶部无传统 navbar，仅页面内的 PageHeader；右上角固定一个小工具簇（⌘K 搜索、任务状态指示、主题切换、用户菜单）。手机（<768）= 底部 dock（最多 5 个一级入口 + "更多" sheet）+ 单列。
-- **页面骨架**：`PageHeader`（mono eyebrow 分组名 / display 大标题 / 一句话说明可省 / 右侧主操作）→ 内容。区块之间用 48–64px 空白和发丝线分隔，而不是层层卡片嵌套。
-- 非对称：列表页采用 "主列表 8 : 侧信息 4" 或 "数字条带横跨 + 列表"；仪表盘用不规则网格（一个大块 + 若干不等宽块），禁止三/四等分卡片排一行。
-- 表格：行高 ≥ 48px，表头 13px mono 大写 muted，无竖线，仅横向发丝线；hover 行底 `--c-surface-2`；操作列最多 2 个可见按钮 + "更多" 下拉；手机下表格转为卡片列表（不出现横向滚动整页）。
-- 空状态：`EmptyState size="page"` 使用 display 大标题；`section` 使用 20px UI 标题、14px 说明与次级按钮；`inline` 使用一行 muted 文本。仪表盘内只使用 section / inline；绝不塞假数据。
+## 4. 布局（v2 "Console"，2026-10-18 起）
+- **外壳**：桌面 = 左侧 236px 带文字的侧栏（Logo + 产品名、按路由分组的小标题 + 导航行、底部任务状态 / 主题 / 账户卡），可收起为 68px 图标栏（偏好存 localStorage）；选中行有弹簧滑动的高亮块。主列顶部 60px 粘性顶栏：面包屑（分组 / 页面）+ 右侧搜索框（⌘K）。<1024px 侧栏变为左侧滑出抽屉，顶栏出现菜单按钮；手机不再有底部 dock。
+- **页面骨架**：`PageHeader`（标题 + 一句说明 + 右侧主操作）→ 可选 `.stat-tiles` 指标卡行 → 一个或多个 `UiPanel` 区块。每个区块 = 带边框卡片，头部为「标题 + 计数徽标 + 一句说明 / 右侧筛选与操作」，列表放在 `flush` 面板里，表头为浅底 12px mono。次要信息（如规则源）用 `collapsible` 折叠面板。
+- 区块间距 16px；页面内边距桌面 28px、平板 20px、手机 12px；内容最大宽 1480px。
+- 列表行高约 64–72px，主行文字 14px 600，副行 12px muted；手机下行转为单列堆叠，不出现横向滚动。
+- 空状态：`EmptyState size="page"` / `section` / `inline` 规则不变；绝不塞假数据。
 
 ## 5. 组件层（`src/ui/`，全部自建，EP 仅作复杂控件底座）
 `UiButton`（primary=signal 实心 / secondary=描边 / ghost / danger；支持 loading、icon、磁吸 `v-magnetic` 仅用于 primary）、`UiPanel`、`PageHeader`、`UiStat`（按 size 区分 display / mono 数字 + 计数动画 + 标签 + 可选趋势）、`StatusDot`（ok/warn/bad/idle，ok 带呼吸脉冲）、`UiTable`（包 el-table，统一样式 + 移动卡片插槽）、`EmptyState`、`UiSkeleton`、`UiDialog` / `UiDrawer`（包 el-dialog/el-drawer，统一头尾）、`UiSegmented`（分段切换，滑块弹簧动画）、`UiTag`、`CommandPalette`（⌘K / Ctrl+K，模糊搜索所有路由 + 常用动作，方向键 + Enter）。
@@ -60,7 +59,7 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
   1. 路由过渡：内容区 clip/translate+opacity 交错入场（标题先、内容后，stagger 40ms），离场 140ms。
   2. 列表/表格首屏行 stagger 入场；筛选结果变化用 `<TransitionGroup>` FLIP。
   3. `UiStat` 数字从 0 滚动到值（字体按第 3 节 size 规则）；延迟数值变化时颜色随阈值过渡。
-  4. dock 图标弹簧放大 + 选中指示条滑动（FLIP）。
+  4. 侧栏选中高亮块弹簧滑动；图标 hover 位移；收起/展开与抽屉为宽度/位移过渡。
   5. 主按钮 `v-magnetic` 磁吸（指针 24px 内吸附，离开弹回）。
   6. 状态脉冲：在线点呼吸、测速/检测进行中扫描线或进度波纹。
   7. 仪表盘地图/地球：底图始终渲染，缓慢扫描 / 经纬线描线可暂停，reduced-motion 静止；节点位置点与标注线仅来自 `getNodeMap` 真实数据，无节点时左下角叠加小号说明与管理节点按钮。
@@ -91,8 +90,8 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 |---|---|---|
 | `UiButton` | `variant?: primary / secondary / ghost / danger = secondary`；`type?: button / submit / reset = button`；`disabled?: boolean`；`loading?: boolean`；`icon?: Component` | 统一按钮。默认插槽为文字，`icon` 插槽可替代图标；loading 时禁用，仅 primary 启用磁吸。纯图标使用者必须提供 aria-label 与 hover/focus tooltip。 |
 | `RowIconButton` | `label: string`；`icon: Component` | 44px 行操作按钮，自带 aria-label 与 hover/focus tooltip；透传 disabled、loading、click 等至 ghost UiButton。直接从组件文件导入。 |
-| `UiPanel` | `title?: string` | 面板容器；默认内容及 `header`、`actions`、`footer` 插槽。 |
-| `PageHeader` | `title?: string`；`eyebrow?: string`；`description?: string` | 页面唯一 h1 与右侧 `actions`；默认插槽可替代标题。eyebrow 未传时按路由分组与序号推导，传空字符串可隐藏。登录页沿用专用双栏标题。 |
+| `UiPanel` | `title?: string`；`description?: string`；`count?: number / string`；`flush?: boolean`；`collapsible?: boolean`；`defaultOpen?: boolean` | 区块卡片：头部标题 + 计数徽标 + 说明，`actions` 插槽放筛选/操作；`flush` 让列表贴边；`collapsible` 可折叠。默认内容及 `header`、`footer` 插槽。 |
+| `PageHeader` | `title?: string`；`description?: string` | 页面唯一 h1、一句说明与右侧 `actions`；默认插槽可替代标题。`eyebrow` 仅为兼容保留，不再渲染。 |
 | `UiStat` | `label: string`；`value: number / null`；`size?: hero / large / medium / small = large`；`decimals?: number = 0`；`unit?: string`；`trend?: string`；`state?: default / ok / warn / bad = default`；`thresholds?: { warn: number; bad: number }` | 真实指标与计数动画；null / 非有限数显示空值。阈值优先于 state，数值越高越差；`label`、`trend` 插槽。hero/large 用 display，medium/small 用 mono。 |
 | `StatusDot` | `state?: ok / warn / bad / idle = idle`；`label?: string`；`running?: boolean` | 文字与形状共同表达状态；ok 呼吸，running 扫描；默认插槽可替代标签。 |
 | `UiTable` | `rows: Record<string, any>[]`；`rowKey?: string = id`；`loading?: boolean`；`label?: string = 数据列表` | 桌面 EP 横线表，手机卡片；默认插槽定义列，`empty` 定义空态，`mobile-card({ row, index })` 自定义移动内容。默认空态为 section。 |
@@ -108,3 +107,9 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 `CommandItem`：`{ id: string; label: string; group?: string; icon?: string; keywords?: string; run: () => void | Promise<unknown> }`。`src/ui/index.ts` 导出上述主体组件及 CommandItem 类型；`RowIconButton`、`CountryFlag` 使用直接导入。
 
 动效统一使用 `src/motion`。CSS 动效由 `src/styles/base.scss` 的系统 reduced-motion 与 `html[data-motion="reduced"]` 双重终态守卫覆盖；地图、图表和 Monaco 读取同一 motion 状态。业务提交中的弹层保留现有关闭保护，空闲时支持 Esc。
+
+### 借鉴功能（参考妙妙屋）
+- 订阅「分享到客户端」：客户端卡片网格选择 → 二维码 + 订阅链接 + 一键导入 + 短链。
+- 机场流量：同步时读取 `Subscription-Userinfo`，机场列表与仪表盘展示已用/总量进度条与到期天数。
+- 模板构建「规则分类」：勾选分类自动增删规则集、规则行与专属分组，含精简 / 均衡 / 全量预设。
+- 模板构建「策略分组」：分组卡片看板，拖拽策略进分组、拖拽卡片排序，支持「添加到 / 移出所有分组」投放区；触屏用下拉与菜单完成同样操作。

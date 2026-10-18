@@ -1,26 +1,5 @@
-.subscription-summary {
-  display: flex;
-  align-items: flex-end;
-  gap: clamp(20px, 8vw, 128px);
-  margin: 0 0 24px;
-  padding: 12px 0 20px;
-  border-bottom: 1px solid var(--c-line);
-}
-.summary-secondary {
-  display: flex;
-  gap: 20px;
-  padding-bottom: 4px;
-}
-.list-toolbar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin: 0 0 20px;
-}
-.list-toolbar > .el-input {
-  max-width: 320px;
-  flex: 1 1 200px;
+.list-search {
+  width: 220px;
 }
 .list-heading,
 .subscription-row {
@@ -28,14 +7,14 @@
   grid-template-columns: minmax(0, 1fr) 72px 160px 322px;
   gap: 12px;
   align-items: center;
-  padding: 10px;
+  padding: 10px 16px;
 }
 .list-heading {
-  min-height: 40px;
-  font: 13px/1.6 var(--font-mono);
+  min-height: 38px;
+  font: 12px/1.6 var(--font-mono);
   color: var(--c-muted);
-  background: var(--c-surface-2);
-  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--c-surface-2) 60%, transparent);
+  border-bottom: 1px solid var(--c-line);
 }
 .actions-heading {
   text-align: right;
@@ -49,6 +28,9 @@
   min-height: 72px;
   border-bottom: 1px solid var(--c-line);
   transition: background var(--duration-fast);
+}
+.subscription-row:last-child {
+  border-bottom: 0;
 }
 .subscription-row:hover {
   background: var(--c-surface-2);
@@ -152,30 +134,13 @@
   }
 }
 @media (max-width: 1023px) {
-  .subscription-summary {
-    gap: 20px;
-    flex-wrap: wrap;
-  }
-  .list-toolbar {
-    gap: 8px;
-  }
-  .list-toolbar > .el-input {
-    max-width: none;
-  }
   .list-heading {
     display: none;
-  }
-  .subscription-list {
-    display: grid;
-    gap: 12px;
   }
   .subscription-row {
     grid-template-columns: minmax(0, 1fr);
     gap: 10px;
-    padding: 12px;
-    border: 1px solid var(--c-line);
-    border-radius: var(--radius-panel);
-    background: var(--c-surface);
+    padding: 14px 12px;
   }
   .name-button {
     margin-bottom: 4px;
@@ -205,8 +170,8 @@
   }
 }
 @media (max-width: 767px) {
-  .list-toolbar > .el-input {
-    flex-basis: 100%;
+  .list-search {
+    width: 100%;
   }
 }
 @media (prefers-reduced-motion: reduce) {

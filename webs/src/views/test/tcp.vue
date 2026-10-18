@@ -449,7 +449,11 @@ onBeforeUnmount(() => {
       1fr
     );
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-surface);
 }
 .tcp-controls > div {
   min-width: 0;

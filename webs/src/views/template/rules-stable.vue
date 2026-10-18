@@ -2,7 +2,14 @@
 import { nextTick, ref, watch } from "vue";
 import { useMediaQuery } from "@vueuse/core";
 import { Refresh, FullScreen } from "@element-plus/icons-vue";
-import { PageHeader, UiButton, StatusDot, EmptyState, UiSkeleton } from "@/ui";
+import {
+  PageHeader,
+  UiButton,
+  UiPanel,
+  StatusDot,
+  EmptyState,
+  UiSkeleton,
+} from "@/ui";
 import { useMotion, useStagger } from "@/motion";
 import RuleAnalysis from "./rules/RuleAnalysis.vue";
 import RuleDialogs from "./rules/RuleDialogs.vue";
@@ -91,15 +98,21 @@ function selectAll() {
       ></PageHeader
     >
     <p v-if="errorText" class="notice error" role="alert">{{ errorText }}</p>
-    <section class="sources-section" aria-labelledby="sources-title" data-enter>
-      <div class="section-heading">
-        <h2 id="sources-title">规则源</h2>
-        <StatusDot
+    <UiPanel
+      class="sources-section"
+      title="规则源"
+      :count="sources.length"
+      description="远程规则仓库，同步后生成可搜索的目录。"
+      collapsible
+      :default-open="false"
+      data-enter
+    >
+      <template #actions
+        ><StatusDot
           :state="syncing ? 'warn' : 'idle'"
           :running="syncing"
-          :label="syncing ? '正在同步目录' : `${sources.length} 个来源`"
-        />
-      </div>
+          :label="syncing ? '正在同步目录' : '已就绪'"
+      /></template>
       <EmptyState
         v-if="sourcesError"
         size="section"
@@ -152,21 +165,15 @@ function selectAll() {
           <time class="source-time mono">{{ fmtTime(item.lastSyncAt) }}</time>
         </article>
       </TransitionGroup>
-    </section>
+    </UiPanel>
     <div class="workbench">
-      <section
+      <UiPanel
         class="catalog-section"
-        aria-labelledby="catalog-title"
+        title="规则目录"
+        :count="total"
+        :description="`已加载 ${rules.length} / ${total}，勾选后批量加入模板。`"
         data-enter
       >
-        <div class="section-heading">
-          <h2 id="catalog-title">
-            规则目录 <span class="mono total">{{ total }}</span>
-          </h2>
-          <span class="muted load-count"
-            >已加载 {{ rules.length }} / {{ total }}</span
-          >
-        </div>
         <form class="filter-form" @submit.prevent="loadCatalog">
           <el-input
             v-model="keyword"
@@ -342,25 +349,25 @@ function selectAll() {
             </div></TransitionGroup
           >
         </section>
-      </section>
-      <aside
+      </UiPanel>
+      <UiPanel
         class="analysis-section"
-        aria-labelledby="analysis-title"
+        title="规则预览"
+        description="选择目录中的一项查看内容。"
         data-enter
       >
-        <div class="section-heading">
-          <h2 id="analysis-title">预览与影响</h2>
-          <UiButton
+        <template #actions
+          ><UiButton
             v-if="focusedRule"
             variant="ghost"
             :icon="FullScreen"
             aria-label="展开规则分析"
             @click="detailOpen = true"
             >展开</UiButton
-          >
-        </div>
+          ></template
+        >
         <RuleAnalysis compact />
-      </aside>
+      </UiPanel>
     </div>
     <RuleDialogs />
   </div>

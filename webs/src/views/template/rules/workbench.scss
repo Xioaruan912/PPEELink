@@ -2,20 +2,6 @@
   min-width: 0;
   color: var(--c-ink);
 }
-.section-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.section-heading h2 {
-  font-size: 17px;
-  font-weight: 600;
-  line-height: 1.4;
-  margin: 0;
-}
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -25,14 +11,14 @@
   color: var(--c-muted);
 }
 .sources-section {
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 .source-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 120px 150px 210px;
   gap: 16px;
   align-items: center;
-  min-height: 96px;
+  min-height: 72px;
   border-top: 1px solid var(--c-line);
   padding: 16px 0;
 }
@@ -72,7 +58,7 @@
 .workbench {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
-  gap: 24px;
+  gap: 16px;
   align-items: start;
 }
 .catalog-section,
@@ -80,11 +66,9 @@
   min-width: 0;
 }
 .analysis-section {
-  border-left: 1px solid var(--c-line);
-  padding-left: 20px;
   position: sticky;
-  top: 24px;
-  max-height: calc(100dvh - 48px);
+  top: 84px;
+  max-height: calc(100dvh - 108px);
   overflow: auto;
   scrollbar-gutter: stable;
 }
@@ -105,12 +89,6 @@
 .catalog-pagination .notice {
   flex-basis: 100%;
   margin: 0;
-}
-.analysis-section > .section-heading {
-  margin-bottom: 16px;
-}
-.analysis-section > .section-heading :deep(.ui-button) {
-  padding-inline: 8px;
 }
 .filter-form {
   display: grid;
@@ -309,7 +287,7 @@ input[type="checkbox"] {
 @media (min-width: 1440px) {
   .workbench {
     grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
-    gap: 28px;
+    gap: 16px;
   }
   .rule-row {
     grid-template-columns: 28px minmax(0, 1fr) 116px 152px;
@@ -352,7 +330,7 @@ input[type="checkbox"] {
     grid-column: 2/4;
   }
   .sources-section {
-    margin-bottom: 28px;
+    margin-bottom: 16px;
   }
 }
 @media (max-width: 767px) {
@@ -380,9 +358,6 @@ input[type="checkbox"] {
   }
   .filter-form {
     gap: 10px 8px;
-  }
-  .section-heading {
-    gap: 10px;
   }
   .rule-row {
     grid-template-columns: 24px minmax(0, 1fr);

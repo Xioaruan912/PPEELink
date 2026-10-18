@@ -12,7 +12,7 @@ const { handleAddSub } = provideSubscriptions();
 </script>
 <template>
   <div class="subscriptions-page">
-    <PageHeader title="订阅"
+    <PageHeader title="订阅" description="一份订阅，适配所有主流客户端。"
       ><template #actions
         ><UiButton variant="primary" :icon="Plus" @click="handleAddSub"
           >新建订阅</UiButton

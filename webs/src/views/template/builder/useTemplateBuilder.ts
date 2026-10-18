@@ -12,12 +12,18 @@ import { createClashPreview } from "./preview";
 import { useRouter } from "vue-router";
 import { BuildClashTemplate, GetDefaultTemplate } from "@/api/template/build";
 import { getTemp } from "@/api/template/temp";
+import {
+  RULE_CATEGORIES,
+  providerUrl,
+  type RuleCategory,
+} from "./ruleCategories";
 
-interface GroupItem {
+export interface GroupItem {
   name: string;
   type: string;
   filter: string;
   include_all_providers: boolean;
+  proxies: string[];
 }
 interface RuleProviderItem {
   name: string;
@@ -29,6 +35,14 @@ interface RuleProviderItem {
   proxy: string;
   path: string;
 }
+
+const normalizeGroup = (group: Partial<GroupItem>): GroupItem => ({
+  name: group.name || "",
+  type: group.type || "select",
+  filter: group.filter || "",
+  include_all_providers: !!group.include_all_providers,
+  proxies: Array.isArray(group.proxies) ? [...group.proxies] : [],
+});
 
 function createTemplateBuilder() {
   const loading = ref(false);
@@ -308,6 +322,7 @@ function createTemplateBuilder() {
         return;
       if (data) {
         Object.assign(form, data, { filename: "mihomo_default.yaml" });
+        form.groups = (data.groups || []).map(normalizeGroup);
         rulesText.value = (data.rules || []).join("\n");
       }
     } catch {
@@ -329,12 +344,12 @@ function createTemplateBuilder() {
     } else if (val === "blank") {
       form.filename = "my_clash.yaml";
       form.groups = [
-        {
+        normalizeGroup({
           name: "🔰 节点选择",
           type: "select",
-          filter: "",
-          include_all_providers: false,
-        },
+          include_all_providers: true,
+          proxies: ["DIRECT"],
+        }),
       ];
       form.rule_providers = [];
       rulesText.value = "";
@@ -363,15 +378,112 @@ function createTemplateBuilder() {
     }
   };
 
-  const addGroup = () => {
-    form.groups.push({
-      name: "",
-      type: "select",
-      filter: "",
-      include_all_providers: false,
-    });
+  const addGroup = (name = "") => {
+    form.groups.push(normalizeGroup({ name }));
   };
-  const removeGroup = (i: number) => form.groups.splice(i, 1);
+  const removeGroup = (i: number) => {
+    const [removed] = form.groups.splice(i, 1);
+    // Other groups must not keep pointing at a policy that no longer exists.
+    if (removed?.name)
+      form.groups.forEach((g) => {
+        g.proxies = g.proxies.filter((p) => p !== removed.name);
+      });
+  };
+
+  // ---- Rule category picker -------------------------------------------
+  const ruleLines = () => rulesText.value.split("\n");
+  const mainGroup = () => {
+    if (!form.groups.length)
+      form.groups.push(
+        normalizeGroup({
+          name: "🔰 节点选择",
+          include_all_providers: true,
+          proxies: ["DIRECT"],
+        })
+      );
+    return form.groups[0].name || "DIRECT";
+  };
+  const hasProvider = (name: string) =>
+    form.rule_providers.some((rp) => rp.name === name);
+  const categoryEnabled = (category: RuleCategory) =>
+    category.providers.every(hasProvider);
+  const ruleRefersTo = (line: string, provider: string) => {
+    const parts = line.split(",").map((part) => part.trim());
+    return parts[0]?.toUpperCase() === "RULE-SET" && parts[1] === provider;
+  };
+  function enableCategory(category: RuleCategory) {
+    const main = mainGroup();
+    let target: string = category.target;
+    if (category.target === "main") target = main;
+    if (category.target === "group" && category.group) {
+      // Reuse an existing group with the same name, ignoring a leading emoji.
+      const bare = (name: string) =>
+        name
+          .replace(/^[^\p{L}\p{N}]+/u, "")
+          .trim()
+          .toLowerCase();
+      target =
+        form.groups.find((g) => bare(g.name) === bare(category.group!))?.name ||
+        category.group;
+      if (!form.groups.some((g) => g.name === target))
+        form.groups.push(
+          normalizeGroup({
+            name: target,
+            include_all_providers: true,
+            proxies: [main, "DIRECT"].filter((p) => p !== target),
+          })
+        );
+    }
+    const lines = ruleLines().filter((line) => line.trim());
+    // Category rules go before the catch-all GEOIP/MATCH tail.
+    let insertAt = lines.findIndex((line) =>
+      /^(GEOIP|MATCH|FINAL)\s*,/i.test(line.trim())
+    );
+    if (insertAt < 0) insertAt = lines.length;
+    for (const name of category.providers) {
+      if (!hasProvider(name))
+        form.rule_providers.push({
+          name,
+          url: providerUrl(name),
+          behavior: "classical",
+          type: "http",
+          interval: 86400,
+          format: "yaml",
+          proxy: main,
+          path: `./rules/${name}.yaml`,
+        });
+      if (!lines.some((line) => ruleRefersTo(line, name)))
+        lines.splice(insertAt++, 0, `RULE-SET,${name},${target}`);
+    }
+    rulesText.value = lines.join("\n");
+  }
+  function disableCategory(category: RuleCategory) {
+    form.rule_providers = form.rule_providers.filter(
+      (rp) => !category.providers.includes(rp.name)
+    );
+    const lines = ruleLines().filter(
+      (line) => !category.providers.some((name) => ruleRefersTo(line, name))
+    );
+    rulesText.value = lines.join("\n");
+    // Drop the dedicated group we created once no rule routes to it any more.
+    if (category.target === "group" && category.group) {
+      const stillUsed = lines.some((line) =>
+        line
+          .split(",")
+          .map((p) => p.trim())
+          .includes(category.group!)
+      );
+      const index = form.groups.findIndex((g) => g.name === category.group);
+      if (!stillUsed && index >= 0) removeGroup(index);
+    }
+  }
+  const toggleCategory = (category: RuleCategory, on: boolean) =>
+    on ? enableCategory(category) : disableCategory(category);
+  function applyCategoryPreset(keys: string[]) {
+    for (const category of RULE_CATEGORIES)
+      if (keys.includes(category.key) !== categoryEnabled(category))
+        toggleCategory(category, keys.includes(category.key));
+  }
 
   const addRP = () => {
     form.rule_providers.push({
@@ -504,6 +616,9 @@ function createTemplateBuilder() {
     onSourceChange,
     addGroup,
     removeGroup,
+    categoryEnabled,
+    toggleCategory,
+    applyCategoryPreset,
     addRP,
     removeRP,
     build,

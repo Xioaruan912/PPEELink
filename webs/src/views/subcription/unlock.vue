@@ -190,8 +190,11 @@ onBeforeUnmount(() => {
   align-items: flex-end;
   flex-wrap: wrap;
   gap: 16px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--c-line);
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-surface);
 }
 .node-picker {
   width: 360px;

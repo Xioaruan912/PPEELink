@@ -1,201 +1,146 @@
 <template>
-  <div v-if="authenticated" class="atlas-shell">
-    <a href="#atlas-content" class="skip-link" @click.prevent="focusMain"
+  <div
+    v-if="authenticated"
+    class="console-shell"
+    :class="{ 'is-collapsed': collapsed, 'is-drawer-open': drawerOpen }"
+  >
+    <a href="#console-content" class="skip-link" @click.prevent="focusMain"
       >跳到主要内容</a
     >
-    <aside class="atlas-dock" aria-label="工作区导航">
-      <router-link class="dock-brand" to="/dashboard" aria-label="PPEELink 首页"
-        ><img
-          class="brand-logo"
-          :src="logo"
-          width="40"
-          height="40"
-          alt="PPEELink"
-      /></router-link>
-      <nav
-        ref="dockNav"
-        class="dock-navigation"
-        aria-label="主导航"
-        @keydown="onDockKeydown"
-      >
-        <i ref="indicator" class="dock-indicator" aria-hidden="true"></i>
-        <div
-          v-for="(item, index) in navigation"
-          :key="item.path"
-          class="dock-entry"
-          :data-active="isActive(item)"
-          :data-index="index"
-        >
-          <DockGroup :item="item" :active="isActive(item)" />
-        </div>
-      </nav>
-      <div class="dock-account">
-        <el-tooltip
-          :content="isDark ? '切换浅色主题' : '切换深色主题'"
-          :trigger="['hover', 'focus']"
-          :trigger-keys="[]"
-          ><button
-            class="icon-button"
-            :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-            @click="toggleTheme"
-          >
-            <component :is="isDark ? Sunny : Moon" /></button
-        ></el-tooltip>
-        <AccountMenu
-          :username="user.user.username"
-          label="账户菜单"
-          @logout="logout"
-        />
-      </div>
-    </aside>
-    <header class="atlas-topbar">
-      <router-link
-        class="mobile-brand"
-        to="/dashboard"
-        aria-label="PPEELink 首页"
-      >
-        <img class="brand-logo" :src="logo" width="32" height="32" alt="" />
-        <span>{{ currentPageTitle }}</span>
-      </router-link>
-      <div class="atlas-tools" role="group" aria-label="快捷工具">
-        <el-tooltip
-          content="搜索页面，Command K 或 Control K"
-          :trigger="['hover', 'focus']"
-          :trigger-keys="[]"
-          ><button
-            class="search-button"
-            aria-label="搜索页面，Command K 或 Control K"
-            @click="commandVisible = true"
-          >
-            <Search /><kbd>{{ shortcutLabel }} K</kbd>
-          </button></el-tooltip
+    <div
+      class="console-scrim"
+      aria-hidden="true"
+      @click="drawerOpen = false"
+    ></div>
+    <aside
+      id="console-sidebar"
+      class="console-sidebar"
+      aria-label="工作区"
+      @keydown.esc="drawerOpen = false"
+    >
+      <div class="sidebar-brand">
+        <router-link
+          to="/dashboard"
+          class="brand-link"
+          aria-label="PPEELink 首页"
+          ><img
+            class="brand-logo"
+            :src="logo"
+            width="32"
+            height="32"
+            alt=""
+          /><span class="brand-copy"
+            ><strong>PPEELink</strong><small>订阅控制台</small></span
+          ></router-link
         >
         <button
-          class="task-button"
-          :aria-label="`测试任务：${testRunning ? '进行中' : statusError ? '状态获取失败' : '空闲'}`"
+          class="icon-button collapse-button"
+          :aria-label="collapsed ? '展开侧栏' : '收起侧栏'"
+          :aria-expanded="!collapsed"
+          aria-controls="console-sidebar"
+          @click="toggleCollapsed"
+        >
+          <component :is="collapsed ? Expand : Fold" />
+        </button>
+      </div>
+      <div class="sidebar-scroll">
+        <SideNav
+          :items="navigation"
+          :collapsed="collapsed && !drawerOpen"
+          @navigate="drawerOpen = false"
+        />
+      </div>
+      <footer class="sidebar-footer">
+        <button
+          class="sidebar-row"
+          :aria-label="`测试任务：${taskLabel}`"
           @click="testVisible = true"
         >
           <StatusDot
             :state="statusError ? 'warn' : testRunning ? 'ok' : 'idle'"
             :running="testRunning"
-            :label="
-              testRunning ? '测试中' : statusError ? '状态未知' : '任务空闲'
-            "
+            :label="taskLabel"
           />
         </button>
-        <el-tooltip
-          :content="isDark ? '切换浅色主题' : '切换深色主题'"
-          :trigger="['hover', 'focus']"
-          :trigger-keys="[]"
-          ><button
-            class="icon-button"
-            :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-            @click="toggleTheme"
+        <button
+          class="sidebar-row"
+          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
+          @click="toggleTheme"
+        >
+          <component :is="isDark ? Sunny : Moon" class="row-icon" /><span
+            class="row-label"
+            >{{ isDark ? "浅色主题" : "深色主题" }}</span
           >
-            <component :is="isDark ? Sunny : Moon" /></button
-        ></el-tooltip>
-        <AccountMenu :username="user.user.username" @logout="logout" />
-      </div>
-    </header>
-    <main id="atlas-content" class="atlas-content" tabindex="-1">
-      <AppMain />
-    </main>
-    <nav class="mobile-dock" aria-label="移动主导航" @keydown="onDockKeydown">
-      <DockGroup
-        v-for="item in navigation.slice(0, 4)"
-        :key="item.path"
-        :item="item"
-        :active="isActive(item)"
-      /><button
-        class="mobile-more"
-        aria-label="打开更多菜单"
-        @click="moreVisible = true"
-      >
-        <MoreFilled /><span>更多</span>
-      </button>
-    </nav>
-    <UiDrawer
-      v-model="moreVisible"
-      title="所有页面"
-      direction="btt"
-      size="75dvh"
-      ><nav class="more-navigation" aria-label="所有页面">
-        <section v-for="group in navigation" :key="group.path">
-          <h2>{{ group.label }}</h2>
-          <a
-            v-for="item in flattenNavigation([group])"
-            :key="item.path"
-            :href="isExternal(item.path) ? item.path : `#${item.path}`"
-            :aria-current="route.path === item.path ? 'page' : undefined"
-            @click="moreVisible = false"
-            ><SvgIcon :icon-class="item.icon" />{{ item.label }}</a
+        </button>
+        <AccountMenu
+          :username="user.user.username"
+          :compact="collapsed && !drawerOpen"
+          @logout="logout"
+        />
+      </footer>
+    </aside>
+    <div class="console-main">
+      <header class="console-topbar">
+        <button
+          class="icon-button menu-button"
+          aria-label="打开导航"
+          aria-controls="console-sidebar"
+          :aria-expanded="drawerOpen"
+          @click="drawerOpen = true"
+        >
+          <Menu />
+        </button>
+        <nav class="crumbs" aria-label="当前位置">
+          <span v-if="currentGroup" class="crumbs__group">{{
+            currentGroup
+          }}</span>
+          <span v-if="currentGroup" class="crumbs__sep" aria-hidden="true"
+            >/</span
           >
-        </section>
-      </nav>
-      <template #footer>
-        <div class="more-actions">
-          <UiButton variant="ghost" @click="toggleTheme">
-            {{ isDark ? "切换浅色主题" : "切换深色主题" }}
-          </UiButton>
-          <UiButton
-            variant="ghost"
-            @click="
-              testVisible = true;
-              moreVisible = false;
-            "
-          >
-            测试任务
-          </UiButton>
-          <UiButton
-            @click="
-              router.push('/system/user/set');
-              moreVisible = false;
-            "
-            >修改密码</UiButton
-          ><UiButton variant="ghost" @click="logout">退出登录</UiButton>
-        </div>
-      </template>
-    </UiDrawer>
+          <span class="crumbs__page" aria-current="page">{{
+            currentPageTitle
+          }}</span>
+        </nav>
+        <button
+          class="search-field"
+          aria-label="搜索页面，Command K 或 Control K"
+          @click="commandVisible = true"
+        >
+          <Search /><span>搜索页面或操作</span><kbd>{{ shortcutLabel }} K</kbd>
+        </button>
+      </header>
+      <main id="console-content" class="console-content" tabindex="-1">
+        <AppMain />
+      </main>
+    </div>
     <CommandPalette v-model="commandVisible" :items="commands" />
     <TestStatusDialog v-if="testVisible" v-model:visible="testVisible" />
   </div>
   <main v-else class="public-error-content"><AppMain /></main>
 </template>
 <script setup lang="ts">
-import {
-  computed,
-  nextTick,
-  onBeforeUnmount,
-  onMounted,
-  ref,
-  watch,
-} from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessageBox } from "element-plus";
-import { Moon, MoreFilled, Search, Sunny } from "@element-plus/icons-vue";
+import {
+  Expand,
+  Fold,
+  Menu,
+  Moon,
+  Search,
+  Sunny,
+} from "@element-plus/icons-vue";
 import { usePermissionStore, useSettingsStore, useUserStore } from "@/store";
 import { ThemeEnum } from "@/enums/ThemeEnum";
 import { translateRouteTitle } from "@/utils/i18n";
 import { GetTestStatus } from "@/api/subcription/node";
 import logo from "@/assets/logo.svg";
-import SvgIcon from "@/components/SvgIcon/index.vue";
 import TestStatusDialog from "@/components/TestStatusDialog.vue";
-import {
-  CommandPalette,
-  StatusDot,
-  UiButton,
-  UiDrawer,
-  type CommandItem,
-} from "@/ui";
-import { useMotion } from "@/motion";
+import { CommandPalette, StatusDot, type CommandItem } from "@/ui";
 import AppMain from "./components/AppMain/index.vue";
-import DockGroup from "./components/DockGroup.vue";
+import SideNav from "./components/SideNav.vue";
 import AccountMenu from "./components/AccountMenu.vue";
-import {
-  buildNavigation,
-  flattenNavigation,
-  type NavigationItem,
-} from "./navigation";
+import { buildNavigation, flattenNavigation } from "./navigation";
 const permission = usePermissionStore(),
   settings = useSettingsStore(),
   user = useUserStore(),
@@ -204,56 +149,51 @@ const permission = usePermissionStore(),
 const authenticated = !!localStorage.getItem("accessToken");
 const isDark = computed(() => settings.theme === ThemeEnum.DARK);
 const navigation = computed(() => buildNavigation(permission.routes));
+const currentGroup = computed(
+  () =>
+    navigation.value.find(
+      (group) =>
+        group.children.length &&
+        flattenNavigation([group]).some((item) => item.path === route.path)
+    )?.label
+);
 const currentPageTitle = computed(
   () =>
     flattenNavigation(navigation.value).find((item) => item.path === route.path)
       ?.label || String(translateRouteTitle(route.meta.title || "PPEELink"))
 );
 const isExternal = (path: string) => /^(https?:)?\/\//.test(path);
-const isActive = (item: NavigationItem) =>
-  flattenNavigation([item]).some((child) => child.path === route.path);
 const commandVisible = ref(false),
-  moreVisible = ref(false),
+  drawerOpen = ref(false),
   testVisible = ref(false),
   testRunning = ref(false),
   statusError = ref(false);
+const taskLabel = computed(() =>
+  testRunning.value ? "测试进行中" : statusError.value ? "状态未知" : "任务空闲"
+);
 const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+const COLLAPSE_KEY = "console-sidebar-collapsed";
+const readCollapsed = () => {
+  try {
+    return localStorage.getItem(COLLAPSE_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+const collapsed = ref(readCollapsed());
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value;
+  try {
+    localStorage.setItem(COLLAPSE_KEY, collapsed.value ? "1" : "0");
+  } catch {
+    /* Preference is optional. */
+  }
+}
 function toggleTheme() {
   settings.changeTheme(isDark.value ? ThemeEnum.LIGHT : ThemeEnum.DARK);
 }
-function onDockKeydown(event: KeyboardEvent) {
-  if (event.defaultPrevented) return;
-  const controls = Array.from(
-    (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
-      ".dock-trigger, .mobile-more"
-    )
-  );
-  const index = controls.indexOf(event.target as HTMLElement);
-  if (index < 0) return;
-  let next: number;
-  switch (event.key) {
-    case "ArrowDown":
-    case "ArrowRight":
-      next = (index + 1) % controls.length;
-      break;
-    case "ArrowUp":
-    case "ArrowLeft":
-      next = (index - 1 + controls.length) % controls.length;
-      break;
-    case "Home":
-      next = 0;
-      break;
-    case "End":
-      next = controls.length - 1;
-      break;
-    default:
-      return;
-  }
-  event.preventDefault();
-  controls[next]?.focus();
-}
 function focusMain() {
-  document.getElementById("atlas-content")?.focus();
+  document.getElementById("console-content")?.focus();
 }
 async function logout() {
   try {
@@ -288,6 +228,13 @@ const commands = computed<CommandItem[]>(() => [
     }))
   ),
   { id: "theme", label: "切换主题", run: toggleTheme },
+  { id: "collapse", label: "收起或展开侧栏", run: toggleCollapsed },
+  { id: "tasks", label: "查看测试任务", run: () => (testVisible.value = true) },
+  {
+    id: "password",
+    label: "修改密码",
+    run: () => router.push("/system/user/set"),
+  },
   { id: "logout", label: "退出登录", run: logout },
 ]);
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
@@ -308,47 +255,20 @@ async function pollStatus() {
     if (!disposed) statusTimer = setTimeout(pollStatus, 5000);
   }
 }
-const dockNav = ref<HTMLElement>(),
-  indicator = ref<HTMLElement>();
-const { animate, stop } = useMotion();
-let previousY = 0;
-async function moveIndicator() {
-  await nextTick();
-  const entry = dockNav.value?.querySelector<HTMLElement>(
-    '[data-active="true"]'
-  );
-  if (!entry || !indicator.value) {
-    if (indicator.value) indicator.value.style.opacity = "0";
-    return;
-  }
-  indicator.value.style.opacity = "1";
-  const nextY = entry.offsetTop + (entry.offsetHeight - 24) / 2;
-  stop();
-  animate(
-    indicator.value,
-    { y: previousY },
-    { y: nextY, duration: 0.56, ease: "elastic.out(1,.6)" }
-  );
-  previousY = nextY;
-}
-let observer: ResizeObserver | undefined;
 onMounted(() => {
   if (authenticated) pollStatus();
-  moveIndicator();
-  observer = new ResizeObserver(moveIndicator);
-  if (dockNav.value) observer.observe(dockNav.value);
 });
 watch(
-  () => [route.path, navigation.value],
-  () => {
-    moreVisible.value = false;
-    moveIndicator();
-  }
+  () => route.path,
+  () => (drawerOpen.value = false)
+);
+watch(drawerOpen, (open) =>
+  document.documentElement.classList.toggle("console-drawer-lock", open)
 );
 onBeforeUnmount(() => {
   disposed = true;
   if (statusTimer) clearTimeout(statusTimer);
-  observer?.disconnect();
+  document.documentElement.classList.remove("console-drawer-lock");
 });
 </script>
 <style scoped>
@@ -357,25 +277,18 @@ onBeforeUnmount(() => {
   max-width: 1440px;
   padding: 28px;
 }
-@media (min-width: 768px) and (max-width: 1023px) {
-  .public-error-content {
-    padding: 20px;
-  }
-}
-@media (max-width: 767px) {
-  .public-error-content {
-    padding: 20px 12px;
-  }
-}
-
-.atlas-shell {
+.console-shell {
+  --sidebar-w: 236px;
   min-height: 100dvh;
+}
+.console-shell.is-collapsed {
+  --sidebar-w: 68px;
 }
 .skip-link {
   position: fixed;
-  top: 16px;
-  left: 96px;
-  z-index: var(--z-tools);
+  top: 12px;
+  left: 12px;
+  z-index: calc(var(--z-tools) + 2);
   transform: translateY(-160%);
   padding: 10px 16px;
   border-radius: var(--radius-control);
@@ -385,255 +298,297 @@ onBeforeUnmount(() => {
 .skip-link:focus {
   transform: none;
 }
-.atlas-dock {
+
+/* Sidebar */
+.console-sidebar {
   position: fixed;
   inset: 0 auto 0 0;
   z-index: var(--z-dock);
-  width: 60px;
+  width: var(--sidebar-w);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 16px 0 12px;
   background: var(--c-surface);
   border-right: 1px solid var(--c-line);
+  transition: width var(--duration-medium) var(--ease-out);
+  overflow: hidden;
 }
-.dock-brand {
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 60px;
+  padding: 0 12px 0 16px;
+  border-bottom: 1px solid var(--c-line);
+}
+.brand-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--c-ink);
+}
+.brand-copy {
   display: grid;
-  place-items: center;
-  width: 40px;
-  min-height: 40px;
-  margin-bottom: 16px;
+  line-height: 1.15;
+  white-space: nowrap;
 }
-.dock-navigation {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-  padding: 0 10px;
-  min-height: 0;
+.brand-copy strong {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.brand-copy small {
+  color: var(--c-muted);
+  font: 400 12px var(--font-mono);
+}
+.sidebar-scroll {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 12px;
 }
-.dock-indicator {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 24px;
-  background: var(--c-signal);
-  border-radius: 999px;
-  pointer-events: none;
-}
-.dock-account {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
+.sidebar-footer {
+  display: grid;
+  gap: 2px;
+  padding: 10px 12px 14px;
   border-top: 1px solid var(--c-line);
+}
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 14px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sidebar-row:hover {
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+}
+.row-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+.is-collapsed .brand-copy,
+.is-collapsed .row-label,
+.is-collapsed .sidebar-row :deep(.status-dot__label) {
+  display: none;
+}
+.is-collapsed .sidebar-brand {
+  flex-direction: column;
+  justify-content: center;
+  height: auto;
+  padding: 14px 0 10px;
+}
+.is-collapsed .sidebar-row {
+  justify-content: center;
+  padding: 0;
 }
 .icon-button {
   display: inline-grid;
   place-items: center;
   flex: 0 0 auto;
-  width: 44px;
+  width: 36px;
   height: 36px;
-  padding: 10px;
+  padding: 9px;
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
-  color: var(--c-ink);
-}
-.icon-button svg {
-  width: 20px;
-  height: 20px;
+  color: var(--c-muted);
 }
 .icon-button:hover {
-  border-color: var(--c-line);
+  color: var(--c-ink);
   background: var(--c-surface-2);
 }
-
-.atlas-topbar {
-  display: contents;
-}
-.mobile-brand {
-  display: none;
-}
-.atlas-tools {
-  position: fixed;
-  z-index: var(--z-tools);
-  top: 24px;
-  right: 48px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-panel);
-}
-.search-button,
-.task-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 36px;
-  padding: 8px 10px;
-  background: transparent;
-  border: 0;
-  border-radius: var(--radius-control);
-}
-.search-button:hover,
-.task-button:hover {
-  background: var(--c-surface-2);
-}
-.search-button svg {
+.icon-button svg {
   width: 18px;
   height: 18px;
 }
-.search-button kbd {
-  font-size: 13px;
-  color: var(--c-muted);
-}
-.task-button {
-  border-left: 1px solid var(--c-line);
-}
-.atlas-content {
-  margin-left: 48px;
-  padding: 112px 28px 32px;
-  max-width: 1536px;
+
+/* Main column */
+.console-main {
+  margin-left: var(--sidebar-w);
   min-width: 0;
+  transition: margin-left var(--duration-medium) var(--ease-out);
 }
-.mobile-dock {
+.console-topbar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-tools);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 60px;
+  padding: 0 28px;
+  background: color-mix(in srgb, var(--c-canvas) 86%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--c-line);
+}
+.menu-button {
   display: none;
 }
-.more-navigation {
-  display: grid;
-  gap: 20px;
-}
-.more-actions {
+.crumbs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.more-navigation h2 {
-  color: var(--c-muted);
-  font: 400 14px var(--font-mono);
-}
-.more-navigation a {
-  display: flex;
-  gap: 12px;
   align-items: center;
-  padding: 10px;
-  min-height: 36px;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.crumbs__group,
+.crumbs__sep {
+  color: var(--c-muted);
+}
+.crumbs__page {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.search-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(320px, 40vw);
+  height: 36px;
+  margin-left: auto;
+  padding: 0 8px 0 12px;
+  border: 1px solid var(--c-line);
   border-radius: var(--radius-control);
-  color: var(--c-ink);
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 14px;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
-.more-navigation a:hover,
-.more-navigation a[aria-current] {
-  background: var(--c-selected);
+.search-field:hover {
+  border-color: var(--c-muted);
 }
-@media (min-width: 768px) and (max-width: 1023px) {
-  .atlas-content {
-    padding-left: 20px;
-    padding-right: 20px;
+.search-field svg {
+  width: 16px;
+  height: 16px;
+}
+.search-field kbd {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-surface-2);
+  font: 500 12px var(--font-mono);
+}
+.console-content {
+  max-width: 1480px;
+  padding: 24px 28px 40px;
+  min-width: 0;
+}
+.console-scrim {
+  display: none;
+}
+
+@media (max-width: 1023px) {
+  .console-shell,
+  .console-shell.is-collapsed {
+    --sidebar-w: 0px;
   }
-  .atlas-tools {
-    right: 32px;
+  .console-sidebar {
+    width: 272px;
+    transform: translateX(-100%);
+    transition: transform var(--duration-medium) var(--ease-out);
+    box-shadow: var(--shadow-overlay);
+    z-index: calc(var(--z-tools) + 1);
+  }
+  .is-drawer-open .console-sidebar {
+    transform: none;
+  }
+  /* Drawer always shows labels, even when the desktop rail is collapsed. */
+  .is-collapsed .brand-copy,
+  .is-collapsed .row-label,
+  .is-collapsed .sidebar-row :deep(.status-dot__label) {
+    display: revert;
+  }
+  .is-collapsed .brand-copy {
+    display: grid;
+  }
+  .is-collapsed .sidebar-brand {
+    flex-direction: row;
+    justify-content: space-between;
+    height: 60px;
+    padding: 0 12px 0 16px;
+  }
+  .is-collapsed .sidebar-row {
+    justify-content: flex-start;
+    padding: 0 10px;
+  }
+  .collapse-button {
+    display: none;
+  }
+  .console-scrim {
+    position: fixed;
+    inset: 0;
+    z-index: var(--z-tools);
+    display: block;
+    background: rgb(0 0 0 / 0.32);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--duration-medium) var(--ease-out);
+  }
+  .is-drawer-open .console-scrim {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .menu-button {
+    display: inline-grid;
+    margin-left: -8px;
+  }
+  .console-topbar {
+    padding: 0 20px;
+    gap: 8px;
+  }
+  .console-content {
+    padding: 20px 20px 32px;
   }
 }
 @media (max-width: 767px) {
-  .atlas-dock {
-    display: none;
+  .console-topbar {
+    height: calc(56px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
   }
-  .atlas-content {
-    margin-left: 0;
-    min-height: 100dvh;
-    padding: calc(56px + env(safe-area-inset-top)) 12px 0;
-  }
-  /* Native focus scrolling must stop above the fixed dock too. */
-  :global(html) {
-    scroll-padding-bottom: calc(
-      var(--mobile-dock-height) + env(safe-area-inset-bottom) + 20px
-    );
-  }
-  .atlas-topbar {
-    position: fixed;
-    inset: 0 0 auto;
-    z-index: var(--z-tools);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: calc(10px + env(safe-area-inset-top)) 12px 10px;
-    border-bottom: 1px solid var(--c-line);
-    background: var(--c-canvas);
-  }
-  .mobile-brand {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-    min-height: 36px;
-    color: var(--c-ink);
-    font-size: 14px;
-  }
-  .mobile-brand span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .atlas-tools {
-    position: static;
-    flex-shrink: 0;
-    gap: 4px;
+  .search-field {
+    width: 36px;
     padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-  .search-button {
     justify-content: center;
-    width: 44px;
-    padding: 10px;
+    border-color: transparent;
+    background: transparent;
   }
-  .search-button kbd,
-  .atlas-tools .task-button,
-  .atlas-tools > .icon-button {
+  .search-field span,
+  .search-field kbd,
+  .crumbs__group,
+  .crumbs__sep {
     display: none;
   }
-  .mobile-dock {
-    position: fixed;
-    inset: auto 0 0;
-    z-index: var(--z-dock);
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-    gap: 4px;
-    height: calc(var(--mobile-dock-height) + env(safe-area-inset-bottom));
-    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-    background: var(--c-surface);
-    border-top: 1px solid var(--c-line);
+  .console-content {
+    padding: 16px 12px 28px;
   }
-  .mobile-more {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    min-height: 48px;
-    border: 0;
-    background: transparent;
-    border-radius: var(--radius-control);
-    color: var(--c-muted);
-    font-size: 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .console-sidebar,
+  .console-main,
+  .console-scrim {
+    transition: none;
   }
-  .mobile-more svg {
-    width: 22px;
-    height: 22px;
-  }
-  .skip-link {
-    left: 16px;
-  }
+}
+:global(html.console-drawer-lock) {
+  overflow: hidden;
 }
 </style>

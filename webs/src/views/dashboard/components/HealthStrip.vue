@@ -1,9 +1,6 @@
 <template>
   <div class="health-strip">
-    <div class="health-heading">
-      <h3>连接健康</h3>
-      <span>连接正常率</span>
-    </div>
+    <p class="health-label">连接正常率</p>
     <UiSkeleton v-if="loading" :lines="2" height="24px" />
     <template v-else-if="summary.total">
       <UiStat
@@ -73,20 +70,9 @@ const states = computed(() => [
 ]);
 </script>
 <style scoped>
-.health-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-h3 {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0;
-}
-.health-heading > span {
-  font-size: 14px;
+.health-label {
+  margin-bottom: 4px;
+  font-size: 13px;
   color: var(--c-muted);
 }
 .health-strip > :deep(.ui-stat) {

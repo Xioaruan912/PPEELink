@@ -107,16 +107,19 @@
           ><span>{{ sizeMB }} MB / {{ timeoutSec }} 秒</span>
         </div>
       </section>
-      <section class="speed-controls" aria-labelledby="node-title">
-        <header class="section-heading">
-          <h2 id="node-title">选择节点</h2>
-          <UiButton
+      <UiPanel
+        class="speed-controls"
+        title="选择节点"
+        description="经所选节点下载测试文件，计算真实吞吐。"
+      >
+        <template #actions
+          ><UiButton
             variant="ghost"
             :disabled="loading || nodesLoading || !nodes.length"
             @click="selectAll"
             >全选可用 · {{ nodes.length }}</UiButton
-          >
-        </header>
+          ></template
+        >
         <label for="speed-nodes" class="field-label"
           >测速节点 · 已选 {{ selectedIds.length }}</label
         >
@@ -208,16 +211,16 @@
             />
           </div>
         </details>
-      </section>
+      </UiPanel>
     </div>
-    <section class="results-section" aria-labelledby="results-title" data-enter>
-      <header class="section-heading">
-        <div>
-          <h2 id="results-title">
-            测速结果 <span class="section-count">{{ results.length }}</span>
-          </h2>
-          <p>下载速率与本次峰值对比</p>
-        </div>
+    <UiPanel
+      class="results-section"
+      title="测速结果"
+      :count="results.length"
+      description="下载速率与本次峰值对比，结果保留一小时。"
+      data-enter
+    >
+      <template #actions>
         <div class="result-filters">
           <el-input
             v-model="query"
@@ -232,7 +235,7 @@
               value="rtt" /><el-option label="返回顺序" value="arrival"
           /></el-select>
         </div>
-      </header>
+      </template>
       <div v-if="results.length" class="result-columns" aria-hidden="true">
         <span>节点 / 状态</span><span>下载速度</span><span>连接响应</span
         ><span>下载量 / 耗时</span>
@@ -313,7 +316,7 @@
           ></template
         ></EmptyState
       >
-    </section>
+    </UiPanel>
   </div>
 </template>
 <script setup lang="ts">
@@ -322,6 +325,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { Close, VideoPlay } from "@element-plus/icons-vue";
 import {
+  UiPanel,
   PageHeader,
   UiButton,
   UiStat,
@@ -549,8 +553,8 @@ onBeforeUnmount(() => {
 .speed-stage {
   display: grid;
   grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-  gap: 28px;
-  margin-bottom: 32px;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 .speed-instrument {
   position: relative;
@@ -558,7 +562,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   padding: 20px;
   border: 1px solid var(--c-line);
-  border-radius: 16px;
+  border-radius: var(--radius-panel);
   background: var(--c-surface);
 }
 .instrument-heading,
@@ -685,7 +689,7 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .results-section {
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 .result-filters {
   display: flex;

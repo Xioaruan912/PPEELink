@@ -119,8 +119,8 @@ const {
   grid-template-columns: minmax(0, 1fr) 78px 112px 52px 132px;
   align-items: center;
   gap: 10px;
-  padding: 12px 0;
-  min-height: 88px;
+  padding: 10px 0;
+  min-height: 68px;
   border-bottom: 1px solid var(--c-line);
   transition: background var(--duration-fast);
 }
@@ -144,7 +144,7 @@ const {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 4px;
+  gap: 0;
 }
 .node-name button {
   text-align: left;
@@ -161,7 +161,11 @@ const {
 .host,
 .membership {
   color: var(--c-muted);
-  font-size: 14px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.host.mono {
+  font-size: 12px;
 }
 .mono {
   font: 400 14px/1.6 var(--font-mono);
