@@ -14,6 +14,7 @@ import IconTerminal from "~icons/ph/terminal-window";
 import IconPencil from "~icons/ph/pencil-simple";
 import IconTrash from "~icons/ph/trash";
 import IconWarning from "~icons/ph/warning";
+import IconPower from "~icons/ph/power";
 import {
   deleteProxyInbound,
   deleteProxyServer,
@@ -36,7 +37,6 @@ import {
   UiPanel,
   UiSegmented,
   UiSkeleton,
-  UiStat,
   UiTag,
 } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
@@ -45,6 +45,7 @@ import SecretLink from "./subs/SecretLink.vue";
 import InboundDrawer from "./servers/InboundDrawer.vue";
 import AccountDrawer from "./servers/AccountDrawer.vue";
 import TrafficBars from "./servers/TrafficBars.vue";
+import Onboarding from "./servers/Onboarding.vue";
 import { formatBytes } from "@/utils/traffic";
 import { formatDateTime } from "@/utils/date";
 
@@ -95,6 +96,21 @@ const onlineCount = computed(
     servers.value.filter((s) => s.online || (s.kind === "local" && s.running))
       .length
 );
+const inboundCount = computed(() =>
+  servers.value.reduce((n, s) => n + s.inbounds.length, 0)
+);
+const todayParts = computed(() => formatBytes(todayTotal.value).split(" "));
+// 最近 7 天总流量折线
+const spark = computed(() => {
+  const totals = new Map<string, number>();
+  for (const r of traffic.value)
+    totals.set(r.day, (totals.get(r.day) || 0) + r.up + r.down);
+  const keys = [...totals.keys()].sort().slice(-7);
+  const vals = keys.map((k) => totals.get(k) || 0);
+  while (vals.length < 7) vals.unshift(0);
+  const max = Math.max(1, ...vals);
+  return vals.map((v, i) => `${(i * 70) / 6},${22 - (v / max) * 20}`).join(" ");
+});
 const openAccounts = computed(
   () => accounts.value.filter((a) => a.enabled).length
 );
@@ -127,7 +143,7 @@ const serverForm = reactive({
 });
 const savingServer = ref(false);
 const install = ref<{ name: string; command: string } | null>(null);
-function openServer(s?: ProxyServer) {
+function openServer(s?: ProxyServer, kind?: "local" | "agent") {
   Object.assign(
     serverForm,
     s
@@ -141,9 +157,9 @@ function openServer(s?: ProxyServer) {
       : {
           id: 0,
           name: "",
-          kind: servers.value.some((x) => x.kind === "local")
-            ? "agent"
-            : "local",
+          kind:
+            kind ||
+            (servers.value.some((x) => x.kind === "local") ? "agent" : "local"),
           publicHost: "",
           enabled: true,
         }
@@ -258,35 +274,14 @@ const usageRatio = (a: ProxyAccount) =>
   <div class="servers-page">
     <PageHeader
       title="自建节点"
-      description="在本机或远程服务器上运行 xray-core，按账户发放节点并统计流量。"
+      description="在自己的服务器上运行 xray-core，按账户发放节点、统计流量。"
     >
-      <template #actions>
+      <template v-if="servers.length" #actions>
         <UiButton variant="primary" :icon="IconPlus" @click="openServer()"
           >添加服务器</UiButton
         >
       </template>
     </PageHeader>
-
-    <div class="stat-tiles" data-enter>
-      <UiStat
-        label="在线服务器"
-        :value="loading ? null : onlineCount"
-        :unit="`/ ${servers.length}`"
-      />
-      <UiStat
-        label="入站"
-        :value="
-          loading ? null : servers.reduce((n, s) => n + s.inbounds.length, 0)
-        "
-      />
-      <UiStat label="开通账户" :value="loading ? null : openAccounts" />
-      <UiStat
-        label="今日流量"
-        :value="loading ? null : Number(formatBytes(todayTotal).split(' ')[0])"
-        :unit="formatBytes(todayTotal).split(' ')[1]"
-        :decimals="1"
-      />
-    </div>
 
     <EmptyState
       v-if="loadError"
@@ -298,110 +293,152 @@ const usageRatio = (a: ProxyAccount) =>
       ></EmptyState
     >
     <UiSkeleton v-else-if="loading" :lines="3" height="140px" />
-    <EmptyState
+    <Onboarding
       v-else-if="!servers.length"
-      size="page"
-      title="还没有自建服务器"
-      description="添加本机，或在其他 VPS 上一键安装 agent。面板会下载官方 xray-core 并校验后运行。"
-      ><template #action
-        ><UiButton variant="primary" :icon="IconPlus" @click="openServer()"
-          >添加服务器</UiButton
-        ></template
-      ></EmptyState
-    >
-    <div v-else ref="root" class="server-grid">
-      <article
-        v-for="s in servers"
-        :key="s.id"
-        class="cell server-card"
-        :class="{ 'is-off': !s.enabled }"
-      >
-        <header class="card-head">
-          <span class="kind-icon" :class="`tone-${status(s).tone}`"
-            ><component :is="s.kind === 'local' ? IconServer : IconCloud"
-          /></span>
-          <div class="card-title">
-            <h2>{{ s.name }}</h2>
-            <p class="mono">{{ s.publicHost }}</p>
-          </div>
-          <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
-        </header>
-        <dl class="meta">
-          <div>
-            <dt>类型</dt>
-            <dd>{{ s.kind === "local" ? "本机" : "远程 agent" }}</dd>
-          </div>
-          <div>
-            <dt>xray</dt>
-            <dd class="mono">{{ s.xrayVersion || "--" }}</dd>
-          </div>
-          <div>
-            <dt>今日</dt>
-            <dd class="mono">{{ formatBytes(s.todayUp + s.todayDown) }}</dd>
-          </div>
-          <div>
-            <dt>最近回报</dt>
-            <dd>
-              {{ s.lastSeenAt ? formatDateTime(s.lastSeenAt).slice(5) : "--" }}
-            </dd>
-          </div>
-        </dl>
-        <p v-if="s.lastError" class="error-line">
-          <IconWarning />{{ s.lastError }}
-        </p>
-        <ul class="inbounds">
-          <li
-            v-for="i in s.inbounds"
-            :key="i.id"
-            :class="{ 'is-off': !i.enabled }"
+      @add="openServer(undefined, $event)"
+    />
+    <template v-else>
+      <section class="telemetry" data-enter aria-label="概览">
+        <div class="tm">
+          <span class="tm-label"
+            ><i class="pulse" :class="{ live: onlineCount > 0 }"></i
+            >在线服务器</span
           >
-            <span class="port mono">:{{ i.port }}</span>
-            <span class="in-main">
-              <strong>{{ i.remark || templateLabel(i.template) }}</strong>
-              <small>{{ templateLabel(i.template) }} · {{ i.sni }}</small>
+          <span class="tm-value mono"
+            >{{ onlineCount }}<small>/ {{ servers.length }}</small></span
+          >
+        </div>
+        <div class="tm">
+          <span class="tm-label">入站</span>
+          <span class="tm-value mono">{{ inboundCount }}</span>
+        </div>
+        <div class="tm">
+          <span class="tm-label">开通账户</span>
+          <span class="tm-value mono"
+            >{{ openAccounts }}<small>/ {{ accounts.length }}</small></span
+          >
+        </div>
+        <div class="tm tm-traffic">
+          <span class="tm-label">今日流量</span>
+          <span class="tm-value mono"
+            >{{ todayParts[0] }}<small>{{ todayParts[1] }}</small></span
+          >
+          <svg
+            class="spark"
+            viewBox="0 0 70 24"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <polyline :points="spark" />
+          </svg>
+        </div>
+      </section>
+      <div ref="root" class="server-grid">
+        <article
+          v-for="s in servers"
+          :key="s.id"
+          class="cell server-card"
+          :class="{ 'is-off': !s.enabled }"
+        >
+          <header class="card-head">
+            <span class="kind-icon" :class="`tone-${status(s).tone}`"
+              ><component :is="s.kind === 'local' ? IconServer : IconCloud"
+            /></span>
+            <div class="card-title">
+              <h2>{{ s.name }}</h2>
+              <p class="mono">{{ s.publicHost }}</p>
+            </div>
+            <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
+          </header>
+          <dl class="meta">
+            <div>
+              <dt>类型</dt>
+              <dd>{{ s.kind === "local" ? "本机" : "远程 agent" }}</dd>
+            </div>
+            <div>
+              <dt>xray</dt>
+              <dd class="mono">{{ s.xrayVersion || "--" }}</dd>
+            </div>
+            <div>
+              <dt>今日</dt>
+              <dd class="mono">{{ formatBytes(s.todayUp + s.todayDown) }}</dd>
+            </div>
+            <div>
+              <dt>最近回报</dt>
+              <dd>
+                {{
+                  s.lastSeenAt ? formatDateTime(s.lastSeenAt).slice(5) : "--"
+                }}
+              </dd>
+            </div>
+          </dl>
+          <p v-if="s.lastError" class="error-line">
+            <IconWarning />{{ s.lastError }}
+          </p>
+          <ul class="inbounds">
+            <li
+              v-for="i in s.inbounds"
+              :key="i.id"
+              :class="{ 'is-off': !i.enabled }"
+            >
+              <span class="port mono">:{{ i.port }}</span>
+              <span class="in-main">
+                <strong>{{ i.remark || templateLabel(i.template) }}</strong>
+                <small>{{ templateLabel(i.template) }} · {{ i.sni }}</small>
+              </span>
+              <el-switch
+                :model-value="i.enabled"
+                size="small"
+                :aria-label="`${i.remark} 启用`"
+                @change="toggleInbound(i)"
+              />
+              <RowIconButton
+                :icon="IconPencil"
+                :label="`编辑入站 ${i.remark}`"
+                @click="openInbound(s, i)"
+              />
+              <RowIconButton
+                :icon="IconTrash"
+                :label="`删除入站 ${i.remark}`"
+                @click="removeInbound(i)"
+              />
+            </li>
+            <li v-if="!s.inbounds.length" class="empty-in">
+              还没有入站，添加一个即可开始发放节点。
+            </li>
+          </ul>
+          <footer class="card-actions">
+            <UiButton :icon="IconPlus" @click="openInbound(s)"
+              >添加入站</UiButton
+            >
+            <span class="act-icons">
+              <RowIconButton
+                :icon="IconPencil"
+                :label="`编辑服务器 ${s.name}`"
+                @click="openServer(s)"
+              />
+              <RowIconButton
+                v-if="s.kind === 'agent'"
+                :icon="IconTerminal"
+                :label="`重新生成 ${s.name} 安装命令`"
+                @click="showInstall(s)"
+              />
+              <RowIconButton
+                :icon="IconPower"
+                :label="`${s.enabled ? '停用' : '启用'}服务器 ${s.name}`"
+                :class="{ 'is-on': s.enabled }"
+                @click="toggleServer(s)"
+              />
+              <RowIconButton
+                :icon="IconTrash"
+                :label="`删除服务器 ${s.name}`"
+                @click="removeServer(s)"
+              />
             </span>
-            <el-switch
-              :model-value="i.enabled"
-              size="small"
-              :aria-label="`${i.remark} 启用`"
-              @change="toggleInbound(i)"
-            />
-            <RowIconButton
-              :icon="IconPencil"
-              :label="`编辑入站 ${i.remark}`"
-              @click="openInbound(s, i)"
-            />
-            <RowIconButton
-              :icon="IconTrash"
-              :label="`删除入站 ${i.remark}`"
-              @click="removeInbound(i)"
-            />
-          </li>
-          <li v-if="!s.inbounds.length" class="empty-in">
-            还没有入站，添加一个即可开始发放节点。
-          </li>
-        </ul>
-        <footer class="card-actions">
-          <UiButton :icon="IconPlus" @click="openInbound(s)">添加入站</UiButton>
-          <UiButton variant="ghost" @click="openServer(s)">编辑</UiButton>
-          <UiButton
-            v-if="s.kind === 'agent'"
-            variant="ghost"
-            :icon="IconTerminal"
-            @click="showInstall(s)"
-            >安装命令</UiButton
-          >
-          <UiButton variant="ghost" @click="toggleServer(s)">{{
-            s.enabled ? "停用" : "启用"
-          }}</UiButton>
-          <RowIconButton
-            :icon="IconTrash"
-            :label="`删除服务器 ${s.name}`"
-            @click="removeServer(s)"
-          />
-        </footer>
-      </article>
-    </div>
+          </footer>
+        </article>
+      </div>
+    </template>
 
     <div v-if="!loading && servers.length" class="lower-grid">
       <UiPanel
@@ -541,9 +578,95 @@ const usageRatio = (a: ProxyAccount) =>
 .servers-page {
   min-width: 0;
 }
+.telemetry {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-surface);
+  box-shadow: var(--shadow-panel), var(--edge-highlight);
+}
+.tm {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 16px 20px;
+  border-left: 1px solid var(--c-line);
+}
+.tm:first-child {
+  border-left: 0;
+}
+.tm-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-muted);
+  font-size: 12px;
+}
+.tm-value {
+  font-size: 26px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+.tm-value small {
+  margin-left: 4px;
+  color: var(--c-muted);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.pulse {
+  position: relative;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-muted);
+}
+.pulse.live {
+  background: var(--c-ok);
+}
+.pulse.live::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--c-ok);
+  content: "";
+  animation: tm-ping 1.8s var(--ease-out) infinite;
+}
+@keyframes tm-ping {
+  to {
+    opacity: 0;
+    transform: scale(3);
+  }
+}
+.spark {
+  position: absolute;
+  right: 18px;
+  bottom: 16px;
+  width: 70px;
+  height: 24px;
+  overflow: visible;
+}
+.spark polyline {
+  fill: none;
+  stroke: var(--c-signal-text);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 200;
+  animation: spark-draw 1.4s var(--ease-out) both;
+}
+@keyframes spark-draw {
+  from {
+    stroke-dashoffset: 200;
+  }
+}
 .server-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
   gap: 14px;
   margin-bottom: 16px;
 }
@@ -693,8 +816,13 @@ const usageRatio = (a: ProxyAccount) =>
   padding-top: 12px;
   border-top: 1px solid var(--c-line);
 }
-.card-actions > :last-child {
+.act-icons {
+  display: flex;
+  gap: 2px;
   margin-left: auto;
+}
+.act-icons .is-on {
+  color: var(--c-ok);
 }
 .lower-grid {
   display: grid;
@@ -769,16 +897,41 @@ const usageRatio = (a: ProxyAccount) =>
   font-family: var(--font-mono);
 }
 @media (max-width: 899px) {
+  .telemetry {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .tm:nth-child(3) {
+    border-left: 0;
+  }
+  .tm:nth-child(n + 3) {
+    border-top: 1px solid var(--c-line);
+  }
+  .tm {
+    padding: 14px 16px;
+  }
+  .tm-value {
+    font-size: 22px;
+  }
+  .spark {
+    right: 14px;
+    width: 48px;
+  }
   .server-grid,
   .lower-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 10px;
+  }
+  .server-card {
+    padding: 16px;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .kind-icon.tone-ok {
+  .kind-icon.tone-ok,
+  .pulse.live::after,
+  .spark polyline {
     animation: none;
   }
 }
