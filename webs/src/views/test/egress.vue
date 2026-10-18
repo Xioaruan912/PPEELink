@@ -516,7 +516,7 @@ async function refreshTargets() {
 }
 .egress-group div > span {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
   overflow-wrap: anywhere;
 }
 .egress-results {
@@ -538,7 +538,7 @@ async function refreshTargets() {
 .target-title small {
   display: block;
   color: var(--c-muted);
-  font: 400 13px/1.5 var(--font-mono);
+  font: 400 14px/1.5 var(--font-mono);
   margin-top: 8px;
   overflow-wrap: anywhere;
 }
@@ -560,7 +560,7 @@ async function refreshTargets() {
 .status-note {
   display: block;
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   margin-top: 8px;
 }
@@ -579,7 +579,7 @@ async function refreshTargets() {
       0,
       1fr
     );
-  gap: 20px;
+  gap: 24px;
 }
 .explain-query label {
   display: flex;
@@ -648,7 +648,7 @@ async function refreshTargets() {
     grid-template-columns: 1fr;
   }
   .egress-group {
-    padding: 20px;
+    padding: 24px;
   }
   .egress-summary {
     margin: 40px 0;

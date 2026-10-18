@@ -4,8 +4,9 @@
   --c-surface-2: #ece9e2;
   --c-line: #dad6cd;
   --c-ink: #17181a;
-  --c-muted: #6b6a66;
+  --c-muted: #625f5a;
   --c-signal: #e4472b;
+  --c-signal-text: #af301a;
   --c-data: #2f5bea;
   --c-ok: #1f9d6b;
   --c-warn: #d99a1e;
@@ -41,6 +42,7 @@ html.dark {
   --c-ink: #eceae4;
   --c-muted: #9a9891;
   --c-signal: #ff6a4d;
+  --c-signal-text: #ff8a70;
   --c-data: #6e8cff;
   --c-ok: #3cc48d;
   --c-warn: #f0b43c;
@@ -101,7 +103,7 @@ html.dark {
   --el-overlay-color: color-mix(in srgb, var(--c-ink) 35%, transparent);
   --el-overlay-color-light: color-mix(in srgb, var(--c-ink) 25%, transparent);
   --el-overlay-color-lighter: color-mix(in srgb, var(--c-ink) 15%, transparent);
-  --el-color-primary: var(--c-signal);
+  --el-color-primary: var(--c-signal-text);
   --el-color-primary-light-3: color-mix(
     in srgb,
     var(--c-signal) 70%,
@@ -281,8 +283,8 @@ html.dark {
   --ui-border-strong: var(--c-line);
   --ui-border-subtle: var(--c-line);
   --ui-hover: var(--c-surface-2);
-  --ui-accent: var(--c-signal);
-  --ui-accent-strong: var(--c-signal);
+  --ui-accent: var(--c-signal-text);
+  --ui-accent-strong: var(--c-signal-text);
   --ui-success: var(--c-ok);
   --ui-warning: var(--c-warn);
   --ui-danger: var(--c-bad);

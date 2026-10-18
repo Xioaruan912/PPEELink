@@ -62,14 +62,14 @@ function render() {
       animationDurationUpdate: 320,
       textStyle: {
         fontFamily: styles.getPropertyValue("--font-ui"),
-        fontSize: 13,
+        fontSize: 14,
         color: color("--c-ink"),
       },
       tooltip: {
         trigger: "item",
         backgroundColor: color("--c-surface"),
         borderColor: color("--c-line"),
-        textStyle: { color: color("--c-ink"), fontSize: 13 },
+        textStyle: { color: color("--c-ink"), fontSize: 14 },
         confine: true,
         formatter: (params: any) => {
           const items = params.data?.targets || [];
@@ -101,7 +101,7 @@ function render() {
           scaleLimit: { min: 0.9, max: 6 },
           label: { show: false },
           emphasis: {
-            label: { show: true, color: color("--c-ink"), fontSize: 13 },
+            label: { show: true, color: color("--c-ink"), fontSize: 14 },
             itemStyle: { areaColor: color("--c-surface-2") },
           },
           itemStyle: {

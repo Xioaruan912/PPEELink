@@ -262,7 +262,7 @@ const tabs = [
   align-items: center;
   justify-content: space-between;
   padding: 0 0 12px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .inspect-pane > .ui-segmented {
@@ -298,7 +298,7 @@ const tabs = [
   grid-template-columns: 1fr auto;
   gap: 12px;
   font-size: 14px;
-  margin-top: 20px;
+  margin-top: 24px;
 }
 .check-stats dt {
   color: var(--c-muted);
@@ -349,7 +349,7 @@ const tabs = [
   white-space: nowrap;
 }
 .outline-item small {
-  font: 400 13px var(--font-mono);
+  font: 400 14px var(--font-mono);
   color: var(--c-muted);
 }
 @media (max-width: 1023px) {

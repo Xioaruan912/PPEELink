@@ -12,6 +12,7 @@ const props = defineProps<{
   label: string;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
+const clientTooltipVisible = ref(false);
 const copied = ref(false),
   copying = ref(false),
   feedback = ref<HTMLElement>();
@@ -61,7 +62,11 @@ function selectClient(value: string) {
 </script>
 <template>
   <div class="copy-split" role="group" :aria-label="`${label}链接操作`">
-    <el-tooltip :content="`复制${clientLabel}链接`" placement="top"
+    <el-tooltip
+      :trigger="['hover', 'focus']"
+      :trigger-keys="[]"
+      :content="`复制${clientLabel}链接`"
+      placement="top"
       ><UiButton
         class="copy-main"
         :disabled="copying || !value"
@@ -76,9 +81,23 @@ function selectClient(value: string) {
     <el-dropdown trigger="click" placement="bottom-end" @command="selectClient"
       ><UiButton
         class="copy-client"
-        :icon="ArrowDown"
-        :aria-label="`选择${label}客户端，当前：${clientLabel}`" /><template
-        #dropdown
+        :aria-label="`选择${label}客户端，当前：${clientLabel}`"
+        @mouseenter="clientTooltipVisible = true"
+        @mouseleave="clientTooltipVisible = false"
+        @focus="clientTooltipVisible = true"
+        @blur="clientTooltipVisible = false"
+        @click="clientTooltipVisible = false"
+      >
+        <template #icon>
+          <el-tooltip
+            :content="`选择${label}客户端，当前：${clientLabel}`"
+            :visible="clientTooltipVisible"
+            :trigger-keys="[]"
+          >
+            <span class="client-chevron" aria-hidden="true"><ArrowDown /></span>
+          </el-tooltip>
+        </template> </UiButton
+      ><template #dropdown
         ><el-dropdown-menu :aria-label="`${label}客户端`"
           ><el-dropdown-item
             v-for="option in options"
@@ -103,7 +122,7 @@ function selectClient(value: string) {
 .copy-main {
   flex: 1;
   min-width: 0;
-  padding: 10px 8px;
+  padding: 8px;
   border-radius: var(--radius-control) 0 0 var(--radius-control);
   gap: 0;
 }
@@ -114,6 +133,11 @@ function selectClient(value: string) {
   gap: 0;
   border-left: 0;
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
+}
+.client-chevron {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
 }
 .client-option {
   min-width: 128px;

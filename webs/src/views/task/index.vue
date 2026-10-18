@@ -422,7 +422,7 @@ h2 {
 }
 .task-meta,
 .mono {
-  font: 400 13px/1.5 var(--font-mono);
+  font: 400 14px/1.5 var(--font-mono);
 }
 .task-meta {
   color: var(--c-muted);
@@ -433,7 +433,7 @@ h2 {
   justify-content: space-between;
   gap: 8px;
   color: var(--c-muted);
-  font: 400 13px/1.4 var(--font-mono);
+  font: 400 14px/1.4 var(--font-mono);
 }
 .progress-track {
   margin: 8px 0;

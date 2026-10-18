@@ -80,7 +80,13 @@ textarea,
 [tabindex] {
   -webkit-tap-highlight-color: transparent;
 }
-:focus-visible {
+:root :focus-visible {
+  outline: 2px solid var(--c-signal) !important;
+  outline-offset: 2px !important;
+}
+// Monaco focuses a hidden textarea; keep its containing editor visibly focused.
+.monaco-host:focus-within,
+.diff-host:focus-within {
   outline: 2px solid var(--c-signal);
   outline-offset: 2px;
 }
@@ -139,18 +145,6 @@ kbd,
 .app-container {
   min-width: 0;
   max-width: 100%;
-}
-// Compatibility for business pages awaiting their visual migration.
-.workbench-empty-symbol {
-  display: inline-grid;
-  place-items: center;
-  width: 64px;
-  height: 64px;
-  color: var(--c-muted);
-}
-.workbench-empty-symbol svg {
-  width: 32px;
-  height: 32px;
 }
 @media (prefers-reduced-motion: reduce) {
   *,

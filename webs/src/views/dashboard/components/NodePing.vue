@@ -231,7 +231,7 @@ async function renderChart() {
         axisLabel: {
           color: palette.muted,
           fontFamily: palette.mono,
-          fontSize: 13,
+          fontSize: 14,
           formatter: "{value} ms",
           hideOverlap: true,
         },
@@ -245,7 +245,7 @@ async function renderChart() {
         data: sortedNodes.value.map((node) => node.name),
         axisLabel: {
           color: palette.muted,
-          fontSize: 13,
+          fontSize: 14,
           width: 120,
           overflow: "truncate",
         },
@@ -262,7 +262,7 @@ async function renderChart() {
             position: "right",
             color: palette.ink,
             fontFamily: palette.mono,
-            fontSize: 13,
+            fontSize: 14,
             formatter: "{c} ms",
           },
           data: sortedNodes.value.map((node) => ({
@@ -405,7 +405,7 @@ h3 {
   overflow-wrap: anywhere;
 }
 .node-address > span {
-  font: 13px/1.6 var(--font-mono);
+  font: 14px/1.6 var(--font-mono);
   color: var(--c-muted);
   overflow-wrap: anywhere;
 }
@@ -419,7 +419,7 @@ h3 {
   font-size: 16px;
 }
 .node-result :deep(.ui-stat__unit) {
-  font-size: 13px;
+  font-size: 14px;
 }
 .node-result :deep(.ui-stat__label) {
   position: absolute;

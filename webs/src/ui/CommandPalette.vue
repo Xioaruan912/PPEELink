@@ -6,8 +6,8 @@
     :show-close="false"
     class="command-palette"
     @update:model-value="emit('update:modelValue', $event)"
-    @opened="focusSearch"
-    @closed="reset"
+    @open-auto-focus="onOpenAutoFocus"
+    @closed="onClosed"
   >
     <div class="command-search">
       <Search aria-hidden="true" /><input
@@ -56,6 +56,7 @@
     </ul>
     <EmptyState
       v-if="!filtered.length"
+      size="section"
       title="没有结果"
       description="试试其他页面名称。"
     />
@@ -113,10 +114,17 @@ function move(by: number) {
     selected.value =
       (selected.value + by + filtered.value.length) % filtered.value.length;
 }
+let pendingAction: CommandItem["run"] | undefined;
 function execute(item?: CommandItem) {
   if (!item) return;
+  pendingAction = item.run;
   emit("update:modelValue", false);
-  void item.run();
+}
+function onClosed() {
+  reset();
+  const action = pendingAction;
+  pendingAction = undefined;
+  void action?.();
 }
 function reset() {
   query.value = "";
@@ -124,6 +132,10 @@ function reset() {
 }
 function focusSearch() {
   nextTick(() => input.value?.focus());
+}
+function onOpenAutoFocus(event?: Event) {
+  event?.preventDefault();
+  focusSearch();
 }
 watch(query, () => {
   selected.value = 0;

@@ -34,7 +34,7 @@
   align-items: center;
   min-height: 96px;
   border-top: 1px solid var(--c-line);
-  padding: 20px 0;
+  padding: 24px 0;
 }
 .source-row:last-child {
   border-bottom: 1px solid var(--c-line);
@@ -49,7 +49,7 @@
   font-size: 16px;
 }
 .source-name .mono {
-  font-size: 13px;
+  font-size: 14px;
 }
 .source-count {
   display: grid;
@@ -57,11 +57,11 @@
   font-size: 15px;
 }
 .source-count small {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .source-time {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
   text-align: right;
 }
@@ -107,7 +107,7 @@
   margin: 0;
 }
 .analysis-section > .section-heading {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 .analysis-section > .section-heading :deep(.ui-button) {
   padding-inline: 8px;
@@ -149,7 +149,7 @@
 .category-list button.active {
   border-color: var(--c-signal);
   background: color-mix(in srgb, var(--c-signal) 10%, transparent);
-  color: var(--c-signal);
+  color: var(--c-signal-text);
 }
 .category-list button:hover {
   background: var(--c-surface-2);
@@ -179,11 +179,11 @@ input[type="checkbox"] {
 }
 .total {
   font-size: 16px;
-  color: var(--c-signal);
+  color: var(--c-signal-text);
   margin-left: 8px;
 }
 .load-count {
-  font-size: 13px;
+  font-size: 14px;
 }
 .rule-row {
   position: relative;
@@ -192,7 +192,7 @@ input[type="checkbox"] {
   gap: 8px 12px;
   align-items: center;
   min-height: 100px;
-  padding: 20px 0;
+  padding: 24px 0;
   border-top: 1px solid var(--c-line);
   transition: background var(--duration-fast);
 }
@@ -224,13 +224,13 @@ input[type="checkbox"] {
 .rule-description > span,
 .rule-description small {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
 }
 .rule-size {
   grid-column: 3;
   grid-row: 1;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
   text-align: right;
 }
@@ -272,7 +272,7 @@ input[type="checkbox"] {
   font-size: 14px;
 }
 .selected-row .muted {
-  font-size: 13px;
+  font-size: 14px;
 }
 .notice {
   padding: 16px;
@@ -373,7 +373,7 @@ input[type="checkbox"] {
     grid-template-columns: minmax(0, 1fr) 100px;
   }
   .source-time {
-    font-size: 13px;
+    font-size: 14px;
   }
   .source-count {
     font-size: 14px;
@@ -405,10 +405,10 @@ input[type="checkbox"] {
     padding-inline: 12px;
   }
   .select-all {
-    font-size: 13px;
+    font-size: 14px;
   }
   .source-name .mono {
-    font-size: 13px;
+    font-size: 14px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

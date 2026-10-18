@@ -18,7 +18,12 @@ const tooltipVisible = ref(false);
     @click="tooltipVisible = false"
   >
     <template #icon>
-      <el-tooltip :content="label" :visible="tooltipVisible" placement="top">
+      <el-tooltip
+        :trigger-keys="[]"
+        :content="label"
+        :visible="tooltipVisible"
+        placement="top"
+      >
         <span class="icon-hit-area" aria-hidden="true"
           ><component :is="icon" class="row-icon"
         /></span>

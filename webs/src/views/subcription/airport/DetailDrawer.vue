@@ -270,7 +270,7 @@ h3 {
   white-space: nowrap;
   color: var(--c-muted);
   margin: 4px 0 8px 26px;
-  font-size: 13px;
+  font-size: 14px;
 }
 .node-row :deep(.el-checkbox) {
   display: flex;
@@ -306,7 +306,7 @@ h3 {
   margin-left: auto;
 }
 .gemini-result {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .gemini-ok {

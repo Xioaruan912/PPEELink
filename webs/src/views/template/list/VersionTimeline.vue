@@ -101,7 +101,7 @@ const {
 }
 .version-link time {
   flex-basis: 100%;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .version-actions {

@@ -1,17 +1,24 @@
 <template>
   <section class="error-page">
     <p class="error-code" data-enter>404</p>
-    <h1 data-enter>页面未找到</h1>
-    <p class="error-description" data-enter>这个页面已不存在，或地址有误。</p>
-    <UiButton variant="primary" @click="router.push('/dashboard')"
-      >返回首页</UiButton
+    <PageHeader
+      class="error-header"
+      eyebrow=""
+      title="页面未找到"
+      description="这个页面已不存在，或地址有误。"
+    />
+    <UiButton
+      variant="primary"
+      @click="router.push(authenticated ? '/dashboard' : '/login')"
+      >{{ authenticated ? "返回首页" : "前往登录" }}</UiButton
     >
   </section>
 </template>
 <script setup lang="ts">
 import { useRouter } from "vue-router";
-import { UiButton } from "@/ui";
+import { PageHeader, UiButton } from "@/ui";
 const router = useRouter();
+const authenticated = !!localStorage.getItem("accessToken");
 </script>
 <style scoped>
 .error-page {
@@ -20,16 +27,13 @@ const router = useRouter();
   max-width: 720px;
 }
 .error-code {
-  color: var(--c-signal);
+  color: var(--c-signal-text);
   font: 400 clamp(112px, 22vw, 240px)/0.9 var(--font-display);
   margin: 0 0 48px;
 }
-.error-page h1 {
-  font-size: clamp(40px, 5vw, 72px);
-  margin-bottom: 24px;
-}
-.error-description {
-  color: var(--c-muted);
+.error-header {
+  padding: 0;
+  border: 0;
   margin-bottom: 40px;
 }
 </style>

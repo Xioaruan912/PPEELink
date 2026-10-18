@@ -79,7 +79,7 @@ const resultByGroup = (group: string) =>
 }
 .unlock-item {
   min-width: 0;
-  padding: 20px;
+  padding: 24px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
@@ -102,7 +102,7 @@ const resultByGroup = (group: string) =>
   gap: 16px;
   margin-top: 16px;
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .item-note {
   margin: 8px 0 0;

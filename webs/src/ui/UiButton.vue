@@ -38,7 +38,7 @@ withDefaults(
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 20px;
+  padding: 8px 24px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-control);
   color: var(--c-ink);

@@ -228,7 +228,6 @@ function selectAll() {
               @change="selectAll"
             />全选当前目录</label
           ><UiButton
-            variant="primary"
             :disabled="!selectedRules.length"
             @click="openImport(selectedRules)"
             >导入已选

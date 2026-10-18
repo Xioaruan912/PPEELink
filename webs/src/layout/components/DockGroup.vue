@@ -204,7 +204,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
   width: 240px;
   max-height: 70dvh;
   overflow-y: auto;
-  padding: 20px;
+  padding: 24px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);
@@ -264,7 +264,7 @@ onBeforeUnmount(() => document.removeEventListener("pointerdown", outside));
   }
   .mobile-label {
     display: block;
-    font-size: 13px;
+    font-size: 14px;
     max-width: 64px;
     overflow: hidden;
     text-overflow: ellipsis;

@@ -191,7 +191,7 @@ const succeeded = (row: any) =>
   margin: 0 0 40px;
 }
 .rule-meta dt {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
   margin-bottom: 8px;
 }
@@ -235,7 +235,7 @@ const succeeded = (row: any) =>
 .plan-node small,
 .plan-mobile small {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
   margin-top: 8px;
 }

@@ -224,7 +224,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .mono {
-  font: 400 13px/1.6 var(--font-mono);
+  font: 400 14px/1.6 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .results-region {

@@ -57,6 +57,7 @@ onMounted(() => {
     fontFamily: '"JetBrains Mono", monospace',
     lineNumbers: "on",
     smoothScrolling: !reduced.value,
+    cursorBlinking: reduced.value ? "solid" : "blink",
   });
   resetModels();
   observer = new ResizeObserver(resize);
@@ -64,7 +65,12 @@ onMounted(() => {
   wide.addEventListener("change", resize);
 });
 watch(() => [props.original, props.modified, props.language], resetModels);
-watch(reduced, (value) => editor?.updateOptions({ smoothScrolling: !value }));
+watch(reduced, (value) =>
+  editor?.updateOptions({
+    smoothScrolling: !value,
+    cursorBlinking: value ? "solid" : "blink",
+  })
+);
 onBeforeUnmount(() => {
   observer?.disconnect();
   wide.removeEventListener("change", resize);

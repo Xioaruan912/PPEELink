@@ -253,7 +253,7 @@ watch(savedRevision, async () => {
 }
 .required-label {
   margin-left: 8px;
-  font-size: 13px;
+  font-size: 14px;
 }
 .builder-layout {
   display: grid;
@@ -273,7 +273,7 @@ watch(savedRevision, async () => {
   margin-bottom: 32px;
 }
 .step-count {
-  font: 400 13px/1.4 var(--font-mono);
+  font: 400 14px/1.4 var(--font-mono);
   color: var(--c-muted);
 }
 .step-actions {

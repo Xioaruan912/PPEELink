@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
 .matrix-cell span,
 .matrix-cell small {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .node-title {
   font-size: 16px;

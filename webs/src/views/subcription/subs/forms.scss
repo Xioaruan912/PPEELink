@@ -62,7 +62,7 @@ p {
   margin: 8px 0 24px;
 }
 .mono {
-  font: 13px/1.6 var(--font-mono);
+  font: 14px/1.6 var(--font-mono);
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
 }
@@ -111,7 +111,7 @@ p {
 .picker-group-count,
 .picker-group-confidence {
   margin-left: 8px;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .picker-node-list,
@@ -133,7 +133,7 @@ p {
 }
 .picker-node-confidence,
 .order-confidence {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-data);
 }
 .empty {
@@ -159,7 +159,7 @@ p {
 }
 .order-badge {
   color: var(--c-muted);
-  font: 13px var(--font-mono);
+  font: 14px var(--font-mono);
 }
 .order-name {
   flex: 1;
@@ -200,7 +200,7 @@ p {
 }
 .pipeline-hint {
   color: var(--c-muted);
-  font: 13px var(--font-mono);
+  font: 14px var(--font-mono);
 }
 .pipeline-footer {
   margin: 16px 0;
@@ -300,5 +300,5 @@ p {
 :deep(.el-select__tags-text),
 :deep(.el-select__input),
 :deep(.el-tag) {
-  font-size: 13px;
+  font-size: 14px;
 }

@@ -52,17 +52,8 @@ export const constantRoutes: RouteRecordRaw[] = [
         component: () => import("@/views/error-page/404.vue"),
         meta: { hidden: true },
       },
-
     ],
-    
-    
   },
-  
-
-
-
-  
-
 
   // 外部链接
   // {

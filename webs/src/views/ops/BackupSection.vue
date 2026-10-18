@@ -371,7 +371,7 @@ function clearPreview() {
   border-radius: 16px;
   background: var(--c-surface-2);
   color: var(--c-data);
-  font: 400 13px/1.6 var(--font-mono);
+  font: 400 14px/1.6 var(--font-mono);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

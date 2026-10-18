@@ -61,6 +61,8 @@ const {
     <div class="row-visibility">
       <span class="mobile-label">可见</span
       ><el-tooltip
+        :trigger="['hover', 'focus']"
+        :trigger-keys="[]"
         :content="
           nodeEffectiveHidden(fullNode(node.id))
             ? '节点已全局隐藏，分组管理中可恢复'
@@ -132,7 +134,7 @@ const {
   grid-template-columns: minmax(0, 1fr) 78px 112px 52px 132px;
   align-items: center;
   gap: 12px;
-  padding: 18px 0;
+  padding: 16px 0;
   min-height: 88px;
   border-bottom: 1px solid var(--c-line);
   transition: background var(--duration-fast);
@@ -174,10 +176,10 @@ const {
 .host,
 .membership {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .mono {
-  font: 400 13px/1.6 var(--font-mono);
+  font: 400 14px/1.6 var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 .row-protocol {
@@ -217,7 +219,7 @@ const {
 .is-card {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 16px 8px;
-  padding: 20px;
+  padding: 24px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);
@@ -240,7 +242,7 @@ const {
 }
 .is-card .row-visibility .mobile-label {
   display: inline;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .is-card .row-actions {
@@ -254,7 +256,7 @@ const {
   gap: 8px 16px;
   padding-top: 16px;
   border-top: 1px solid var(--c-line);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .quality-meta button {
@@ -262,7 +264,7 @@ const {
 }
 .quality-meta time {
   flex-basis: 100%;
-  font: 13px/1.6 var(--font-mono);
+  font: 14px/1.6 var(--font-mono);
 }
 @media (max-width: 1199px) {
   .node-row:not(.is-card) {
@@ -273,7 +275,7 @@ const {
 @media (max-width: 767px) {
   .node-row:not(.is-card) {
     grid-template-columns: minmax(0, 1fr) auto;
-    padding: 20px 0;
+    padding: 24px 0;
     gap: 12px;
   }
   .node-identity {
@@ -287,7 +289,7 @@ const {
   .row-protocol .mobile-label,
   .row-visibility .mobile-label {
     display: inline;
-    font: 400 13px/1.6 var(--font-ui);
+    font: 400 14px/1.6 var(--font-ui);
     color: var(--c-muted);
   }
   .latency {

@@ -187,7 +187,7 @@ function simpleReason(reasons: string[]) {
   font-size: 24px;
 }
 .node-score :deep(.ui-stat__unit) {
-  font-size: 13px;
+  font-size: 14px;
 }
 .node-move,
 .node-enter-active,

@@ -315,7 +315,7 @@ h4 {
   color: var(--c-ink);
   border: 1px solid var(--c-line);
   border-radius: 10px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.8;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -339,7 +339,7 @@ h4 {
   display: flex;
   flex-wrap: wrap;
   gap: 16px 24px;
-  padding: 20px 0 24px;
+  padding: 24px 0;
 }
 .impact-counts > div {
   display: grid;
@@ -347,7 +347,7 @@ h4 {
 }
 .impact-counts span {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .impact-counts strong {
   font-size: 22px;
@@ -374,7 +374,7 @@ h4 {
 }
 .regression-row {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   font-size: 14px;
   padding: 16px 0;
   border-bottom: 1px solid var(--c-line);
@@ -383,7 +383,7 @@ h4 {
 .diff-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
+  gap: 24px;
 }
 .diff-grid section {
   min-width: 0;
@@ -403,7 +403,7 @@ h4 {
   font-size: 14px;
 }
 .snapshot-row time {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
   overflow-wrap: anywhere;
 }

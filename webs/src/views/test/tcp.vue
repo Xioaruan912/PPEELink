@@ -506,7 +506,7 @@ onBeforeUnmount(() => {
   gap: 16px;
   margin-top: 24px;
   color: var(--c-muted);
-  font: 400 13px var(--font-mono);
+  font: 400 14px var(--font-mono);
 }
 .latency-legend > span {
   display: flex;
@@ -546,7 +546,7 @@ onBeforeUnmount(() => {
   color: var(--c-warn-ink);
 }
 .latency-text-3 {
-  color: var(--c-signal);
+  color: var(--c-signal-text);
 }
 .latency-text-4 {
   color: var(--c-bad);
@@ -574,7 +574,7 @@ onBeforeUnmount(() => {
 }
 .rank-index {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .ranking-summary strong {
   font-size: 18px;
@@ -586,7 +586,7 @@ onBeforeUnmount(() => {
 }
 .ranking-row p {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
   margin: 8px 0 16px 34px;
 }
 .target-cells {
@@ -604,7 +604,7 @@ onBeforeUnmount(() => {
 }
 .target-cell > span {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .target-cell b {
   font-weight: 400;
