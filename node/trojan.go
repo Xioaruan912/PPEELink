@@ -92,7 +92,7 @@ func DecodeTrojanURL(s string) (Trojan, error) {
 	/*
 		trojan://password@hostname:port?peer=example.com&allowInsecure=0&sni=example.com
 	*/
-	
+
 	// 有些情况是 trojan://[Base64]
 	u, err := url.Parse(s)
 	if err != nil || u.Host == "" {
@@ -106,7 +106,7 @@ func DecodeTrojanURL(s string) (Trojan, error) {
 			return Trojan{}, fmt.Errorf("url parse error: %v", err)
 		}
 	}
-	
+
 	if u.Scheme != "trojan" {
 		return Trojan{}, fmt.Errorf("非trojan协议: %s", s)
 	}

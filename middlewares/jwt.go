@@ -32,7 +32,7 @@ type JwtClaims struct {
 // AuthorToken 验证token中间件
 func AuthorToken(c *gin.Context) {
 	// 定义白名单
-	list := []string{"/static", "/api/v1/auth/login", "/c/", "/cc/", "/s/", "/api/v1/version", "/status", "/api/v1/status/public", "/favicon.ico"}
+	list := []string{"/static", "/api/v1/auth/login", "/c/", "/cc/", "/s/", "/t/", "/p/", "/agent/", "/api/v1/agent/", "/api/v1/version", "/status", "/api/v1/status/public", "/favicon.ico"}
 	// 如果是首页直接跳过
 	if c.Request.URL.Path == "/" {
 		c.Next()
@@ -59,8 +59,10 @@ func AuthorToken(c *gin.Context) {
 	}
 	if strings.Count(credential, ".") == 2 {
 		if mc, err := ParseToken(credential); err == nil {
-			c.Set("username", mc.Username)
-			c.Set("authType", "jwt")
+			if !AuthorizeUser(c, mc.Username) {
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}
@@ -91,18 +93,62 @@ func AuthorToken(c *gin.Context) {
 	c.Next()
 }
 
+// 账户自身可用的接口：必须先改密码的账户、普通用户都只能访问这些。
+var selfServicePaths = []string{
+	"/api/v1/users/me",
+	"/api/v1/users/update",
+	"/api/v1/auth/logout",
+	"/api/v1/menus/routes",
+	"/api/v1/version",
+}
+
+// 普通用户额外可访问的“我的订阅”接口。
+var userPaths = []string{"/api/v1/my/"}
+
+func hasPrefix(path string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if path == p || strings.HasPrefix(path, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// AuthorizeUser 加载 JWT 对应账户并按状态与角色限制可访问的接口。
+func AuthorizeUser(c *gin.Context, username string) bool {
+	var user models.User
+	if err := models.DB.Where("username = ?", username).First(&user).Error; err != nil || user.Disabled {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "账户不存在或已停用"})
+		return false
+	}
+	c.Set("username", user.Username)
+	c.Set("userId", user.ID)
+	c.Set("authType", "jwt")
+	c.Set("isAdmin", user.IsAdmin())
+	path := c.Request.URL.Path
+	if user.MustChangePassword && !hasPrefix(path, selfServicePaths) {
+		c.JSON(http.StatusForbidden, gin.H{"code": "40310", "msg": "请先修改默认密码"})
+		return false
+	}
+	if !user.IsAdmin() && !hasPrefix(path, selfServicePaths) && !hasPrefix(path, userPaths) {
+		c.JSON(http.StatusForbidden, gin.H{"code": "40300", "msg": "没有权限访问"})
+		return false
+	}
+	return true
+}
+
 // requiredScope 根据请求方法与路径判定 API Token 所需权限。
 // 读操作默认 read；高风险写操作（模板、规则、系统部署、备份导入）与
 // 令牌/审计、备份导出需要 admin；其余写操作需要 write。
 func requiredScope(method, path string) string {
 	isRead := method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
-	for _, prefix := range []string{"/api/v1/tokens", "/api/v1/audit"} {
+	for _, prefix := range []string{"/api/v1/tokens", "/api/v1/audit", "/api/v1/proxy"} {
 		if strings.HasPrefix(path, prefix) {
 			return "admin"
 		}
 	}
 	if isRead {
-		for _, prefix := range []string{"/api/v1/ops/backup/export", "/api/v1/ops/backup/inspect"} {
+		for _, prefix := range []string{"/api/v1/ops/backup/export", "/api/v1/ops/backup/inspect", "/api/v1/ops/backup/full"} {
 			if strings.HasPrefix(path, prefix) {
 				return "admin"
 			}

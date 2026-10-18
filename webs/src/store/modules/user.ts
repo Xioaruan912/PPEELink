@@ -19,12 +19,12 @@ export const useUserStore = defineStore("user", () => {
    * @returns
    */
   function login(loginData: LoginData) {
-    return new Promise<void>((resolve, reject) => {
+    return new Promise<{ mustChangePassword: boolean }>((resolve, reject) => {
       loginApi(loginData)
         .then((response) => {
-          const { tokenType, accessToken } = response.data;
+          const { tokenType, accessToken, mustChangePassword } = response.data;
           localStorage.setItem("accessToken", tokenType + " " + accessToken); // Bearer eyJhbGciOiJIUzI1NiJ9.xxx.xxx
-          resolve();
+          resolve({ mustChangePassword: !!mustChangePassword });
         })
         .catch((error) => {
           reject(error);

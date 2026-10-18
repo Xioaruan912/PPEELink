@@ -336,28 +336,79 @@ export function useStagger() {
  */
 const SPOTLIGHT =
   ".cell, .ui-panel, .stat-tiles > .ui-stat, .client-row, .group-card, .client-tile";
+// Tiles that also lean towards the pointer (3D tilt, max ±TILT_MAX degrees).
+const TILT = ".cell, .client-tile, .sub-card, .stat-tiles > .ui-stat";
+const TILT_MAX = 5;
 export function installSpotlight() {
   if (window.matchMedia("(hover: none)").matches) return () => {};
   let frame = 0;
   let last: PointerEvent | null = null;
+  let tilted: HTMLElement | null = null;
+  const release = () => {
+    tilted?.style.setProperty("--rx", "0deg");
+    tilted?.style.setProperty("--ry", "0deg");
+    tilted = null;
+  };
   const update = () => {
     frame = 0;
-    if (!last || prefersReducedMotion()) return;
-    const target = (last.target as Element | null)?.closest<HTMLElement>(
-      SPOTLIGHT
-    );
-    if (!target) return;
-    const rect = target.getBoundingClientRect();
-    target.style.setProperty("--mx", `${last.clientX - rect.left}px`);
-    target.style.setProperty("--my", `${last.clientY - rect.top}px`);
+    if (!last || prefersReducedMotion()) return release();
+    const origin = last.target as Element | null;
+    const target = origin?.closest<HTMLElement>(SPOTLIGHT);
+    if (target) {
+      const rect = target.getBoundingClientRect();
+      target.style.setProperty("--mx", `${last.clientX - rect.left}px`);
+      target.style.setProperty("--my", `${last.clientY - rect.top}px`);
+    }
+    const tilt = origin?.closest<HTMLElement>(TILT) || null;
+    if (tilt !== tilted) release();
+    if (!tilt) return;
+    const rect = tilt.getBoundingClientRect();
+    const x = (last.clientX - rect.left) / rect.width - 0.5;
+    const y = (last.clientY - rect.top) / rect.height - 0.5;
+    tilt.style.setProperty("--rx", `${(-y * TILT_MAX).toFixed(2)}deg`);
+    tilt.style.setProperty("--ry", `${(x * TILT_MAX).toFixed(2)}deg`);
+    tilted = tilt;
   };
   const onMove = (event: PointerEvent) => {
     last = event;
     if (!frame) frame = requestAnimationFrame(update);
   };
+  const onLeave = () => release();
   document.addEventListener("pointermove", onMove, { passive: true });
+  document.addEventListener("pointerleave", onLeave);
   return () => {
     document.removeEventListener("pointermove", onMove);
+    document.removeEventListener("pointerleave", onLeave);
     cancelAnimationFrame(frame);
   };
 }
+
+/**
+ * v-reveal：元素滚入视口时模糊上浮出现（IntersectionObserver，只播一次）。
+ * 首屏内的元素交给路由过渡，不重复动画。
+ */
+const revealObserver =
+  typeof IntersectionObserver === "undefined"
+    ? null
+    : new IntersectionObserver(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue;
+            const el = entry.target as HTMLElement;
+            revealObserver?.unobserve(el);
+            el.classList.add("is-revealed");
+          }
+        },
+        { rootMargin: "0px 0px -8% 0px" }
+      );
+export const vReveal: ObjectDirective<HTMLElement> = {
+  mounted(el) {
+    if (!revealObserver || prefersReducedMotion()) return;
+    if (el.getBoundingClientRect().top < window.innerHeight) return;
+    el.classList.add("reveal-pending");
+    revealObserver.observe(el);
+  },
+  beforeUnmount(el) {
+    revealObserver?.unobserve(el);
+  },
+};

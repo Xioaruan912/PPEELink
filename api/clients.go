@@ -87,6 +87,12 @@ func fetchAndExpandRemote(rawURL string) []string {
 func collectNodeInputs(nodes []models.Node) ([]string, map[string]node.NodeFlags) {
 	urls := []string{}
 	flags := map[string]node.NodeFlags{}
+	nameByID := map[int]string{}
+	for _, v := range nodes {
+		nameByID[v.ID] = v.Name
+	}
+	// 链式代理的中转节点不在本订阅时，补进输出，保证 dialer-proxy 指向存在的代理
+	relays := []string{}
 	for _, v := range nodes {
 		links := expandNodeLink(v.Link)
 		if len(links) == 0 {
@@ -94,13 +100,25 @@ func collectNodeInputs(nodes []models.Node) ([]string, map[string]node.NodeFlags
 		}
 		urls = append(urls, links...)
 		f := decodeNodeFlags(v.Flags)
+		if f.DialerProxyID != 0 && f.DialerProxyID != v.ID {
+			name, ok := nameByID[f.DialerProxyID]
+			if !ok {
+				var relay models.Node
+				if err := models.DB.First(&relay, f.DialerProxyID).Error; err == nil {
+					name = relay.Name
+					nameByID[relay.ID] = relay.Name
+					relays = append(relays, expandNodeLink(relay.Link)...)
+				}
+			}
+			f.DialerProxy = name
+		}
 		if !f.Empty() {
 			for _, l := range links {
 				flags[l] = f
 			}
 		}
 	}
-	return urls, flags
+	return append(relays, urls...), flags
 }
 
 // mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后）
@@ -192,50 +210,46 @@ func subName(c *gin.Context) string {
 }
 
 func GetClient(c *gin.Context) {
-	// 获取协议头
 	token := c.Query("token")
-	ClientIndex := c.Query("client") // 客户端标识
 	if token == "" {
-		log.Println("token为空")
-		c.Writer.WriteString("token为空")
+		c.String(400, "token为空")
 		return
 	}
-	Sub := new(models.Subcription)
-	// 获取所有订阅
-	list, _ := Sub.List()
 	// 仅按随机 token 匹配，不再兼容可猜测的 md5(订阅名)
-	for _, sub := range list {
-		if sub.Token == "" || !strings.EqualFold(sub.Token, token) {
-			continue
-		}
-		// 过期校验
-		if sub.ExpiresAt != nil && time.Now().After(*sub.ExpiresAt) {
-			c.Writer.WriteString("订阅已过期")
-			return
-		}
-		// 记录订阅名供后续子函数使用
-		c.Set("subname", sub.Name)
-		if resolved := normalizeClient(ClientIndex); resolved != "" {
-			serveSubscriptionClient(c, sub.ID, resolved)
-			return
-		}
-		serveSubscriptionClient(c, sub.ID, clientFromUserAgent(c.Request.UserAgent()))
+	sub, err := models.FindSubscriptionByToken(token)
+	if err != nil {
+		// 非 200 状态让客户端保留旧配置，而不是把错误文字当配置保存
+		c.String(404, "无效的订阅令牌")
 		return
 	}
-	c.Writer.WriteString("无效的订阅令牌")
+	if sub.ExpiresAt != nil && time.Now().After(*sub.ExpiresAt) {
+		c.String(410, "订阅已过期")
+		return
+	}
+	// 记录订阅名供访问日志中间件使用
+	c.Set("subname", sub.Name)
+	client := normalizeClient(c.Query("client"))
+	if client == "" {
+		client = clientFromUserAgent(c.Request.UserAgent())
+	}
+	serveSubscriptionClient(c, *sub, client)
 }
 
 // normalizeClient 将客户端标识归一化为内部名称，无法识别时返回空串。
 func normalizeClient(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "clash", "mihomo", "clashmeta", "clash.meta":
+	// Stash / Egern / FlClash / Clash Verge 等读取 Clash(mihomo) 配置
+	case "clash", "mihomo", "clashmeta", "clash.meta", "meta", "stash", "egern", "flclash", "clash-verge", "clashverge", "meowx":
 		return "clash"
-	case "surge":
+	// Surfboard 与 Surge Mac 使用 Surge 风格配置
+	case "surge", "surgemac", "surge-mac", "surfboard":
 		return "surge"
 	case "loon":
 		return "loon"
 	case "v2ray", "v2rayng", "v2raytun":
 		return "v2ray"
+	case "clash-proxies":
+		return "clash-proxies"
 	case "singbox", "sing-box", "sing_box":
 		return "singbox"
 	case "qx", "quantumultx", "quantumult", "quantumult x":
@@ -251,9 +265,10 @@ func normalizeClient(raw string) string {
 func clientFromUserAgent(ua string) string {
 	lower := strings.ToLower(ua)
 	switch {
-	case strings.Contains(lower, "mihomo") || strings.Contains(lower, "clash"):
+	case strings.Contains(lower, "mihomo") || strings.Contains(lower, "clash") ||
+		strings.Contains(lower, "stash") || strings.Contains(lower, "egern"):
 		return "clash"
-	case strings.Contains(lower, "surge"):
+	case strings.Contains(lower, "surge") || strings.Contains(lower, "surfboard"):
 		return "surge"
 	case strings.Contains(lower, "loon"):
 		return "loon"
@@ -325,9 +340,21 @@ func GetClash(c *gin.Context) {
 		c.Writer.WriteString("配置读取错误")
 		return
 	}
-	DecodeClash, err := node.EncodeClashWithFlags(urls, flags, configs)
+	var DecodeClash []byte
+	proxiesOnly := c.GetBool("clashProxiesOnly")
+	token := c.GetString("subToken")
+	base := c.GetString("providerBase")
+	switch {
+	case proxiesOnly:
+		DecodeClash, err = node.EncodeClashProxies(urls, flags, configs)
+	case configs.ProxyProvider && token != "" && base != "":
+		providerURL := base + "/c/?token=" + url.QueryEscape(token) + "&client=clash-proxies"
+		DecodeClash, err = node.EncodeClashProvider(configs.Clash, "sub-"+token[:8], providerURL, "")
+	default:
+		DecodeClash, err = node.EncodeClashWithFlags(urls, flags, configs)
+	}
 	if err != nil {
-		c.Writer.WriteString(err.Error())
+		c.String(500, err.Error())
 		return
 	}
 	c.Set("subname", subName(c))

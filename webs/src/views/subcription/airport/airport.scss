@@ -261,3 +261,19 @@
     animation: none;
   }
 }
+
+.strategy {
+  margin: 8px 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-canvas);
+}
+.strategy summary {
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+.strategy[open] summary {
+  margin-bottom: 12px;
+}

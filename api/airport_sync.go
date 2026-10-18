@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -143,6 +144,44 @@ func recordAirportTraffic(a *models.Airport, header string) {
 	}
 }
 
+// airportMatchKey 同步时识别“同一个节点”的依据。
+func airportMatchKey(mode string, n models.Node) string {
+	switch mode {
+	case "server", "type-server":
+		p, err := node.ParseOutbound(n.Link)
+		if err != nil || p.Server == "" {
+			return ""
+		}
+		key := fmt.Sprintf("%s:%d", strings.ToLower(p.Server), p.Port)
+		if mode == "type-server" {
+			key = p.Type + "|" + key
+		}
+		return key
+	default:
+		return n.Name
+	}
+}
+
+// SyncDueAirports 同步设置了自动间隔且已到期的机场（由每小时的定时任务调用）。
+func SyncDueAirports() {
+	airports, err := models.GetAirports()
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	for _, a := range airports {
+		if a.SyncIntervalHours <= 0 {
+			continue
+		}
+		if a.LastSync != nil && now.Sub(*a.LastSync) < time.Duration(a.SyncIntervalHours)*time.Hour {
+			continue
+		}
+		if err := SyncAirportNodeTask(a.ID); err != nil {
+			log.Printf("[Cron] 机场 %s 定时同步失败: %v\n", a.Name, err)
+		}
+	}
+}
+
 func SyncAllAirports() {
 	log.Println("[Cron] 开始每日凌晨3点的机场同步和测活任务...")
 	airports, err := models.GetAirports()
@@ -190,6 +229,20 @@ func SyncAirportNodeTask(airportID int) error {
 		return fmt.Errorf("机场 %s 解析失败(格式:%s): %w", a.Name, format, parseErr)
 	}
 	log.Printf("[Sync] 机场 %s 解析成功，格式:%s，节点数:%d\n", a.Name, format, len(validNodes))
+	if a.ExcludePattern != "" {
+		if re, reErr := regexp.Compile(a.ExcludePattern); reErr == nil {
+			kept := validNodes[:0]
+			for _, n := range validNodes {
+				if !re.MatchString(n.Name) {
+					kept = append(kept, n)
+				}
+			}
+			validNodes = kept
+		}
+		if len(validNodes) == 0 {
+			return fmt.Errorf("机场 %s 的节点全部被排除规则过滤，已保留原分组绑定", a.Name)
+		}
+	}
 
 	// 并发测活
 	log.Printf("[Sync] 机场 %s 获取到 %d 个节点，开始并发测活 (AutoCleanup: %v)\n", a.Name, len(validNodes), a.AutoCleanup)
@@ -249,7 +302,14 @@ func SyncAirportNodeTask(airportID int) error {
 	// 事务内清空该分组并写入存活节点，避免清空成功但写入失败导致订阅整体失效
 	err = models.DB.Transaction(func(tx *gorm.DB) error {
 		var gn models.GroupNode
-		tx.Where("name = ?", a.Name).First(&gn)
+		tx.Preload("Nodes").Where("name = ?", a.Name).First(&gn)
+		// 先按同步策略为上一轮的节点建索引，匹配到的沿用原记录（保留 ID、订阅引用与本地名称）
+		previous := map[string]models.Node{}
+		for _, n := range gn.Nodes {
+			if key := airportMatchKey(a.MatchMode, n); key != "" {
+				previous[key] = n
+			}
+		}
 		if gn.ID != 0 {
 			if err := tx.Model(&gn).Association("Nodes").Clear(); err != nil {
 				return err
@@ -262,12 +322,26 @@ func SyncAirportNodeTask(airportID int) error {
 		}
 		for _, n := range aliveNodes {
 			var dbNode models.Node
-			tx.Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
-			if dbNode.ID == 0 {
-				if err := tx.Create(&n).Error; err != nil {
+			if prev, ok := previous[airportMatchKey(a.MatchMode, n)]; ok {
+				dbNode = prev
+				updates := map[string]any{"link": n.Link}
+				if !a.KeepLocalNames {
+					updates["name"] = n.Name
+				} else if p, perr := node.ParseOutbound(n.Link); perr == nil {
+					// 保留本地名称时，链接内的名称也要跟着本地名称走
+					updates["link"] = p.WithName(prev.Name).Link
+				}
+				if err := tx.Model(&dbNode).Updates(updates).Error; err != nil {
 					return err
 				}
-				dbNode = n
+			} else {
+				tx.Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
+				if dbNode.ID == 0 {
+					if err := tx.Create(&n).Error; err != nil {
+						return err
+					}
+					dbNode = n
+				}
 			}
 			if err := tx.Model(&dbNode).Association("GroupNodes").Append(&gn); err != nil {
 				return err

@@ -22,7 +22,7 @@ type TaskRun struct {
 
 func RecoverInterruptedTasks() error {
 	now := time.Now()
-	return DB.Model(&TaskRun{}).Where("status IN ?", []string{"running","queued"}).Updates(map[string]any{
-		"status":"failed", "message":"服务重启导致任务中断", "error":"interrupted by service restart", "finished_at":&now,
+	return DB.Model(&TaskRun{}).Where("status IN ?", []string{"running", "queued"}).Updates(map[string]any{
+		"status": "failed", "message": "服务重启导致任务中断", "error": "interrupted by service restart", "finished_at": &now,
 	}).Error
 }

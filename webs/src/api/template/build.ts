@@ -1,7 +1,7 @@
 import request from "@/utils/request";
 
 // 通过表单构建 clash 模板并保存
-export function BuildClashTemplate(data: any){
+export function BuildClashTemplate(data: any) {
   return request({
     url: "/api/v1/template/build",
     method: "post",
@@ -13,7 +13,7 @@ export function BuildClashTemplate(data: any){
 }
 
 // 获取默认 mihomo 配置（用于预填表单）
-export function GetDefaultTemplate(){
+export function GetDefaultTemplate() {
   return request({
     url: "/api/v1/template/default",
     method: "get",

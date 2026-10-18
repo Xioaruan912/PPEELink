@@ -82,7 +82,12 @@
         <IconArrow class="cell-arrow" aria-hidden="true" />
       </RouterLink>
 
-      <section class="cell cell-traffic" aria-label="机场流量" data-enter>
+      <section
+        v-reveal
+        class="cell cell-traffic"
+        aria-label="机场流量"
+        data-enter
+      >
         <header class="cell-head">
           <div>
             <h2>机场流量</h2>
@@ -120,7 +125,12 @@
         @refresh="loadOverview"
       />
 
-      <section class="cell cell-regions" aria-label="所在地区" data-enter>
+      <section
+        v-reveal
+        class="cell cell-regions"
+        aria-label="所在地区"
+        data-enter
+      >
         <header class="cell-head">
           <div>
             <h2>所在地区</h2>
@@ -322,11 +332,12 @@ onMounted(loadOverview);
   justify-content: space-between;
   color: var(--c-ink);
   transition:
-    transform var(--duration-medium) var(--ease-spring),
+    translate var(--duration-medium) var(--ease-spring),
+    transform var(--duration-slow) var(--ease-out),
     border-color var(--duration-fast);
 }
 .cell-link:hover {
-  transform: translateY(-3px);
+  translate: 0 -3px;
   border-color: color-mix(in srgb, var(--c-focus) 60%, var(--c-line));
 }
 .cell-subs {

@@ -34,7 +34,7 @@ func InitSqlite() {
 		sqlDB.SetConnMaxLifetime(time.Hour)
 	}
 	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{}, &ClientVersion{}, &Airport{},
-		&NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &Collection{})
+		&NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &Collection{}, &ProxyServer{}, &ProxyInbound{}, &ProxyTraffic{}, &ProxyAccount{})
 	if err != nil {
 		log.Println("数据表迁移失败:", err)
 	}
@@ -42,6 +42,7 @@ func InitSqlite() {
 	if err := EnsureDefaultEgressTargets(); err != nil {
 		log.Println("初始化分流检测目标失败:", err)
 	}
+	EnsureAllTokens()
 	if err := EnsureNodeGroupMembership(); err != nil {
 		log.Println("修复未分组节点失败:", err)
 	}
@@ -49,10 +50,11 @@ func InitSqlite() {
 	err = db.First(&User{}).Error
 	if err == gorm.ErrRecordNotFound {
 		admin := &User{
-			Username: "admin",
-			Password: "123456",
-			Role:     "admin",
-			Nickname: "管理员",
+			Username:           "admin",
+			Password:           DefaultPassword,
+			Role:               RoleAdmin,
+			Nickname:           "管理员",
+			MustChangePassword: true,
 		}
 		err = admin.Create()
 		if err != nil {

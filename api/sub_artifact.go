@@ -1,15 +1,12 @@
 package api
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/http/httptest"
 	"net/url"
-	"os"
-	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -18,68 +15,153 @@ import (
 	"ppeelink/node"
 )
 
-type subscriptionArtifactMeta struct {
-	ArtifactID       uint   `json:"artifactId"`
-	SubscriptionID   int    `json:"subscriptionId"`
-	Client           string `json:"client"`
-	Bytes            int    `json:"bytes"`
-	SHA256           string `json:"sha256"`
-	ValidationStatus string `json:"validationStatus"`
-	TestStatus       string `json:"testStatus"`
-	PromotedLKG      bool   `json:"promotedLastKnownGood"`
+func shaHex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
-func shaHex(data []byte) string { sum:=sha256.Sum256(data);return hex.EncodeToString(sum[:]) }
-
-func subscriptionTemplateForClient(sub *models.Subcription, client string) (string,string) {
-	var cfg models.SubscriptionConfig; _=json.Unmarshal([]byte(sub.Config),&cfg);name:=""
-	switch strings.ToLower(client){case "clash":name=cfg.Clash;case "surge":name=cfg.Surge;case "loon":name=cfg.Loon}
-	if name==""{return "",""};clean:=strings.TrimPrefix(filepathToSlash(name),"./template/");path,err:=safeFilePath(clean);if err!=nil{return name,""};body,err:=os.ReadFile(path);if err!=nil{return name,""};return clean,string(body)
-}
-
-func filepathToSlash(value string) string { return strings.ReplaceAll(value,"\\","/") }
-
-func subscriptionInputDigest(sub *models.Subcription, client string) (inputDigest,templateName,templateChecksum,rulesChecksum string,error error) {
-	if err:=mergeGroupNodes(sub);err!=nil{return "","","","",err}
-	templateName,content:=subscriptionTemplateForClient(sub,client);if content!=""{templateChecksum=shaHex([]byte(content))}
-	parts:=[]string{strconv.Itoa(sub.ID),client,sub.Config,sub.Pipeline,sub.SourceURLs,sub.NodeOrder,templateChecksum}
-	for _,n:=range sub.Nodes{parts=append(parts,strconv.Itoa(n.ID),n.Name,shaHex([]byte(n.Link)))}
-	var catalogs []models.RuleCatalog;_ = models.DB.Where("checksum <> ''").Order("external_id asc").Find(&catalogs).Error;refs:=[]string{}
-	for _,r:=range catalogs{if content!=""&&strings.Contains(strings.ToLower(content),strings.ToLower(r.Name)){refs=append(refs,r.ExternalID+":"+r.Checksum)}};sort.Strings(refs);rulesChecksum=shaHex([]byte(strings.Join(refs,"\n")));parts=append(parts,rulesChecksum)
-	return shaHex([]byte(strings.Join(parts,"\x00"))),templateName,templateChecksum,rulesChecksum,nil
-}
-
+// validateSubscriptionContent 对生成结果做结构校验，不通过时回退到上一次成功的版本。
 func validateSubscriptionContent(client string, body []byte) error {
-	if len(body)==0{return fmt.Errorf("订阅产物为空")}
-	switch strings.ToLower(client){case "clash":var root map[string]any;if err:=yaml.Unmarshal(body,&root);err!=nil{return fmt.Errorf("Clash YAML 无效: %w",err)};if len(root)==0{return fmt.Errorf("Clash YAML 为空")};case "surge":if !strings.Contains(string(body),"["){return fmt.Errorf("Surge 配置缺少段落")};case "loon":if !strings.Contains(string(body),"["){return fmt.Errorf("Loon 配置缺少段落")};	case "v2ray","shadowrocket":decoded:=node.Base64Decode(string(body));if decoded==""||!strings.Contains(decoded,"://"){return fmt.Errorf("V2Ray 订阅未解析到节点")};case "singbox":var root map[string]any;if err:=json.Unmarshal(body,&root);err!=nil{return fmt.Errorf("sing-box JSON 无效: %w",err)};if _,ok:=root["outbounds"];!ok{return fmt.Errorf("sing-box 配置缺少 outbounds")};case "qx":if !strings.Contains(string(body),"="){return fmt.Errorf("Quantumult X 节点列表为空")};default:return fmt.Errorf("未知客户端 %s",client)};return nil
-}
-
-func buildAndSnapshotSubscription(ctx context.Context, subscriptionID int, client string) (subscriptionArtifactMeta,error) {
-	body,err:=buildSubscriptionOutput(subscriptionID,client);if err!=nil{return subscriptionArtifactMeta{},err}
-	var sub models.Subcription;if err:=models.DB.First(&sub,subscriptionID).Error;err!=nil{return subscriptionArtifactMeta{},err}
-	inputDigest,templateName,templateChecksum,rulesChecksum,err:=subscriptionInputDigest(&sub,client);if err!=nil{return subscriptionArtifactMeta{},err}
-	validationStatus:="valid";validationErr:=validateSubscriptionContent(client,body);if validationErr!=nil{validationStatus="invalid"}
-	testStatus:="passed";report:=map[string]any{"validation":validationStatus}
-	if validationErr!=nil{report["validationError"]=validationErr.Error();testStatus="failed"}
-	if validationErr==nil&&strings.EqualFold(client,"clash"){
-		plan,planErr:=runSubscriptionEgressPlanTask(ctx,subscriptionID);if planErr!=nil{testStatus="warning";report["egressError"]=planErr.Error()}else{passed,failed:=0,0;for _,item:=range plan.Items{if item.SelectedNode!=nil&&item.Result!=nil&&(item.Result.Status=="available"||item.Result.Status=="reachable"){passed++}else{failed++}};report["egressPassed"]=passed;report["egressFailed"]=failed;report["egressWarnings"]=plan.Warnings;if failed>0||passed==0{testStatus="warning"}}
+	if len(body) == 0 {
+		return fmt.Errorf("订阅产物为空")
 	}
-	reportJSON,_:=json.Marshal(report);artifact:=models.SubscriptionArtifact{SubscriptionID:subscriptionID,Client:strings.ToLower(client),InputDigest:inputDigest,TemplateName:templateName,TemplateChecksum:templateChecksum,RulesChecksum:rulesChecksum,ContentChecksum:shaHex(body),ByteSize:len(body),ValidationStatus:validationStatus,TestStatus:testStatus,TestReportJSON:string(reportJSON),Content:append([]byte(nil),body...)}
-	if err:=models.DB.Create(&artifact).Error;err!=nil{return subscriptionArtifactMeta{},err}
-	promoted:=validationStatus=="valid"&&testStatus!="failed"
-	if promoted{pointer:=models.SubscriptionArtifactPointer{SubscriptionID:subscriptionID,Client:strings.ToLower(client),LastKnownGoodArtifactID:artifact.ID};var existing models.SubscriptionArtifactPointer;err:=models.DB.Where("subscription_id = ? AND client = ?",subscriptionID,strings.ToLower(client)).First(&existing).Error;if err==nil{_ = models.DB.Model(&existing).Update("last_known_good_artifact_id",artifact.ID).Error}else{_ = models.DB.Create(&pointer).Error}}
-	return subscriptionArtifactMeta{ArtifactID:artifact.ID,SubscriptionID:subscriptionID,Client:client,Bytes:len(body),SHA256:artifact.ContentChecksum,ValidationStatus:validationStatus,TestStatus:testStatus,PromotedLKG:promoted},nil
+	switch strings.ToLower(client) {
+	case "clash", "clash-proxies":
+		var root map[string]any
+		if err := yaml.Unmarshal(body, &root); err != nil {
+			return fmt.Errorf("Clash YAML 无效: %w", err)
+		}
+		if len(root) == 0 {
+			return fmt.Errorf("Clash YAML 为空")
+		}
+	case "surge", "loon":
+		if !strings.Contains(string(body), "[") {
+			return fmt.Errorf("配置缺少段落")
+		}
+	case "v2ray", "shadowrocket":
+		decoded := node.Base64Decode(string(body))
+		if decoded == "" || !strings.Contains(decoded, "://") {
+			return fmt.Errorf("V2Ray 订阅未解析到节点")
+		}
+	case "singbox":
+		var root map[string]any
+		if err := json.Unmarshal(body, &root); err != nil {
+			return fmt.Errorf("sing-box JSON 无效: %w", err)
+		}
+		if _, ok := root["outbounds"]; !ok {
+			return fmt.Errorf("sing-box 配置缺少 outbounds")
+		}
+	case "qx":
+		if !strings.Contains(string(body), "=") {
+			return fmt.Errorf("Quantumult X 节点列表为空")
+		}
+	default:
+		return fmt.Errorf("未知客户端 %s", client)
+	}
+	return nil
 }
 
-func lastKnownGoodArtifact(subscriptionID int, client string) (*models.SubscriptionArtifact,error) { var pointer models.SubscriptionArtifactPointer;if err:=models.DB.Where("subscription_id = ? AND client = ?",subscriptionID,strings.ToLower(client)).First(&pointer).Error;err!=nil{return nil,err};var artifact models.SubscriptionArtifact;if err:=models.DB.First(&artifact,pointer.LastKnownGoodArtifactID).Error;err!=nil{return nil,err};return &artifact,nil }
-
-func serveSubscriptionClient(c *gin.Context, subscriptionID int, client string) {
-	client=strings.ToLower(client);body,err:=buildSubscriptionOutput(subscriptionID,client);liveValid:=err==nil&&validateSubscriptionContent(client,body)==nil
-	if !liveValid { if artifact,lkgErr:=lastKnownGoodArtifact(subscriptionID,client);lkgErr==nil&&len(artifact.Content)>0 { body=artifact.Content;err=nil;c.Header("X-SubLinkX-Artifact","last-known-good");c.Header("X-SubLinkX-Artifact-ID",strconv.FormatUint(uint64(artifact.ID),10)) } }
-	if err!=nil||len(body)==0 { c.String(502,"订阅生成失败，且没有可用的 Last Known Good 版本");return }
-	var sub models.Subcription;_ = models.DB.First(&sub,subscriptionID).Error;if sub.ExpiresAt!=nil{c.Header("Subscription-Userinfo",fmt.Sprintf("upload=0; download=0; total=0; expire=%d",sub.ExpiresAt.Unix()))};c.Header("Profile-Update-Interval","24");ext:=map[string]string{"clash":"yaml","surge":"conf","loon":"conf","v2ray":"txt","shadowrocket":"txt","singbox":"json","qx":"conf"}[client];contentType:=map[string]string{"clash":"text/plain; charset=utf-8","singbox":"application/json; charset=utf-8"}[client];if contentType==""{contentType="text/plain; charset=utf-8"};filename:=sub.Name+"."+ext;c.Header("Content-Disposition","inline; filename*=utf-8''"+url.QueryEscape(filename));c.Header("X-SubLinkX-Artifact-Source",map[bool]string{true:"live",false:"fallback"}[liveValid]);c.Data(200,contentType,body)
+func lastKnownGoodArtifact(subscriptionID int, client string) (*models.SubscriptionArtifact, error) {
+	var pointer models.SubscriptionArtifactPointer
+	if err := models.DB.Where("subscription_id = ? AND client = ?", subscriptionID, strings.ToLower(client)).First(&pointer).Error; err != nil {
+		return nil, err
+	}
+	var artifact models.SubscriptionArtifact
+	if err := models.DB.First(&artifact, pointer.LastKnownGoodArtifactID).Error; err != nil {
+		return nil, err
+	}
+	return &artifact, nil
 }
 
-func SubscriptionArtifacts(c *gin.Context){id,_:=strconv.Atoi(c.Query("id"));client:=strings.ToLower(strings.TrimSpace(c.Query("client")));q:=models.DB.Model(&models.SubscriptionArtifact{}).Select("id,subscription_id,client,input_digest,template_name,template_checksum,rules_checksum,content_checksum,byte_size,validation_status,test_status,test_report_json,created_at").Where("subscription_id = ?",id);if client!=""{q=q.Where("client = ?",client)};var items []models.SubscriptionArtifact;if err:=q.Order("id desc").Limit(100).Find(&items).Error;err!=nil{c.JSON(500,gin.H{"code":"50000","msg":"读取产物版本失败"});return};var pointers []models.SubscriptionArtifactPointer;_ = models.DB.Where("subscription_id = ?",id).Find(&pointers).Error;c.JSON(200,gin.H{"code":"00000","data":gin.H{"items":items,"pointers":pointers},"msg":"订阅产物版本"})}
+// rememberGoodArtifact 保存本次成功生成的内容作为该客户端的回退版本；
+// 内容未变时不写库，每个订阅每个客户端只保留最新一份。
+func rememberGoodArtifact(subscriptionID int, client string, body []byte) {
+	client = strings.ToLower(client)
+	checksum := shaHex(body)
+	if current, err := lastKnownGoodArtifact(subscriptionID, client); err == nil && current.ContentChecksum == checksum {
+		return
+	}
+	artifact := models.SubscriptionArtifact{
+		SubscriptionID: subscriptionID, Client: client, ContentChecksum: checksum,
+		ByteSize: len(body), ValidationStatus: "valid", TestStatus: "passed",
+		Content: append([]byte(nil), body...),
+	}
+	if err := models.DB.Create(&artifact).Error; err != nil {
+		return
+	}
+	var pointer models.SubscriptionArtifactPointer
+	if err := models.DB.Where("subscription_id = ? AND client = ?", subscriptionID, client).First(&pointer).Error; err == nil {
+		_ = models.DB.Model(&pointer).Update("last_known_good_artifact_id", artifact.ID).Error
+	} else {
+		_ = models.DB.Create(&models.SubscriptionArtifactPointer{SubscriptionID: subscriptionID, Client: client, LastKnownGoodArtifactID: artifact.ID}).Error
+	}
+	_ = models.DB.Where("subscription_id = ? AND client = ? AND id <> ?", subscriptionID, client, artifact.ID).
+		Delete(&models.SubscriptionArtifact{}).Error
+}
 
-func SubscriptionArtifactRollback(c *gin.Context){artifactID64,_:=strconv.ParseUint(c.Query("artifactId"),10,64);var artifact models.SubscriptionArtifact;if artifactID64==0||models.DB.First(&artifact,uint(artifactID64)).Error!=nil{c.JSON(404,gin.H{"code":"40400","msg":"产物版本不存在"});return};if artifact.ValidationStatus!="valid"{c.JSON(409,gin.H{"code":"40900","msg":"无效产物不能设为 Last Known Good"});return};var pointer models.SubscriptionArtifactPointer;err:=models.DB.Where("subscription_id = ? AND client = ?",artifact.SubscriptionID,artifact.Client).First(&pointer).Error;if err==nil{_ = models.DB.Model(&pointer).Update("last_known_good_artifact_id",artifact.ID).Error}else{_ = models.DB.Create(&models.SubscriptionArtifactPointer{SubscriptionID:artifact.SubscriptionID,Client:artifact.Client,LastKnownGoodArtifactID:artifact.ID}).Error};c.JSON(200,gin.H{"code":"00000","msg":"Last Known Good 已切换"})}
+// buildSubscriptionOutput 在内存中渲染订阅；providerBase 用于 proxy-provider 模式拼接节点地址。
+func buildSubscriptionOutput(sub models.Subcription, client, providerBase string) ([]byte, error) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	c.Request = httptest.NewRequest("GET", "/", nil)
+	c.Set("subname", sub.Name)
+	c.Set("subToken", sub.Token)
+	c.Set("providerBase", providerBase)
+	switch client {
+	case "clash", "clash-proxies":
+		c.Set("clashProxiesOnly", client == "clash-proxies")
+		GetClash(c)
+	case "surge":
+		GetSurge(c)
+	case "loon":
+		GetLoon(c)
+	case "v2ray", "shadowrocket":
+		GetV2ray(c)
+	case "singbox":
+		GetSingbox(c)
+	case "qx":
+		GetQX(c)
+	default:
+		return nil, fmt.Errorf("不支持的客户端: %s", client)
+	}
+	body := recorder.Body.Bytes()
+	if len(body) == 0 {
+		return nil, fmt.Errorf("订阅生成结果为空")
+	}
+	if recorder.Code >= 400 {
+		return nil, fmt.Errorf("订阅生成失败 HTTP %d", recorder.Code)
+	}
+	return append([]byte(nil), body...), nil
+}
+
+var clientFileExt = map[string]string{
+	"clash": "yaml", "clash-proxies": "yaml", "surge": "conf", "loon": "conf",
+	"v2ray": "txt", "shadowrocket": "txt", "singbox": "json", "qx": "conf",
+}
+
+func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client string) {
+	client = strings.ToLower(client)
+	body, err := buildSubscriptionOutput(sub, client, baseURL(c))
+	liveValid := err == nil && validateSubscriptionContent(client, body) == nil
+	if liveValid {
+		rememberGoodArtifact(sub.ID, client, body)
+	} else if artifact, lkgErr := lastKnownGoodArtifact(sub.ID, client); lkgErr == nil && len(artifact.Content) > 0 {
+		body, err = artifact.Content, nil
+		c.Header("X-SubLinkX-Artifact", "last-known-good")
+	}
+	if err != nil || len(body) == 0 {
+		c.String(502, "订阅生成失败，且没有可用的上一版本")
+		return
+	}
+	if info := subscriptionUserinfo(sub); info != "" {
+		c.Header("Subscription-Userinfo", info)
+	}
+	c.Header("Profile-Update-Interval", "24")
+	contentType := "text/plain; charset=utf-8"
+	if client == "singbox" {
+		contentType = "application/json; charset=utf-8"
+	}
+	filename := sub.Name + "." + clientFileExt[client]
+	c.Header("Content-Disposition", "inline; filename*=utf-8''"+url.QueryEscape(filename))
+	c.Data(200, contentType, body)
+}

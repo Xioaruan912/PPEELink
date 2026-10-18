@@ -36,40 +36,68 @@ type TargetQualityStats struct {
 }
 
 func RecordNodeTargetQuality(samples []NodeTargetQualitySample) error {
-	if len(samples) == 0 { return nil }
+	if len(samples) == 0 {
+		return nil
+	}
 	return DB.CreateInBatches(samples, 100).Error
 }
 
-type targetQualityKey struct { nodeID int; label string }
+type targetQualityKey struct {
+	nodeID int
+	label  string
+}
 
 func aggregateTargetQuality(samples []NodeTargetQualitySample, byScene bool) map[targetQualityKey]TargetQualityStats {
 	type acc struct {
 		count, successes int
-		rtts []int
-		sum float64
-		lastAt time.Time
-		lastStatus string
-		lastRtt int
+		rtts             []int
+		sum              float64
+		lastAt           time.Time
+		lastStatus       string
+		lastRtt          int
 	}
 	accs := map[targetQualityKey]*acc{}
 	for _, s := range samples {
-		label := s.TargetKey; if byScene { label = s.Scene }
+		label := s.TargetKey
+		if byScene {
+			label = s.Scene
+		}
 		k := targetQualityKey{s.NodeID, label}
-		a := accs[k]; if a == nil { a = &acc{lastRtt:-1}; accs[k] = a }
+		a := accs[k]
+		if a == nil {
+			a = &acc{lastRtt: -1}
+			accs[k] = a
+		}
 		a.count++
-		if s.Success && s.Rtt >= 0 { a.successes++; a.sum += float64(s.Rtt); a.rtts = append(a.rtts, s.Rtt) }
-		if s.CheckedAt.After(a.lastAt) { a.lastAt = s.CheckedAt; a.lastStatus = s.Status; a.lastRtt = s.Rtt }
+		if s.Success && s.Rtt >= 0 {
+			a.successes++
+			a.sum += float64(s.Rtt)
+			a.rtts = append(a.rtts, s.Rtt)
+		}
+		if s.CheckedAt.After(a.lastAt) {
+			a.lastAt = s.CheckedAt
+			a.lastStatus = s.Status
+			a.lastRtt = s.Rtt
+		}
 	}
 	result := make(map[targetQualityKey]TargetQualityStats, len(accs))
 	for k, a := range accs {
-		availability := 0.0; average, p95 := -1, -1
-		if a.count > 0 { availability = float64(a.successes)*100/float64(a.count) }
-		if len(a.rtts) > 0 {
-			average = int(math.Round(a.sum/float64(len(a.rtts))))
-			sort.Ints(a.rtts); p95 = a.rtts[int(math.Ceil(float64(len(a.rtts))*0.95))-1]
+		availability := 0.0
+		average, p95 := -1, -1
+		if a.count > 0 {
+			availability = float64(a.successes) * 100 / float64(a.count)
 		}
-		stats := TargetQualityStats{NodeID:k.nodeID, Score:CalculateNodeQualityScore(availability, average, 0), Availability:math.Round(availability*10)/10, AverageRtt:average, P95Rtt:p95, Confidence:minInt(100,a.count*10), SampleCount:a.count, LastStatus:a.lastStatus, LastRtt:a.lastRtt, LastTestedAt:a.lastAt}
-		if byScene { stats.Scene = k.label } else { stats.TargetKey = k.label }
+		if len(a.rtts) > 0 {
+			average = int(math.Round(a.sum / float64(len(a.rtts))))
+			sort.Ints(a.rtts)
+			p95 = a.rtts[int(math.Ceil(float64(len(a.rtts))*0.95))-1]
+		}
+		stats := TargetQualityStats{NodeID: k.nodeID, Score: CalculateNodeQualityScore(availability, average, 0), Availability: math.Round(availability*10) / 10, AverageRtt: average, P95Rtt: p95, Confidence: minInt(100, a.count*10), SampleCount: a.count, LastStatus: a.lastStatus, LastRtt: a.lastRtt, LastTestedAt: a.lastAt}
+		if byScene {
+			stats.Scene = k.label
+		} else {
+			stats.TargetKey = k.label
+		}
 		result[k] = stats
 	}
 	return result
@@ -77,17 +105,33 @@ func aggregateTargetQuality(samples []NodeTargetQualitySample, byScene bool) map
 
 func GetNodeTargetQualityStats(since time.Time) (map[int]map[string]TargetQualityStats, error) {
 	var samples []NodeTargetQualitySample
-	if err := DB.Where("checked_at >= ?", since).Order("node_id, target_key, checked_at").Find(&samples).Error; err != nil { return nil, err }
-	flat := aggregateTargetQuality(samples, false); result := map[int]map[string]TargetQualityStats{}
-	for k, stat := range flat { if result[k.nodeID] == nil { result[k.nodeID] = map[string]TargetQualityStats{} }; result[k.nodeID][k.label] = stat }
+	if err := DB.Where("checked_at >= ?", since).Order("node_id, target_key, checked_at").Find(&samples).Error; err != nil {
+		return nil, err
+	}
+	flat := aggregateTargetQuality(samples, false)
+	result := map[int]map[string]TargetQualityStats{}
+	for k, stat := range flat {
+		if result[k.nodeID] == nil {
+			result[k.nodeID] = map[string]TargetQualityStats{}
+		}
+		result[k.nodeID][k.label] = stat
+	}
 	return result, nil
 }
 
 func GetNodeSceneQualityStats(since time.Time) (map[int]map[string]TargetQualityStats, error) {
 	var samples []NodeTargetQualitySample
-	if err := DB.Where("checked_at >= ?", since).Order("node_id, scene, checked_at").Find(&samples).Error; err != nil { return nil, err }
-	flat := aggregateTargetQuality(samples, true); result := map[int]map[string]TargetQualityStats{}
-	for k, stat := range flat { if result[k.nodeID] == nil { result[k.nodeID] = map[string]TargetQualityStats{} }; result[k.nodeID][k.label] = stat }
+	if err := DB.Where("checked_at >= ?", since).Order("node_id, scene, checked_at").Find(&samples).Error; err != nil {
+		return nil, err
+	}
+	flat := aggregateTargetQuality(samples, true)
+	result := map[int]map[string]TargetQualityStats{}
+	for k, stat := range flat {
+		if result[k.nodeID] == nil {
+			result[k.nodeID] = map[string]TargetQualityStats{}
+		}
+		result[k.nodeID][k.label] = stat
+	}
 	return result, nil
 }
 

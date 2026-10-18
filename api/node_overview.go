@@ -33,9 +33,16 @@ type NodeOverviewItem struct {
 	SampleCount         int       `json:"sampleCount"`
 	LastTestedAt        time.Time `json:"lastTestedAt"`
 	Multiplier          float64   `json:"multiplier"`
+	RelayID             int       `json:"relayId,omitempty"` // 链式代理的中转节点
+	UDP                 bool      `json:"udp,omitempty"`
+	TFO                 bool      `json:"tfo,omitempty"`
+	SkipCertVerify      bool      `json:"skipCertVerify,omitempty"`
 }
 
-// overview 缓存（60s）
+// qualityCheckConcurrency 节点 TCP 质量检测的最大并发连接数。
+const qualityCheckConcurrency = 16
+
+// overview 缓存（5 分钟；节点变更时立即失效）
 type overviewCache struct {
 	mu      sync.Mutex
 	data    []NodeOverviewItem
@@ -72,7 +79,7 @@ func NodeOverview(c *gin.Context) {
 
 	oCache.mu.Lock()
 	oCache.data = items
-	oCache.expires = time.Now().Add(60 * time.Second)
+	oCache.expires = time.Now().Add(5 * time.Minute)
 	oCache.mu.Unlock()
 
 	c.JSON(200, gin.H{"code": "00000", "data": items, "msg": "节点概览"})
@@ -86,19 +93,26 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 		return nil, err
 	}
 
-	// 逐节点解析服务器地址 + GeoIP 国家 + TCP 延迟
+	// 逐节点解析服务器地址 + GeoIP 国家 + TCP 延迟。
+	// 并发上限避免节点很多时瞬间向机场发起大量连接（易被判定为扫描）。
 	var wg sync.WaitGroup
 	results := make([]NodeOverviewItem, len(nodes))
+	slots := make(chan struct{}, qualityCheckConcurrency)
 	for i, n := range nodes {
 		wg.Add(1)
 		go func(i int, n models.Node) {
 			defer wg.Done()
 			defer utils.RecoverPanic("node-overview")
+			slots <- struct{}{}
+			defer func() { <-slots }()
 			item := NodeOverviewItem{
 				ID: n.ID, Name: n.Name, Link: n.Link,
 				Rtt:        -1,
 				Groups:     make([]string, 0),
 				Multiplier: node.ParseMultiplier(n.Name),
+			}
+			if f := decodeNodeFlags(n.Flags); !f.Empty() {
+				item.RelayID, item.UDP, item.TFO, item.SkipCertVerify = f.DialerProxyID, f.UDP, f.TFO, f.SkipCertVerify
 			}
 			for _, g := range n.GroupNodes {
 				item.Groups = append(item.Groups, g.Name)

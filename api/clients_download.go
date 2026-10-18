@@ -21,7 +21,7 @@ func ClientList(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{
-			"items":    items,
+			"items":     items,
 			"lastCheck": client.LastChecked().Unix(),
 		},
 		"msg": "客户端列表",

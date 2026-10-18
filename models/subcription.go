@@ -23,7 +23,7 @@ type Subcription struct {
 	LastGoodSnapshot string      `gorm:"type:text" json:"-"`
 	LastSyncAt       *time.Time  `json:"lastSyncAt"`
 	LastSyncError    string      `gorm:"type:text" json:"lastSyncError"`
-	Token            string      `gorm:"type:text"` // 订阅链接身份令牌（随机生成，可重置）
+	Token            string      `gorm:"type:text;index"` // 订阅链接身份令牌（随机生成，可重置）
 	ExpiresAt        *time.Time  // 过期时间，nil 表示永不过期
 	LastRemindedAt   *time.Time  `json:"lastRemindedAt"` // 上次到期/流量提醒时间（每天最多一次）
 	Nodes            []Node      `gorm:"many2many:subcription_nodes;"`
@@ -160,6 +160,31 @@ func (sub *Subcription) Find() error {
 	}
 
 	return nil
+}
+
+// FindByToken 按令牌直接查找订阅（大小写不敏感），不预加载节点与访问日志。
+func FindSubscriptionByToken(token string) (*Subcription, error) {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var sub Subcription
+	if err := DB.Where("lower(token) = ?", token).First(&sub).Error; err != nil {
+		return nil, err
+	}
+	return &sub, nil
+}
+
+// EnsureAllTokens 给缺少令牌的老订阅补齐令牌，启动时调用一次。
+func EnsureAllTokens() {
+	var subs []Subcription
+	if err := DB.Where("token IS NULL OR token = ''").Find(&subs).Error; err != nil {
+		log.Println("补齐订阅令牌失败:", err)
+		return
+	}
+	for i := range subs {
+		_ = subs[i].EnsureToken()
+	}
 }
 
 // List 订阅列表 (返回所有订阅，并加载其关联节点和日志，按指定顺序)

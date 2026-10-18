@@ -55,6 +55,7 @@ type Proxy struct {
 	Mtu                int                    `yaml:"mtu,omitempty"`
 	Reserved           []int                  `yaml:"reserved,omitempty"`
 	Dns                []string               `yaml:"dns,omitempty"`
+	Dialer_proxy       string                 `yaml:"dialer-proxy,omitempty"`
 }
 
 type ProxyGroup struct {
@@ -101,6 +102,41 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 
 // EncodeClashWithFlags 与 EncodeClash 相同，但允许按节点覆盖 udp/tfo/skip-cert-verify。
 func EncodeClashWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) ([]byte, error) {
+	return DecodeClash(BuildClashProxies(urls, flags, sqlconfig), sqlconfig.Clash)
+}
+
+// EncodeClashProxies 只输出 proxies 列表，供 proxy-provider 拉取。
+func EncodeClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) ([]byte, error) {
+	proxys := BuildClashProxies(urls, flags, sqlconfig)
+	if len(proxys) == 0 {
+		return nil, fmt.Errorf("没有可输出的节点")
+	}
+	return yaml.Marshal(map[string]interface{}{"proxies": proxys})
+}
+
+// EncodeClashMinimal 不依赖模板的最小 Clash 配置：全部节点放进一个手动选择组，其余直连规则交给客户端默认。
+func EncodeClashMinimal(urls []string, flags map[string]NodeFlags) ([]byte, error) {
+	proxys := BuildClashProxies(urls, flags, SqlConfig{Udp: true})
+	if len(proxys) == 0 {
+		return nil, fmt.Errorf("没有可输出的节点")
+	}
+	names := make([]string, 0, len(proxys))
+	for _, p := range proxys {
+		names = append(names, p.Name)
+	}
+	return yaml.Marshal(map[string]interface{}{
+		"mixed-port": 7890,
+		"mode":       "rule",
+		"proxies":    proxys,
+		"proxy-groups": []map[string]interface{}{
+			{"name": "PROXY", "type": "select", "proxies": append(names, "DIRECT")},
+		},
+		"rules": []string{"GEOIP,LAN,DIRECT", "GEOIP,CN,DIRECT", "MATCH,PROXY"},
+	})
+}
+
+// BuildClashProxies 将分享链接转换为 Clash 代理定义。
+func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) []Proxy {
 	// 传入urls，解析urls，生成proxys
 	// yamlfile 为模板文件
 	var proxys []Proxy
@@ -109,8 +145,9 @@ func EncodeClashWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 		udp := sqlconfig.Udp
 		cert := sqlconfig.Cert
 		tfo := false
+		dialer := ""
 		if f, ok := flags[link]; ok {
-			udp, cert, tfo = f.UDP, f.SkipCertVerify, f.TFO
+			udp, cert, tfo, dialer = f.UDP, f.SkipCertVerify, f.TFO, f.DialerProxy
 		}
 		before := len(proxys)
 		Scheme := strings.Split(link, "://")[0]
@@ -429,14 +466,16 @@ func EncodeClashWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 		if tfo && len(proxys) > before {
 			proxys[len(proxys)-1].Tfo = true
 		}
+		if dialer != "" && len(proxys) > before && dialer != proxys[len(proxys)-1].Name {
+			proxys[len(proxys)-1].Dialer_proxy = dialer
+		}
 	}
-	// 生成Clash配置文件
-	return DecodeClash(proxys, sqlconfig.Clash)
+	return proxys
 }
 
 // DecodeClash 用于解析 Clash 配置文件
-func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
-	// 读取 YAML 文件
+// loadClashTemplate 读取本地或远程 Clash 模板。
+func loadClashTemplate(yamlfile string) (map[interface{}]interface{}, error) {
 	var data []byte
 	var err error
 	if strings.Contains(yamlfile, "://") {
@@ -448,7 +487,6 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 		defer resp.Body.Close()
 		data, err = io.ReadAll(resp.Body)
 		if err != nil {
-			log.Printf("error: %v", err)
 			return nil, err
 		}
 	} else {
@@ -458,11 +496,64 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 			return nil, err
 		}
 	}
-	// 解析 YAML 文件
 	config := make(map[interface{}]interface{})
-	err = yaml.Unmarshal(data, &config)
-	if err != nil {
+	if err := yaml.Unmarshal(data, &config); err != nil {
 		log.Printf("error: %v", err)
+		return nil, err
+	}
+	return config, nil
+}
+
+// EncodeClashProvider 生成节点来自 proxy-provider 的 Clash 配置：客户端按 interval
+// 自动刷新节点，无需重新下载整份配置。各策略组的 filter 对 provider 同样生效。
+func EncodeClashProvider(yamlfile, providerName, providerURL, testURL string) ([]byte, error) {
+	config, err := loadClashTemplate(yamlfile)
+	if err != nil {
+		return nil, err
+	}
+	if testURL == "" {
+		testURL = "https://www.gstatic.com/generate_204"
+	}
+	providers, _ := config["proxy-providers"].(map[string]interface{})
+	if providers == nil {
+		providers = map[string]interface{}{}
+	}
+	providers[providerName] = map[string]interface{}{
+		"type":     "http",
+		"url":      providerURL,
+		"interval": 3600,
+		"path":     "./providers/" + providerName + ".yaml",
+		"health-check": map[string]interface{}{
+			"enable":   true,
+			"url":      testURL,
+			"interval": 600,
+		},
+	}
+	config["proxy-providers"] = providers
+	groups, _ := config["proxy-groups"].([]interface{})
+	for i, pg := range groups {
+		group, ok := pg.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if group["type"] == "relay" {
+			break
+		}
+		uses, _ := group["use"].([]interface{})
+		group["use"] = append(uses, providerName)
+		if group["proxies"] == nil {
+			group["proxies"] = []interface{}{}
+		}
+		groups[i] = group
+	}
+	config["proxy-groups"] = groups
+	return yaml.Marshal(config)
+}
+
+// DecodeClash 用于解析 Clash 配置文件
+func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
+	config, err := loadClashTemplate(yamlfile)
+	if err != nil {
 		return nil, err
 	}
 

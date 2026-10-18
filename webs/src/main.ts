@@ -3,7 +3,7 @@ import App from "./App.vue";
 import router from "@/router";
 import { setupStore } from "@/store";
 import { setupElIcons, setupI18n, setupPermission } from "@/plugins";
-import { installSpotlight } from "@/motion";
+import { installSpotlight, vReveal } from "@/motion";
 
 // 本地SVG图标
 import "virtual:svg-icons-register";
@@ -22,6 +22,7 @@ setupElIcons(app);
 setupI18n(app);
 // 注册动态路由
 setupPermission();
+app.directive("reveal", vReveal);
 app.use(router);
 app.mount("#app");
 installSpotlight();

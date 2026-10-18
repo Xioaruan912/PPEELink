@@ -16,6 +16,12 @@ type Airport struct {
 	NodeCount     int        // 节点总数
 	SelectedNodes string     `gorm:"type:text"` // 逗号分隔的已勾选节点名，空=全选
 
+	// 同步策略
+	MatchMode         string // name（默认）/ server（服务器:端口）/ type-server（协议+服务器:端口）
+	KeepLocalNames    bool   // 匹配到已有节点时保留本地改过的名称
+	ExcludePattern    string // 额外排除的节点名正则（信息节点等）
+	SyncIntervalHours int    // 自动同步间隔；0 表示只在每日凌晨同步
+
 	// 来自机场响应头 Subscription-Userinfo 的流量信息（字节），同步时刷新
 	TrafficUpload    int64
 	TrafficDownload  int64

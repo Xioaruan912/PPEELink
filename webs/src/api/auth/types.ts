@@ -32,6 +32,8 @@ export interface LoginResult {
    * token 类型
    */
   tokenType?: string;
+  /** 仍在使用默认密码或被管理员重置过，登录后必须先改密码 */
+  mustChangePassword?: boolean;
 }
 
 export interface VersionResult {

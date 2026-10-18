@@ -16,10 +16,10 @@ type TestSession struct {
 
 // testManager 管理全局测试会话
 type testManager struct {
-	mu     sync.Mutex
+	mu      sync.Mutex
 	session *TestSession
-	cancel context.CancelFunc
-	busy   bool
+	cancel  context.CancelFunc
+	busy    bool
 }
 
 var tm = &testManager{}

@@ -7,6 +7,7 @@ import {
   UiDrawer,
   UiDialog,
   UiPanel,
+  UiSegmented,
   UiStat,
   UiSkeleton,
   EmptyState,
@@ -326,6 +327,63 @@ const status = (row: Airport) => {
             aria-label="自动清理死节点"
           />
         </div>
+        <details
+          class="strategy"
+          :open="
+            form.MatchMode !== 'name' ||
+            !!form.ExcludePattern ||
+            !!form.SyncIntervalHours
+          "
+        >
+          <summary>同步策略</summary>
+          <el-form-item label="识别同一节点的依据">
+            <UiSegmented
+              v-model="form.MatchMode"
+              label="匹配方式"
+              :options="[
+                { label: '名称', value: 'name' },
+                { label: '服务器:端口', value: 'server' },
+                { label: '协议+服务器', value: 'type-server' },
+              ]"
+            />
+            <p class="field-hint">
+              机场常改节点名时选“服务器:端口”，已有节点会被更新而不是重建，订阅引用保持不变。
+            </p>
+          </el-form-item>
+          <div class="switch-field">
+            <div>
+              <label for="airport-keep-names">保留本地名称</label>
+              <p class="field-hint">
+                匹配到已有节点时不覆盖你改过的名称（需按服务器匹配）。
+              </p>
+            </div>
+            <el-switch
+              id="airport-keep-names"
+              v-model="form.KeepLocalNames"
+              :disabled="saving || form.MatchMode === 'name'"
+              aria-label="保留本地名称"
+            />
+          </div>
+          <el-form-item label="排除节点（正则）">
+            <el-input
+              v-model="form.ExcludePattern"
+              placeholder="例如 剩余|到期|官网"
+              :disabled="saving"
+            />
+          </el-form-item>
+          <el-form-item label="自动同步间隔">
+            <UiSegmented
+              v-model="form.SyncIntervalHours"
+              label="自动同步间隔"
+              :options="[
+                { label: '每日凌晨', value: 0 },
+                { label: '6 小时', value: 6 },
+                { label: '12 小时', value: 12 },
+                { label: '24 小时', value: 24 },
+              ]"
+            />
+          </el-form-item>
+        </details>
         <p v-if="formError" class="error-text" role="alert">{{ formError }}</p>
       </el-form>
       <template #footer

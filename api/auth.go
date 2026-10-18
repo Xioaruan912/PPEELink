@@ -117,10 +117,11 @@ func UserLogin(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{
-			"accessToken":  token,
-			"tokenType":    "Bearer",
-			"refreshToken": nil,
-			"expires":      nil,
+			"accessToken":        token,
+			"tokenType":          "Bearer",
+			"refreshToken":       nil,
+			"expires":            nil,
+			"mustChangePassword": user.MustChangePassword,
 		},
 		"msg": "登录成功",
 	})

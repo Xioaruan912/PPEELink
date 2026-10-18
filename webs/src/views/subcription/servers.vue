@@ -1,0 +1,785 @@
+<script setup lang="ts">
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+} from "vue";
+import IconPlus from "~icons/ph/plus";
+import IconServer from "~icons/ph/hard-drives";
+import IconCloud from "~icons/ph/cloud-arrow-up";
+import IconTerminal from "~icons/ph/terminal-window";
+import IconPencil from "~icons/ph/pencil-simple";
+import IconTrash from "~icons/ph/trash";
+import IconWarning from "~icons/ph/warning";
+import {
+  deleteProxyInbound,
+  deleteProxyServer,
+  getProxyTraffic,
+  listProxyAccounts,
+  listProxyServers,
+  resetServerToken,
+  saveProxyInbound,
+  saveProxyServer,
+  type DailyTraffic,
+  type ProxyAccount,
+  type ProxyInbound,
+  type ProxyServer,
+} from "@/api/proxy";
+import {
+  EmptyState,
+  PageHeader,
+  UiButton,
+  UiDialog,
+  UiPanel,
+  UiSegmented,
+  UiSkeleton,
+  UiStat,
+  UiTag,
+} from "@/ui";
+import RowIconButton from "@/ui/RowIconButton.vue";
+import { useStagger } from "@/motion";
+import SecretLink from "./subs/SecretLink.vue";
+import InboundDrawer from "./servers/InboundDrawer.vue";
+import AccountDrawer from "./servers/AccountDrawer.vue";
+import TrafficBars from "./servers/TrafficBars.vue";
+import { formatBytes } from "@/utils/traffic";
+import { formatDateTime } from "@/utils/date";
+
+defineOptions({ name: "ProxyServers" });
+const servers = ref<ProxyServer[]>([]);
+const accounts = ref<ProxyAccount[]>([]);
+const traffic = ref<DailyTraffic[]>([]);
+const loading = ref(true);
+const loadError = ref("");
+const root = ref<HTMLElement>();
+const stagger = useStagger();
+
+async function load(quiet = false) {
+  if (!quiet) loading.value = true;
+  loadError.value = "";
+  try {
+    const [s, a, t] = await Promise.all([
+      listProxyServers(),
+      listProxyAccounts(),
+      getProxyTraffic(30),
+    ]);
+    servers.value = s.data || [];
+    accounts.value = a.data || [];
+    traffic.value = t.data || [];
+  } catch (e: any) {
+    loadError.value = e?.message || "请检查网络后重试";
+  } finally {
+    if (!quiet) {
+      loading.value = false;
+      await nextTick();
+      if (root.value) stagger(root.value.querySelectorAll(".server-card"));
+    }
+  }
+}
+// 服务器每分钟回报一次，页面每 20 秒静默刷新状态
+let timer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  void load();
+  timer = setInterval(() => void load(true), 20000);
+});
+onBeforeUnmount(() => clearInterval(timer));
+
+const todayTotal = computed(() =>
+  servers.value.reduce((s, x) => s + x.todayUp + x.todayDown, 0)
+);
+const onlineCount = computed(
+  () =>
+    servers.value.filter((s) => s.online || (s.kind === "local" && s.running))
+      .length
+);
+const openAccounts = computed(
+  () => accounts.value.filter((a) => a.enabled).length
+);
+
+function status(s: ProxyServer) {
+  if (!s.enabled) return { tone: "neutral" as const, text: "已停用" };
+  if (s.kind === "agent" && !s.online)
+    return {
+      tone: "bad" as const,
+      text: s.lastSeenAt ? "离线" : "等待 agent 连接",
+    };
+  if (s.lastError) return { tone: "warn" as const, text: "运行异常" };
+  if (!s.inbounds.some((i) => i.enabled))
+    return { tone: "neutral" as const, text: "未配置入站" };
+  return s.running
+    ? { tone: "ok" as const, text: "运行中" }
+    : { tone: "warn" as const, text: "未运行" };
+}
+const templateLabel = (t: string) =>
+  t === "vless-xhttp-reality" ? "XHTTP Reality" : "Reality Vision";
+
+// ---- 服务器编辑 ----
+const serverDialog = ref(false);
+const serverForm = reactive({
+  id: 0,
+  name: "",
+  kind: "agent" as "local" | "agent",
+  publicHost: "",
+  enabled: true,
+});
+const savingServer = ref(false);
+const install = ref<{ name: string; command: string } | null>(null);
+function openServer(s?: ProxyServer) {
+  Object.assign(
+    serverForm,
+    s
+      ? {
+          id: s.id,
+          name: s.name,
+          kind: s.kind,
+          publicHost: s.publicHost,
+          enabled: s.enabled,
+        }
+      : {
+          id: 0,
+          name: "",
+          kind: servers.value.some((x) => x.kind === "local")
+            ? "agent"
+            : "local",
+          publicHost: "",
+          enabled: true,
+        }
+  );
+  serverDialog.value = true;
+}
+async function submitServer() {
+  savingServer.value = true;
+  try {
+    const { data } = await saveProxyServer({
+      ...serverForm,
+      id: serverForm.id || undefined,
+    });
+    serverDialog.value = false;
+    if (data?.install)
+      install.value = { name: serverForm.name, command: data.install };
+    else ElMessage.success("已保存");
+    await load(true);
+  } finally {
+    savingServer.value = false;
+  }
+}
+async function toggleServer(s: ProxyServer) {
+  await saveProxyServer({
+    id: s.id,
+    name: s.name,
+    publicHost: s.publicHost,
+    enabled: !s.enabled,
+  });
+  ElMessage.success(s.enabled ? "已停用，xray 将在一分钟内停止" : "已启用");
+  await load(true);
+}
+async function showInstall(s: ProxyServer) {
+  try {
+    await ElMessageBox.confirm(
+      "重新生成安装命令会使旧令牌失效，已安装的 agent 需要用新命令重装。",
+      "重置 agent 令牌",
+      {
+        type: "warning",
+        confirmButtonText: "重置",
+        cancelButtonText: "取消",
+      }
+    );
+  } catch {
+    return;
+  }
+  const { data } = await resetServerToken(s.id);
+  install.value = { name: s.name, command: data.install };
+}
+async function removeServer(s: ProxyServer) {
+  try {
+    await ElMessageBox.confirm(
+      `删除服务器 ${s.name}？其上的入站与“自建·${s.name}”节点分组会一起删除。`,
+      "删除服务器",
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+        confirmButtonClass: "el-button--danger",
+      }
+    );
+  } catch {
+    return;
+  }
+  const res: any = await deleteProxyServer(s.id);
+  ElMessage.success(res?.msg || "已删除");
+  await load(true);
+}
+
+// ---- 入站 ----
+const inboundDrawer = ref(false);
+const inboundServer = ref(0);
+const editingInbound = ref<ProxyInbound | null>(null);
+function openInbound(s: ProxyServer, inbound?: ProxyInbound) {
+  inboundServer.value = s.id;
+  editingInbound.value = inbound || null;
+  inboundDrawer.value = true;
+}
+async function toggleInbound(inbound: ProxyInbound) {
+  await saveProxyInbound({ ...inbound, enabled: !inbound.enabled });
+  await load(true);
+}
+async function removeInbound(inbound: ProxyInbound) {
+  try {
+    await ElMessageBox.confirm(
+      `删除入站 ${inbound.remark || inbound.port}？`,
+      "删除入站",
+      {
+        type: "warning",
+        confirmButtonText: "删除",
+        cancelButtonText: "取消",
+      }
+    );
+  } catch {
+    return;
+  }
+  await deleteProxyInbound(inbound.id);
+  await load(true);
+}
+
+// ---- 账户 ----
+const accountDrawer = ref(false);
+const editingAccount = ref<ProxyAccount | null>(null);
+function openAccount(a: ProxyAccount) {
+  editingAccount.value = a;
+  accountDrawer.value = true;
+}
+const usageRatio = (a: ProxyAccount) =>
+  a.trafficLimit ? Math.min(a.trafficUsed / a.trafficLimit, 1) : 0;
+</script>
+<template>
+  <div class="servers-page">
+    <PageHeader
+      title="自建节点"
+      description="在本机或远程服务器上运行 xray-core，按账户发放节点并统计流量。"
+    >
+      <template #actions>
+        <UiButton variant="primary" :icon="IconPlus" @click="openServer()"
+          >添加服务器</UiButton
+        >
+      </template>
+    </PageHeader>
+
+    <div class="stat-tiles" data-enter>
+      <UiStat
+        label="在线服务器"
+        :value="loading ? null : onlineCount"
+        :unit="`/ ${servers.length}`"
+      />
+      <UiStat
+        label="入站"
+        :value="
+          loading ? null : servers.reduce((n, s) => n + s.inbounds.length, 0)
+        "
+      />
+      <UiStat label="开通账户" :value="loading ? null : openAccounts" />
+      <UiStat
+        label="今日流量"
+        :value="loading ? null : Number(formatBytes(todayTotal).split(' ')[0])"
+        :unit="formatBytes(todayTotal).split(' ')[1]"
+        :decimals="1"
+      />
+    </div>
+
+    <EmptyState
+      v-if="loadError"
+      size="section"
+      title="无法加载"
+      :description="loadError"
+      ><template #action
+        ><UiButton @click="load()">重新加载</UiButton></template
+      ></EmptyState
+    >
+    <UiSkeleton v-else-if="loading" :lines="3" height="140px" />
+    <EmptyState
+      v-else-if="!servers.length"
+      size="page"
+      title="还没有自建服务器"
+      description="添加本机，或在其他 VPS 上一键安装 agent。面板会下载官方 xray-core 并校验后运行。"
+      ><template #action
+        ><UiButton variant="primary" :icon="IconPlus" @click="openServer()"
+          >添加服务器</UiButton
+        ></template
+      ></EmptyState
+    >
+    <div v-else ref="root" class="server-grid">
+      <article
+        v-for="s in servers"
+        :key="s.id"
+        class="cell server-card"
+        :class="{ 'is-off': !s.enabled }"
+      >
+        <header class="card-head">
+          <span class="kind-icon" :class="`tone-${status(s).tone}`"
+            ><component :is="s.kind === 'local' ? IconServer : IconCloud"
+          /></span>
+          <div class="card-title">
+            <h2>{{ s.name }}</h2>
+            <p class="mono">{{ s.publicHost }}</p>
+          </div>
+          <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
+        </header>
+        <dl class="meta">
+          <div>
+            <dt>类型</dt>
+            <dd>{{ s.kind === "local" ? "本机" : "远程 agent" }}</dd>
+          </div>
+          <div>
+            <dt>xray</dt>
+            <dd class="mono">{{ s.xrayVersion || "--" }}</dd>
+          </div>
+          <div>
+            <dt>今日</dt>
+            <dd class="mono">{{ formatBytes(s.todayUp + s.todayDown) }}</dd>
+          </div>
+          <div>
+            <dt>最近回报</dt>
+            <dd>
+              {{ s.lastSeenAt ? formatDateTime(s.lastSeenAt).slice(5) : "--" }}
+            </dd>
+          </div>
+        </dl>
+        <p v-if="s.lastError" class="error-line">
+          <IconWarning />{{ s.lastError }}
+        </p>
+        <ul class="inbounds">
+          <li
+            v-for="i in s.inbounds"
+            :key="i.id"
+            :class="{ 'is-off': !i.enabled }"
+          >
+            <span class="port mono">:{{ i.port }}</span>
+            <span class="in-main">
+              <strong>{{ i.remark || templateLabel(i.template) }}</strong>
+              <small>{{ templateLabel(i.template) }} · {{ i.sni }}</small>
+            </span>
+            <el-switch
+              :model-value="i.enabled"
+              size="small"
+              :aria-label="`${i.remark} 启用`"
+              @change="toggleInbound(i)"
+            />
+            <RowIconButton
+              :icon="IconPencil"
+              :label="`编辑入站 ${i.remark}`"
+              @click="openInbound(s, i)"
+            />
+            <RowIconButton
+              :icon="IconTrash"
+              :label="`删除入站 ${i.remark}`"
+              @click="removeInbound(i)"
+            />
+          </li>
+          <li v-if="!s.inbounds.length" class="empty-in">
+            还没有入站，添加一个即可开始发放节点。
+          </li>
+        </ul>
+        <footer class="card-actions">
+          <UiButton :icon="IconPlus" @click="openInbound(s)">添加入站</UiButton>
+          <UiButton variant="ghost" @click="openServer(s)">编辑</UiButton>
+          <UiButton
+            v-if="s.kind === 'agent'"
+            variant="ghost"
+            :icon="IconTerminal"
+            @click="showInstall(s)"
+            >安装命令</UiButton
+          >
+          <UiButton variant="ghost" @click="toggleServer(s)">{{
+            s.enabled ? "停用" : "启用"
+          }}</UiButton>
+          <RowIconButton
+            :icon="IconTrash"
+            :label="`删除服务器 ${s.name}`"
+            @click="removeServer(s)"
+          />
+        </footer>
+      </article>
+    </div>
+
+    <div v-if="!loading && servers.length" class="lower-grid">
+      <UiPanel
+        title="最近 30 天流量"
+        description="全部服务器合计，按服务器回报的实际字节统计。"
+      >
+        <TrafficBars :rows="traffic" />
+      </UiPanel>
+      <UiPanel
+        title="账户与配额"
+        :count="openAccounts"
+        description="开通后账户的订阅里会出现自建节点；超额、到期或设备超限会自动停用。"
+        flush
+      >
+        <ul class="accounts">
+          <li
+            v-for="a in accounts"
+            :key="a.userId"
+            :class="{ 'is-off': !a.enabled }"
+          >
+            <span class="avatar" aria-hidden="true">{{
+              (a.nickname || a.username).charAt(0).toUpperCase()
+            }}</span>
+            <span class="acc-main">
+              <strong>{{ a.nickname || a.username }}</strong>
+              <small v-if="!a.enabled">未开通</small>
+              <small v-else-if="a.blockedReason && !a.active" class="warn">{{
+                a.blockedReason
+              }}</small>
+              <small v-else
+                >{{ formatBytes(a.trafficUsed)
+                }}{{
+                  a.trafficLimit ? ` / ${formatBytes(a.trafficLimit)}` : ""
+                }}
+                · 今日 {{ formatBytes(a.todayBytes)
+                }}<template v-if="a.onlineIps">
+                  · 在线 {{ a.onlineIps }} IP</template
+                ></small
+              >
+              <span v-if="a.enabled && a.trafficLimit" class="acc-bar"
+                ><i
+                  :style="{ transform: `scaleX(${usageRatio(a)})` }"
+                  :class="{ hot: usageRatio(a) > 0.8 }"
+                ></i
+              ></span>
+            </span>
+            <UiButton variant="ghost" @click="openAccount(a)">{{
+              a.enabled ? "设置" : "开通"
+            }}</UiButton>
+          </li>
+        </ul>
+      </UiPanel>
+    </div>
+
+    <UiDialog
+      v-model="serverDialog"
+      :title="serverForm.id ? '编辑服务器' : '添加服务器'"
+      width="480px"
+    >
+      <el-form label-position="top" @submit.prevent="submitServer">
+        <el-form-item v-if="!serverForm.id" label="类型">
+          <UiSegmented
+            v-model="serverForm.kind"
+            label="服务器类型"
+            :options="[
+              {
+                label: '本机（面板所在服务器）',
+                value: 'local',
+                disabled: servers.some((x) => x.kind === 'local'),
+              },
+              { label: '远程 agent', value: 'agent' },
+            ]"
+          />
+        </el-form-item>
+        <el-form-item label="名称"
+          ><el-input v-model="serverForm.name" placeholder="例如 东京 1"
+        /></el-form-item>
+        <el-form-item label="客户端连接地址（域名或 IP）">
+          <el-input
+            v-model="serverForm.publicHost"
+            placeholder="例如 216.23.84.93"
+          />
+        </el-form-item>
+        <p class="dialog-hint">
+          {{
+            serverForm.kind === "local"
+              ? "面板会在本机下载官方 xray-core（校验 SHA-256 后运行），并以 systemd 服务托管，面板重启不影响连接。"
+              : "保存后会给出一条安装命令，在远程服务器上以 root 执行即可。agent 主动连回面板，无需开放额外端口或提供 SSH 密码。"
+          }}
+        </p>
+      </el-form>
+      <template #footer>
+        <UiButton @click="serverDialog = false">取消</UiButton>
+        <UiButton
+          variant="primary"
+          :loading="savingServer"
+          @click="submitServer"
+          >保存</UiButton
+        >
+      </template>
+    </UiDialog>
+
+    <UiDialog
+      :model-value="!!install"
+      title="在远程服务器上安装 agent"
+      width="620px"
+      @update:model-value="install = null"
+    >
+      <template v-if="install">
+        <p class="dialog-hint">
+          用 root 登录 <b>{{ install.name }}</b
+          >，执行下面的命令。命令里包含令牌，只显示这一次，请勿公开。
+        </p>
+        <SecretLink :value="install.command" label="安装命令" />
+      </template>
+      <template #footer
+        ><UiButton variant="primary" @click="install = null"
+          >完成</UiButton
+        ></template
+      >
+    </UiDialog>
+
+    <InboundDrawer
+      v-model="inboundDrawer"
+      :server-id="inboundServer"
+      :inbound="editingInbound"
+      @saved="load(true)"
+    />
+    <AccountDrawer
+      v-model="accountDrawer"
+      :account="editingAccount"
+      @saved="load(true)"
+    />
+  </div>
+</template>
+<style scoped>
+.servers-page {
+  min-width: 0;
+}
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.server-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  padding: 18px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background:
+    radial-gradient(
+      120% 80% at 100% 0%,
+      color-mix(in srgb, var(--c-signal) 8%, transparent),
+      transparent 55%
+    ),
+    var(--c-surface);
+  box-shadow: var(--shadow-panel), var(--edge-highlight);
+}
+.server-card.is-off {
+  opacity: 0.7;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.kind-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+}
+.kind-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.kind-icon.tone-ok {
+  background: var(--c-signal);
+  color: var(--c-on-signal);
+  box-shadow: 0 0 0 6px var(--c-glow);
+  animation: breathe 2.8s var(--ease-out) infinite;
+}
+.kind-icon.tone-bad {
+  background: color-mix(in srgb, var(--c-bad) 16%, transparent);
+  color: var(--c-bad);
+}
+@keyframes breathe {
+  50% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+.card-title {
+  flex: 1;
+  min-width: 0;
+}
+.card-title h2 {
+  font-size: 17px;
+}
+.card-title p {
+  overflow: hidden;
+  color: var(--c-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.meta {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.meta dt {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+.meta dd {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+.error-line {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--c-warn) 12%, transparent);
+  color: var(--c-warn-ink);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.error-line svg {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+}
+.inbounds {
+  display: grid;
+  gap: 6px;
+}
+.inbounds li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 6px 6px 10px;
+  border-radius: var(--radius-control);
+  background: var(--c-canvas);
+}
+.inbounds li.is-off {
+  opacity: 0.55;
+}
+.port {
+  min-width: 56px;
+  color: var(--c-signal-text);
+  font-size: 13px;
+}
+.in-main {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.in-main strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.in-main small,
+.empty-in {
+  overflow: hidden;
+  color: var(--c-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.empty-in {
+  padding: 10px !important;
+  background: transparent !important;
+  white-space: normal;
+}
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-line);
+}
+.card-actions > :last-child {
+  margin-left: auto;
+}
+.lower-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.accounts li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--c-line);
+}
+.accounts li:last-child {
+  border-bottom: 0;
+}
+.accounts li.is-off {
+  opacity: 0.7;
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-pill);
+  background: var(--c-surface-2);
+  font: 600 13px var(--font-mono);
+}
+.acc-main {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  min-width: 0;
+}
+.acc-main strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.acc-main small {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+.acc-main small.warn {
+  color: var(--c-warn-ink);
+}
+.acc-bar {
+  height: 4px;
+  margin-top: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--c-surface-2);
+  overflow: hidden;
+}
+.acc-bar i {
+  display: block;
+  height: 100%;
+  background: var(--c-ok);
+  transform-origin: left;
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+.acc-bar i.hot {
+  background: var(--c-bad);
+}
+.dialog-hint {
+  margin-bottom: 12px;
+  color: var(--c-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.mono {
+  font-family: var(--font-mono);
+}
+@media (max-width: 899px) {
+  .server-grid,
+  .lower-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .meta {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kind-icon.tone-ok {
+    animation: none;
+  }
+}
+</style>

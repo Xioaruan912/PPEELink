@@ -6,9 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"ppeelink/models"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"gopkg.in/yaml.v3"
@@ -93,62 +91,6 @@ func ValidateTemp(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"valid": len(validationErrors) == 0, "errors": validationErrors, "outline": outline,
 	}, "msg": "模板校验完成"})
-}
-
-func GetTempVersions(c *gin.Context) {
-	filename := c.Query("filename")
-	if _, err := safeFilePath(filename); err != nil {
-		c.JSON(400, gin.H{"msg": err.Error()})
-		return
-	}
-	var versions []models.TemplateVersion
-	if err := models.DB.Select("id, filename, action, created_at").Where("filename = ?", filename).Order("id desc").Limit(50).Find(&versions).Error; err != nil {
-		c.JSON(500, gin.H{"msg": "读取版本历史失败"})
-		return
-	}
-	c.JSON(200, gin.H{"code": "00000", "data": versions, "msg": "版本历史"})
-}
-
-func GetTempVersion(c *gin.Context) {
-	id, err := strconv.Atoi(c.Query("id"))
-	if err != nil || id <= 0 {
-		c.JSON(400, gin.H{"msg": "版本 id 无效"})
-		return
-	}
-	var version models.TemplateVersion
-	if err := models.DB.First(&version, id).Error; err != nil {
-		c.JSON(404, gin.H{"msg": "版本不存在"})
-		return
-	}
-	c.JSON(200, gin.H{"code": "00000", "data": version, "msg": "版本详情"})
-}
-
-func RollbackTemp(c *gin.Context) {
-	id, err := strconv.Atoi(c.PostForm("id"))
-	if err != nil || id <= 0 {
-		c.JSON(400, gin.H{"msg": "版本 id 无效"})
-		return
-	}
-	var version models.TemplateVersion
-	if err := models.DB.First(&version, id).Error; err != nil {
-		c.JSON(404, gin.H{"msg": "版本不存在"})
-		return
-	}
-	path, err := safeFilePath(version.Filename)
-	if err != nil {
-		c.JSON(400, gin.H{"msg": err.Error()})
-		return
-	}
-	current, readErr := os.ReadFile(path)
-	if readErr == nil {
-		_ = models.SaveTemplateVersion(version.Filename, string(current), "before_rollback")
-	}
-	if err := atomicWrite(path, version.Content); err != nil {
-		c.JSON(500, gin.H{"msg": "回滚写入失败"})
-		return
-	}
-	_ = models.SaveTemplateVersion(version.Filename, version.Content, "rollback")
-	c.JSON(200, gin.H{"code": "00000", "msg": "已回滚到 " + version.CreatedAt.Format(time.DateTime)})
 }
 
 // 定义允许操作的基础目录

@@ -7,25 +7,25 @@ import (
 
 // LoonGeneral Loon [General] 常用配置（表单填空）
 type LoonGeneral struct {
-	IPMode            string `json:"ip_mode"`            // ipv4-only / dual / ipv4-preferred / ipv6-preferred
-	DNSServer         string `json:"dns_server"`
-	SniSniffing       bool   `json:"sni_sniffing"`
-	DisableStun       bool   `json:"disable_stun"`
-	AllowWifiAccess   bool   `json:"allow_wifi_access"`
-	WifiHTTPPort      int    `json:"wifi_http_port"`
-	WifiSocksPort     int    `json:"wifi_socks_port"`
-	TestTimeout       int    `json:"test_timeout"`
-	SwitchNodeAfterFail int  `json:"switch_node_after_failure"`
-	InternetTestURL   string `json:"internet_test_url"`
-	ProxyTestURL      string `json:"proxy_test_url"`
-	ResourceParser    string `json:"resource_parser"`
-	GeoipURL          string `json:"geoip_url"`
-	IpasnURL          string `json:"ipasn_url"`
-	UDPFallbackMode   string `json:"udp_fallback_mode"`  // DIRECT / REJECT
-	DomainRejectMode  string `json:"domain_reject_mode"` // DNS / Request
-	DNSRejectMode     string `json:"dns_reject_mode"`    // LoopbackIP / NOANSWER / NXDOMAIN
-	BypassTun         string `json:"bypass_tun"`
-	SkipProxy         string `json:"skip_proxy"`
+	IPMode              string `json:"ip_mode"` // ipv4-only / dual / ipv4-preferred / ipv6-preferred
+	DNSServer           string `json:"dns_server"`
+	SniSniffing         bool   `json:"sni_sniffing"`
+	DisableStun         bool   `json:"disable_stun"`
+	AllowWifiAccess     bool   `json:"allow_wifi_access"`
+	WifiHTTPPort        int    `json:"wifi_http_port"`
+	WifiSocksPort       int    `json:"wifi_socks_port"`
+	TestTimeout         int    `json:"test_timeout"`
+	SwitchNodeAfterFail int    `json:"switch_node_after_failure"`
+	InternetTestURL     string `json:"internet_test_url"`
+	ProxyTestURL        string `json:"proxy_test_url"`
+	ResourceParser      string `json:"resource_parser"`
+	GeoipURL            string `json:"geoip_url"`
+	IpasnURL            string `json:"ipasn_url"`
+	UDPFallbackMode     string `json:"udp_fallback_mode"`  // DIRECT / REJECT
+	DomainRejectMode    string `json:"domain_reject_mode"` // DNS / Request
+	DNSRejectMode       string `json:"dns_reject_mode"`    // LoopbackIP / NOANSWER / NXDOMAIN
+	BypassTun           string `json:"bypass_tun"`
+	SkipProxy           string `json:"skip_proxy"`
 }
 
 // LoonFilter Remote Filter 节点筛选
@@ -45,14 +45,14 @@ type LoonGroup struct {
 
 // LoonBuilder Loon 模板构建请求
 type LoonBuilder struct {
-	Filename    string        `json:"filename"`
-	EditOldname string        `json:"edit_oldname"`
-	General     LoonGeneral   `json:"general"`
-	Filters     []LoonFilter  `json:"filters"`
-	Groups      []LoonGroup   `json:"groups"`
-	RemoteRules string        `json:"remote_rules"`
-	Plugins     string        `json:"plugins"`
-	Rules       string        `json:"rules"`
+	Filename    string       `json:"filename"`
+	EditOldname string       `json:"edit_oldname"`
+	General     LoonGeneral  `json:"general"`
+	Filters     []LoonFilter `json:"filters"`
+	Groups      []LoonGroup  `json:"groups"`
+	RemoteRules string       `json:"remote_rules"`
+	Plugins     string       `json:"plugins"`
+	Rules       string       `json:"rules"`
 }
 
 // defaultLoonGeneral 默认 [General]（基于常用基础配置）

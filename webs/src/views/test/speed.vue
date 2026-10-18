@@ -12,7 +12,7 @@
           variant="primary"
           :icon="VideoPlay"
           :loading="loading"
-          :disabled="!selectedIds.length || nodesLoading"
+          :disabled="!selectedIds.length || nodesLoading || planBlocked"
           :aria-describedby="
             !selectedIds.length ? 'speed-start-hint' : undefined
           "
@@ -165,6 +165,33 @@
             :decimals="1"
             unit="Mbps"
           />
+        </div>
+        <div
+          class="usage-plan"
+          :class="{ 'is-over': planBlocked }"
+          role="status"
+        >
+          <div class="usage-row">
+            <span>预计消耗</span>
+            <strong class="mono">{{ formatBytes(plannedBytes) }}</strong>
+          </div>
+          <div class="usage-track" aria-hidden="true">
+            <i class="usage-used" :style="{ '--w': usedRatio }"></i
+            ><i
+              class="usage-plan-bar"
+              :style="{ '--w': planRatio, '--x': usedRatio }"
+            ></i>
+          </div>
+          <p class="usage-note">
+            {{
+              budget
+                ? `今日已用 ${formatBytes(budget.used)} / ${formatBytes(budget.daily)}，单次最多 ${budget.maxNodes} 个节点、${formatBytes(budget.maxBytesPerRun)}。`
+                : "测速会经节点下载数据，消耗机场流量与服务器带宽。"
+            }}
+            <template v-if="planReason"
+              ><br /><b>{{ planReason }}</b></template
+            >
+          </p>
         </div>
         <details class="speed-advanced">
           <summary>更多测速设置</summary>
@@ -333,7 +360,11 @@ import {
   StatusDot,
   EmptyState,
 } from "@/ui";
-import { getNodeOverview } from "@/api/subcription/node";
+import {
+  getNodeOverview,
+  getSpeedBudget,
+  type SpeedBudget,
+} from "@/api/subcription/node";
 import { getSpeed, saveSpeed } from "@/utils/nodeTestStorage";
 import { formatDateTime } from "@/utils/date";
 import { usePrefersReducedMotion } from "@/motion";
@@ -443,8 +474,51 @@ function setSize(mb: number) {
   sizeMB.value = mb;
   target.value = speedTarget(target.value, mb);
 }
+// 全选只取延迟最低的若干个，避免一次测完全部节点
 function selectAll() {
-  selectedIds.value = nodes.value.map((node) => node.id);
+  const limit = budget.value?.maxNodes || 30;
+  selectedIds.value = nodes.value.slice(0, limit).map((node) => node.id);
+  if (nodes.value.length > limit)
+    ElMessage.info(
+      `已选延迟最低的 ${limit} 个节点，单次测速上限为 ${limit} 个`
+    );
+}
+const budget = ref<SpeedBudget | null>(null);
+async function loadBudget() {
+  try {
+    budget.value = (await getSpeedBudget()).data;
+  } catch {
+    budget.value = null;
+  }
+}
+const plannedBytes = computed(
+  () => selectedIds.value.length * sizeMB.value * 1048576
+);
+const usedRatio = computed(() =>
+  budget.value ? Math.min(budget.value.used / budget.value.daily, 1) : 0
+);
+const planRatio = computed(() =>
+  budget.value
+    ? Math.min(plannedBytes.value / budget.value.daily, 1 - usedRatio.value)
+    : 0
+);
+const planReason = computed(() => {
+  const b = budget.value;
+  if (!b || !selectedIds.value.length) return "";
+  if (selectedIds.value.length > b.maxNodes)
+    return `单次最多 ${b.maxNodes} 个节点，请分批测速。`;
+  if (plannedBytes.value > b.maxBytesPerRun)
+    return "超过单次下载上限，请减少节点或下载量。";
+  if (plannedBytes.value > b.remaining)
+    return "今日剩余额度不足，可减小下载量或明天再测。";
+  if (b.cooldownSeconds > 0)
+    return `刚测过速，请 ${b.cooldownSeconds} 秒后再试。`;
+  return "";
+});
+const planBlocked = computed(() => !!planReason.value);
+function formatBytes(n: number) {
+  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`;
+  return `${Math.round(n / 1048576)} MB`;
 }
 function rttClass(rtt: number) {
   return rtt < 0
@@ -478,6 +552,27 @@ async function startTest() {
   if (!selectedIds.value.length) {
     ElMessage.warning("请先选择测速节点");
     return;
+  }
+  await loadBudget();
+  if (planBlocked.value) {
+    ElMessage.warning(planReason.value);
+    return;
+  }
+  // 大于 300 MB 时再确认一次，避免误点耗掉机场流量
+  if (plannedBytes.value > 300 * 1048576) {
+    try {
+      await ElMessageBox.confirm(
+        `本次将经 ${selectedIds.value.length} 个节点各下载 ${sizeMB.value} MB，预计消耗 ${formatBytes(plannedBytes.value)} 机场流量。`,
+        "确认测速",
+        {
+          confirmButtonText: "开始测速",
+          cancelButtonText: "取消",
+          type: "warning",
+        }
+      );
+    } catch {
+      return;
+    }
   }
   results.value = [];
   cachedAt.value = 0;
@@ -525,6 +620,7 @@ async function startTest() {
     ElMessage.error(testError.value);
   } finally {
     if (!disposed && ownVersion === runVersion) persist();
+    if (!disposed) void loadBudget();
   }
 }
 function abortTest() {
@@ -534,7 +630,10 @@ function abortTest() {
   persist();
   ElMessage.info("已中断测速，已返回结果保留");
 }
-onMounted(loadNodes);
+onMounted(() => {
+  void loadNodes();
+  void loadBudget();
+});
 onBeforeUnmount(() => {
   if (runStatus.value === "测量进行中") {
     runStatus.value = "已中断";
@@ -655,6 +754,64 @@ onBeforeUnmount(() => {
 }
 .speed-controls {
   min-width: 0;
+}
+.usage-plan {
+  margin: 4px 0 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
+  background: var(--c-canvas);
+  transition: border-color var(--duration-fast);
+}
+.usage-plan.is-over {
+  border-color: color-mix(in srgb, var(--c-bad) 50%, var(--c-line));
+}
+.usage-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.usage-row span {
+  color: var(--c-muted);
+}
+.usage-track {
+  position: relative;
+  height: 6px;
+  margin: 8px 0;
+  border-radius: var(--radius-pill);
+  background: var(--c-surface-2);
+  overflow: hidden;
+}
+.usage-track i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: inherit;
+  transition:
+    width var(--duration-slow) var(--ease-out),
+    left var(--duration-slow) var(--ease-out);
+}
+.usage-used {
+  width: calc(var(--w) * 100%);
+  background: var(--c-muted);
+}
+.usage-plan-bar {
+  left: calc(var(--x) * 100%) !important;
+  width: calc(var(--w) * 100%);
+  background: var(--c-signal);
+}
+.is-over .usage-plan-bar {
+  background: var(--c-bad);
+}
+.usage-note {
+  color: var(--c-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.usage-note b {
+  color: var(--c-bad);
+  font-weight: 500;
 }
 .speed-summary {
   display: grid;
