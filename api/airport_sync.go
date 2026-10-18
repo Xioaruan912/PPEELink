@@ -93,6 +93,56 @@ func isPlaceholderNodeName(name string) bool {
 	return false
 }
 
+// parseSubscriptionUserinfo 解析 "upload=1; download=2; total=3; expire=4"。
+// ok 为 false 表示头缺失或没有任何可识别字段。
+func parseSubscriptionUserinfo(header string) (upload, download, total int64, expire *time.Time, ok bool) {
+	for _, part := range strings.Split(header, ";") {
+		key, value, found := strings.Cut(strings.TrimSpace(part), "=")
+		if !found {
+			continue
+		}
+		n, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err != nil || n < 0 {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(key)) {
+		case "upload":
+			upload, ok = int64(n), true
+		case "download":
+			download, ok = int64(n), true
+		case "total":
+			total, ok = int64(n), true
+		case "expire":
+			if n > 0 {
+				t := time.Unix(int64(n), 0)
+				expire = &t
+			}
+			ok = true
+		}
+	}
+	return
+}
+
+// recordAirportTraffic 立即落库流量信息，与节点解析/测活结果无关。
+func recordAirportTraffic(a *models.Airport, header string) {
+	upload, download, total, expire, ok := parseSubscriptionUserinfo(header)
+	if !ok {
+		return
+	}
+	now := time.Now()
+	a.TrafficUpload, a.TrafficDownload, a.TrafficTotal = upload, download, total
+	a.TrafficExpire, a.TrafficUpdatedAt = expire, &now
+	if err := models.DB.Model(&models.Airport{}).Where("id = ?", a.ID).Updates(map[string]any{
+		"traffic_upload":     upload,
+		"traffic_download":   download,
+		"traffic_total":      total,
+		"traffic_expire":     expire,
+		"traffic_updated_at": &now,
+	}).Error; err != nil {
+		log.Printf("[Sync] 机场 %s 流量信息保存失败: %v\n", a.Name, err)
+	}
+}
+
 func SyncAllAirports() {
 	log.Println("[Cron] 开始每日凌晨3点的机场同步和测活任务...")
 	airports, err := models.GetAirports()
@@ -132,6 +182,7 @@ func SyncAirportNodeTask(airportID int) error {
 	}
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
+	recordAirportTraffic(&a, resp.Header.Get("Subscription-Userinfo"))
 
 	validNodes, format, parseErr := nodesFromSubscriptionBody(body)
 	if parseErr != nil {
