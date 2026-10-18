@@ -50,19 +50,22 @@ const state = computed(() =>
   min-width: 0;
 }
 .ui-stat__label {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--c-muted);
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 .ui-stat__number {
   display: flex;
   align-items: baseline;
-  font: 400 clamp(28px, 2.6vw, 34px)/1.1 var(--font-display);
+  font: 600 26px/1.15 var(--font-ui);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow-wrap: normal;
   font-variant-numeric: lining-nums tabular-nums;
   transition: color var(--duration-medium);
 }
 .ui-stat--hero .ui-stat__number {
-  font-size: clamp(36px, 3.4vw, 44px);
+  font: 400 clamp(44px, 4.4vw, 60px)/1 var(--font-display);
   letter-spacing: -0.03em;
 }
 .ui-stat--medium .ui-stat__number {

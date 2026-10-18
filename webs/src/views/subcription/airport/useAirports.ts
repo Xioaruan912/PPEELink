@@ -23,6 +23,11 @@ export interface Airport {
   IsDedicated: boolean;
   NodeCount: number;
   LastSync: string | null;
+  TrafficUpload?: number;
+  TrafficDownload?: number;
+  TrafficTotal?: number;
+  TrafficExpire?: string | null;
+  TrafficUpdatedAt?: string | null;
 }
 export interface AirportNode {
   ID: number;

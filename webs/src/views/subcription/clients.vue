@@ -382,14 +382,14 @@ const platformGroups = computed(() =>
   [
     {
       key: "desktop",
-      label: "桌面与跨平台 / 01",
+      label: "桌面与跨平台",
       clients: filteredClients.value.filter(
         (client) => client.category === "desktop"
       ),
     },
     {
       key: "mobile",
-      label: "移动平台 / 02",
+      label: "移动平台",
       clients: filteredClients.value.filter(
         (client) => client.category === "mobile"
       ),
@@ -593,42 +593,51 @@ function clearFilters() {
   font-weight: 400;
 }
 .platform-group + .platform-group {
-  margin-top: 32px;
+  margin-top: 24px;
 }
 .platform-eyebrow {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin: 0 0 12px;
-  color: var(--c-muted);
-  font: 400 13px/1.4 var(--font-mono);
-  letter-spacing: 0.08em;
+  margin: 0 0 10px;
+  font: 600 15px/1.4 var(--font-ui);
 }
 .platform-eyebrow > span {
-  letter-spacing: 0;
-  font: 400 14px/1.4 var(--font-ui);
+  color: var(--c-muted);
+  font: 400 13px/1.4 var(--font-ui);
 }
 .library-list {
   position: relative;
-  border-top: 1px solid var(--c-line);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
 }
 .client-row {
   display: grid;
-  grid-template-columns: minmax(220px, 3fr) minmax(0, 5fr) auto;
-  align-items: center;
-  column-gap: 20px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--c-line);
-  transition: background var(--duration-fast);
+  grid-template-rows: auto 1fr auto;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-surface);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-medium) var(--ease-spring),
+    box-shadow var(--duration-medium) var(--ease-out);
 }
 .client-row:hover {
-  background: var(--c-surface-2);
+  border-color: var(--c-muted);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-overlay);
+}
+.client-row:focus-within {
+  z-index: 3;
 }
 .client-identity {
   min-width: 0;
 }
 .client-identity h2 {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   font: 600 15px/1.4 var(--font-ui);
   overflow-wrap: anywhere;
 }
@@ -638,23 +647,30 @@ function clearFilters() {
   gap: 4px;
 }
 .client-platforms > span {
-  padding: 4px 8px;
-  border: 1px solid var(--c-line);
+  padding: 2px 8px;
   border-radius: 999px;
-  font-size: 14px;
-  line-height: 1.4;
+  background: var(--c-surface-2);
+  font-size: 12px;
+  line-height: 1.5;
   color: var(--c-muted);
 }
 .client-description {
+  display: -webkit-box;
   margin: 0;
-  font-size: 14px;
+  overflow: hidden;
+  font-size: 13px;
   line-height: 1.6;
   color: var(--c-muted);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 .client-actions {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--c-line);
 }
 .client-downloads {
   position: relative;
@@ -700,7 +716,7 @@ details[open] > summary > svg:last-child {
   position: absolute;
   z-index: 2;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;
   width: 320px;
   max-width: calc(100vw - 32px);
   padding: 8px 12px;
@@ -797,19 +813,6 @@ a:focus-visible {
   transition: none !important;
   animation: none !important;
 }
-@media (max-width: 1023px) {
-  .client-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 12px 16px;
-  }
-  .client-description {
-    grid-column: 1;
-  }
-  .client-actions {
-    grid-column: 2;
-    grid-row: 1 / 3;
-  }
-}
 @media (max-width: 767px) {
   .library-toolbar {
     align-items: stretch;
@@ -824,15 +827,6 @@ a:focus-visible {
     flex-wrap: wrap;
     gap: 8px;
   }
-  .client-row {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-  }
-  .client-description,
-  .client-actions {
-    grid-column: 1;
-    grid-row: auto;
-  }
   .client-specifications {
     padding: 12px;
   }
@@ -843,9 +837,6 @@ a:focus-visible {
   .client-download-links {
     right: auto;
     left: 0;
-  }
-  .platform-group + .platform-group {
-    margin-top: 24px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

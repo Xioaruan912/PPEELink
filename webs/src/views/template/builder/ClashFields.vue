@@ -3,9 +3,10 @@ import { Delete, Plus } from "@element-plus/icons-vue";
 import { UiButton } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { useTemplateBuilder } from "./useTemplateBuilder";
+import GroupBoard from "./GroupBoard.vue";
+import RulePicker from "./RulePicker.vue";
 defineProps<{ step: string | number }>();
-const { form, rulesText, addGroup, removeGroup, addRP, removeRP, router } =
-  useTemplateBuilder();
+const { form, rulesText, addRP, removeRP, router } = useTemplateBuilder();
 </script>
 <template>
   <el-form label-position="top" class="builder-form">
@@ -128,48 +129,11 @@ const { form, rulesText, addGroup, removeGroup, addRP, removeRP, router } =
     </section>
 
     <section v-show="step === 2" class="builder-section">
-      <h2>分组与规则</h2>
-      <!-- 策略分组 -->
-      <el-form-item label="策略分组">
-        <div class="group-list">
-          <div v-for="(g, i) in form.groups" :key="i" class="group-row">
-            <el-input
-              v-model="g.name"
-              aria-label="分组名称"
-              placeholder="分组名（如 AI）"
-              class="g-name"
-            />
-            <el-select v-model="g.type" aria-label="分组类型" class="g-type">
-              <el-option label="select 手动选择" value="select" />
-              <el-option label="url-test 自动测速" value="url-test" />
-              <el-option label="fallback 故障转移" value="fallback" />
-            </el-select>
-            <el-input
-              v-model="g.filter"
-              aria-label="节点筛选正则"
-              placeholder="filter 正则（如 (?i)US|美国）"
-              class="g-filter"
-            />
-            <el-checkbox
-              v-model="g.include_all_providers"
-              aria-label="匹配全部节点"
-              title="匹配全部节点"
-              >全部</el-checkbox
-            >
-            <RowIconButton
-              :icon="Delete"
-              :label="`删除分组 ${g.name || i + 1}`"
-              @click="removeGroup(i)"
-            />
-          </div>
-          <UiButton :icon="Plus" @click="addGroup">添加分组</UiButton>
-        </div>
-        <div class="group-hint">
-          类型说明：<b>select</b>=手动选择；<b>url-test</b>=自动测速；<b>fallback</b>=故障转移。filter
-          为正则，匹配节点自动填入。
-        </div>
-      </el-form-item>
+      <GroupBoard />
+    </section>
 
+    <section v-show="step === 1" class="builder-section">
+      <RulePicker />
       <!-- 规则集 -->
       <el-form-item label="规则集 (rule-providers)">
         <div class="group-list">

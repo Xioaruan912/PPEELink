@@ -4,7 +4,7 @@ import { Plus, Refresh } from "@element-plus/icons-vue";
 import {
   PageHeader,
   UiButton,
-  UiStat,
+  UiPanel,
   UiSkeleton,
   EmptyState,
   StatusDot,
@@ -98,14 +98,12 @@ function leaveBar(element: Element, done: () => void) {
       ></PageHeader
     >
     <div class="workbench-grid" data-enter>
-      <aside class="group-sidebar">
-        <div class="group-heading">
-          <span class="eyebrow">节点 / 分组</span
+      <UiPanel class="group-sidebar" title="分组" :count="groupTree.length"
+        ><template #actions
           ><UiButton variant="ghost" @click="openGroupManager()"
-            >管理分组</UiButton
-          >
-        </div>
-        <UiStat size="large" label="全部节点" :value="overviewList.length" />
+            >管理</UiButton
+          ></template
+        >
         <p class="coverage">
           已分组
           <span class="mono"
@@ -139,8 +137,14 @@ function leaveBar(element: Element, done: () => void) {
           >隐藏当前分组</UiButton
         >
         <p class="group-hint">隐藏的节点与分组可在管理中恢复。</p>
-      </aside>
-      <section class="node-main" :aria-busy="loading" aria-label="节点列表">
+      </UiPanel>
+      <UiPanel
+        class="node-main"
+        title="节点列表"
+        :count="filteredNodes.length"
+        description="名称可点开编辑；延迟为浏览器本地检测。"
+        :aria-busy="loading"
+      >
         <div class="node-toolbar">
           <el-input
             v-model="searchText"
@@ -162,16 +166,6 @@ function leaveBar(element: Element, done: () => void) {
           /></el-select>
         </div>
         <div class="view-toolbar">
-          <span class="result-count mono"
-            >{{ filteredNodes.length }} 个节点</span
-          ><UiButton
-            v-if="filteredNodes.length"
-            variant="ghost"
-            @click="toggleNodes(filteredNodes)"
-            >{{ allSelected(filteredNodes) ? "取消全选" : "全选" }}</UiButton
-          >
-        </div>
-        <div class="probe-status">
           <StatusDot
             :state="localTesting ? 'idle' : 'ok'"
             :running="localTesting"
@@ -182,6 +176,13 @@ function leaveBar(element: Element, done: () => void) {
             :loading="localTesting"
             @click="triggerLocalPing"
             >重新检测</UiButton
+          ><span class="result-count mono"
+            >{{ filteredNodes.length }} 个节点</span
+          ><UiButton
+            v-if="filteredNodes.length"
+            variant="ghost"
+            @click="toggleNodes(filteredNodes)"
+            >{{ allSelected(filteredNodes) ? "取消全选" : "全选" }}</UiButton
           >
         </div>
         <EmptyState
@@ -229,7 +230,7 @@ function leaveBar(element: Element, done: () => void) {
             /></TransitionGroup>
           </template>
         </div>
-      </section>
+      </UiPanel>
     </div>
     <Transition :css="false" @enter="enterBar" @leave="leaveBar"
       ><div v-if="selectedCount" class="bulk-anchor">
@@ -271,33 +272,18 @@ function leaveBar(element: Element, done: () => void) {
 }
 .workbench-grid {
   display: grid;
-  grid-template-columns: minmax(230px, 4fr) minmax(0, 8fr);
-  gap: 24px;
+  grid-template-columns: minmax(220px, 3fr) minmax(0, 9fr);
+  gap: 16px;
   align-items: start;
 }
 .group-sidebar {
   position: sticky;
-  top: 32px;
+  top: 84px;
   min-width: 0;
-  padding-right: 20px;
-  border-right: 1px solid var(--c-line);
 }
-.group-heading {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.eyebrow,
 .mono {
   font: 400 13px/1.6 var(--font-mono);
   font-variant-numeric: tabular-nums;
-}
-.eyebrow {
-  letter-spacing: 0.08em;
-  color: var(--c-muted);
 }
 .coverage,
 .group-hint {
@@ -306,7 +292,7 @@ function leaveBar(element: Element, done: () => void) {
   line-height: 1.6;
 }
 .coverage {
-  margin: 12px 0 20px;
+  margin: 0 0 12px;
 }
 .group-hint {
   margin-top: 16px;
@@ -358,22 +344,12 @@ function leaveBar(element: Element, done: () => void) {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 4px 10px;
   margin-bottom: 8px;
 }
 .result-count {
   color: var(--c-muted);
   margin-left: auto;
-}
-.probe-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
-}
-.probe-status :deep(.ui-button) {
-  font-size: 14px;
 }
 .list-heading {
   display: grid;
@@ -408,7 +384,7 @@ function leaveBar(element: Element, done: () => void) {
   position: fixed;
   z-index: 1100;
   bottom: 24px;
-  left: 100px;
+  left: calc(var(--sidebar-w, 0px) + 24px);
   right: 24px;
   display: flex;
   justify-content: center;
@@ -436,9 +412,6 @@ function leaveBar(element: Element, done: () => void) {
     gap: 16px;
     grid-template-columns: minmax(190px, 4fr) minmax(0, 8fr);
   }
-  .group-sidebar {
-    padding-right: 16px;
-  }
   .list-heading {
     grid-template-columns: minmax(0, 1fr) 65px 100px 44px 132px;
     gap: 8px;
@@ -450,8 +423,6 @@ function leaveBar(element: Element, done: () => void) {
   }
   .group-sidebar {
     position: static;
-    border: 0;
-    padding-right: 0;
   }
   .group-navigation {
     flex-direction: row;
@@ -465,9 +436,6 @@ function leaveBar(element: Element, done: () => void) {
   .group-hint {
     display: none;
   }
-  .group-heading {
-    margin-bottom: 10px;
-  }
 }
 @media (max-width: 767px) {
   .workbench-grid {
@@ -476,9 +444,6 @@ function leaveBar(element: Element, done: () => void) {
   }
   .group-sidebar {
     position: static;
-    border: 0;
-    padding: 0 0 16px;
-    border-bottom: 1px solid var(--c-line);
   }
   .group-sidebar :deep(.ui-stat),
   .coverage,
@@ -494,9 +459,6 @@ function leaveBar(element: Element, done: () => void) {
     width: auto;
     max-width: 100%;
   }
-  .group-heading {
-    margin-bottom: 10px;
-  }
   .node-toolbar {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -506,7 +468,7 @@ function leaveBar(element: Element, done: () => void) {
   .bulk-anchor {
     left: 16px;
     right: 16px;
-    bottom: calc(84px + env(safe-area-inset-bottom));
+    bottom: calc(16px + env(safe-area-inset-bottom));
   }
   .bulk-bar {
     justify-content: flex-start;

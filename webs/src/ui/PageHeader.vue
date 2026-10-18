@@ -27,9 +27,7 @@ defineProps<{
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 4px 0 16px;
   margin-bottom: 20px;
-  border-bottom: 1px solid var(--c-line);
 }
 h1 {
   margin: 0;
@@ -51,8 +49,7 @@ h1 {
   .page-header {
     align-items: start;
     flex-direction: column;
-    margin-bottom: 20px;
-    padding-bottom: 20px;
+    gap: 12px;
   }
 }
 </style>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 import { Plus, Edit, MoreFilled } from "@element-plus/icons-vue";
-import { UiButton, UiSkeleton, EmptyState } from "@/ui";
+import { UiButton, UiPanel, UiSkeleton, EmptyState } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { useMotion, useStagger } from "@/motion";
 import { formatDateTime } from "@/utils/date";
@@ -37,19 +37,22 @@ function command(value: string, row: Temp) {
 }
 </script>
 <template>
-  <section :aria-busy="loading">
-    <div class="template-toolbar" data-enter>
-      <el-input
+  <UiPanel
+    title="模板文件"
+    :count="filteredData.length"
+    description="订阅按模板生成客户端配置；点击名称进入编辑。"
+    flush
+    :aria-busy="loading"
+    data-enter
+    ><template #actions
+      ><el-input
         v-model="searchKey"
+        class="template-search"
         clearable
         aria-label="搜索模板文件名"
         placeholder="搜索模板文件名"
-      />
-      <span class="muted mono"
-        >{{ filteredData.length }} / {{ tableData.length }}</span
-      >
-      <UiButton :loading="loading" @click="gettemps">刷新</UiButton>
-    </div>
+      /><UiButton :loading="loading" @click="gettemps">刷新</UiButton></template
+    >
     <EmptyState
       v-if="loadError"
       size="section"
@@ -136,20 +139,11 @@ function command(value: string, row: Temp) {
         </article>
       </TransitionGroup>
     </div>
-  </section>
+  </UiPanel>
 </template>
 <style scoped>
-.template-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.template-toolbar :deep(.el-input) {
-  width: min(360px, 100%);
-}
-.template-toolbar > .ui-button {
-  margin-left: auto;
+.template-search {
+  width: 220px;
 }
 .template-heading,
 .template-row {
@@ -159,15 +153,19 @@ function command(value: string, row: Temp) {
   align-items: center;
 }
 .template-heading {
-  padding: 10px 12px;
-  font: 400 13px/1.4 var(--font-mono);
+  padding: 10px 16px;
+  font: 400 12px/1.4 var(--font-mono);
   color: var(--c-muted);
+  background: color-mix(in srgb, var(--c-surface-2) 60%, transparent);
   border-bottom: 1px solid var(--c-line);
 }
 .template-row {
-  padding: 10px 12px;
-  min-height: 80px;
+  padding: 10px 16px;
+  min-height: 64px;
   border-bottom: 1px solid var(--c-line);
+}
+.template-row:last-child {
+  border-bottom: 0;
 }
 .template-row:hover {
   background: var(--c-surface-2);
@@ -177,7 +175,7 @@ function command(value: string, row: Temp) {
   min-height: 36px;
   display: grid;
   text-align: left;
-  gap: 4px;
+  gap: 2px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -189,9 +187,12 @@ function command(value: string, row: Temp) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.template-name > span,
+.template-name > span {
+  font-size: 12px;
+  color: var(--c-muted);
+}
 .row-value {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--c-muted);
 }
 .mono {
@@ -236,12 +237,7 @@ function command(value: string, row: Temp) {
   }
 }
 @media (max-width: 1023px) {
-  .template-toolbar {
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-  .template-toolbar :deep(.el-input) {
-    flex: 1 1 100%;
+  .template-search {
     width: 100%;
   }
   .template-heading {

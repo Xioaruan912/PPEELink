@@ -5,7 +5,9 @@ import {
   ArrowRight,
   DocumentChecked,
   DocumentCopy,
+  Hide,
   Refresh,
+  View,
 } from "@element-plus/icons-vue";
 import { PageHeader, UiButton, UiPanel, UiSegmented, UiSkeleton } from "@/ui";
 import TemplateMonacoEditor from "@/components/TemplateMonacoEditor.vue";
@@ -47,7 +49,8 @@ const steps = computed(() =>
       ]
     : [
         { label: "基础端口", value: 0 },
-        { label: "分组规则", value: 2 },
+        { label: "规则分类", value: 1 },
+        { label: "策略分组", value: 2 },
       ]
 );
 const stepIndex = computed(() =>
@@ -60,6 +63,11 @@ function goStep(offset: number) {
   const next = steps.value[stepIndex.value + offset];
   if (next) step.value = next.value;
 }
+// The group board needs width; the preview folds away there until reopened.
+const previewOpen = ref(true);
+watch([step, target], () => {
+  previewOpen.value = !(target.value === "clash" && step.value === 2);
+});
 // Switching client type must not leave the user on a step the new type hides.
 watch(steps, (list) => {
   if (!list.some((item) => item.value === step.value)) step.value = 0;
@@ -106,7 +114,10 @@ watch(savedRevision, async () => {
 
 <template>
   <div class="template-builder-workbench">
-    <PageHeader title="模板构建" description="逐步配置，实时核对生成内容。">
+    <PageHeader
+      title="模板构建"
+      description="勾选规则分类、拖拽编排策略分组，实时核对生成内容。"
+    >
       <template #actions>
         <UiButton
           variant="primary"
@@ -173,7 +184,7 @@ watch(savedRevision, async () => {
     </div>
     <p v-if="buildError" class="build-error" role="alert">{{ buildError }}</p>
 
-    <div class="builder-layout">
+    <div class="builder-layout" :class="{ 'is-wide': !previewOpen }">
       <UiPanel class="builder-controls" data-enter>
         <div class="step-header">
           <span class="step-count"
@@ -181,6 +192,14 @@ watch(savedRevision, async () => {
             {{ String(steps.length).padStart(2, "0") }}</span
           >
           <UiSegmented v-model="step" :options="steps" label="配置步骤" />
+          <UiButton
+            class="preview-toggle"
+            variant="ghost"
+            :icon="previewOpen ? Hide : View"
+            :aria-pressed="previewOpen"
+            @click="previewOpen = !previewOpen"
+            >{{ previewOpen ? "收起预览" : "显示预览" }}</UiButton
+          >
         </div>
         <UiSkeleton v-if="sourceLoading" :lines="6" />
         <div v-show="!sourceLoading" ref="fields" class="builder-fields">
@@ -206,7 +225,12 @@ watch(savedRevision, async () => {
         </template>
       </UiPanel>
 
-      <aside class="builder-preview" aria-label="配置预览" data-enter>
+      <aside
+        v-show="previewOpen"
+        class="builder-preview"
+        aria-label="配置预览"
+        data-enter
+      >
         <UiPanel title="配置预览">
           <template #actions
             ><UiButton
@@ -249,16 +273,18 @@ watch(savedRevision, async () => {
   display: grid;
   grid-template-columns: minmax(160px, 0.7fr) minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 16px;
-  margin-bottom: 20px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--c-line);
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+  background: var(--c-surface);
 }
 .source-field {
   min-width: 0;
   label {
     display: block;
-    margin-bottom: 8px;
-    font-size: 14px;
+    margin-bottom: 6px;
+    font-size: 13px;
     color: var(--c-muted);
   }
   :deep(.el-select) {
@@ -281,10 +307,16 @@ watch(savedRevision, async () => {
 }
 .step-header {
   display: flex;
-  flex-direction: column;
-  align-items: start;
+  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 20px;
+}
+.preview-toggle {
+  margin-left: auto;
+}
+.builder-layout.is-wide {
+  grid-template-columns: minmax(0, 1fr);
 }
 .step-count {
   font: 400 14px/1.4 var(--font-mono);
@@ -302,7 +334,7 @@ watch(savedRevision, async () => {
 }
 .builder-preview {
   position: sticky;
-  top: 96px;
+  top: 84px;
   min-width: 0;
   > :deep(.ui-panel) {
     position: relative;

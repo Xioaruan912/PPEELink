@@ -24,9 +24,11 @@ export interface Temp {
 export const tempType = (file: string) =>
   /\.ya?ml$/i.test(file)
     ? "Clash / Mihomo"
-    : /\.conf$/i.test(file)
-      ? "Loon"
-      : "通用";
+    : /surge/i.test(file)
+      ? "Surge"
+      : /\.conf$/i.test(file)
+        ? "Loon"
+        : "通用";
 export const fileSize = (text: string) => {
   const bytes = new Blob([text || ""]).size;
   return bytes < 1024
