@@ -16,5 +16,7 @@ func Clients(r *gin.Engine) {
 		// ClientsGroup.GET("/surge/:subname", api.GetSurge)
 		ClientsGroup.GET("/", api.GetClient)
 	}
+	// 单节点临时订阅（签名链接，到期自动失效）
+	r.GET("/t/", api.GetTempLink)
 
 }

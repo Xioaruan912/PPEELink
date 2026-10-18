@@ -30,29 +30,19 @@ type Menu struct {
 
 func GetMenus(c *gin.Context) {
 	menus := []Menu{
+		// 普通用户：我的订阅
 		{
-			Path:      "/system",
+			Path:      "/my",
 			Component: "Layout",
-			// Redirect:  "/system/user",
-			Name: "system",
-			Meta: Meta{
-				Title:  "system",
-				Icon:   "system",
-				Hidden: true,
-				Roles:  []string{"ADMIN"},
-			},
+			Redirect:  "/my/subscriptions",
+			Name:      "my",
+			Meta:      Meta{Title: "我的", Icon: "link", Roles: []string{"USER"}},
 			Children: []Child{
 				{
-					Path:      "user/set",
-					Component: "system/user/set",
-					Name:      "Userset",
-					Meta: Meta{
-						Title:     "userset",
-						Icon:      "role",
-						Hidden:    true,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
+					Path:      "subscriptions",
+					Component: "my/index",
+					Name:      "MySubscriptions",
+					Meta:      Meta{Title: "我的订阅", Icon: "link", Roles: []string{"USER"}},
 				},
 			},
 		},
@@ -116,6 +106,12 @@ func GetMenus(c *gin.Context) {
 						Roles:     []string{"ADMIN"},
 						KeepAlive: true,
 					},
+				},
+				{
+					Path:      "servers",
+					Component: "subcription/servers",
+					Name:      "ProxyServers",
+					Meta:      Meta{Title: "自建节点", Icon: "monitor", Roles: []string{"ADMIN"}, KeepAlive: true},
 				},
 				{
 					Path:      "clients",
@@ -230,6 +226,34 @@ func GetMenus(c *gin.Context) {
 						Roles:     []string{"ADMIN"},
 						KeepAlive: true,
 					},
+				},
+			},
+		},
+		// 系统：用户、设置；修改密码对所有账户开放但不进菜单
+		{
+			Path:      "/system",
+			Component: "Layout",
+			Redirect:  "/system/users",
+			Name:      "system",
+			Meta:      Meta{Title: "系统", Icon: "system", Roles: []string{"ADMIN", "USER"}},
+			Children: []Child{
+				{
+					Path:      "users",
+					Component: "system/user/list",
+					Name:      "UserList",
+					Meta:      Meta{Title: "用户管理", Icon: "user", Roles: []string{"ADMIN"}, KeepAlive: true},
+				},
+				{
+					Path:      "settings",
+					Component: "system/settings/index",
+					Name:      "SystemSettings",
+					Meta:      Meta{Title: "系统设置", Icon: "system", Roles: []string{"ADMIN"}, KeepAlive: true},
+				},
+				{
+					Path:      "user/set",
+					Component: "system/user/set",
+					Name:      "Userset",
+					Meta:      Meta{Title: "userset", Icon: "role", Hidden: true, Roles: []string{"ADMIN", "USER"}},
 				},
 			},
 		},

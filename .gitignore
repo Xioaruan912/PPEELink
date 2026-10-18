@@ -37,3 +37,4 @@ webs/node_modules/
 /pnpm-workspace.yaml
 coverage/
 *.log
+/xray/

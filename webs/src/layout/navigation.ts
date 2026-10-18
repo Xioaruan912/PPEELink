@@ -17,6 +17,10 @@ import IconSubs from "~icons/ph/broadcast";
 import IconFlask from "~icons/ph/flask";
 import IconCode from "~icons/ph/brackets-curly";
 import IconCircle from "~icons/ph/circle-dashed";
+import IconUserCircle from "~icons/ph/user-circle";
+import IconUsers from "~icons/ph/users-three";
+import IconGear from "~icons/ph/gear-six";
+import IconServer from "~icons/ph/hard-drives";
 
 export interface NavigationItem {
   path: string;
@@ -33,6 +37,10 @@ const META: Record<string, { icon: Component; hint?: string }> = {
   "/subcription/collections": { icon: IconStack, hint: "多份订阅合成一个链接" },
   "/subcription/nodes": { icon: IconNodes, hint: "分组、编辑与检测节点" },
   "/subcription/airport": { icon: IconAirplane, hint: "机场来源、同步与流量" },
+  "/subcription/servers": {
+    icon: IconServer,
+    hint: "运行 xray-core，按账户发节点",
+  },
   "/subcription/clients": { icon: IconDevices, hint: "各平台客户端下载" },
   "/test": { icon: IconFlask },
   "/test/speed": { icon: IconGauge, hint: "经节点测量真实吞吐" },
@@ -42,6 +50,11 @@ const META: Record<string, { icon: Component; hint?: string }> = {
   "/template/list": { icon: IconFiles, hint: "编辑客户端配置模板" },
   "/template/builder": { icon: IconSliders, hint: "勾选规则、拖拽分组" },
   "/template/rules": { icon: IconBooks, hint: "规则源与规则目录" },
+  "/my": { icon: IconUserCircle },
+  "/my/subscriptions": { icon: IconLink, hint: "分配给我的订阅与导入链接" },
+  "/system": { icon: IconGear },
+  "/system/users": { icon: IconUsers, hint: "账户、角色与订阅分配" },
+  "/system/settings": { icon: IconGear, hint: "备份、API 令牌、审计与短链" },
 };
 export function resolvePath(parent: string, child: string) {
   return /^(https?:)?\/\//.test(child) || child.startsWith("/")
@@ -57,6 +70,10 @@ export function buildNavigation(
     const path = resolvePath(parent, route.path);
     const children = buildNavigation(route.children || [], path);
     if (!route.meta?.title) return children;
+    // 子页面全部隐藏（例如普通用户的“系统”只有改密页）时不显示该分组
+    if (route.children?.length && !children.length) return [];
+    // 只有一个可见子页面时直接显示该页面，避免只有一项的下拉菜单
+    if (route.children?.length && children.length === 1) return children;
     const meta = META[path];
     return [
       {

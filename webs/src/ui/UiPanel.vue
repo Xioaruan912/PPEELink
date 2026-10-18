@@ -1,5 +1,6 @@
 <template>
   <section
+    v-reveal
     class="ui-panel"
     :class="{ 'is-flush': flush, 'is-collapsed': collapsible && !open }"
     :aria-label="title"

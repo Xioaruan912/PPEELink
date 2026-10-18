@@ -1,33 +1,27 @@
 import request from "@/utils/request";
-export function getSubs(){
+export function getSubs() {
   return request({
     url: "/api/v1/subcription/get",
     method: "get",
   });
 }
 
-export function getSubPreviewNodes(id: number){
+export function getSubPreviewNodes(id: number) {
   return request({
     url: "/api/v1/subcription/preview-nodes",
     method: "get",
     params: { id },
   });
 }
-export function subscriptionEgressPlan(id: number){
-  return request({ url: "/api/v1/subcription/egress-plan", method: "post", params: { id } });
+export function previewSubPipeline(data: any) {
+  return request({
+    url: "/api/v1/subcription/pipeline/preview",
+    method: "post",
+    data,
+    headers: { "Content-Type": "multipart/form-data" },
+  });
 }
-export function subscriptionRuleExplain(data: any){
-  return request({ url: "/api/v1/subcription/rule-explain", method: "post", data });
-}
-export function previewSubPipeline(data: any){
-  return request({ url: "/api/v1/subcription/pipeline/preview", method: "post", data, headers: { "Content-Type": "multipart/form-data" } });
-}
-export function startSubscriptionBuild(data:any){ return request({ url:'/api/v1/subcription/build-task', method:'post', data }); }
-export function getSubscriptionArtifacts(id:number, client = ''){ return request({ url:'/api/v1/subcription/artifacts', method:'get', params:{ id, client } }); }
-export function rollbackSubscriptionArtifact(artifactId:number){ return request({ url:'/api/v1/subcription/artifacts/rollback', method:'post', params:{ artifactId } }); }
-export function safePublishSubscription(data:any){ return request({ url:'/api/v1/tasks/safe-publish', method:'post', data }); }
-
-export function AddSub(data: any){
+export function AddSub(data: any) {
   return request({
     url: "/api/v1/subcription/add",
     method: "post",
@@ -37,7 +31,7 @@ export function AddSub(data: any){
     },
   });
 }
-export function DelSub(data: any){
+export function DelSub(data: any) {
   return request({
     url: "/api/v1/subcription/delete",
     method: "delete",
@@ -45,7 +39,7 @@ export function DelSub(data: any){
   });
 }
 
-export function UpdateSub(data: any){
+export function UpdateSub(data: any) {
   return request({
     url: "/api/v1/subcription/update",
     method: "post",
@@ -56,7 +50,7 @@ export function UpdateSub(data: any){
   });
 }
 
-export function ResetToken(data: any){
+export function ResetToken(data: any) {
   return request({
     url: "/api/v1/subcription/reset-token",
     method: "post",
@@ -67,7 +61,7 @@ export function ResetToken(data: any){
   });
 }
 
-export function SetExpire(data: any){
+export function SetExpire(data: any) {
   return request({
     url: "/api/v1/subcription/set-expire",
     method: "post",
@@ -78,10 +72,14 @@ export function SetExpire(data: any){
   });
 }
 
-export function getImportLinks(id: number){
-  return request({ url: "/api/v1/subcription/import-links", method: "get", params: { id } });
+export function getImportLinks(id: number) {
+  return request({
+    url: "/api/v1/subcription/import-links",
+    method: "get",
+    params: { id },
+  });
 }
 
-export function createShortLink(data: any){
+export function createShortLink(data: any) {
   return request({ url: "/api/v1/shortlinks/create", method: "post", data });
 }

@@ -22,9 +22,6 @@ func StartCronTasks() {
 		if err := models.CleanupNodeQuality(time.Now().Add(-7 * 24 * time.Hour)); err != nil {
 			log.Println("[Cron] 清理节点质量历史失败:", err)
 		}
-		if err := models.CleanupNodeTargetQuality(time.Now().Add(-7 * 24 * time.Hour)); err != nil {
-			log.Println("[Cron] 清理目标质量历史失败:", err)
-		}
 		models.CleanupMaintenance(time.Now())
 	})
 
@@ -56,14 +53,12 @@ func StartCronTasks() {
 		return
 	}
 
-	_, err = c.AddFunc("0 20 */6 * * *", func() {
-		defer utils.RecoverPanic("cron-quality-matrix")
-		if err := api.RunScheduledQualityMatrixSample(); err != nil {
-			log.Println("[Cron] 质量矩阵场景采样失败:", err)
-		}
+	_, err = c.AddFunc("0 15 * * * *", func() {
+		defer utils.RecoverPanic("cron-airport-interval")
+		api.SyncDueAirports()
 	})
 	if err != nil {
-		log.Println("[Cron] 添加质量矩阵采样任务失败:", err)
+		log.Println("[Cron] 添加机场间隔同步任务失败:", err)
 		return
 	}
 
@@ -77,7 +72,6 @@ func StartCronTasks() {
 	}
 
 	c.Start()
-	api.EnsureInitialQualityMatrixSample()
 	go func() {
 		defer utils.RecoverPanic("startup-rule-sync")
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -86,5 +80,5 @@ func StartCronTasks() {
 			log.Println("[RuleCenter] 启动同步失败，保留现有缓存:", err)
 		}
 	}()
-	log.Println("[Cron] 机场/规则同步、节点每10分钟 TCP 质量与每6小时目标场景采样已启动")
+	log.Println("[Cron] 机场/规则同步、机场间隔同步与节点每10分钟 TCP 质量检测已启动")
 }

@@ -19,9 +19,11 @@ func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 	for _, link := range urls {
 		udp := sqlconfig.Udp
 		cert := sqlconfig.Cert
+		dialer := ""
 		if f, ok := flags[link]; ok {
-			udp, cert = f.UDP, f.SkipCertVerify
+			udp, cert, dialer = f.UDP, f.SkipCertVerify, f.DialerProxy
 		}
+		before := len(proxys)
 		Scheme := strings.Split(link, "://")[0]
 		switch {
 		case Scheme == "ss":
@@ -140,6 +142,10 @@ func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 				proxy["name"], proxy["server"], proxy["port"], proxy["password"], proxy["udp"], proxy["skip-cert-verify"])
 			groups = append(groups, tuic.Name)
 			proxys = append(proxys, tuicproxy)
+		}
+		// Surge 用 underlying-proxy 表达链式代理
+		if dialer != "" && len(proxys) > before {
+			proxys[len(proxys)-1] += ", underlying-proxy=" + dialer
 		}
 	}
 	return DecodeSurge(proxys, groups, sqlconfig.Surge)

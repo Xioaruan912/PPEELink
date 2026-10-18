@@ -21,6 +21,7 @@ const {
   busy,
   setRowVisible,
   activeGroup,
+  nodeName,
 } = useNodes();
 </script>
 <template>
@@ -43,6 +44,8 @@ const {
           node.server || "主机未知"
         }}</span>
         <span class="membership" :title="(node.groups || []).join(' / ')"
+          ><span v-if="node.relayId" class="relay-badge"
+            >经 {{ nodeName(node.relayId) || "已删除节点" }} 中转</span
           >{{ node.country || "国家未知" }} ·
           {{ (node.groups || []).join(" / ") || "未分组" }}</span
         >
@@ -98,6 +101,10 @@ const {
           ><el-dropdown-menu>
             <el-dropdown-item command="tcp">链路 TCP 检测</el-dropdown-item>
             <el-dropdown-item command="unlock">解锁检测</el-dropdown-item>
+            <el-dropdown-item command="chain" divided
+              >设置中转</el-dropdown-item
+            >
+            <el-dropdown-item command="temp">临时订阅</el-dropdown-item>
             <el-dropdown-item command="group" divided
               >加入分组</el-dropdown-item
             >
@@ -163,6 +170,14 @@ const {
   color: var(--c-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.relay-badge {
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--c-signal) 18%, transparent);
+  color: var(--c-signal-text);
+  font-size: 12px;
 }
 .host.mono {
   font-size: 12px;

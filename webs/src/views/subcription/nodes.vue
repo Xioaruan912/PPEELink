@@ -15,6 +15,7 @@ import NodeTcpDialog from "@/components/NodeTcpDialog.vue";
 import { provideNodes } from "./nodes/useNodes";
 import NodeRow from "./nodes/NodeRow.vue";
 import NodeDrawers from "./nodes/NodeDrawers.vue";
+import NodeTools from "./nodes/NodeTools.vue";
 defineOptions({ name: "NodesPage" });
 const {
   loading,
@@ -34,6 +35,7 @@ const {
   clearSelection,
   clearFilters,
   localTesting,
+  latencySource,
   loadAll,
   triggerLocalPing,
   handleAddNode,
@@ -44,8 +46,25 @@ const {
   unlockVisible,
   tcpVisible,
   testNode,
+  openTool,
 } = provideNodes();
 const root = ref<HTMLElement>();
+// 浏览器直连会从你当前的网络向每个代理服务器发起连接，首次使用前说明并确认
+async function confirmLocalPing() {
+  try {
+    if (localStorage.getItem("local-ping-ack") !== "1") {
+      await ElMessageBox.confirm(
+        "将从你当前的网络直接连接每个节点服务器来测延迟。这会暴露本机 IP 与节点的连接关系，且部分机场可能把频繁直连视为异常。",
+        "从本机检测延迟",
+        { confirmButtonText: "继续", cancelButtonText: "取消", type: "warning" }
+      );
+      localStorage.setItem("local-ping-ack", "1");
+    }
+  } catch (error) {
+    if (error === "cancel" || error === "close") return;
+  }
+  void triggerLocalPing();
+}
 const stagger = useStagger();
 const { reduced, animate } = useMotion();
 watch(loading, async () => {
@@ -92,6 +111,8 @@ function leaveBar(element: Element, done: () => void) {
       ><template #actions
         ><UiButton :icon="Refresh" :loading="loading" @click="loadAll"
           >刷新</UiButton
+        ><UiButton :disabled="loading || busy" @click="openTool('dedupe', [])"
+          >去重</UiButton
         ><UiButton variant="primary" :icon="Plus" @click="handleAddNode"
           >添加节点</UiButton
         ></template
@@ -142,7 +163,7 @@ function leaveBar(element: Element, done: () => void) {
         class="node-main"
         title="节点列表"
         :count="filteredNodes.length"
-        description="名称可点开编辑；延迟为浏览器本地检测。"
+        description="名称可点开编辑；延迟默认为服务器到节点的 TCP 检测。"
         :aria-busy="loading"
       >
         <div class="node-toolbar">
@@ -169,13 +190,19 @@ function leaveBar(element: Element, done: () => void) {
           <StatusDot
             :state="localTesting ? 'idle' : 'ok'"
             :running="localTesting"
-            :label="localTesting ? '正在检测本地延迟' : '本地延迟'"
+            :label="
+              localTesting
+                ? '正在从本机检测'
+                : latencySource === 'local'
+                  ? '本机延迟'
+                  : '服务器延迟'
+            "
           /><UiButton
             variant="ghost"
             :disabled="loading || !overviewList.length"
             :loading="localTesting"
-            @click="triggerLocalPing"
-            >重新检测</UiButton
+            @click="confirmLocalPing"
+            >从本机检测</UiButton
           ><span class="result-count mono"
             >{{ filteredNodes.length }} 个节点</span
           ><UiButton
@@ -238,6 +265,9 @@ function leaveBar(element: Element, done: () => void) {
           <span class="mono" role="status">已选 {{ selectedCount }}</span
           ><UiButton variant="ghost" @click="clearSelection">取消选择</UiButton
           ><UiButton @click="copySelected">复制选中</UiButton
+          ><UiButton :disabled="busy" @click="openTool('rename')">改名</UiButton
+          ><UiButton :disabled="busy" @click="openTool('flags')">开关</UiButton
+          ><UiButton :disabled="busy" @click="openTool('chain')">中转</UiButton
           ><UiButton
             v-if="activeGroup !== '全部'"
             :disabled="busy"
@@ -251,6 +281,7 @@ function leaveBar(element: Element, done: () => void) {
       </div></Transition
     >
     <NodeDrawers />
+    <NodeTools />
     <NodeUnlockDialog
       v-if="testNode"
       v-model:visible="unlockVisible"

@@ -79,7 +79,9 @@ func fetchURLThroughNode(ctx context.Context, link, rawURL, userAgent string, ti
 	if err != nil {
 		return nil, nil, err
 	}
-	if userAgent == "" { userAgent = "SubLinkX-RuleCenter/1.0" }
+	if userAgent == "" {
+		userAgent = "SubLinkX-RuleCenter/1.0"
+	}
 	req.Header.Set("User-Agent", userAgent)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -91,7 +93,8 @@ func fetchURLThroughNode(ctx context.Context, link, rawURL, userAgent string, ti
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
 	if err != nil {
-		return nil, resp.Header, err
+		// 返回已读到的部分，调用方可据此统计实际消耗的流量
+		return body, resp.Header, err
 	}
 	if int64(len(body)) > maxBytes {
 		if strictSize {

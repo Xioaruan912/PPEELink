@@ -83,6 +83,29 @@ func ShortLinkRedirect(c *gin.Context) {
 	c.Redirect(http.StatusFound, link.Target)
 }
 
+// subscriptionClients 订阅可下发的客户端标识（与 normalizeClient 的输出一致）。
+var subscriptionClients = []string{"clash", "surge", "loon", "v2ray", "singbox", "qx", "shadowrocket", "stash", "egern", "surfboard"}
+
+// subscriptionLinks 生成订阅在各客户端的直链及支持 URL Scheme 的一键导入链接。
+func subscriptionLinks(base, token string) (map[string]string, map[string]string) {
+	links := map[string]string{}
+	for _, cl := range subscriptionClients {
+		links[cl] = base + "/c/?token=" + url.QueryEscape(token) + "&client=" + cl
+	}
+	return links, importLinks(links)
+}
+
+// importLinks 支持 URL Scheme 的客户端的一键导入链接。
+func importLinks(links map[string]string) map[string]string {
+	return map[string]string{
+		"clash":        "clash://install-config?url=" + url.QueryEscape(links["clash"]),
+		"surge":        "surge://install-config?url=" + url.QueryEscape(links["surge"]),
+		"loon":         "loon://install-config?url=" + url.QueryEscape(links["loon"]),
+		"stash":        "stash://install-config?url=" + url.QueryEscape(links["stash"]),
+		"shadowrocket": "shadowrocket://add/sub://" + base64.RawURLEncoding.EncodeToString([]byte(links["shadowrocket"])),
+	}
+}
+
 // SubscriptionImportLinks 返回订阅的直链与一键导入链接。
 func SubscriptionImportLinks(c *gin.Context) {
 	id, err := strconv.Atoi(c.Query("id"))
@@ -99,16 +122,6 @@ func SubscriptionImportLinks(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "订阅尚未生成 token，请先重置订阅令牌"})
 		return
 	}
-	base := baseURL(c)
-	links := map[string]string{}
-	for _, cl := range []string{"clash", "surge", "loon", "v2ray", "singbox", "qx", "shadowrocket"} {
-		links[cl] = base + "/c/?token=" + url.QueryEscape(sub.Token) + "&client=" + cl
-	}
-	imports := map[string]string{
-		"clash":        "clash://install-config?url=" + url.QueryEscape(links["clash"]),
-		"surge":        "surge://install-config?url=" + url.QueryEscape(links["surge"]),
-		"loon":         "loon://install-config?url=" + url.QueryEscape(links["loon"]),
-		"shadowrocket": "shadowrocket://add/sub://" + base64.RawURLEncoding.EncodeToString([]byte(links["shadowrocket"])),
-	}
+	links, imports := subscriptionLinks(baseURL(c), sub.Token)
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"links": links, "imports": imports}, "msg": "导入链接"})
 }

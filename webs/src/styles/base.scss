@@ -255,3 +255,41 @@ html[data-motion="reduced"] {
     display: none;
   }
 }
+
+// 3D tilt (driven by installSpotlight); hover lifts use the independent
+// `translate` property so they compose with the tilt transform.
+:is(.cell, .client-tile, .sub-card, .stat-tiles > .ui-stat) {
+  transform: perspective(900px) rotateX(var(--rx, 0deg))
+    rotateY(var(--ry, 0deg));
+  transition:
+    transform var(--duration-slow) var(--ease-out),
+    translate var(--duration-medium) var(--ease-spring),
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-medium) var(--ease-out);
+  will-change: transform;
+}
+// v-reveal
+.reveal-pending {
+  opacity: 0;
+  translate: 0 28px;
+  filter: blur(8px);
+}
+.reveal-pending.is-revealed {
+  opacity: 1;
+  translate: 0 0;
+  filter: blur(0);
+  transition:
+    opacity 0.7s var(--ease-out),
+    translate 0.9s var(--ease-out),
+    filter 0.7s var(--ease-out);
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(.cell, .client-tile, .sub-card, .stat-tiles > .ui-stat) {
+    transform: none;
+  }
+  .reveal-pending {
+    opacity: 1;
+    translate: none;
+    filter: none;
+  }
+}

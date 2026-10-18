@@ -109,16 +109,16 @@ func renderCollectionNodes(client string, nodes []models.Node, configs node.SqlC
 func GetCollectionClient(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
-		c.Writer.WriteString("token为空")
+		c.String(400, "token为空")
 		return
 	}
 	var col models.Collection
 	if err := models.DB.Where("token = ?", token).First(&col).Error; err != nil {
-		c.Writer.WriteString("无效的合集令牌")
+		c.String(404, "无效的合集令牌")
 		return
 	}
 	if col.ExpiresAt != nil && time.Now().After(*col.ExpiresAt) {
-		c.Writer.WriteString("合集已过期")
+		c.String(410, "合集已过期")
 		return
 	}
 	client := normalizeClient(c.Query("client"))
@@ -127,7 +127,7 @@ func GetCollectionClient(c *gin.Context) {
 	}
 	nodes := collectionNodes(col)
 	if len(nodes) == 0 {
-		c.Writer.WriteString("合集没有可用节点")
+		c.String(502, "合集没有可用节点")
 		return
 	}
 	var configs node.SqlConfig
@@ -135,8 +135,8 @@ func GetCollectionClient(c *gin.Context) {
 		_ = json.Unmarshal([]byte(col.Config), &configs)
 	}
 	body, ext, contentType := renderCollectionNodes(client, nodes, configs)
-	if col.ExpiresAt != nil {
-		c.Header("Subscription-Userinfo", "upload=0; download=0; total=0; expire="+strconv.FormatInt(col.ExpiresAt.Unix(), 10))
+	if info := collectionUserinfo(col); info != "" {
+		c.Header("Subscription-Userinfo", info)
 	}
 	c.Header("Content-Disposition", "inline; filename*=utf-8''"+url.QueryEscape(col.Name+"."+ext))
 	c.Data(200, contentType, body)

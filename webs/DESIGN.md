@@ -94,8 +94,29 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 
 动效统一使用 `src/motion`。CSS 动效由 `src/styles/base.scss` 的系统 reduced-motion 与 `html[data-motion="reduced"]` 双重终态守卫覆盖；地图、图表和 Monaco 读取同一 motion 状态。业务提交中的弹层保留现有关闭保护，空闲时支持 Esc。
 
+### 动效清单（MOTION 10）
+- 路由内容模糊上浮交错入场；页面标题逐字上浮（`PageHeader`，每字 28ms）。
+- 卡片 / 面板指针聚光灯；`.cell`、客户端卡片、订阅卡片、指标卡随指针 3D 倾斜（±5°，`installSpotlight`）。悬停抬起用独立的 `translate` 属性，与倾斜的 `transform` 叠加。
+- `v-reveal`：首屏以下的面板与卡片滚入视口时模糊上浮出现（IntersectionObserver，只播一次）。
+- 链式代理示意的虚线流动、批量改名预览逐行滑入、设置页分区切换模糊过渡。
+- 全部受 `prefers-reduced-motion` 与 `html[data-motion="reduced"]` 控制。
+
 ### 借鉴功能（参考妙妙屋）
 - 订阅「分享到客户端」：客户端卡片网格选择 → 二维码 + 订阅链接 + 一键导入 + 短链。
 - 机场流量：同步时读取 `Subscription-Userinfo`，机场列表与仪表盘展示已用/总量进度条与到期天数。
 - 模板构建「规则分类」：勾选分类自动增删规则集、规则行与专属分组，含精简 / 均衡 / 全量预设。
 - 模板构建「策略分组」：分组卡片看板，拖拽策略进分组、拖拽卡片排序，支持「添加到 / 移出所有分组」投放区；触屏用下拉与菜单完成同样操作。
+- 节点批量：正则改名（预览后应用，订阅中的节点顺序同步改名）、加 / 去国旗、UDP / TFO / 跳过证书开关、按“协议+服务器+端口”去重（引用转移给保留的节点）。
+- 链式代理：节点设置中转节点，Clash 输出 `dialer-proxy`、Surge 输出 `underlying-proxy`，中转不在订阅里时自动补上。
+- 机场同步策略：按名称 / 服务器:端口 / 协议+服务器匹配、保留本地名称、排除正则、6/12/24 小时自动同步。
+- Clash 节点集合：订阅可改用 proxy-provider 引用 `client=clash-proxies` 节点列表，客户端每小时自动刷新。
+- 多用户：管理员 / 普通用户，普通用户只看到“我的订阅”；新账户与默认密码账户首次登录必须改密码。
+- 单节点临时订阅：HMAC 签名、自带到期时间的 `/t/` 链接。
+- 系统设置：完整备份（数据库快照 + 模板 tar.gz）、配置导入导出、API 令牌、操作审计、短链管理。
+
+### 自建节点（xray-core）
+- **服务器**：本机（面板直接管理）或远程 agent（同一程序的 `agent` 子命令，凭令牌主动连回面板拉配置、回报流量，无需 SSH 密码与额外端口）。安装命令由面板生成，令牌只显示一次。
+- **xray-core**：按固定版本（`xraycore.DefaultVersion`）从 GitHub 官方 release 下载，用同一 release 的 `.dgst` 校验 SHA2-256 后才落盘；有 systemd 时托管为 `ppeelink-xray` 服务，面板 / agent 重启不断连。新配置先 `xray run -test` 自检，失败继续跑旧配置。
+- **入站**：VLESS Reality Vision、VLESS XHTTP Reality；Reality 密钥与 shortId 自动生成，伪装目标可一键检测 TLS 1.3 / h2。
+- **账户**：每个面板账户一个 UUID，按 `u<用户ID>` 统计流量；额度、每月清零日、到期、同时在线 IP 上限（超限临时停用 10 分钟）。账户在“我的订阅”里多一份“自建节点”订阅；管理员的节点同步进“自建·服务器名”分组，可被已有订阅引用。
+- **防滥用**：所有入站默认阻断内网地址与 BT；服务器可一键停用（xray 随即停止）。

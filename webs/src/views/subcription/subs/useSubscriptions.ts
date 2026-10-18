@@ -59,6 +59,7 @@ interface Config {
   loon: string;
   udp: boolean;
   cert: boolean;
+  proxyProvider?: boolean;
 }
 interface SubLogs {
   IP: string;
@@ -169,6 +170,7 @@ export function createSubscriptions() {
   });
   const udpOn = ref(false);
   const certOn = ref(false);
+  const providerOn = ref(false);
   const qrcode = ref("");
   const qrTitle = ref("");
   const qrDialog = ref(false);
@@ -544,6 +546,7 @@ export function createSubscriptions() {
         loon: Loon.value.trim(),
         udp: udpOn.value,
         cert: certOn.value,
+        proxyProvider: providerOn.value,
       });
       const groupStr = selectedGroups.value.join(",");
       if (SubTitle.value === "添加订阅") {
@@ -584,6 +587,7 @@ export function createSubscriptions() {
     isAirportUrl.value = false;
     udpOn.value = false;
     certOn.value = false;
+    providerOn.value = false;
     Clash.value = "./template/clash.yaml";
     Surge.value = "./template/surge.conf";
     Loon.value = "./template/loon.conf";
@@ -606,6 +610,7 @@ export function createSubscriptions() {
         loon: c.loon || "",
         udp: !!c.udp,
         cert: !!c.cert,
+        proxyProvider: !!c.proxyProvider,
       };
     } catch {
       return { clash: "", surge: "", loon: "", udp: false, cert: false };
@@ -622,6 +627,7 @@ export function createSubscriptions() {
     isAirportUrl.value = !!sub.SourceURLs;
     udpOn.value = !!config.udp;
     certOn.value = !!config.cert;
+    providerOn.value = !!config.proxyProvider;
     Clash.value = config.clash;
     Surge.value = config.surge;
     Loon.value = config.loon;
@@ -946,6 +952,7 @@ export function createSubscriptions() {
     groupedNodes,
     udpOn,
     certOn,
+    providerOn,
     qrcode,
     qrTitle,
     qrDialog,

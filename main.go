@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"flag"
 	"fmt"
@@ -8,12 +9,17 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"ppeelink/api"
 	"ppeelink/middlewares"
 	"ppeelink/models"
 	"ppeelink/routers"
 	"ppeelink/settings"
 	"ppeelink/utils"
+	"ppeelink/xraycore"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -22,6 +28,7 @@ import (
 // The default embed matcher excludes those files when walking directories,
 // which can otherwise produce runtime 404s for chunks such as
 // _plugin-vue_export-helper.*.js.
+//
 //go:embed all:webs/dist/*
 var embeddedFiles embed.FS
 
@@ -72,6 +79,11 @@ func Templateinit() {
 }
 
 func main() {
+	// agent 模式运行在远程服务器上，不需要面板的配置与数据库
+	if len(os.Args) > 1 && os.Args[1] == "agent" {
+		runAgent(os.Args[2:])
+		return
+	}
 	// 初始化配置
 	models.ConfigInit()
 	config := models.ReadConfig() // 读取配置文件
@@ -186,13 +198,36 @@ func Run(port int) {
 	routers.Tokens(r)        // API Token 管理
 	routers.Ops(r)           // 安全运维/备份
 	routers.Status(r)        // 公共只读状态页
-	routers.Regression(r)    // 分流回归用例与模板命中差异
 	routers.Audit(r)         // 管理操作审计
 	routers.ShortLinks(r)    // 内部短链与一键导入
-	routers.Collections(r)   // 多订阅合集与到期/用量告警
+	routers.Collections(r)
+	routers.Proxy(r) // 多订阅合集与到期/用量告警
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
+	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步
 
 	// 启动服务
 	r.Run(fmt.Sprintf("0.0.0.0:%d", port))
+}
+
+// runAgent 远程节点：只负责运行 xray，配置与流量都与面板同步。
+func runAgent(args []string) {
+	cmd := flag.NewFlagSet("agent", flag.ExitOnError)
+	panel := cmd.String("panel", "", "面板地址，如 https://panel.example.com")
+	token := cmd.String("token", os.Getenv("PPEELINK_AGENT_TOKEN"), "agent 令牌")
+	dir := cmd.String("dir", "/var/lib/ppeelink-agent", "xray 安装与配置目录")
+	interval := cmd.Duration("interval", 60*time.Second, "同步间隔")
+	_ = cmd.Parse(args)
+	if *panel == "" || *token == "" {
+		log.Fatal("需要 -panel 与 -token")
+	}
+	if err := os.MkdirAll(*dir, 0o700); err != nil {
+		log.Fatal(err)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	runner := xraycore.NewRunner(*dir, "ppeelink-xray")
+	log.Printf("[agent] 已启动，面板 %s，每 %s 同步一次", *panel, *interval)
+	xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token}, runner, *interval)
+	runner.Stop()
 }

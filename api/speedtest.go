@@ -58,6 +58,14 @@ func NodeSpeedTestStream(c *gin.Context) {
 		timeout = time.Duration(v) * time.Second
 	}
 	target = normalizeSpeedTarget(target, maxBytes)
+	if len(ids) == 0 && group == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请选择要测速的节点"})
+		return
+	}
+	if err := validateSpeedTarget(target); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
+	}
 
 	nodesList, err := speedTestNodes(ids, group)
 	if err != nil {
@@ -69,6 +77,11 @@ func NodeSpeedTestStream(c *gin.Context) {
 		return
 	}
 
+	if msg := checkSpeedPlan(len(nodesList), maxBytes, time.Now()); msg != "" {
+		c.JSON(429, gin.H{"code": "42900", "msg": msg})
+		return
+	}
+
 	ctx, cancel, ok := node.BeginTest("批量测速", 0, "speed", c.Request.Context())
 	if !ok {
 		c.JSON(429, gin.H{"code": "42900", "msg": "已有测试进行中，请稍候"})
@@ -76,6 +89,7 @@ func NodeSpeedTestStream(c *gin.Context) {
 	}
 	defer node.EndTest()
 	defer cancel()
+	defer speedGuard.finish()
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Writer.Header().Set("Cache-Control", "no-cache")
@@ -128,13 +142,21 @@ func speedTestNodes(ids []int, group string) ([]models.Node, error) {
 func speedTestOne(ctx context.Context, n models.Node, target string, timeout time.Duration, maxBytes int64) gin.H {
 	res := gin.H{"id": n.ID, "name": n.Name, "rtt": -1, "ok": false, "mbps": 0.0, "bytes": 0}
 	if host, port := node.ExtractServerHost(n.Link); host != "" && port > 0 {
-		res["rtt"] = node.TCPPing(host+":"+strconv.Itoa(port), 4*time.Second)
+		rtt := node.TCPPing(host+":"+strconv.Itoa(port), 4*time.Second)
+		res["rtt"] = rtt
+		if rtt < 0 {
+			// 连不上的节点不再发起下载，省流量也省时间
+			res["error"] = "节点 TCP 不可达，已跳过下载"
+			return res
+		}
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	start := time.Now()
 	body, err := node.SpeedTestThroughNode(runCtx, n.Link, target, "SubLinkX-Speedtest/1.0", timeout, maxBytes)
 	elapsed := time.Since(start).Seconds()
+	// 超时中断时 body 为已下载的部分，同样计入当日额度
+	speedGuard.add(int64(len(body)))
 	if err != nil {
 		res["error"] = err.Error()
 		return res

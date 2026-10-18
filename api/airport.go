@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -37,6 +38,10 @@ func AirportAdd(c *gin.Context) {
 		c.JSON(400, gin.H{"msg": "名称和URL不能为空"})
 		return
 	}
+	if msg := validateAirportStrategy(&a); msg != "" {
+		c.JSON(400, gin.H{"msg": msg})
+		return
+	}
 
 	now := time.Now()
 	a.LastSync = &now
@@ -59,6 +64,10 @@ func AirportUpdate(c *gin.Context) {
 		c.JSON(400, gin.H{"msg": "ID不能为空"})
 		return
 	}
+	if msg := validateAirportStrategy(&a); msg != "" {
+		c.JSON(400, gin.H{"msg": msg})
+		return
+	}
 
 	var existing models.Airport
 	existing.ID = a.ID
@@ -71,6 +80,10 @@ func AirportUpdate(c *gin.Context) {
 	existing.URL = a.URL
 	existing.AutoCleanup = a.AutoCleanup
 	existing.IsDedicated = a.IsDedicated
+	existing.MatchMode = a.MatchMode
+	existing.KeepLocalNames = a.KeepLocalNames
+	existing.ExcludePattern = a.ExcludePattern
+	existing.SyncIntervalHours = a.SyncIntervalHours
 
 	if err := existing.Update(); err != nil {
 		c.JSON(500, gin.H{"msg": "更新失败: " + err.Error()})
@@ -255,4 +268,22 @@ func AirportSync(c *gin.Context) {
 	}()
 
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"taskId": task.ID}, "msg": "已在后台启动同步和测活任务。"})
+}
+
+// validateAirportStrategy 规范化同步策略字段，返回错误提示（为空表示通过）。
+func validateAirportStrategy(a *models.Airport) string {
+	switch a.MatchMode {
+	case "", "name", "server", "type-server":
+	default:
+		return "未知的匹配方式"
+	}
+	if a.ExcludePattern != "" {
+		if _, err := regexp.Compile(a.ExcludePattern); err != nil {
+			return "排除正则无效: " + err.Error()
+		}
+	}
+	if a.SyncIntervalHours < 0 || a.SyncIntervalHours > 168 {
+		return "同步间隔需在 0 到 168 小时之间"
+	}
+	return ""
 }

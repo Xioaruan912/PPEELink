@@ -15,7 +15,6 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.GET("/overview", api.NodeOverview)
 		NodesGroup.GET("/quality/history", api.NodeQualityHistory)
 		NodesGroup.GET("/quality/summary", api.NodeQualitySummary)
-		NodesGroup.GET("/quality/matrix", api.NodeQualityMatrix)
 		NodesGroup.GET("/quality/trend", api.NodeQualityTrend)
 		NodesGroup.GET("/health/events", api.NodeHealthEvents)
 		NodesGroup.GET("/recommendations", api.NodeRecommendations)
@@ -32,8 +31,12 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.POST("/chinaping", api.NodeChinaPing)
 		NodesGroup.POST("/chinaping/stream", api.NodeChinaPingStream)
 		NodesGroup.POST("/speedtest/stream", api.NodeSpeedTestStream)
+		NodesGroup.GET("/speedtest/budget", api.SpeedTestBudget)
 		NodesGroup.GET("/test/status", api.TestStatus)
 		NodesGroup.POST("/test/cancel", api.TestCancel)
+		NodesGroup.POST("/batch", api.NodeBatch)
+		NodesGroup.POST("/temp-link", api.NodeTempLink)
+		NodesGroup.POST("/dedupe", api.NodeDedupe)
 		NodesGroup.POST("/visibility", api.NodeVisibility) // 全局隐藏/恢复单个节点
 
 	}

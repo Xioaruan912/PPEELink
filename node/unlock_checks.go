@@ -202,7 +202,6 @@ func checkTelegram(ctx context.Context, c *http.Client) (bool, string) {
 	return false, "HTTP " + itoa(resp.StatusCode)
 }
 
-
 // getWithCtx 带 context 的 GET 请求（ctx 取消时立即中断）
 func getWithCtx(ctx context.Context, c *http.Client, url string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)

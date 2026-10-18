@@ -69,9 +69,6 @@
               >大写锁定已开启</span
             ></el-form-item
           >
-          <button type="button" class="default-account" @click="quickFill">
-            使用默认账户
-          </button>
           <p v-if="loginError" class="login-error" role="alert">
             {{ loginError }}
           </p>
@@ -114,10 +111,6 @@ const isDark = computed(() => settingsStore.theme === ThemeEnum.DARK);
 function toggleTheme() {
   settingsStore.changeTheme(isDark.value ? ThemeEnum.LIGHT : ThemeEnum.DARK);
 }
-function quickFill() {
-  loginData.value = { username: "admin", password: "123456" };
-  loginFormRef.value?.clearValidate();
-}
 function checkCapslock(event: KeyboardEvent) {
   isCapslock.value = event.getModifierState("CapsLock");
 }
@@ -130,7 +123,11 @@ async function handleLogin() {
   loading.value = true;
   loginError.value = "";
   try {
-    await userStore.login(loginData.value);
+    const { mustChangePassword } = await userStore.login(loginData.value);
+    if (mustChangePassword) {
+      await router.push("/system/user/set");
+      return;
+    }
     const redirect =
       typeof route.query.redirect === "string" &&
       route.query.redirect.startsWith("/") &&
@@ -329,17 +326,6 @@ onMounted(() => {
 }
 .login-form-wrap :deep(.el-input__wrapper) {
   min-height: 44px;
-}
-.default-account {
-  min-height: 32px;
-  padding: 0;
-  color: var(--c-muted);
-  font-size: 13px;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-}
-.default-account:hover {
-  color: var(--c-ink);
 }
 .login-submit {
   position: relative;

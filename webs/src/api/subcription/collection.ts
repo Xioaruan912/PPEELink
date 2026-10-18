@@ -10,7 +10,11 @@ export function updateCollection(data: any) {
   return request({ url: "/api/v1/collections/update", method: "post", data });
 }
 export function deleteCollection(id: number) {
-  return request({ url: "/api/v1/collections/delete", method: "delete", params: { id } });
+  return request({
+    url: "/api/v1/collections/delete",
+    method: "delete",
+    params: { id },
+  });
 }
 export function resetCollectionToken(id: number) {
   return request({

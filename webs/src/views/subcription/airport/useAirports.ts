@@ -21,6 +21,10 @@ export interface Airport {
   URL: string;
   AutoCleanup: boolean;
   IsDedicated: boolean;
+  MatchMode?: string;
+  KeepLocalNames?: boolean;
+  ExcludePattern?: string;
+  SyncIntervalHours?: number;
   NodeCount: number;
   LastSync: string | null;
   TrafficUpload?: number;
@@ -210,6 +214,10 @@ export function useAirports() {
     URL: "",
     AutoCleanup: true,
     IsDedicated: false,
+    MatchMode: "name",
+    KeepLocalNames: false,
+    ExcludePattern: "",
+    SyncIntervalHours: 0,
   });
   const form = ref(emptyForm());
   function handleAdd() {
@@ -224,6 +232,10 @@ export function useAirports() {
       URL: row.URL,
       AutoCleanup: row.AutoCleanup,
       IsDedicated: row.IsDedicated,
+      MatchMode: row.MatchMode || "name",
+      KeepLocalNames: !!row.KeepLocalNames,
+      ExcludePattern: row.ExcludePattern || "",
+      SyncIntervalHours: row.SyncIntervalHours || 0,
     };
     formError.value = "";
     editorVisible.value = true;

@@ -38,11 +38,15 @@ type NodeFlags struct {
 	UDP            bool `json:"udp,omitempty"`
 	TFO            bool `json:"tfo,omitempty"`
 	SkipCertVerify bool `json:"skipCertVerify,omitempty"`
+	// DialerProxyID 链式代理：经由该节点（中转）连接本节点（落地）。
+	DialerProxyID int `json:"dialerProxyId,omitempty"`
+	// DialerProxy 构建时解析出的中转节点最终名称，不落库。
+	DialerProxy string `json:"-"`
 }
 
 // Empty reports whether no flag is set.
 func (f NodeFlags) Empty() bool {
-	return !f.UDP && !f.TFO && !f.SkipCertVerify
+	return !f.UDP && !f.TFO && !f.SkipCertVerify && f.DialerProxyID == 0
 }
 
 // NodeInput is a link plus its per-node build flags.
@@ -62,6 +66,7 @@ type Outbound struct {
 	UDP            bool
 	TFO            bool
 	SkipCertVerify bool
+	DialerProxyID  int
 	Spec           interface{}
 	Link           string
 	ScriptID       int // 内部使用：脚本 operator 的稳定标识（>=1），不参与序列化
@@ -69,7 +74,7 @@ type Outbound struct {
 
 // Flags returns the normalized build flags of the proxy.
 func (p Outbound) Flags() NodeFlags {
-	return NodeFlags{UDP: p.UDP, TFO: p.TFO, SkipCertVerify: p.SkipCertVerify}
+	return NodeFlags{UDP: p.UDP, TFO: p.TFO, SkipCertVerify: p.SkipCertVerify, DialerProxyID: p.DialerProxyID}
 }
 
 // ParseOutbound decodes a share link into a normalized Outbound.

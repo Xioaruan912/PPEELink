@@ -20,6 +20,8 @@ type SqlConfig struct {
 	Loon  string `json:"loon"`
 	Udp   bool   `json:"udp"`
 	Cert  bool   `json:"cert"`
+	// ProxyProvider 为真时 Clash 配置通过 proxy-provider 引用节点列表
+	ProxyProvider bool `json:"proxyProvider,omitempty"`
 }
 
 // ipv6地址匹配规则

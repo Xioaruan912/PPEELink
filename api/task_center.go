@@ -5,13 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http/httptest"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"runtime/debug"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -25,21 +20,11 @@ var taskCancels sync.Map // task id -> context.CancelFunc
 type nodeEgressTaskRequest struct {
 	NodeID int `json:"nodeId"`
 }
-type subscriptionEgressTaskRequest struct {
-	SubscriptionID int `json:"subscriptionId"`
-}
 type airportSyncTaskRequest struct {
 	AirportID int `json:"airportId"`
 }
 type ruleSyncTaskRequest struct {
 	Source string `json:"source"`
-}
-type subscriptionBuildTaskRequest struct {
-	SubscriptionID int    `json:"subscriptionId"`
-	Client         string `json:"client"`
-}
-type templateValidationTaskRequest struct {
-	Filename string `json:"filename"`
 }
 
 func createTaskRun(base context.Context, kind, name string, request any, retryOf *uint) (*models.TaskRun, context.Context, error) {
@@ -117,13 +102,6 @@ func executeStoredTask(task *models.TaskRun) {
 			updateTaskProgress(task.ID, 20, "正在检测目标出口")
 			result, err = runNodeEgressTask(ctx, req.NodeID)
 		}
-	case "subscription-egress":
-		var req subscriptionEgressTaskRequest
-		err = json.Unmarshal([]byte(task.RequestJSON), &req)
-		if err == nil {
-			updateTaskProgress(task.ID, 20, "正在按模板验证分流")
-			result, err = runSubscriptionEgressPlanTask(ctx, req.SubscriptionID)
-		}
 	case "airport-sync":
 		var req airportSyncTaskRequest
 		err = json.Unmarshal([]byte(task.RequestJSON), &req)
@@ -144,35 +122,6 @@ func executeStoredTask(task *models.TaskRun) {
 				err = rulecenter.SyncSource(syncCtx, req.Source)
 			}
 		}
-	case "subscription-build":
-		var req subscriptionBuildTaskRequest
-		err = json.Unmarshal([]byte(task.RequestJSON), &req)
-		if err == nil {
-			updateTaskProgress(task.ID, 20, "正在生成并验证订阅产物")
-			result, err = buildAndSnapshotSubscription(ctx, req.SubscriptionID, req.Client)
-		}
-	case "template-validate":
-		var req templateValidationTaskRequest
-		err = json.Unmarshal([]byte(task.RequestJSON), &req)
-		if err == nil {
-			updateTaskProgress(task.ID, 20, "正在检查模板结构、引用和回归用例")
-			result, err = runTemplateValidationTask(ctx, req)
-		}
-	case "safe-publish":
-		var req safePublishRequest
-		err = json.Unmarshal([]byte(task.RequestJSON), &req)
-		if err == nil {
-			updateTaskProgress(task.ID, 10, "正在执行一键安全发布")
-			result, err = runSafePublish(ctx, req)
-		}
-	case "quality-matrix-sample":
-		var req qualityMatrixSampleRequest
-		err = json.Unmarshal([]byte(task.RequestJSON), &req)
-		if err == nil {
-			result, err = collectQualityMatrixSamples(ctx, req.Mode, func(p int, message string) {
-				updateTaskProgress(task.ID, p, message)
-			})
-		}
 	default:
 		err = fmt.Errorf("任务类型不支持重试: %s", task.Type)
 	}
@@ -181,62 +130,6 @@ func executeStoredTask(task *models.TaskRun) {
 		return
 	}
 	finishTaskRun(task.ID, err, result)
-}
-
-func runTemplateValidationTask(ctx context.Context, req templateValidationTaskRequest) (any, error) {
-	filename := strings.TrimSpace(req.Filename)
-	if filename == "" {
-		return nil, fmt.Errorf("模板文件名不能为空")
-	}
-	path, err := safeFilePath(filename)
-	if err != nil {
-		return nil, err
-	}
-	body, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	cases, _ := activeRegressionCases()
-	results, report := evaluateRoutingRegression(ctx, filename, string(body), cases)
-	failed := 0
-	for _, item := range results {
-		if !item.Passed {
-			failed++
-		}
-	}
-	if !report.Valid {
-		return map[string]any{"preflight": report, "regression": results}, fmt.Errorf("模板预检失败")
-	}
-	if failed > 0 {
-		return map[string]any{"preflight": report, "regression": results}, fmt.Errorf("分流回归失败 %d 项", failed)
-	}
-	return map[string]any{"preflight": report, "regression": results}, nil
-}
-
-func runConfiguredDeployTask(ctx context.Context) (any, error) {
-	raw := strings.TrimSpace(os.Getenv("SUBLINKX_DEPLOY_SCRIPT"))
-	if raw == "" {
-		return nil, fmt.Errorf("未配置 SUBLINKX_DEPLOY_SCRIPT，已拒绝执行发布")
-	}
-	path, err := filepath.Abs(raw)
-	if err != nil {
-		return nil, err
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("发布脚本不可用: %w", err)
-	}
-	if info.IsDir() || info.Mode().Perm()&0o111 == 0 {
-		return nil, fmt.Errorf("发布脚本必须是可执行文件")
-	}
-	started := time.Now()
-	cmd := exec.CommandContext(ctx, path)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("发布脚本执行失败: %w", err)
-	}
-	return map[string]any{"script": filepath.Base(path), "durationMs": time.Since(started).Milliseconds()}, nil
 }
 
 func startTrackedTask(c *gin.Context, kind, name string, req any) {
@@ -248,119 +141,6 @@ func startTrackedTask(c *gin.Context, kind, name string, req any) {
 	}
 	go executeStoredTask(task)
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"taskId": task.ID}, "msg": "任务已启动"})
-}
-
-func StartTemplateValidationTask(c *gin.Context) {
-	var req templateValidationTaskRequest
-	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Filename) == "" {
-		c.JSON(400, gin.H{"code": "40000", "msg": "filename 不能为空"})
-		return
-	}
-	startTrackedTask(c, "template-validate", "模板验证 · "+filepath.Base(req.Filename), req)
-}
-
-func StartSafePublishTask(c *gin.Context) {
-	var req safePublishRequest
-	if err := c.ShouldBindJSON(&req); err != nil || req.SubscriptionID <= 0 || strings.TrimSpace(req.Template) == "" {
-		c.JSON(400, gin.H{"code": "40000", "msg": "订阅、模板和客户端不能为空"})
-		return
-	}
-	if req.Client == "" {
-		req.Client = "clash"
-	}
-	startTrackedTask(c, "safe-publish", "一键安全发布", req)
-}
-
-func StartQualityMatrixSampleTask(c *gin.Context) {
-	mode := strings.ToLower(strings.TrimSpace(c.DefaultQuery("mode", "scene")))
-	if mode != "scene" && mode != "full" {
-		c.JSON(400, gin.H{"code": "40000", "msg": "mode 仅支持 scene/full"})
-		return
-	}
-	name := "质量矩阵场景采样"
-	if mode == "full" {
-		name = "质量矩阵完整采样"
-	}
-	startTrackedTask(c, "quality-matrix-sample", name, qualityMatrixSampleRequest{Mode: mode})
-}
-
-func buildSubscriptionOutput(subscriptionID int, client string) ([]byte, error) {
-	client = strings.ToLower(strings.TrimSpace(client))
-	switch client {
-	case "clash", "surge", "loon", "v2ray", "singbox", "qx", "shadowrocket":
-	default:
-		return nil, fmt.Errorf("不支持的客户端: %s", client)
-	}
-	var sub models.Subcription
-	if err := models.DB.First(&sub, subscriptionID).Error; err != nil {
-		return nil, err
-	}
-	recorder := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest("GET", "/", nil)
-	c.Set("subname", sub.Name)
-	switch client {
-	case "clash":
-		GetClash(c)
-	case "surge":
-		GetSurge(c)
-	case "loon":
-		GetLoon(c)
-	case "v2ray", "shadowrocket":
-		GetV2ray(c)
-	case "singbox":
-		GetSingbox(c)
-	case "qx":
-		GetQX(c)
-	}
-	body := recorder.Body.Bytes()
-	if len(body) == 0 {
-		return nil, fmt.Errorf("订阅生成结果为空")
-	}
-	if recorder.Code >= 400 {
-		return nil, fmt.Errorf("订阅生成失败 HTTP %d", recorder.Code)
-	}
-	return append([]byte(nil), body...), nil
-}
-
-func StartSubscriptionBuildTask(c *gin.Context) {
-	var req subscriptionBuildTaskRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		req.SubscriptionID, _ = strconv.Atoi(c.PostForm("subscriptionId"))
-		req.Client = c.PostForm("client")
-	}
-	if req.SubscriptionID <= 0 {
-		c.JSON(400, gin.H{"code": "40000", "msg": "订阅 id 格式错误"})
-		return
-	}
-	req.Client = strings.ToLower(strings.TrimSpace(req.Client))
-	if req.Client == "" {
-		req.Client = "clash"
-	}
-	if req.Client != "clash" && req.Client != "surge" && req.Client != "loon" && req.Client != "v2ray" {
-		c.JSON(400, gin.H{"code": "40000", "msg": "客户端仅支持 clash/surge/loon/v2ray"})
-		return
-	}
-	var sub models.Subcription
-	if err := models.DB.First(&sub, req.SubscriptionID).Error; err != nil {
-		c.JSON(404, gin.H{"code": "40400", "msg": "订阅不存在"})
-		return
-	}
-	task, taskCtx, err := createTaskRun(context.Background(), "subscription-build", "订阅构建 · "+sub.Name+" · "+req.Client, req, nil)
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "创建任务失败: " + err.Error()})
-		return
-	}
-	go func() {
-		updateTaskProgress(task.ID, 20, "正在生成并验证订阅产物")
-		meta, runErr := buildAndSnapshotSubscription(taskCtx, req.SubscriptionID, req.Client)
-		if taskCtx.Err() == context.Canceled {
-			markTaskCancelled(task.ID)
-			return
-		}
-		finishTaskRun(task.ID, runErr, meta)
-	}()
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"taskId": task.ID}, "msg": "订阅构建任务已启动"})
 }
 
 func TaskList(c *gin.Context) {

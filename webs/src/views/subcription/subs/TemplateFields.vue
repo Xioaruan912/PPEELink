@@ -10,6 +10,7 @@ const {
   loonMode,
   udpOn,
   certOn,
+  providerOn,
   templist,
 } = useSubscriptions();
 </script>
@@ -125,5 +126,15 @@ const {
       </div>
     </el-col>
   </el-row>
+  <div class="switch-item provider-switch">
+    <div class="switch-main">
+      <span class="switch-label">Clash 节点集合</span>
+      <el-switch v-model="providerOn" />
+    </div>
+    <div class="switch-hint">
+      Clash 配置里的节点改为 proxy-provider
+      引用，客户端每小时自动刷新节点，无需重新导入整份配置。
+    </div>
+  </div>
 </template>
 <style scoped src="./forms.scss"></style>

@@ -5,13 +5,14 @@
     >
     <header class="ion-header">
       <div class="header-inner">
-        <router-link to="/dashboard" class="brand" aria-label="PPEELink 首页"
+        <router-link to="/" class="brand" aria-label="PPEELink 首页"
           ><img class="brand-logo" :src="logo" width="28" height="28" alt="" />
           <span class="brand-name">PPEELink</span></router-link
         >
-        <TopNav class="desktop-nav" :items="navigation" />
+        <TopNav v-if="!locked" class="desktop-nav" :items="navigation" />
         <div class="header-tools">
           <button
+            v-if="!locked"
             class="search-pill"
             aria-label="搜索页面，Command K 或 Control K"
             @click="commandVisible = true"
@@ -19,6 +20,7 @@
             <IconSearch /><span>搜索</span><kbd>{{ shortcutLabel }}K</kbd>
           </button>
           <el-tooltip
+            v-if="!locked && isAdmin"
             :content="`测试任务：${taskLabel}`"
             :trigger-keys="[]"
             placement="bottom"
@@ -51,6 +53,7 @@
           </el-tooltip>
           <AccountMenu :username="user.user.username" @logout="logout" />
           <button
+            v-if="!locked"
             class="tool-button menu-button"
             :aria-label="sheetOpen ? '关闭导航' : '打开导航'"
             :aria-expanded="sheetOpen"
@@ -137,7 +140,15 @@ const permission = usePermissionStore(),
   router = useRouter();
 const authenticated = !!localStorage.getItem("accessToken");
 const isDark = computed(() => settings.theme === ThemeEnum.DARK);
-const navigation = computed(() => buildNavigation(permission.routes));
+const isAdmin = computed(() => user.user.roles.includes("ADMIN"));
+// 必须先改密码时只保留品牌与内容区，其余入口都会被拦截
+const locked = computed(() => !!user.user.mustChangePassword);
+// 普通用户没有仪表盘，首页入口换成“我的订阅”
+const navigation = computed(() =>
+  buildNavigation(permission.routes).filter(
+    (item) => isAdmin.value || item.path !== "/dashboard"
+  )
+);
 const isExternal = (path: string) => /^(https?:)?\/\//.test(path);
 const commandVisible = ref(false),
   sheetOpen = ref(false),
@@ -200,6 +211,10 @@ const commands = computed<CommandItem[]>(() => [
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 async function pollStatus() {
+  if (locked.value || !isAdmin.value) {
+    if (!disposed) statusTimer = setTimeout(pollStatus, 5000);
+    return;
+  }
   try {
     const { data } = await GetTestStatus();
     if (!disposed) {

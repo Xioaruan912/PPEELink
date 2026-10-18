@@ -39,7 +39,12 @@ export interface OverviewItem {
   jitter: number;
   sampleCount: number;
   lastTestedAt: string;
+  relayId?: number;
+  udp?: boolean;
+  tfo?: boolean;
+  skipCertVerify?: boolean;
 }
+export type NodeToolKind = "rename" | "flags" | "chain" | "dedupe" | "temp";
 export interface NodeItem {
   ID: number;
   Name: string;
@@ -154,6 +159,7 @@ function createNodes() {
     loadSequence = 0,
     pingController: AbortController | undefined;
   const localTesting = ref(false);
+  const latencySource = ref<"server" | "local">("server");
   async function loadAll() {
     if (!alive) return;
     const sequence = ++loadSequence;
@@ -167,9 +173,9 @@ function createNodes() {
         GetGroupFull(true),
       ]);
       if (!alive || sequence !== loadSequence) return;
+      // 保留服务器侧 TCP 延迟；本机检测由用户手动触发后覆盖
       overviewList.value = (ov?.data || []).map((n: OverviewItem) => ({
         ...n,
-        rtt: n.rtt === -1 ? -1 : -2,
       }));
       fullNodes.value = nd?.data || [];
       groupDetails.value = Array.isArray(gp?.data) ? gp.data : [];
@@ -188,7 +194,9 @@ function createNodes() {
         !groupDetails.value.some((g) => g.id === manageGroupId.value)
       )
         manageGroupId.value = groupDetails.value[0]?.id;
-      void triggerLocalPing();
+      // 延迟默认用服务器侧 TCP 检测结果；浏览器直连节点只在用户主动点击时进行，
+      // 避免每次打开页面都从本机向所有代理服务器发起连接。
+      latencySource.value = "server";
     } catch {
       if (alive && sequence === loadSequence)
         loadError.value = "请检查连接后重试。";
@@ -202,6 +210,7 @@ function createNodes() {
     pingController = controller;
     const nodes = overviewList.value;
     localTesting.value = true;
+    latencySource.value = "local";
     try {
       await testLocalAll(
         nodes,
@@ -478,7 +487,20 @@ function createNodes() {
   const unlockVisible = ref(false),
     tcpVisible = ref(false),
     testNode = ref<OverviewItem | null>(null);
+  // 批量工具对话框：kind 决定内容，targets 为作用节点（去重作用于全部）
+  const tool = ref<{ kind: NodeToolKind; targets: OverviewItem[] } | null>(
+    null
+  );
+  function openTool(kind: NodeToolKind, targets?: OverviewItem[]) {
+    tool.value = { kind, targets: targets ?? selectedNodes.value };
+  }
+  const nodeName = (id?: number) =>
+    id ? overviewList.value.find((n) => n.id === id)?.name : undefined;
   function nodeCommand(command: string, row: OverviewItem) {
+    if (command === "temp" || command === "chain") {
+      openTool(command, [row]);
+      return;
+    }
     if (command === "unlock" || command === "tcp") {
       testNode.value = row;
       if (command === "unlock") unlockVisible.value = true;
@@ -523,6 +545,7 @@ function createNodes() {
     clearSelection,
     clearFilters,
     localTesting,
+    latencySource,
     loadAll,
     triggerLocalPing,
     nodeDialog,
@@ -555,5 +578,8 @@ function createNodes() {
     unlockVisible,
     tcpVisible,
     testNode,
+    tool,
+    openTool,
+    nodeName,
   };
 }

@@ -456,6 +456,7 @@ function clearFilters() {
           <article
             v-for="item in group.clients"
             :key="item.id"
+            v-reveal
             class="client-row"
           >
             <div class="client-identity">
@@ -622,12 +623,13 @@ function clearFilters() {
   background: var(--c-surface);
   transition:
     border-color var(--duration-fast) var(--ease-out),
-    transform var(--duration-medium) var(--ease-spring),
+    translate var(--duration-medium) var(--ease-spring),
+    transform var(--duration-slow) var(--ease-out),
     box-shadow var(--duration-medium) var(--ease-out);
 }
 .client-row:hover {
   border-color: var(--c-muted);
-  transform: translateY(-2px);
+  translate: 0 -2px;
   box-shadow: var(--shadow-overlay);
 }
 .client-row:focus-within {

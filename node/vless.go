@@ -103,14 +103,14 @@ func DecodeVLESSURL(s string) (VLESS, error) {
 	if !strings.Contains(s, "vless://") {
 		return VLESS{}, fmt.Errorf("非vless协议: %s", s)
 	}
-	
+
 	var u *url.URL
 	var err error
-	
+
 	// 有些机场返回的不是 Base64 编码的 vless 字符串，而是原生的 vless://xxxx 链接
 	// 我们先尝试直接作为 URL 解析
 	u, err = url.Parse(s)
-	
+
 	// 如果直接解析失败，或者解析出来的Host为空（比如vless://[Base64]的情况），我们再尝试走Base64解码
 	if err != nil || u.Host == "" {
 		s = "vless://" + Base64Decode(strings.Split(s, "://")[1])
@@ -188,4 +188,3 @@ func DecodeVLESSURL(s string) (VLESS, error) {
 		},
 	}, nil
 }
-
