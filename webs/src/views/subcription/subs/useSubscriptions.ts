@@ -13,10 +13,6 @@ import {
   getSubs,
   getSubPreviewNodes,
   previewSubPipeline,
-  startSubscriptionBuild,
-  getSubscriptionArtifacts,
-  rollbackSubscriptionArtifact,
-  safePublishSubscription,
   AddSub,
   DelSub,
   UpdateSub,
@@ -178,18 +174,6 @@ export function createSubscriptions() {
   const qrDialog = ref(false);
   const templist = ref<Temp[]>([]);
   const editingSubId = ref(0);
-  const artifactDrawer = ref(false);
-  const artifactLoading = ref(false);
-  const artifactError = ref("");
-  let artifactVersion = 0;
-  const artifactSub = ref<Sub | null>(null);
-  const artifactClient = ref("clash");
-  const artifactItems = ref<any[]>([]);
-  const artifactPointers = ref<any[]>([]);
-  const publishDialog = ref(false);
-  const publishSub = ref<Sub | null>(null);
-  const publishForm = ref({ client: "clash", template: "" });
-  const publishLoading = ref(false);
   const pipeline = reactive({
     include: "",
     exclude: "",
@@ -257,102 +241,6 @@ export function createSubscriptions() {
     if (rules.length) payload.emojiRules = rules;
     return JSON.stringify(payload);
   };
-  const buildDialog = ref(false);
-  const buildSub = ref<Sub | null>(null);
-  const buildClient = ref("clash");
-  const buildLoading = ref(false);
-  const buildSubscription = (sub: Sub) => {
-    buildSub.value = sub;
-    buildClient.value = "clash";
-    buildDialog.value = true;
-  };
-  const runBuild = async () => {
-    if (!buildSub.value) return;
-    buildLoading.value = true;
-    try {
-      const { data } = await startSubscriptionBuild({
-        subscriptionId: buildSub.value.ID,
-        client: buildClient.value,
-      });
-      ElMessage.success(
-        `生成产物任务已创建 #${data?.taskId || ""}，可在任务中心查看`
-      );
-      buildDialog.value = false;
-    } finally {
-      buildLoading.value = false;
-    }
-  };
-  const loadArtifacts = async () => {
-    if (!artifactSub.value) return;
-    const version = ++artifactVersion;
-    artifactLoading.value = true;
-    artifactError.value = "";
-    artifactItems.value = [];
-    artifactPointers.value = [];
-    try {
-      const { data } = await getSubscriptionArtifacts(
-        artifactSub.value.ID,
-        artifactClient.value
-      );
-      if (!alive || version !== artifactVersion) return;
-      artifactItems.value = data?.items || [];
-      artifactPointers.value = data?.pointers || [];
-    } catch {
-      if (alive && version === artifactVersion)
-        artifactError.value = "产物版本加载失败，请重试";
-    } finally {
-      if (alive && version === artifactVersion) artifactLoading.value = false;
-    }
-  };
-  const openArtifacts = async (sub: Sub) => {
-    artifactSub.value = sub;
-    artifactDrawer.value = true;
-    await loadArtifacts();
-  };
-  const lkgId = computed(
-    () =>
-      artifactPointers.value.find((p: any) => p.client === artifactClient.value)
-        ?.lastKnownGoodArtifactId || 0
-  );
-  const setLkg = async (artifact: any) => {
-    if (
-      !(await confirmAction(
-        "回滚产物",
-        `将产物 #${artifact.id} 设为 ${artifactClient.value} 的 Last Known Good？`,
-        "确认回滚"
-      ))
-    )
-      return;
-    await rollbackSubscriptionArtifact(artifact.id);
-    ElMessage.success("Last Known Good 已切换");
-    await Promise.all([loadArtifacts(), getsubs()]);
-  };
-  const openSafePublish = (sub: Sub) => {
-    publishSub.value = sub;
-    publishForm.value = {
-      client: "clash",
-      template:
-        templist.value.find((t) => /\.ya?ml$/i.test(t.file))?.file || "",
-    };
-    publishDialog.value = true;
-  };
-  const runSafePublish = async () => {
-    if (!publishSub.value || !publishForm.value.template) return;
-    publishLoading.value = true;
-    try {
-      const { data } = await safePublishSubscription({
-        subscriptionId: publishSub.value.ID,
-        client: publishForm.value.client,
-        template: publishForm.value.template,
-      });
-      ElMessage.success(
-        `发布验证任务已创建 #${data?.taskId || ""}，全部检查通过后才会切换 LKG`
-      );
-      publishDialog.value = false;
-    } finally {
-      publishLoading.value = false;
-    }
-  };
   const shortLink = ref("");
   const importDialog = ref(false);
   const importSub = ref<Sub | null>(null);
@@ -406,15 +294,6 @@ export function createSubscriptions() {
   const onCardCommand = async (cmd: string, sub: Sub) => {
     try {
       switch (cmd) {
-        case "publish":
-          openSafePublish(sub);
-          break;
-        case "build":
-          buildSubscription(sub);
-          break;
-        case "artifacts":
-          await openArtifacts(sub);
-          break;
         case "reset":
           await handleReset(sub);
           break;
@@ -538,8 +417,6 @@ export function createSubscriptions() {
           sub.ExpiresAt && new Date(sub.ExpiresAt).getTime() <= Date.now()
       ).length
   );
-  const recentPublished = ref<Record<number, string>>({});
-  const publicationErrors = ref<Record<number, boolean>>({});
   const publicationLoading = ref<Record<number, boolean>>({});
   const nodeCounts = ref<Record<number, number>>({});
   const serverAddress = () => {
@@ -575,8 +452,6 @@ export function createSubscriptions() {
         GroupRefs: sub.GroupRefs || [],
         SubLogs: sub.SubLogs || [],
       }));
-      recentPublished.value = {};
-      publicationErrors.value = {};
       nodeCounts.value = {};
       publicationLoading.value = Object.fromEntries(
         tableData.value.map((sub) => [sub.ID, true])
@@ -584,23 +459,11 @@ export function createSubscriptions() {
       loading.value = false;
       void Promise.allSettled(
         tableData.value.map(async (sub) => {
-          const [artifacts, preview] = await Promise.allSettled([
-            getSubscriptionArtifacts(sub.ID),
+          const [preview] = await Promise.allSettled([
             getSubPreviewNodes(sub.ID),
           ]);
           if (!alive || version !== loadVersion) return;
           publicationLoading.value[sub.ID] = false;
-          if (artifacts.status === "fulfilled") {
-            const { items = [], pointers = [] } = artifacts.value.data || {};
-            const current = new Set(
-              pointers.map((p: any) => p.lastKnownGoodArtifactId)
-            );
-            const published = items
-              .filter((item: any) => current.has(item.id))
-              .map((item: any) => item.createdAt)
-              .sort();
-            recentPublished.value[sub.ID] = published.at(-1) || "";
-          } else publicationErrors.value[sub.ID] = true;
           if (preview.status === "fulfilled")
             nodeCounts.value[sub.ID] = (preview.value.data || []).length;
         })
@@ -1088,35 +951,12 @@ export function createSubscriptions() {
     qrDialog,
     templist,
     editingSubId,
-    artifactDrawer,
-    artifactLoading,
-    artifactError,
-    artifactSub,
-    artifactClient,
-    artifactItems,
-    artifactPointers,
-    publishDialog,
-    publishSub,
-    publishForm,
-    publishLoading,
     pipeline,
     emojiRulesText,
     pipelinePreview,
     pipelineLoading,
     parseEmojiRules,
     pipelineJSON,
-    buildDialog,
-    buildSub,
-    buildClient,
-    buildLoading,
-    buildSubscription,
-    runBuild: withFeedback(runBuild),
-    loadArtifacts: withFeedback(loadArtifacts),
-    openArtifacts: withFeedback(openArtifacts),
-    lkgId,
-    setLkg: withFeedback(setLkg),
-    openSafePublish,
-    runSafePublish: withFeedback(runSafePublish),
     shortLink,
     importDialog,
     importSub,
@@ -1138,8 +978,6 @@ export function createSubscriptions() {
     statusFilter,
     filteredSubs,
     expiredCount,
-    recentPublished,
-    publicationErrors,
     publicationLoading,
     nodeCounts,
     subUrl,

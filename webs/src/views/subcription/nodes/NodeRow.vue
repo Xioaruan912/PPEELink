@@ -3,7 +3,6 @@ import { CopyDocument, Edit, MoreFilled } from "@element-plus/icons-vue";
 import { StatusDot } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import CountryFlag from "@/ui/CountryFlag.vue";
-import { formatDateTime } from "@/utils/date";
 import {
   useNodes,
   rttState,
@@ -11,7 +10,7 @@ import {
   nodeEffectiveHidden,
   type OverviewItem,
 } from "./useNodes";
-defineProps<{ node: OverviewItem; card?: boolean }>();
+defineProps<{ node: OverviewItem }>();
 const {
   selectedIds,
   toggleSelect,
@@ -27,7 +26,7 @@ const {
 <template>
   <article
     class="node-row"
-    :class="{ 'is-card': card, 'is-selected': selectedIds.has(node.id) }"
+    :class="{ 'is-selected': selectedIds.has(node.id) }"
   >
     <div class="node-identity">
       <el-checkbox
@@ -37,7 +36,7 @@ const {
       />
       <CountryFlag :code="node.countryCode" :label="node.country" />
       <div class="node-name">
-        <button :title="node.name" @click="nodeCommand('quality', node)">
+        <button :title="node.name" @click="nodeCommand('edit', node)">
           {{ node.name }}
         </button>
         <span class="host mono" :title="node.server">{{
@@ -79,19 +78,6 @@ const {
         />
       </el-tooltip>
     </div>
-    <div v-if="card" class="quality-meta">
-      <button @click="nodeCommand('quality', node)">
-        质量 <span class="mono">{{ node.score || 0 }} 分</span>
-      </button>
-      <span
-        >可用 <span class="mono">{{ node.availability ?? 0 }}%</span></span
-      ><span
-        >抖动 <span class="mono">{{ node.jitter ?? 0 }} ms</span></span
-      >
-      <time v-if="node.lastTestedAt" :datetime="node.lastTestedAt">{{
-        formatDateTime(node.lastTestedAt)
-      }}</time>
-    </div>
     <div class="row-actions">
       <RowIconButton
         :icon="Edit"
@@ -110,7 +96,6 @@ const {
         <RowIconButton :icon="MoreFilled" :label="`${node.name} 更多操作`" />
         <template #dropdown
           ><el-dropdown-menu>
-            <el-dropdown-item command="quality">质量详情</el-dropdown-item>
             <el-dropdown-item command="tcp">链路 TCP 检测</el-dropdown-item>
             <el-dropdown-item command="unlock">解锁检测</el-dropdown-item>
             <el-dropdown-item command="group" divided
@@ -216,66 +201,16 @@ const {
 .mobile-label {
   display: none;
 }
-.is-card {
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px 8px;
-  padding: 16px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
-  background: var(--c-surface);
-  align-content: start;
-}
-.is-card .node-identity {
-  grid-column: 1 / -1;
-}
-.is-card .row-protocol {
-  display: flex;
-  gap: 8px;
-}
-.is-card .latency {
-  justify-self: end;
-}
-.is-card .row-visibility {
-  grid-column: 1;
-  gap: 8px;
-  grid-row: 4;
-}
-.is-card .row-visibility .mobile-label {
-  display: inline;
-  font-size: 14px;
-  color: var(--c-muted);
-}
-.is-card .row-actions {
-  grid-column: 2;
-  grid-row: 4;
-}
-.quality-meta {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--c-line);
-  font-size: 14px;
-  color: var(--c-muted);
-}
-.quality-meta button {
-  color: var(--c-data);
-}
-.quality-meta time {
-  flex-basis: 100%;
-  font: 14px/1.6 var(--font-mono);
-}
 @media (max-width: 1199px) {
-  .node-row:not(.is-card) {
+  .node-row {
     grid-template-columns: minmax(0, 1fr) 65px 100px 44px 132px;
     gap: 8px;
   }
 }
 @media (max-width: 767px) {
-  .node-row:not(.is-card) {
+  .node-row {
     grid-template-columns: minmax(0, 1fr) auto;
-    padding: 16px 0;
+    padding: 12px 0;
     gap: 10px;
   }
   .node-identity {

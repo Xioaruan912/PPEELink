@@ -53,10 +53,6 @@ const {
   rttLoading,
   rttError,
   loadNodeRtt,
-  geminiStatus,
-  geminiTesting,
-  geminiError,
-  testGemini,
   toggleNode,
   allSelected,
   toggleAllNodes,
@@ -281,18 +277,6 @@ const status = (row: Airport) => {
             aria-label="自动清理死节点"
           />
         </div>
-        <div class="switch-field">
-          <div>
-            <label for="airport-dedicated">国内专线</label>
-            <p class="field-hint">开启后，即使测活失败也保留该节点。</p>
-          </div>
-          <el-switch
-            id="airport-dedicated"
-            v-model="form.IsDedicated"
-            :disabled="saving"
-            aria-label="国内专线测活免死"
-          />
-        </div>
         <p v-if="formError" class="error-text" role="alert">{{ formError }}</p>
       </el-form>
       <template #footer
@@ -315,14 +299,10 @@ const status = (row: Airport) => {
       :rtt="rttMap"
       :rtt-loading="rttLoading"
       :rtt-error="rttError"
-      :gemini="geminiStatus"
-      :gemini-testing="geminiTesting"
-      :gemini-error="geminiError"
       @retry="detailTarget && openDetail({ ID: detailTarget })"
       @toggle="toggleNode"
       @toggle-all="toggleAllNodes"
       @save="saveNodeSelection"
-      @test-gemini="testGemini"
       @test-latency="loadNodeRtt"
     />
     <UiDialog

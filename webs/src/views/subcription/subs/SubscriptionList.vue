@@ -30,9 +30,6 @@ const {
   openDrawer,
   onCardCommand,
   fmtTime,
-  recentPublished,
-  publicationErrors,
-  publicationLoading,
   handleAddSub,
   nodeCounts,
 } = useSubscriptions();
@@ -120,7 +117,7 @@ const expired = (value: string | null) =>
       >
       <div v-if="filteredSubs.length" class="list-heading" aria-hidden="true">
         <span>名称 / 状态</span><span>节点数</span><span>过期时间</span
-        ><span>最近发布</span><span class="actions-heading">操作</span>
+        ><span class="actions-heading">操作</span>
       </div>
       <TransitionGroup
         tag="div"
@@ -142,16 +139,7 @@ const expired = (value: string | null) =>
               ><StatusDot
                 :state="expired(sub.ExpiresAt) ? 'bad' : 'ok'"
                 :label="expired(sub.ExpiresAt) ? '已过期' : '有效'"
-              /><span class="access-count"
-                >{{
-                  (sub.SubLogs || []).reduce(
-                    (total, log) => total + log.Count,
-                    0
-                  )
-                }}
-                次访问</span
-              ></span
-            >
+            /></span>
           </button>
           <div class="row-value">
             <span class="mobile-label">节点数</span
@@ -164,23 +152,6 @@ const expired = (value: string | null) =>
             ><time class="mono" :datetime="sub.ExpiresAt || undefined">{{
               sub.ExpiresAt ? fmtTime(sub.ExpiresAt) : "永不过期"
             }}</time>
-          </div>
-          <div class="row-value">
-            <span class="mobile-label">最近发布</span
-            ><time
-              class="mono"
-              :datetime="recentPublished[sub.ID] || undefined"
-              title="当前 LKG 产物生成时间"
-              >{{
-                publicationLoading[sub.ID]
-                  ? "读取中"
-                  : publicationErrors[sub.ID]
-                    ? "读取失败"
-                    : recentPublished[sub.ID]
-                      ? fmtTime(recentPublished[sub.ID])
-                      : "暂无发布记录"
-              }}</time
-            >
           </div>
           <div class="row-actions">
             <CopyLinkButton
@@ -214,11 +185,6 @@ const expired = (value: string | null) =>
               /><template #dropdown
                 ><el-dropdown-menu>
                   <el-dropdown-item command="edit">编辑订阅</el-dropdown-item
-                  ><el-dropdown-item command="publish"
-                    >发布验证</el-dropdown-item
-                  ><el-dropdown-item command="build">生成产物</el-dropdown-item
-                  ><el-dropdown-item command="artifacts"
-                    >版本与回滚</el-dropdown-item
                   ><el-dropdown-item command="reset" divided
                     >重置订阅链接</el-dropdown-item
                   ><el-dropdown-item command="delete"

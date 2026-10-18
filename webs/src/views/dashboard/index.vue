@@ -59,14 +59,6 @@
             :loading="loading"
             :rate="survivalRate"
           />
-          <UiButton
-            class="alert-action"
-            variant="ghost"
-            :icon="Setting"
-            :loading="readingAlert"
-            @click="openAlerts"
-            >异常提醒设置</UiButton
-          >
         </template>
       </UiPanel>
       <WorldMap
@@ -76,196 +68,50 @@
       />
     </div>
 
-    <div class="overview-details" data-enter>
-      <section aria-labelledby="recommendation-title" class="routing-section">
-        <header class="section-heading">
-          <h2 id="recommendation-title">推荐节点</h2>
-          <UiButton
-            variant="ghost"
-            :icon="TopRight"
-            @click="router.push('/test/speed')"
-            >测试速度</UiButton
-          >
-        </header>
-        <RecommendationList
-          v-model="activeScene"
-          :scenes="sceneOptions"
-          :loading="loading"
-        />
-      </section>
-      <aside class="network-history">
-        <section aria-labelledby="region-title">
-          <header class="section-heading">
-            <h2 id="region-title">所在地区</h2>
-          </header>
-          <UiSkeleton v-if="loading" :lines="4" height="40px" />
-          <ol v-else-if="countries.length" class="region-list">
-            <li v-for="country in countries.slice(0, 5)" :key="country.name">
-              <span class="region-name">{{ country.name }}</span>
-              <UiStat
-                size="small"
-                label="节点数"
-                :value="country.count"
-                unit="个"
-              />
-              <span class="region-track" aria-hidden="true"
-                ><i
-                  :style="{
-                    transform: `scaleX(${country.count / mapPoints.length})`,
-                  }"
-                ></i
-              ></span>
-            </li>
-          </ol>
-          <EmptyState
-            size="inline"
-            v-else
-            class="aside-empty"
-            title="暂无地区"
-            description="节点定位后会显示所在地区。"
-          />
-          <UiButton
-            class="region-source"
-            variant="ghost"
-            :icon="Plus"
-            @click="router.push('/subcription/airport')"
-            >添加机场订阅</UiButton
-          >
-        </section>
-        <section aria-labelledby="activity-title" class="activity-section">
-          <header class="section-heading">
-            <h2 id="activity-title">最近变化</h2>
-            <el-tooltip
-              content="异常提醒设置"
-              :trigger="['hover', 'focus']"
-              :trigger-keys="[]"
-              ><UiButton
-                variant="ghost"
-                :icon="Setting"
-                :loading="readingAlert"
-                @click="openAlerts"
-                aria-label="异常提醒设置"
-            /></el-tooltip>
-          </header>
-          <UiSkeleton v-if="loading" :lines="4" height="48px" />
-          <ol v-else-if="events.length" class="activity-list">
-            <li v-for="event in events.slice(0, 4)" :key="event.id">
-              <StatusDot
-                :state="eventState(event.type)"
-                :label="event.nodeName"
-              />
-              <p>{{ event.message }}</p>
-              <time :datetime="event.createdAt">{{
-                formatDateTime(event.createdAt)
-              }}</time>
-            </li>
-          </ol>
-          <EmptyState
-            size="inline"
-            v-else
-            class="aside-empty"
-            title="暂无变化"
-            description="连接状态变化会记录在这里。"
-          />
-        </section>
-      </aside>
-    </div>
-
-    <section
-      class="diagnostics-section"
-      aria-labelledby="diagnostics-title"
-      data-enter
-    >
+    <section class="region-section" aria-labelledby="region-title" data-enter>
       <header class="section-heading">
-        <div>
-          <p class="section-eyebrow">连接诊断</p>
-          <h2 id="diagnostics-title">响应时间</h2>
-        </div>
+        <h2 id="region-title">所在地区</h2>
         <UiButton
           variant="ghost"
-          :icon="ArrowDown"
-          :aria-expanded="diagnosticsVisible"
-          aria-controls="network-diagnostics"
-          @click="diagnosticsVisible = !diagnosticsVisible"
+          :icon="Plus"
+          @click="router.push('/subcription/airport')"
+          >添加机场订阅</UiButton
         >
-          {{ diagnosticsVisible ? "收起响应时间" : "查看响应时间" }}
-        </UiButton>
       </header>
-      <div id="network-diagnostics"><NodePing v-if="diagnosticsVisible" /></div>
+      <UiSkeleton v-if="loading" :lines="4" height="40px" />
+      <ol v-else-if="countries.length" class="region-list">
+        <li v-for="country in countries.slice(0, 8)" :key="country.name">
+          <span class="region-name">{{ country.name }}</span>
+          <UiStat
+            size="small"
+            label="节点数"
+            :value="country.count"
+            unit="个"
+          />
+          <span class="region-track" aria-hidden="true"
+            ><i
+              :style="{
+                transform: `scaleX(${country.count / mapPoints.length})`,
+              }"
+            ></i
+          ></span>
+        </li>
+      </ol>
+      <EmptyState
+        v-else
+        size="inline"
+        title="暂无地区"
+        description="节点定位后会显示所在地区。"
+      />
     </section>
-
-    <UiDialog
-      v-model="alertVisible"
-      title="异常提醒设置"
-      width="540px"
-      :close-on-click-modal="!savingAlert"
-    >
-      <el-form label-position="top" @submit.prevent="saveAlerts">
-        <el-form-item
-          ><el-switch v-model="alertForm.enabled" active-text="开启异常提醒"
-        /></el-form-item>
-        <el-form-item label="通知接收地址"
-          ><el-input v-model="alertForm.webhookUrl" placeholder="https://…"
-        /></el-form-item>
-        <el-form-item label="连续连接失败次数"
-          ><el-input-number
-            v-model="alertForm.failureThreshold"
-            :min="1"
-            :max="20"
-        /></el-form-item>
-        <div class="maintenance-fields">
-          <el-form-item label="免打扰开始"
-            ><el-time-select
-              v-model="alertForm.maintenanceStart"
-              start="00:00"
-              step="00:30"
-              end="23:30"
-              clearable
-          /></el-form-item>
-          <el-form-item label="免打扰结束"
-            ><el-time-select
-              v-model="alertForm.maintenanceEnd"
-              start="00:00"
-              step="00:30"
-              end="23:30"
-              clearable
-          /></el-form-item>
-        </div>
-        <el-alert
-          title="维护期间继续记录探测样本，暂停发送 Webhook 告警。"
-          type="info"
-          :closable="false"
-        />
-      </el-form>
-      <template #footer>
-        <UiButton @click="alertVisible = false">取消</UiButton>
-        <UiButton variant="primary" :loading="savingAlert" @click="saveAlerts"
-          >保存设置</UiButton
-        >
-      </template>
-    </UiDialog>
   </div>
 </template>
 <script setup lang="ts">
-import { formatDateTime } from "@/utils/date";
 import { useRouter } from "vue-router";
-import { computed, ref, onMounted, defineAsyncComponent } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { getSubTotal, getNodeMap } from "@/api/total";
-import {
-  getNodeQualitySummary,
-  getNodeRecommendations,
-  getNodeHealthEvents,
-  getAlertSetting,
-  updateAlertSetting,
-} from "@/api/subcription/node";
-import { ElMessage } from "element-plus";
-import {
-  Refresh,
-  TopRight,
-  Setting,
-  ArrowDown,
-  Plus,
-} from "@element-plus/icons-vue";
+import { getNodeQualitySummary } from "@/api/subcription/node";
+import { Refresh, TopRight, Plus } from "@element-plus/icons-vue";
 import {
   PageHeader,
   UiButton,
@@ -274,25 +120,14 @@ import {
   UiSkeleton,
   StatusDot,
   EmptyState,
-  UiDialog,
 } from "@/ui";
 import WorldMap from "./components/WorldMap.vue";
-import RecommendationList from "./components/RecommendationList.vue";
 import HealthStrip from "./components/HealthStrip.vue";
 const router = useRouter();
-const NodePing = defineAsyncComponent(
-  () => import("./components/NodePing.vue")
-);
 defineOptions({ name: "Dashboard", inheritAttrs: false });
-interface Recommendation {
-  key: string;
-  name: string;
-  nodes: { nodeId: number; name: string; reasons: string[]; score: number }[];
-}
 const loading = ref(true),
   loadError = ref(""),
-  subTotal = ref(0),
-  diagnosticsVisible = ref(false);
+  subTotal = ref(0);
 const summary = ref({
   total: 0,
   healthy: 0,
@@ -300,28 +135,15 @@ const summary = ref({
   offline: 0,
   averageScore: 0,
 });
-const recommendations = ref<Recommendation[]>([]),
-  activeScene = ref("");
 const mapPoints = ref<
   { lat: number; lng: number; name: string; country: string }[]
 >([]);
-const events = ref<
-  {
-    id: number;
-    nodeName: string;
-    type: string;
-    message: string;
-    createdAt: string;
-  }[]
->([]);
-const aliveNodes = computed(() =>
-  Math.max(summary.value.total - summary.value.offline, 0)
-);
-const survivalRate = computed(() =>
-  summary.value.total
-    ? Math.round((aliveNodes.value / summary.value.total) * 1000) / 10
-    : 0
-);
+const survivalRate = computed(() => {
+  const { total, offline } = summary.value;
+  return total
+    ? Math.round((Math.max(total - offline, 0) / total) * 1000) / 10
+    : 0;
+});
 const countries = computed(() => {
   const groups = new Map<string, number>();
   mapPoints.value.forEach((p) => {
@@ -332,89 +154,26 @@ const countries = computed(() => {
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 });
-const sceneOptions = computed<Recommendation[]>(() =>
-  recommendations.value.length
-    ? recommendations.value
-    : [
-        { key: "general", name: "综合推荐", nodes: [] },
-        { key: "streaming", name: "流媒体", nodes: [] },
-        { key: "latency", name: "低延迟", nodes: [] },
-      ]
-);
 async function loadOverview() {
   loading.value = true;
   loadError.value = "";
   const results = await Promise.allSettled([
     getSubTotal(),
     getNodeQualitySummary(),
-    getNodeRecommendations(),
-    getNodeHealthEvents(12),
     getNodeMap(),
   ]);
-  const [subs, quality, scenes, healthEvents, map] = results;
+  const [subs, quality, map] = results;
   if (subs.status === "fulfilled")
     subTotal.value = Number(subs.value.data) || 0;
   if (quality.status === "fulfilled")
     summary.value = { ...summary.value, ...quality.value.data };
-  if (scenes.status === "fulfilled") {
-    recommendations.value = scenes.value.data || [];
-    if (!recommendations.value.some((s) => s.key === activeScene.value))
-      activeScene.value = sceneOptions.value[0].key;
-  }
-  if (healthEvents.status === "fulfilled")
-    events.value = healthEvents.value.data || [];
   if (map.status === "fulfilled")
     mapPoints.value = Array.isArray(map.value.data) ? map.value.data : [];
   if (results.some((r) => r.status === "rejected"))
     loadError.value = "部分网络数据暂时无法加载，请检查服务状态后重试。";
   loading.value = false;
 }
-const alertVisible = ref(false),
-  readingAlert = ref(false),
-  savingAlert = ref(false),
-  alertForm = ref({
-    enabled: false,
-    webhookUrl: "",
-    failureThreshold: 3,
-    maintenanceStart: "",
-    maintenanceEnd: "",
-  });
-async function openAlerts() {
-  if (readingAlert.value) return;
-  readingAlert.value = true;
-  try {
-    const { data } = await getAlertSetting();
-    alertForm.value = { ...alertForm.value, ...data };
-    alertVisible.value = true;
-  } catch {
-    ElMessage.error("无法读取告警设置，请重试");
-  } finally {
-    readingAlert.value = false;
-  }
-}
-async function saveAlerts() {
-  savingAlert.value = true;
-  try {
-    await updateAlertSetting(alertForm.value);
-    ElMessage.success("告警设置已保存");
-    alertVisible.value = false;
-  } catch {
-    ElMessage.error("告警设置未保存，请重试");
-  } finally {
-    savingAlert.value = false;
-  }
-}
-
-function eventState(type: string): "ok" | "warn" | "bad" | "idle" {
-  if (/recover|healthy|online/.test(type)) return "ok";
-  if (/offline|fail|down/.test(type)) return "bad";
-  if (/degrad|warn|slow/.test(type)) return "warn";
-  return "idle";
-}
-onMounted(() => {
-  activeScene.value = sceneOptions.value[0].key;
-  loadOverview();
-});
+onMounted(loadOverview);
 </script>
 <style scoped>
 .network-overview {
@@ -494,17 +253,8 @@ onMounted(() => {
   margin-top: auto;
   padding-top: 16px;
 }
-.alert-action {
-  margin-top: 12px;
-  margin-left: -12px;
-}
-.overview-details {
-  display: grid;
-  grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
-  gap: 32px;
-  margin-top: 32px;
-  padding-top: 28px;
-  border-top: 1px solid var(--c-line);
+.region-section {
+  margin-top: 24px;
 }
 .section-heading {
   display: flex;
@@ -519,11 +269,7 @@ h2 {
   font-size: 17px;
   font-weight: 600;
 }
-.network-history {
-  min-width: 0;
-}
-.region-list,
-.activity-list {
+.region-list {
   list-style: none;
   padding: 0;
   margin: 0;
@@ -554,9 +300,6 @@ h2 {
   font-size: 14px;
   overflow-wrap: anywhere;
 }
-.region-source {
-  margin-left: -12px;
-}
 .region-list :deep(.ui-stat__label) {
   position: absolute;
   width: 1px;
@@ -581,73 +324,10 @@ h2 {
   background: var(--c-data);
   transform-origin: left;
 }
-.activity-section {
-  margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid var(--c-line);
-}
-.activity-list {
-  border-left: 1px solid var(--c-line);
-  margin-left: 4px;
-}
-.activity-list li {
-  position: relative;
-  padding: 0 0 16px 16px;
-}
-.activity-list li:last-child {
-  padding-bottom: 0;
-}
-.activity-list :deep(.status-dot) {
-  display: flex;
-  align-items: flex-start;
-  font-size: 14px;
-  color: var(--c-ink);
-  overflow-wrap: anywhere;
-}
-.activity-list :deep(.status-dot i) {
-  position: absolute;
-  left: -4px;
-  top: 8px;
-}
-.activity-list p {
-  margin: 8px 0;
-  font-size: 14px;
-  color: var(--c-muted);
-  overflow-wrap: anywhere;
-}
-.activity-list time {
-  font: 14px/1.6 var(--font-mono);
-  color: var(--c-muted);
-}
-.aside-empty {
-  padding: 16px 0;
-}
-.aside-empty :deep(p) {
-  font-size: 14px;
-}
-.diagnostics-section {
-  margin-top: 32px;
-  padding-top: 28px;
-  border-top: 1px solid var(--c-line);
-}
-.section-eyebrow {
-  font: 13px/1.4 var(--font-mono);
-  letter-spacing: 0.08em;
-  color: var(--c-muted);
-  margin: 0 0 12px;
-}
-.maintenance-fields {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
 @media (min-width: 768px) and (max-width: 1100px) {
   .overview-stage {
     grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
     gap: 12px;
-  }
-  .overview-details {
-    gap: 20px;
   }
   .secondary-metrics {
     gap: 8px;
@@ -666,17 +346,11 @@ h2 {
   }
 }
 @media (max-width: 767px) {
-  .overview-stage,
-  .overview-details {
+  .overview-stage {
     grid-template-columns: minmax(0, 1fr);
   }
   .overview-stage {
     gap: 16px;
-  }
-  .overview-details {
-    gap: 28px;
-    margin-top: 28px;
-    padding-top: 20px;
   }
   .network-situation :deep(.ui-panel__footer) {
     margin-top: 20px;
@@ -684,24 +358,6 @@ h2 {
   .overview-notice {
     align-items: flex-start;
     flex-direction: column;
-  }
-  .network-history {
-    display: grid;
-    gap: 28px;
-  }
-  .activity-section {
-    margin-top: 0;
-  }
-  .diagnostics-section {
-    margin-top: 28px;
-    padding-top: 20px;
-  }
-  .diagnostics-section .section-heading {
-    flex-wrap: wrap;
-  }
-  .maintenance-fields {
-    grid-template-columns: 1fr;
-    gap: 0;
   }
 }
 </style>

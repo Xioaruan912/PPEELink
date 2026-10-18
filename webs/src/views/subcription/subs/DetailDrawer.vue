@@ -31,7 +31,6 @@ const sections = [
   { label: "节点预览", value: "nodes" },
   { label: "模板配置", value: "config" },
   { label: "过期设置", value: "expire" },
-  { label: "访问记录", value: "logs" },
 ];
 </script>
 <template>
@@ -148,26 +147,7 @@ const sections = [
           ></el-form
         >
       </section>
-      <section v-if="detailSection === 'logs'" class="form-section">
-        <h3>访问记录 · {{ drawerSub.SubLogs?.length || 0 }}</h3>
-        <div
-          v-for="(log, index) in drawerSub.SubLogs || []"
-          :key="index"
-          class="log-row"
-        >
-          <span class="mono">{{ log.IP }}</span
-          ><span>{{ log.Count }} 次 · {{ log.Addr }}</span
-          ><time class="mono">{{
-            formatDateTime(log.Date) || "未知时间"
-          }}</time>
-        </div>
-        <EmptyState
-          v-if="!drawerSub.SubLogs?.length"
-          size="section"
-          title="暂无访问记录"
-          description="设备访问订阅后会记录在这里。"
-        />
-      </section> </template
-  ></UiDrawer>
+    </template></UiDrawer
+  >
 </template>
 <style scoped src="./forms.scss"></style>

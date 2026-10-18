@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 import { Plus, Edit, MoreFilled } from "@element-plus/icons-vue";
-import { UiButton, UiStat, UiSkeleton, EmptyState, StatusDot } from "@/ui";
+import { UiButton, UiSkeleton, EmptyState } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { useMotion, useStagger } from "@/motion";
 import { formatDateTime } from "@/utils/date";
@@ -12,9 +12,6 @@ const {
   searchKey,
   loading,
   loadError,
-  latestVersions,
-  versionFailures,
-  checkedTemplates,
   gettemps,
   handleAddTemp,
   handleEdit,
@@ -34,14 +31,6 @@ watch(
   },
   { immediate: true }
 );
-const check = (row: Temp) => {
-  const value = checkedTemplates.value[row.file];
-  return value?.text === row.text
-    ? value.valid
-      ? "passed"
-      : "failed"
-    : "unchecked";
-};
 function command(value: string, row: Temp) {
   if (value === "copy") void copyText(row);
   else if (value === "delete") void handleDel(row);
@@ -49,10 +38,6 @@ function command(value: string, row: Temp) {
 </script>
 <template>
   <section :aria-busy="loading">
-    <div class="template-summary" data-enter>
-      <UiStat size="large" label="模板总数" :value="tableData.length" />
-      <p>以版本留住每次修改。<br />保存前，先检查规则与客户端兼容性。</p>
-    </div>
     <div class="template-toolbar" data-enter>
       <el-input
         v-model="searchKey"
@@ -105,8 +90,8 @@ function command(value: string, row: Temp) {
         class="template-heading"
         aria-hidden="true"
       >
-        <span>名称 / 客户端</span><span>更新时间</span><span>版本</span
-        ><span>语法校验</span><span class="end">操作</span>
+        <span>名称 / 客户端</span><span>更新时间</span
+        ><span class="end">操作</span>
       </div>
       <TransitionGroup tag="div" :name="reduced ? '' : 'template-row'">
         <article
@@ -126,37 +111,6 @@ function command(value: string, row: Temp) {
             ><time class="mono" :datetime="row.create_date">{{
               formatDateTime(row.create_date) || "未提供"
             }}</time>
-          </div>
-          <div class="row-value">
-            <span class="mobile-label">版本</span
-            ><span class="mono">{{
-              versionFailures[row.file]
-                ? "读取失败"
-                : latestVersions[row.file] === undefined
-                  ? "读取中"
-                  : latestVersions[row.file] === null
-                    ? "无历史"
-                    : `#${latestVersions[row.file]}`
-            }}</span>
-          </div>
-          <div class="row-value">
-            <span class="mobile-label">语法校验</span
-            ><StatusDot
-              :state="
-                check(row) === 'passed'
-                  ? 'ok'
-                  : check(row) === 'failed'
-                    ? 'bad'
-                    : 'idle'
-              "
-              :label="
-                check(row) === 'passed'
-                  ? '本次已通过'
-                  : check(row) === 'failed'
-                    ? '检查未通过'
-                    : '未校验'
-              "
-            />
           </div>
           <div class="row-actions">
             <RowIconButton
@@ -185,17 +139,6 @@ function command(value: string, row: Temp) {
   </section>
 </template>
 <style scoped>
-.template-summary {
-  display: flex;
-  align-items: end;
-  gap: 32px;
-  margin-bottom: 24px;
-}
-.template-summary p {
-  margin: 0 0 4px;
-  color: var(--c-muted);
-  font-size: 14px;
-}
 .template-toolbar {
   display: flex;
   align-items: center;
@@ -211,9 +154,7 @@ function command(value: string, row: Temp) {
 .template-heading,
 .template-row {
   display: grid;
-  grid-template-columns:
-    minmax(160px, 1.6fr) minmax(160px, 1fr) minmax(85px, 0.6fr)
-    minmax(110px, 0.8fr) 88px;
+  grid-template-columns: minmax(160px, 1fr) 180px 88px;
   gap: 12px;
   align-items: center;
 }
@@ -290,19 +231,11 @@ function command(value: string, row: Temp) {
 @media (max-width: 1023px) {
   .template-heading,
   .template-row {
-    grid-template-columns:
-      minmax(140px, 1fr) minmax(155px, 1fr)
-      85px 110px 88px;
+    grid-template-columns: minmax(140px, 1fr) 170px 88px;
     gap: 8px;
   }
 }
 @media (max-width: 1023px) {
-  .template-summary {
-    align-items: start;
-    flex-direction: column;
-    gap: 16px;
-    margin-bottom: 20px;
-  }
   .template-toolbar {
     flex-wrap: wrap;
     gap: 8px;

@@ -438,13 +438,7 @@ onBeforeUnmount(() => {
               type="datetime"
               format="YYYY-MM-DD HH:mm"
               placeholder="选择到期时间"
-              clearable /></el-form-item
-          ><el-form-item label="合集处理链（可选，JSON）"
-            ><el-input
-              v-model="form.pipeline"
-              type="textarea"
-              :rows="6"
-              placeholder='{"dedupe":true}'
+              clearable
           /></el-form-item></section></el-form
       ><template #footer
         ><UiButton :disabled="saving" @click="dialog = false">取消</UiButton
