@@ -68,7 +68,7 @@ async function copy() {
   gap: 8px;
 }
 .secret-input :deep(input) {
-  font: 13px/1.6 var(--font-mono);
+  font: 14px/1.6 var(--font-mono);
 }
 .secret-actions {
   display: flex;

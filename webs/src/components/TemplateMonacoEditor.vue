@@ -72,6 +72,7 @@ onMounted(() => {
     fontSize: 14,
     lineHeight: 22,
     smoothScrolling: !reduced.value,
+    cursorBlinking: reduced.value ? "solid" : "blink",
     scrollBeyondLastLine: false,
     wordWrap: "on",
     padding: { top: 16, bottom: 16 },
@@ -109,6 +110,7 @@ watch(
       readOnly: props.readOnly,
       minimap: { enabled: props.minimap },
       smoothScrolling: !reduced.value,
+      cursorBlinking: reduced.value ? "solid" : "blink",
     });
   }
 );

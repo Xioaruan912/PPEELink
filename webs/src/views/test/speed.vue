@@ -558,7 +558,7 @@ onBeforeUnmount(() => {
   position: relative;
   min-width: 0;
   overflow: hidden;
-  padding: 28px 32px;
+  padding: 32px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
@@ -572,7 +572,7 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 .instrument-heading .mono {
-  font-size: 13px;
+  font-size: 14px;
 }
 .instrument-reading {
   padding: 32px 0 28px;
@@ -584,7 +584,7 @@ onBeforeUnmount(() => {
 .is-running
   .instrument-reading
   :deep(.ui-stat--hero .ui-stat__number:not(.is-empty)) {
-  color: var(--c-signal);
+  color: var(--c-signal-text);
 }
 .instrument-reading :deep(.ui-stat--hero .ui-stat__number.is-empty) {
   color: var(--c-muted);
@@ -608,7 +608,7 @@ onBeforeUnmount(() => {
   height: 36px;
   display: grid;
   grid-template-columns: repeat(25, 1fr);
-  gap: 6px;
+  gap: 8px;
   align-items: end;
   margin-bottom: 24px;
 }
@@ -721,7 +721,7 @@ onBeforeUnmount(() => {
 .speed-result {
   min-height: 96px;
   border-bottom: 1px solid var(--c-line);
-  padding: 20px 0;
+  padding: 24px 0;
 }
 .speed-result:hover {
   background: var(--c-surface-2);
@@ -743,7 +743,7 @@ onBeforeUnmount(() => {
 }
 .result-node div > span {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   margin-top: 8px;
   overflow-wrap: anywhere;
 }
@@ -754,7 +754,7 @@ onBeforeUnmount(() => {
   font-size: 22px;
 }
 .result-speed small {
-  font: 400 13px var(--font-mono);
+  font: 400 14px var(--font-mono);
   color: var(--c-muted);
 }
 .speed-line {
@@ -780,7 +780,7 @@ onBeforeUnmount(() => {
 }
 .result-volume small:not(.mobile-label) {
   display: block;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
   margin-top: 4px;
 }
@@ -853,7 +853,7 @@ onBeforeUnmount(() => {
   .result-volume small.mobile-label {
     display: block;
     color: var(--c-muted);
-    font: 400 13px var(--font-ui);
+    font: 400 14px var(--font-ui);
     margin: 0 0 8px;
   }
   .instrument-foot {

@@ -288,7 +288,7 @@ watch(
   flex-wrap: wrap;
   gap: 16px;
   margin: 0 0 24px;
-  font: 400 13px/1.5 var(--font-mono);
+  font: 400 14px/1.5 var(--font-mono);
   color: var(--c-muted);
 }
 .legend > span {
@@ -346,7 +346,7 @@ watch(
   font-size: 16px;
 }
 .province-heading > span {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .target-list {
@@ -371,7 +371,7 @@ watch(
   font-weight: 500;
 }
 .target div > span {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .target-rtt {

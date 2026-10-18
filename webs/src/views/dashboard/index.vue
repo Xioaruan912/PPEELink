@@ -135,13 +135,17 @@
         <section aria-labelledby="activity-title" class="activity-section">
           <header class="section-heading">
             <h2 id="activity-title">最近变化</h2>
-            <UiButton
-              variant="ghost"
-              :icon="Setting"
-              :loading="readingAlert"
-              @click="openAlerts"
-              aria-label="异常提醒设置"
-            />
+            <el-tooltip
+              content="异常提醒设置"
+              :trigger="['hover', 'focus']"
+              :trigger-keys="[]"
+              ><UiButton
+                variant="ghost"
+                :icon="Setting"
+                :loading="readingAlert"
+                @click="openAlerts"
+                aria-label="异常提醒设置"
+            /></el-tooltip>
           </header>
           <UiSkeleton v-if="loading" :lines="4" height="48px" />
           <ol v-else-if="events.length" class="activity-list">
@@ -564,7 +568,7 @@ h2 {
   font-size: 16px;
 }
 .region-list :deep(.ui-stat__unit) {
-  font-size: 13px;
+  font-size: 14px;
 }
 .region-track {
   grid-column: 1 / -1;
@@ -612,7 +616,7 @@ h2 {
   overflow-wrap: anywhere;
 }
 .activity-list time {
-  font: 13px/1.6 var(--font-mono);
+  font: 14px/1.6 var(--font-mono);
   color: var(--c-muted);
 }
 .aside-empty {

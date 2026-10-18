@@ -209,6 +209,7 @@ function leaveBar(element: Element, done: () => void) {
         <UiSkeleton v-else-if="loading" :lines="5" height="72px" />
         <div v-else ref="root">
           <EmptyState
+            size="page"
             v-if="!overviewList.length"
             title="建立你的连接"
             description="粘贴节点链接，或从机场同步节点。"
@@ -381,7 +382,7 @@ function leaveBar(element: Element, done: () => void) {
 }
 .group-navigation .active {
   background: var(--c-selected);
-  color: var(--c-signal);
+  color: var(--c-signal-text);
 }
 .group-name {
   overflow: hidden;
@@ -416,7 +417,7 @@ function leaveBar(element: Element, done: () => void) {
   flex-wrap: wrap;
 }
 .probe-status :deep(.ui-button) {
-  font-size: 13px;
+  font-size: 14px;
 }
 .list-heading {
   display: grid;
@@ -587,7 +588,7 @@ function leaveBar(element: Element, done: () => void) {
     padding: 12px;
   }
   .bulk-bar :deep(.ui-button) {
-    padding: 10px 12px;
+    padding: 8px 16px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

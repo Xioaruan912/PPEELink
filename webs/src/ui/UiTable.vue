@@ -5,7 +5,7 @@
         <el-table v-bind="$attrs" :data="rows" :row-key="rowKey"
           ><slot></slot
           ><template #empty
-            ><slot name="empty"><EmptyState /></slot></template
+            ><slot name="empty"><EmptyState size="section" /></slot></template
         ></el-table>
       </div>
       <div class="ui-table__mobile">
@@ -24,7 +24,9 @@
               </dl></slot
             >
           </article></TransitionGroup
-        ><slot v-if="!rows.length" name="empty"><EmptyState /></slot></div
+        ><slot v-if="!rows.length" name="empty"
+          ><EmptyState size="section"
+        /></slot></div
     ></template>
   </section>
 </template>

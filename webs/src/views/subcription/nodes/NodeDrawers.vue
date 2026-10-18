@@ -212,7 +212,7 @@ h3 {
 }
 .visibility-name .mono {
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .managed-nodes {
   max-height: 320px;

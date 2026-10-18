@@ -256,50 +256,6 @@ export const vMagnetic: ObjectDirective<HTMLElement, boolean | undefined> = {
   },
 };
 
-const reveals = new WeakMap<HTMLElement, () => void>();
-export const vReveal: ObjectDirective<HTMLElement> = {
-  mounted(element) {
-    if (prefersReducedMotion()) return;
-    let tween: gsap.core.Tween | undefined;
-    const media = matchMedia("(prefers-reduced-motion: reduce)");
-    const finish = () => {
-      tween?.progress(1).kill();
-      gsap.set(element, { clearProps: "opacity,transform" });
-      observer.disconnect();
-    };
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        observer.disconnect();
-        tween = gsap.fromTo(
-          element,
-          { opacity: 0, y: 24 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.56,
-            ease: "power3.out",
-            clearProps: "opacity,transform",
-          }
-        );
-      },
-      { threshold: 0.08 }
-    );
-    observer.observe(element);
-    media.addEventListener("change", finish);
-    window.addEventListener("workspace-motion-change", finish);
-    reveals.set(element, () => {
-      finish();
-      media.removeEventListener("change", finish);
-      window.removeEventListener("workspace-motion-change", finish);
-    });
-  },
-  beforeUnmount(element) {
-    reveals.get(element)?.();
-    reveals.delete(element);
-  },
-};
-
 /** FLIP snapshots use stable keys; invoke after Vue has patched the list. */
 export function useFlip() {
   const { animate } = useMotion();

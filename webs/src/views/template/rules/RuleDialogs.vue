@@ -177,7 +177,7 @@ const {
   display: block;
   margin-top: 8px;
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
 }
 :deep(.el-select) {

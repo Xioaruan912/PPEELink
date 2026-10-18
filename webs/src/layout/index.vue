@@ -1,5 +1,5 @@
 <template>
-  <div class="atlas-shell">
+  <div v-if="authenticated" class="atlas-shell">
     <a href="#atlas-content" class="skip-link" @click.prevent="focusMain"
       >跳到主要内容</a
     >
@@ -12,7 +12,12 @@
           height="40"
           alt="PPEELink"
       /></router-link>
-      <nav ref="dockNav" class="dock-navigation" aria-label="主导航">
+      <nav
+        ref="dockNav"
+        class="dock-navigation"
+        aria-label="主导航"
+        @keydown="onDockKeydown"
+      >
         <i ref="indicator" class="dock-indicator" aria-hidden="true"></i>
         <div
           v-for="(item, index) in navigation"
@@ -25,13 +30,17 @@
         </div>
       </nav>
       <div class="dock-account">
-        <button
-          class="icon-button"
-          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-          @click="toggleTheme"
-        >
-          <component :is="isDark ? Sunny : Moon" />
-        </button>
+        <el-tooltip
+          :content="isDark ? '切换浅色主题' : '切换深色主题'"
+          :trigger="['hover', 'focus']"
+          :trigger-keys="[]"
+          ><button
+            class="icon-button"
+            :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
+            @click="toggleTheme"
+          >
+            <component :is="isDark ? Sunny : Moon" /></button
+        ></el-tooltip>
         <AccountMenu
           :username="user.user.username"
           label="账户菜单"
@@ -49,13 +58,18 @@
         <span>{{ currentPageTitle }}</span>
       </router-link>
       <div class="atlas-tools" role="group" aria-label="快捷工具">
-        <button
-          class="search-button"
-          aria-label="搜索页面，Command K 或 Control K"
-          @click="commandVisible = true"
+        <el-tooltip
+          content="搜索页面，Command K 或 Control K"
+          :trigger="['hover', 'focus']"
+          :trigger-keys="[]"
+          ><button
+            class="search-button"
+            aria-label="搜索页面，Command K 或 Control K"
+            @click="commandVisible = true"
+          >
+            <Search /><kbd>{{ shortcutLabel }} K</kbd>
+          </button></el-tooltip
         >
-          <Search /><kbd>{{ shortcutLabel }} K</kbd>
-        </button>
         <button
           class="task-button"
           :aria-label="`测试任务：${testRunning ? '进行中' : statusError ? '状态获取失败' : '空闲'}`"
@@ -69,20 +83,24 @@
             "
           />
         </button>
-        <button
-          class="icon-button"
-          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-          @click="toggleTheme"
-        >
-          <component :is="isDark ? Sunny : Moon" />
-        </button>
+        <el-tooltip
+          :content="isDark ? '切换浅色主题' : '切换深色主题'"
+          :trigger="['hover', 'focus']"
+          :trigger-keys="[]"
+          ><button
+            class="icon-button"
+            :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
+            @click="toggleTheme"
+          >
+            <component :is="isDark ? Sunny : Moon" /></button
+        ></el-tooltip>
         <AccountMenu :username="user.user.username" @logout="logout" />
       </div>
     </header>
     <main id="atlas-content" class="atlas-content" tabindex="-1">
       <AppMain />
     </main>
-    <nav class="mobile-dock" aria-label="移动主导航">
+    <nav class="mobile-dock" aria-label="移动主导航" @keydown="onDockKeydown">
       <DockGroup
         v-for="item in navigation.slice(0, 4)"
         :key="item.path"
@@ -141,6 +159,7 @@
     <CommandPalette v-model="commandVisible" :items="commands" />
     <TestStatusDialog v-if="testVisible" v-model:visible="testVisible" />
   </div>
+  <main v-else class="public-error-content"><AppMain /></main>
 </template>
 <script setup lang="ts">
 import {
@@ -182,6 +201,7 @@ const permission = usePermissionStore(),
   user = useUserStore(),
   route = useRoute(),
   router = useRouter();
+const authenticated = !!localStorage.getItem("accessToken");
 const isDark = computed(() => settings.theme === ThemeEnum.DARK);
 const navigation = computed(() => buildNavigation(permission.routes));
 const currentPageTitle = computed(
@@ -200,6 +220,37 @@ const commandVisible = ref(false),
 const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
 function toggleTheme() {
   settings.changeTheme(isDark.value ? ThemeEnum.LIGHT : ThemeEnum.DARK);
+}
+function onDockKeydown(event: KeyboardEvent) {
+  if (event.defaultPrevented) return;
+  const controls = Array.from(
+    (event.currentTarget as HTMLElement).querySelectorAll<HTMLElement>(
+      ".dock-trigger, .mobile-more"
+    )
+  );
+  const index = controls.indexOf(event.target as HTMLElement);
+  if (index < 0) return;
+  let next: number;
+  switch (event.key) {
+    case "ArrowDown":
+    case "ArrowRight":
+      next = (index + 1) % controls.length;
+      break;
+    case "ArrowUp":
+    case "ArrowLeft":
+      next = (index - 1 + controls.length) % controls.length;
+      break;
+    case "Home":
+      next = 0;
+      break;
+    case "End":
+      next = controls.length - 1;
+      break;
+    default:
+      return;
+  }
+  event.preventDefault();
+  controls[next]?.focus();
 }
 function focusMain() {
   document.getElementById("atlas-content")?.focus();
@@ -282,7 +333,7 @@ async function moveIndicator() {
 }
 let observer: ResizeObserver | undefined;
 onMounted(() => {
-  pollStatus();
+  if (authenticated) pollStatus();
   moveIndicator();
   observer = new ResizeObserver(moveIndicator);
   if (dockNav.value) observer.observe(dockNav.value);
@@ -301,6 +352,22 @@ onBeforeUnmount(() => {
 });
 </script>
 <style scoped>
+.public-error-content {
+  min-height: 100dvh;
+  max-width: 1440px;
+  padding: 48px;
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .public-error-content {
+    padding: 32px;
+  }
+}
+@media (max-width: 767px) {
+  .public-error-content {
+    padding: 32px 16px;
+  }
+}
+
 .atlas-shell {
   min-height: 100dvh;
 }
@@ -559,7 +626,7 @@ onBeforeUnmount(() => {
     background: transparent;
     border-radius: var(--radius-control);
     color: var(--c-muted);
-    font-size: 13px;
+    font-size: 14px;
   }
   .mobile-more svg {
     width: 22px;

@@ -274,7 +274,7 @@ async function remove(item: Record<string, any>) {
 .target-form {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px 16px;
+  gap: 24px 16px;
 }
 .target-form label {
   display: flex;
@@ -324,7 +324,7 @@ async function remove(item: Record<string, any>) {
   gap: 12px;
 }
 .mobile-target > span {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--c-muted);
 }
 .mobile-target p {

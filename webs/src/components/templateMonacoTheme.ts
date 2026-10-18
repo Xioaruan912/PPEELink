@@ -17,7 +17,7 @@ export function useTemplateMonacoTheme() {
     (colors) => {
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = 1;
-      const context = canvas.getContext("2d")!;
+      const context = canvas.getContext("2d", { willReadFrequently: true })!;
       const hex = (color: string, alpha = 1) => {
         context.clearRect(0, 0, 1, 1);
         context.fillStyle = color;

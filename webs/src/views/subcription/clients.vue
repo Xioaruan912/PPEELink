@@ -552,6 +552,7 @@ function clearFilters() {
       </template>
     </UiDrawer>
     <EmptyState
+      size="section"
       v-if="!filteredClients.length"
       title="没有匹配客户端"
       description="试试设备名称、内核或协议。"

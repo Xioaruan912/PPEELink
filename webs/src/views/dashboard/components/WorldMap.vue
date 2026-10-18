@@ -1,13 +1,17 @@
 <template>
   <UiPanel title="节点分布" class="map-panel">
     <template #actions>
-      <UiButton
-        variant="ghost"
-        :icon="Refresh"
-        :loading="busy"
-        aria-label="刷新节点地图"
-        @click="refresh"
-      />
+      <el-tooltip
+        content="刷新节点地图"
+        :trigger="['hover', 'focus']"
+        :trigger-keys="[]"
+        ><UiButton
+          variant="ghost"
+          :icon="Refresh"
+          :loading="busy"
+          aria-label="刷新节点地图"
+          @click="refresh"
+      /></el-tooltip>
     </template>
     <div
       ref="stage"
@@ -99,33 +103,49 @@
       </EmptyState>
       <div class="map-controls">
         <div class="zoom-controls">
-          <UiButton
-            variant="ghost"
-            :icon="Plus"
-            aria-label="放大地图"
-            @click="setZoom(0.25)"
-          />
-          <UiButton
-            variant="ghost"
-            :icon="Minus"
-            aria-label="缩小地图"
-            @click="setZoom(-0.25)"
-          />
-          <UiButton
-            variant="ghost"
-            :icon="Aim"
-            aria-label="复位地图"
-            @click="reset"
-          />
+          <el-tooltip
+            content="放大地图"
+            :trigger="['hover', 'focus']"
+            :trigger-keys="[]"
+            ><UiButton
+              variant="ghost"
+              :icon="Plus"
+              aria-label="放大地图"
+              @click="setZoom(0.25)"
+          /></el-tooltip>
+          <el-tooltip
+            content="缩小地图"
+            :trigger="['hover', 'focus']"
+            :trigger-keys="[]"
+            ><UiButton
+              variant="ghost"
+              :icon="Minus"
+              aria-label="缩小地图"
+              @click="setZoom(-0.25)"
+          /></el-tooltip>
+          <el-tooltip
+            content="复位地图"
+            :trigger="['hover', 'focus']"
+            :trigger-keys="[]"
+            ><UiButton
+              variant="ghost"
+              :icon="Aim"
+              aria-label="复位地图"
+              @click="reset"
+          /></el-tooltip>
         </div>
-        <UiButton
-          variant="secondary"
-          :icon="playing && !reduced ? VideoPause : VideoPlay"
-          :disabled="reduced"
-          :aria-label="playing && !reduced ? '暂停地图动效' : '播放地图动效'"
-          :aria-pressed="playing && !reduced"
-          @click="togglePlayback"
-        />
+        <el-tooltip
+          :content="playing && !reduced ? '暂停地图动效' : '播放地图动效'"
+          :trigger="['hover', 'focus']"
+          :trigger-keys="[]"
+          ><UiButton
+            variant="secondary"
+            :icon="playing && !reduced ? VideoPause : VideoPlay"
+            :disabled="reduced"
+            :aria-label="playing && !reduced ? '暂停地图动效' : '播放地图动效'"
+            :aria-pressed="playing && !reduced"
+            @click="togglePlayback"
+        /></el-tooltip>
       </div>
     </div>
     <el-select
@@ -622,7 +642,7 @@ onBeforeUnmount(() => {
   border-radius: var(--radius-control);
 }
 .map-controls :deep(.ui-button) {
-  padding: 10px 12px;
+  padding: 8px 16px;
 }
 .map-location {
   display: flex;
@@ -656,7 +676,7 @@ onBeforeUnmount(() => {
 .map-count {
   margin-left: auto;
   white-space: nowrap;
-  font: 13px/1.6 var(--font-mono);
+  font: 14px/1.6 var(--font-mono);
   color: var(--c-muted);
 }
 .map-error {

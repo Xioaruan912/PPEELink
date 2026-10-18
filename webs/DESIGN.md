@@ -18,12 +18,17 @@
 | `--c-surface-2` | `#ECE9E2` | `#222326` | 凹陷区/表头/输入底 |
 | `--c-line` | `#DAD6CD` | `#2E3033` | 发丝线 1px |
 | `--c-ink` | `#17181A` | `#ECEAE4` | 主文字 |
-| `--c-muted` | `#6B6A66` | `#9A9891` | 次要文字（对比度 ≥ 4.5:1） |
-| `--c-signal` | `#E4472B` | `#FF6A4D` | 主强调：主按钮、选中、焦点环、关键数字 |
+| `--c-muted` | `#625F5A` | `#9A9891` | 次要文字（对比度 ≥ 4.5:1） |
+| `--c-signal` | `#E4472B` | `#FF6A4D` | 图形强调：填充背景、边框、焦点环、指示条与图形 |
+| `--c-signal-text` | `#AF301A` | `#FF8A70` | 文字强调：选中项、计数、链接式按钮、eyebrow 与强调数字（对比度 ≥ 4.5:1） |
 | `--c-data` | `#2F5BEA` | `#6E8CFF` | 数据/图表/链接 |
 | `--c-ok` | `#1F9D6B` | `#3CC48D` | 正常/在线 |
 | `--c-warn` | `#D99A1E` | `#F0B43C` | 警告/偏慢 |
 | `--c-bad` | `#C8321E` | `#FF5A45` | 失败/离线 |
+
+对比度核算（WCAG sRGB，依次为 canvas / surface / surface-2）：浅色 muted **5.63 / 6.09 / 5.24 : 1**；深色 muted **6.44 / 5.97 / 5.44 : 1**。
+
+文字强调色对比度（依次为 canvas / surface / surface-2）：浅色 **5.71 / 6.17 / 5.31 : 1**，深色 **8.08 / 7.49 / 6.83 : 1**。在三种底色分别叠加 signal 12% 后，浅色为 **4.91 / 5.28 / 4.59 : 1**，深色为 **6.94 / 6.35 / 5.76 : 1**。朱红文字统一用 `--c-signal-text`，不从填充色派生；Element Plus 的 primary 文字及旧 ui-accent 别名映射到文字色，实心按钮等图形填充单独保留 `--c-signal`。
 
 派生：`color-mix(in srgb, var(--c-signal) 12%, transparent)` 用作选中底色；阴影只用一层极淡 `0 1px 0 var(--c-line)` + 弹层用 `0 24px 48px -24px rgb(0 0 0 / .25)`。
 圆角：控件 10px，面板 16px，弹层 20px，状态点/标签 999px。
@@ -76,3 +81,30 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 3. 每个页面原有的 API 调用、按钮、对话框、流程全部保留（对照任务书清单）。
 4. 无硬编码颜色（除 tokens.scss / echarts 主题读取 token）；无 12px 以下字号；无 TagsView/面包屑/旧 Settings 抽屉残留。
 5. 浏览器：控制台 0 error；390/768/1440 无横向溢出；深浅主题；键盘可用；reduced-motion 生效。
+
+
+## 10. 组件清单（实际实现）
+
+以下组件均位于 `src/ui/`。`?` 表示可选；未列出默认值的属性沿用 Vue 的类型默认行为（Boolean 为 false，其余为 undefined）。原生属性、事件及 ARIA 属性可传给组件；`UiTable`、`UiDialog`、`UiDrawer` 将额外属性透传至 Element Plus 底座。
+
+| 组件 | props（类型与默认值） | 用途 / 插槽 |
+|---|---|---|
+| `UiButton` | `variant?: primary / secondary / ghost / danger = secondary`；`type?: button / submit / reset = button`；`disabled?: boolean`；`loading?: boolean`；`icon?: Component` | 统一按钮。默认插槽为文字，`icon` 插槽可替代图标；loading 时禁用，仅 primary 启用磁吸。纯图标使用者必须提供 aria-label 与 hover/focus tooltip。 |
+| `RowIconButton` | `label: string`；`icon: Component` | 44px 行操作按钮，自带 aria-label 与 hover/focus tooltip；透传 disabled、loading、click 等至 ghost UiButton。直接从组件文件导入。 |
+| `UiPanel` | `title?: string` | 面板容器；默认内容及 `header`、`actions`、`footer` 插槽。 |
+| `PageHeader` | `title?: string`；`eyebrow?: string`；`description?: string` | 页面唯一 h1 与右侧 `actions`；默认插槽可替代标题。eyebrow 未传时按路由分组与序号推导，传空字符串可隐藏。登录页沿用专用双栏标题。 |
+| `UiStat` | `label: string`；`value: number / null`；`size?: hero / large / medium / small = large`；`decimals?: number = 0`；`unit?: string`；`trend?: string`；`state?: default / ok / warn / bad = default`；`thresholds?: { warn: number; bad: number }` | 真实指标与计数动画；null / 非有限数显示空值。阈值优先于 state，数值越高越差；`label`、`trend` 插槽。hero/large 用 display，medium/small 用 mono。 |
+| `StatusDot` | `state?: ok / warn / bad / idle = idle`；`label?: string`；`running?: boolean` | 文字与形状共同表达状态；ok 呼吸，running 扫描；默认插槽可替代标签。 |
+| `UiTable` | `rows: Record<string, any>[]`；`rowKey?: string = id`；`loading?: boolean`；`label?: string = 数据列表` | 桌面 EP 横线表，手机卡片；默认插槽定义列，`empty` 定义空态，`mobile-card({ row, index })` 自定义移动内容。默认空态为 section。 |
+| `EmptyState` | `title?: string = 暂无内容`；`description?: string`；`size?: page / section / inline = page` | 页面 / 区块 / 行内空态，`icon`、`action` 插槽。仪表盘及弹层使用 section/inline。 |
+| `UiSkeleton` | `lines?: number = 3`；`height?: string = 24px` | 加载占位；默认插槽可替代行，末行默认 65% 宽；带 busy/status 语义。 |
+| `UiDialog` | `modelValue: boolean`；`title: string`；`width?: string = 560px`；`destroyOnClose?: boolean = true` | 统一对话框；`update:modelValue`，默认内容及 `header`、`footer` 插槽。EP 负责焦点进入、Tab 陷阱、关闭归还与 Esc；透传 open/closed 及 autofocus 事件。 |
+| `UiDrawer` | `modelValue: boolean`；`title: string`；`size?: string = 480px`；`direction?: rtl / ltr / ttb / btt = rtl`；`destroyOnClose?: boolean = true` | 统一抽屉；`update:modelValue`，默认内容及 `header`、`footer` 插槽；焦点与 Esc 使用 EP 底座。 |
+| `UiSegmented` | `modelValue: string / number`；`options: { label: string; value: string / number; disabled?: boolean }[]`；`label: string` | 带 aria-label 的 radio 分段切换；方向键/Home/End 跳过禁用项，`update:modelValue`；默认插槽接收 option。 |
+| `UiTag` | `tone?: neutral / signal / ok / warn / bad = neutral` | 轻量语义标签；默认插槽为内容。 |
+| `CommandPalette` | `modelValue: boolean`；`items: CommandItem[]` | Ctrl/⌘+K 开关、模糊匹配、方向键选择、Enter 执行、Esc 关闭。items 由外壳的可见路由加主题/退出动作提供；关闭并释放焦点后才执行动作。`update:modelValue`。 |
+| `CountryFlag` | `code?: string`；`label?: string` | ISO 双字母国旗；不支持彩色 emoji 或代码无效时回退可读代码。label 同步用于 title 与 aria-label。直接从组件文件导入。 |
+
+`CommandItem`：`{ id: string; label: string; group?: string; icon?: string; keywords?: string; run: () => void | Promise<unknown> }`。`src/ui/index.ts` 导出上述主体组件及 CommandItem 类型；`RowIconButton`、`CountryFlag` 使用直接导入。
+
+动效统一使用 `src/motion`。CSS 动效由 `src/styles/base.scss` 的系统 reduced-motion 与 `html[data-motion="reduced"]` 双重终态守卫覆盖；地图、图表和 Monaco 读取同一 motion 状态。业务提交中的弹层保留现有关闭保护，空闲时支持 Esc。

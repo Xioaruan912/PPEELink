@@ -1,6 +1,6 @@
 .el-button {
   min-height: 44px;
-  padding: 10px 20px;
+  padding: 8px 24px;
   font-size: 15px;
   border-radius: var(--radius-control);
   box-shadow: none;
@@ -19,13 +19,45 @@
   --el-button-hover-text-color: var(--c-on-signal);
   --el-button-active-text-color: var(--c-on-signal);
 }
-.el-button--primary {
+:root
+  .el-button--primary:not(.is-plain):not(.is-text):not(.is-link):not(
+    .is-dashed
+  ) {
+  --el-button-bg-color: var(--c-signal);
+  --el-button-border-color: var(--c-signal);
+  --el-button-text-color: var(--c-on-signal);
+  --el-button-hover-text-color: var(--c-on-signal);
+  --el-button-active-text-color: var(--c-on-signal);
   --el-button-hover-bg-color: color-mix(
     in srgb,
     var(--c-signal) 92%,
     var(--c-surface)
   );
   --el-button-active-bg-color: var(--c-signal);
+}
+:root .el-button--primary:is(.is-plain, .is-text, .is-link, .is-dashed) {
+  --el-button-text-color: var(--c-signal-text);
+  --el-button-hover-text-color: var(--c-signal-text);
+  --el-button-hover-link-text-color: var(--c-signal-text);
+  --el-button-active-text-color: var(--c-signal-text);
+  --el-button-hover-bg-color: var(--c-surface-2);
+}
+:root .el-button--text:not(.is-disabled) {
+  color: var(--c-signal-text);
+}
+:root .el-link--primary {
+  --el-link-text-color: var(--c-signal-text);
+  --el-link-hover-text-color: var(--c-signal-text);
+}
+// Keep graphical paint independent of the vendor's primary text token.
+:root .el-loading-spinner .path {
+  stroke: var(--c-signal);
+}
+:root .el-date-table td.current:not(.disabled) .el-date-table-cell__text,
+:root .el-date-table td.start-date .el-date-table-cell__text,
+:root .el-date-table td.end-date .el-date-table-cell__text {
+  background-color: var(--c-signal);
+  color: var(--c-on-signal);
 }
 .el-button--danger {
   --el-button-hover-bg-color: color-mix(
@@ -172,7 +204,7 @@
 .el-tag {
   min-height: 28px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
 }
 // Beat lazily loaded Element Plus defaults without page-specific overrides.
 :root .el-switch {
@@ -183,8 +215,14 @@
 :root .el-switch__label.is-active {
   color: var(--c-ink);
 }
-.el-switch__input:focus-visible ~ .el-switch__core {
-  outline-color: var(--c-signal);
+// Native inputs are visually hidden; draw the ring on their visible control.
+:root .el-switch__input:focus-visible ~ .el-switch__core,
+:root .el-checkbox__original:focus-visible + .el-checkbox__inner,
+:root .el-radio__original:focus-visible + .el-radio__inner,
+:root .el-checkbox-button__original:focus-visible + .el-checkbox-button__inner,
+:root .el-radio-button__original-radio:focus-visible + .el-radio-button__inner {
+  outline: 2px solid var(--c-signal) !important;
+  outline-offset: 2px !important;
 }
 .el-pagination {
   flex-wrap: wrap;
@@ -317,7 +355,7 @@ input[type="radio"] {
 @media (max-width: 767px) {
   .el-dialog {
     margin-top: 8dvh;
-    padding: 20px;
+    padding: 24px;
   }
   .el-date-range-picker {
     max-width: calc(100vw - 32px);

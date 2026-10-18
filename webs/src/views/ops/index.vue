@@ -459,7 +459,7 @@ onMounted(load);
   border-top: 1px solid var(--c-line);
 }
 .mono {
-  font: 400 13px/1.6 var(--font-mono);
+  font: 400 14px/1.6 var(--font-mono);
   overflow-wrap: anywhere;
 }
 .muted {

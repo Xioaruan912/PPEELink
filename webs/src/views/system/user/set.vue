@@ -172,7 +172,7 @@ onMounted(loadUser);
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface-2);
-  color: var(--c-signal);
+  color: var(--c-signal-text);
   font: 400 32px/1 var(--font-display);
 }
 .current-account p {

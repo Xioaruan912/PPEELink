@@ -16,7 +16,7 @@ withDefaults(
   border: 1px solid color-mix(in srgb, var(--tag-color) 35%, var(--c-line));
   padding: 4px 12px;
   border-radius: 999px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
   color: var(--c-ink);
   background: color-mix(in srgb, var(--tag-color) 10%, var(--c-surface));

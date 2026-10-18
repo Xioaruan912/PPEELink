@@ -71,18 +71,18 @@ function render() {
   chart.setOption(
     {
       animation: !reduced.value,
-      textStyle: { fontFamily: t.font, fontSize: 13, color: t.muted },
+      textStyle: { fontFamily: t.font, fontSize: 14, color: t.muted },
       tooltip: {
         trigger: "axis",
         confine: true,
         backgroundColor: t.surface,
         borderColor: t.line,
-        textStyle: { color: t.ink, fontSize: 13 },
+        textStyle: { color: t.ink, fontSize: 14 },
       },
       legend: {
         top: 0,
         left: 0,
-        textStyle: { color: t.muted, fontSize: 13 },
+        textStyle: { color: t.muted, fontSize: 14 },
         data: ["可用率 (%)", "平均延迟 (ms)"],
       },
       grid: { left: 0, right: 0, top: 56, bottom: 0, containLabel: true },
@@ -98,7 +98,7 @@ function render() {
         axisLine: { lineStyle: { color: t.line } },
         axisLabel: {
           color: t.muted,
-          fontSize: 13,
+          fontSize: 14,
           hideOverlap: true,
           formatter: (value: string) =>
             value.length <= 5 ? value : value.slice(5, 16),
@@ -109,13 +109,13 @@ function render() {
           type: "value",
           min: 0,
           max: 100,
-          axisLabel: { color: t.muted, fontSize: 13, formatter: "{value}%" },
+          axisLabel: { color: t.muted, fontSize: 14, formatter: "{value}%" },
           splitNumber: 2,
           splitLine: { lineStyle: { color: t.grid } },
         },
         {
           type: "value",
-          axisLabel: { color: t.muted, fontSize: 13, formatter: "{value} ms" },
+          axisLabel: { color: t.muted, fontSize: 14, formatter: "{value} ms" },
           splitLine: { show: false },
         },
       ],

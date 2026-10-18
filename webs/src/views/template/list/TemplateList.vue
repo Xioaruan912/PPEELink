@@ -86,7 +86,7 @@ function command(value: string, row: Temp) {
         title="写下你的连接规则"
         description="添加模板，或前往构建器生成配置。"
         ><template #action
-          ><UiButton variant="primary" :icon="Plus" @click="handleAddTemp"
+          ><UiButton :icon="Plus" @click="handleAddTemp"
             >添加模板</UiButton
           ></template
         ></EmptyState

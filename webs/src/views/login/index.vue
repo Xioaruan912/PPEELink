@@ -39,13 +39,17 @@
     <section class="login-form-side" aria-labelledby="login-title">
       <header class="login-topline">
         <span>个人网络工作台</span
-        ><button
-          class="theme-toggle"
-          :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-          @click="toggleTheme"
-        >
-          <component :is="isDark ? Sunny : Moon" />
-        </button>
+        ><el-tooltip
+          :content="isDark ? '切换浅色主题' : '切换深色主题'"
+          :trigger="['hover', 'focus']"
+          :trigger-keys="[]"
+          ><button
+            class="theme-toggle"
+            :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
+            @click="toggleTheme"
+          >
+            <component :is="isDark ? Sunny : Moon" /></button
+        ></el-tooltip>
       </header>
       <div class="login-form-wrap" data-enter>
         <p class="login-group">账户 / 登录</p>
@@ -315,7 +319,7 @@ onMounted(() => {
   margin-bottom: 40px;
 }
 .login-form-wrap :deep(.el-form-item) {
-  margin-bottom: 28px;
+  margin-bottom: 32px;
 }
 .login-form-wrap :deep(.el-form-item__label) {
   padding-bottom: 8px;
