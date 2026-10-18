@@ -47,10 +47,23 @@ const steps = computed(() =>
       ]
     : [
         { label: "基础端口", value: 0 },
-        { label: "高级配置", value: 1 },
         { label: "分组规则", value: 2 },
       ]
 );
+const stepIndex = computed(() =>
+  Math.max(
+    0,
+    steps.value.findIndex((item) => item.value === step.value)
+  )
+);
+function goStep(offset: number) {
+  const next = steps.value[stepIndex.value + offset];
+  if (next) step.value = next.value;
+}
+// Switching client type must not leave the user on a step the new type hides.
+watch(steps, (list) => {
+  if (!list.some((item) => item.value === step.value)) step.value = 0;
+});
 watch([step, target], async () => {
   await nextTick();
   if (fields.value)
@@ -164,7 +177,8 @@ watch(savedRevision, async () => {
       <UiPanel class="builder-controls" data-enter>
         <div class="step-header">
           <span class="step-count"
-            >{{ String(Number(step) + 1).padStart(2, "0") }} / 03</span
+            >{{ String(stepIndex + 1).padStart(2, "0") }} /
+            {{ String(steps.length).padStart(2, "0") }}</span
           >
           <UiSegmented v-model="step" :options="steps" label="配置步骤" />
         </div>
@@ -177,14 +191,14 @@ watch(savedRevision, async () => {
           <nav class="step-actions" aria-label="步骤导航">
             <UiButton
               :icon="ArrowLeft"
-              :disabled="Number(step) === 0"
-              @click="step = Number(step) - 1"
+              :disabled="stepIndex === 0"
+              @click="goStep(-1)"
               >上一步</UiButton
             >
             <UiButton
-              v-if="Number(step) < 2"
+              v-if="stepIndex < steps.length - 1"
               :icon="ArrowRight"
-              @click="step = Number(step) + 1"
+              @click="goStep(1)"
               >下一步</UiButton
             >
             <span v-else class="step-finish">配置完成后，生成并保存。</span>

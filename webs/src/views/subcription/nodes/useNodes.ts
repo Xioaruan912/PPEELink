@@ -86,8 +86,7 @@ function createNodes() {
   const overviewList = ref<OverviewItem[]>([]),
     fullNodes = ref<NodeItem[]>([]),
     groupDetails = ref<GroupDetail[]>([]);
-  const viewMode = ref("list"),
-    activeGroup = ref("全部"),
+  const activeGroup = ref("全部"),
     searchText = ref(""),
     filterCountries = ref<string[]>([]);
   const selectedIds = ref<Set<number>>(new Set());
@@ -111,16 +110,6 @@ function createNodes() {
         (!filterCountries.value.length ||
           filterCountries.value.includes(n.country))
     )
-  );
-  const cardGroups = computed(() =>
-    [...new Set(filteredNodes.value.map((n) => n.country || "未知"))]
-      .sort()
-      .map((country) => ({
-        country,
-        items: filteredNodes.value.filter(
-          (n) => (n.country || "未知") === country
-        ),
-      }))
   );
   const groupTree = computed(() =>
     allGroupNames.value.map((name) => ({
@@ -488,14 +477,9 @@ function createNodes() {
   }
   const unlockVisible = ref(false),
     tcpVisible = ref(false),
-    qualityVisible = ref(false),
-    testNode = ref<OverviewItem | null>(null),
-    qualityNode = ref<OverviewItem | null>(null);
+    testNode = ref<OverviewItem | null>(null);
   function nodeCommand(command: string, row: OverviewItem) {
-    if (command === "quality") {
-      qualityNode.value = row;
-      qualityVisible.value = true;
-    } else if (command === "unlock" || command === "tcp") {
+    if (command === "unlock" || command === "tcp") {
       testNode.value = row;
       if (command === "unlock") unlockVisible.value = true;
       else tcpVisible.value = true;
@@ -521,7 +505,6 @@ function createNodes() {
     overviewList,
     fullNodes,
     groupDetails,
-    viewMode,
     activeGroup,
     searchText,
     filterCountries,
@@ -529,7 +512,6 @@ function createNodes() {
     allGroupNames,
     countryOptions,
     filteredNodes,
-    cardGroups,
     groupTree,
     groupedCount,
     hiddenNodeCount,
@@ -572,8 +554,6 @@ function createNodes() {
     protocol,
     unlockVisible,
     tcpVisible,
-    qualityVisible,
     testNode,
-    qualityNode,
   };
 }

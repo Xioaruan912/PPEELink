@@ -14,9 +14,6 @@ const props = defineProps<{
   rtt: Record<string, number>;
   rttLoading: boolean;
   rttError: string;
-  gemini: Record<string, "testing" | "ok" | "fail" | "busy">;
-  geminiTesting: string;
-  geminiError: string;
 }>();
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
@@ -24,7 +21,6 @@ const emit = defineEmits<{
   toggle: [name: string, checked: boolean];
   toggleAll: [];
   save: [];
-  testGemini: [node: AirportNode];
   testLatency: [];
 }>();
 const rttText = (name: string) => {
@@ -50,12 +46,6 @@ const rttTone = (name: string) => {
         : value < 300
           ? "warn"
           : "bad";
-};
-const geminiText = {
-  testing: "Gemini 检测中",
-  ok: "Gemini 可用",
-  fail: "Gemini 不可用",
-  busy: "Gemini 待重试",
 };
 </script>
 <template>
@@ -97,12 +87,6 @@ const geminiText = {
           <dd>{{ detail.auto_cleanup ? "已开启" : "已关闭" }}</dd>
         </div>
         <div>
-          <dt>国内专线</dt>
-          <dd>
-            {{ detail.is_dedicated ? "测活失败仍保留" : "按测活结果处理" }}
-          </dd>
-        </div>
-        <div>
           <dt>同步保留节点</dt>
           <dd class="mono">{{ detail.node_count }}</dd>
         </div>
@@ -135,16 +119,8 @@ const geminiText = {
           >
         </div>
         <p v-if="rttError" class="error-text" role="alert">{{ rttError }}</p>
-        <p v-if="geminiError" class="error-text" role="alert">
-          {{ geminiError }}
-        </p>
         <div v-if="detail.nodes.length" class="node-list">
-          <article
-            v-for="node in detail.nodes"
-            :key="node.ID"
-            class="node-row"
-            :class="{ 'is-testing': gemini[node.Name] === 'testing' }"
-          >
+          <article v-for="node in detail.nodes" :key="node.ID" class="node-row">
             <el-checkbox
               :model-value="selected.includes(node.Name)"
               :disabled="saving"
@@ -158,21 +134,7 @@ const geminiText = {
               node.Link
             }}</span>
             <div class="node-metrics">
-              <UiTag :tone="rttTone(node.Name)">{{ rttText(node.Name) }}</UiTag
-              ><span
-                v-if="gemini[node.Name]"
-                class="gemini-result"
-                :class="`gemini-${gemini[node.Name]}`"
-                role="status"
-                >{{ geminiText[gemini[node.Name]] }}</span
-              ><UiButton
-                variant="ghost"
-                :loading="geminiTesting === node.Name"
-                :disabled="!!geminiTesting"
-                :aria-label="`检测 ${node.Name} 的 Gemini`"
-                @click="emit('testGemini', node)"
-                >测 Gemini</UiButton
-              >
+              <UiTag :tone="rttTone(node.Name)">{{ rttText(node.Name) }}</UiTag>
             </div>
           </article>
         </div>
@@ -304,17 +266,6 @@ h3 {
 }
 .node-metrics > .ui-button {
   margin-left: auto;
-}
-.gemini-result {
-  font-size: 14px;
-  color: var(--c-muted);
-}
-.gemini-ok {
-  color: var(--c-ok);
-}
-.gemini-fail,
-.error-text {
-  color: var(--c-bad);
 }
 .error-text {
   font-size: 14px;

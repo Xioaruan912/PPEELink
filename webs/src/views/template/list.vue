@@ -4,9 +4,6 @@ import { PageHeader, UiButton } from "@/ui";
 import { provideTemplates } from "./list/useTemplates";
 import TemplateList from "./list/TemplateList.vue";
 import EditorWorkspace from "./list/EditorWorkspace.vue";
-import VersionDialogs from "./list/VersionDialogs.vue";
-import PreflightDialog from "./list/PreflightDialog.vue";
-import RegressionDrawer from "./list/RegressionDrawer.vue";
 defineOptions({ name: "TemplateListPage" });
 const {
   dialogVisible,
@@ -25,7 +22,7 @@ const {
       :description="
         dialogVisible
           ? `${TempTitle}${dirty ? '，有未保存修改' : ''}`
-          : '编写规则，检查差异，按版本发布。'
+          : '编辑客户端配置模板。'
       "
       ><template #actions
         ><template v-if="dialogVisible"
@@ -40,7 +37,6 @@ const {
       ></PageHeader
     >
     <EditorWorkspace v-if="dialogVisible" /><TemplateList v-else />
-    <VersionDialogs /><PreflightDialog /><RegressionDrawer />
   </div>
 </template>
 <style scoped>

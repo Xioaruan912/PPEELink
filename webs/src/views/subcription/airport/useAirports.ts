@@ -288,19 +288,11 @@ export function useAirports() {
   const rttMap = ref<Record<string, number>>({}),
     rttLoading = ref(false),
     rttError = ref("");
-  const geminiStatus = ref<Record<string, "testing" | "ok" | "fail" | "busy">>(
-    {}
-  );
-  const geminiTesting = ref(""),
-    geminiError = ref("");
   let detailGeneration = 0,
-    rttController: AbortController | undefined,
-    geminiController: AbortController | undefined;
+    rttController: AbortController | undefined;
   function stopDetailWork() {
     ++detailGeneration;
     rttController?.abort();
-    geminiController?.abort();
-    geminiTesting.value = "";
   }
   watch(drawerVisible, (visible) => {
     if (!visible) stopDetailWork();
@@ -315,8 +307,6 @@ export function useAirports() {
     detailError.value = "";
     nodeSaveError.value = "";
     selectedNodeNames.value = [];
-    geminiStatus.value = {};
-    geminiError.value = "";
     rttMap.value = {};
     try {
       const { data } = await getAirportDetail(row.ID);
@@ -363,68 +353,6 @@ export function useAirports() {
         rttError.value = messageOf(error, "本地延迟检测失败");
     } finally {
       if (!disposed && !controller.signal.aborted) rttLoading.value = false;
-    }
-  }
-  async function testGemini(node: AirportNode) {
-    if (geminiTesting.value) return;
-    geminiController?.abort();
-    const controller = new AbortController();
-    geminiController = controller;
-    geminiTesting.value = node.Name;
-    geminiStatus.value[node.Name] = "testing";
-    geminiError.value = "";
-    let received = false;
-    try {
-      const payload = new URLSearchParams({
-        link: node.Link,
-        service: "google-gemini",
-      });
-      const response = await fetch("/api/v1/nodes/unlock", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Authorization: localStorage.getItem("accessToken") || "",
-        },
-        body: payload.toString(),
-        signal: controller.signal,
-      });
-      if (response.status === 429) {
-        const json = await response.json().catch(() => ({}));
-        if (controller.signal.aborted || disposed) return;
-        geminiStatus.value[node.Name] = "busy";
-        geminiError.value = json.msg || "已有测试进行中，请稍候重试";
-        ElMessage.warning(geminiError.value);
-        return;
-      }
-      await readUnlockResponse(response, controller.signal, (json) => {
-        if (disposed || controller.signal.aborted) return;
-        if (json?.code === "42900") {
-          received = true;
-          geminiStatus.value[node.Name] = "busy";
-          geminiError.value = json.msg || "已有测试进行中，请稍候重试";
-          ElMessage.warning(geminiError.value);
-          return;
-        }
-        if (json?.code && json.code !== "00000")
-          throw new Error(json.msg || "Gemini 检测失败");
-        const data = json.data ?? json;
-        const result =
-          (data.results || []).find((r: any) => r.key === "google-gemini") ||
-          (data.key === "google-gemini" ? data : null);
-        if (result) {
-          received = true;
-          geminiStatus.value[node.Name] = result.ok ? "ok" : "fail";
-        }
-      });
-      if (!controller.signal.aborted && !received)
-        throw new Error("未收到 Gemini 检测结果");
-    } catch (error) {
-      if (!disposed && !controller.signal.aborted) {
-        geminiStatus.value[node.Name] = "fail";
-        geminiError.value = messageOf(error, "Gemini 检测失败");
-      }
-    } finally {
-      if (!disposed && !controller.signal.aborted) geminiTesting.value = "";
     }
   }
   function toggleNode(name: string, checked: boolean) {
@@ -504,10 +432,6 @@ export function useAirports() {
     rttLoading,
     rttError,
     loadNodeRtt,
-    geminiStatus,
-    geminiTesting,
-    geminiError,
-    testGemini,
     toggleNode,
     allSelected,
     toggleAllNodes,

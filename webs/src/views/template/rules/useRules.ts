@@ -12,10 +12,6 @@ import {
   getRuleSources,
   getRuleCatalog,
   getRulePreview,
-  getRuleUpdateImpact,
-  applyRuleUpdate,
-  getRuleSnapshots,
-  rollbackRule,
   getRuleTemplateGroups,
   syncRuleCatalog,
   applyRulesToTemplate,
@@ -109,18 +105,12 @@ function createRules() {
     rules.value.filter((row) => selectedIds.value.includes(row.externalId))
   );
   const focusedRule = ref<RuleItem | null>(null),
-    analysisMode = ref("preview"),
     detailOpen = ref(false);
   const previewLoading = ref(false),
-    preview = ref<any>(null),
-    impactLoading = ref(false),
-    impact = ref<any>(null),
-    snapshots = ref<any[]>([]);
-  const operationLoading = ref(false);
+    preview = ref<any>(null);
   let alive = true;
   let importRequest = 0;
   let previewRequest = 0,
-    impactRequest = 0,
     catalogRequest = 0;
   const confirmation = reactive({
     visible: false,
@@ -152,7 +142,6 @@ function createRules() {
     groupsRequest++;
     answer?.(false);
     previewRequest++;
-    impactRequest++;
     catalogRequest++;
   });
   async function loadSources() {
@@ -274,18 +263,13 @@ function createRules() {
   function focus(row: RuleItem) {
     if (focusedRule.value?.externalId !== row.externalId) {
       previewRequest++;
-      impactRequest++;
       preview.value = null;
-      impact.value = null;
-      snapshots.value = [];
       previewLoading.value = false;
-      impactLoading.value = false;
     }
     focusedRule.value = row;
   }
   async function openPreview(row: RuleItem, expanded = detailOpen.value) {
     focus(row);
-    analysisMode.value = "preview";
     detailOpen.value = expanded;
     const request = ++previewRequest;
     previewLoading.value = true;
@@ -297,88 +281,6 @@ function createRules() {
       if (request === previewRequest) preview.value = { error: message(error) };
     } finally {
       if (request === previewRequest) previewLoading.value = false;
-    }
-  }
-  async function openImpact(row: RuleItem, expanded = detailOpen.value) {
-    focus(row);
-    analysisMode.value = "impact";
-    detailOpen.value = expanded;
-    const request = ++impactRequest;
-    impactLoading.value = true;
-    impact.value = null;
-    snapshots.value = [];
-    try {
-      const [impactRes, snapshotsRes] = await Promise.allSettled([
-        getRuleUpdateImpact(row.externalId),
-        getRuleSnapshots(row.externalId),
-      ]);
-      if (request !== impactRequest) return;
-      impact.value =
-        impactRes.status === "fulfilled"
-          ? impactRes.value?.data || null
-          : { error: message(impactRes.reason) };
-      snapshots.value =
-        snapshotsRes.status === "fulfilled" &&
-        Array.isArray(snapshotsRes.value?.data)
-          ? snapshotsRes.value.data
-          : [];
-      if (snapshotsRes.status === "rejected") {
-        impact.value = {
-          ...impact.value,
-          snapshotError: `读取快照失败：${message(snapshotsRes.reason)}`,
-        };
-      }
-    } finally {
-      if (request === impactRequest) impactLoading.value = false;
-    }
-  }
-  async function applyUpdateNow() {
-    const row = focusedRule.value;
-    if (!row || operationLoading.value || !impact.value?.preview?.changed)
-      return;
-    if (
-      !(await confirm(
-        "应用规则更新",
-        `确认更新「${row.name}」？当前版本将保留为可回滚快照。`,
-        "保存快照并更新"
-      ))
-    )
-      return;
-    operationLoading.value = true;
-    try {
-      await applyRuleUpdate(row.externalId);
-      ElMessage.success("规则已更新，旧版本已保留");
-      await loadCatalog();
-      await openImpact(row, detailOpen.value);
-    } catch (error) {
-      errorText.value = `规则更新失败：${message(error)}`;
-      ElMessage.error(errorText.value);
-    } finally {
-      operationLoading.value = false;
-    }
-  }
-  async function rollbackSnapshot(snapshotId: number) {
-    const row = focusedRule.value;
-    if (!row || operationLoading.value) return;
-    if (
-      !(await confirm(
-        "回滚规则",
-        `确认将「${row.name}」回滚至快照 #${snapshotId}？当前版本也会保留为快照。`,
-        "确认回滚"
-      ))
-    )
-      return;
-    operationLoading.value = true;
-    try {
-      await rollbackRule(row.externalId, snapshotId);
-      ElMessage.success("规则已回滚");
-      await loadCatalog();
-      await openImpact(row, detailOpen.value);
-    } catch (error) {
-      errorText.value = `回滚失败：${message(error)}`;
-      ElMessage.error(errorText.value);
-    } finally {
-      operationLoading.value = false;
     }
   }
   const importOpen = ref(false),
@@ -519,14 +421,9 @@ function createRules() {
     selectedIds,
     selectedRules,
     focusedRule,
-    analysisMode,
     detailOpen,
     previewLoading,
     preview,
-    impactLoading,
-    impact,
-    snapshots,
-    operationLoading,
     confirmation,
     resolveConfirmation,
     loadSources,
@@ -540,9 +437,6 @@ function createRules() {
     toggleSelected,
     doSync,
     openPreview,
-    openImpact,
-    applyUpdateNow,
-    rollbackSnapshot,
     importOpen,
     importLoading,
     templateLoading,

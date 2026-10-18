@@ -7,7 +7,6 @@ const mobile = useMediaQuery("(max-width: 767px)");
 const {
   focusedRule,
   detailOpen,
-  operationLoading,
   importOpen,
   importLoading,
   templateLoading,
@@ -16,7 +15,6 @@ const {
   importItems,
   templates,
   policyGroups,
-  proxyOptions,
   importForm,
   loadTemplateGroups,
   submitImport,
@@ -30,13 +28,8 @@ const {
     :title="focusedRule?.name || '规则分析'"
     :direction="mobile ? 'btt' : 'rtl'"
     :size="mobile ? '88dvh' : 'min(840px, 100vw)'"
-    :close-on-click-modal="!operationLoading"
-    :close-on-press-escape="!operationLoading"
-    :show-close="!operationLoading"
     ><RuleAnalysis /><template #footer
-      ><UiButton :disabled="operationLoading" @click="detailOpen = false"
-        >关闭</UiButton
-      ></template
+      ><UiButton @click="detailOpen = false">关闭</UiButton></template
     ></UiDrawer
   >
   <UiDialog
@@ -92,35 +85,8 @@ const {
             >读取模板的 proxy-groups，并额外提供 DIRECT。</span
           ></el-form-item
         >
-        <el-form-item label="规则下载代理（proxy）"
-          ><el-select
-            v-model="importForm.proxy"
-            aria-label="规则下载代理"
-            :disabled="groupsLoading || importLoading"
-            ><el-option label="不指定（proxy: 空字符串）" value="" /><el-option
-              v-for="group in proxyOptions"
-              :key="group"
-              :label="group"
-              :value="group" /></el-select
-          ><span class="field-hint"
-            >通过所选策略下载远程规则文件。</span
-          ></el-form-item
-        >
-        <el-form-item label="Provider 冲突方式"
-          ><el-select
-            v-model="importForm.conflictPolicy"
-            aria-label="Provider 冲突方式"
-            :disabled="importLoading"
-            ><el-option label="保留现有" value="keep" /><el-option
-              label="更新 URL"
-              value="update-url" /><el-option
-              label="替换"
-              value="replace" /></el-select
-        ></el-form-item>
       </el-form>
-      <p class="notice">
-        使用 Rule Provider，插入 MATCH 前；写入前会创建模板版本。
-      </p>
+      <p class="notice">以 Rule Provider 方式插入到 MATCH 之前。</p>
     </template>
     <template #footer
       ><UiButton :disabled="importLoading" @click="importOpen = false"

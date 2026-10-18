@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from "vue";
 import { useMediaQuery } from "@vueuse/core";
-import { Refresh, MoreFilled, FullScreen } from "@element-plus/icons-vue";
+import { Refresh, FullScreen } from "@element-plus/icons-vue";
 import { PageHeader, UiButton, StatusDot, EmptyState, UiSkeleton } from "@/ui";
 import { useMotion, useStagger } from "@/motion";
 import RuleAnalysis from "./rules/RuleAnalysis.vue";
@@ -35,7 +35,6 @@ const {
   selectedRules,
   focusedRule,
   detailOpen,
-  operationLoading,
   loadSources,
   loadCatalog,
   loadMoreCatalog,
@@ -44,7 +43,6 @@ const {
   toggleSelected,
   doSync,
   openPreview,
-  openImpact,
   openImport,
 } = provideRules();
 const root = ref<HTMLElement>();
@@ -69,14 +67,8 @@ watch([loading, sourcesLoading], async () => {
   if (root.value)
     stagger(root.value.querySelectorAll(".source-row, .rule-row"));
 });
-function inspect(row: RuleItem, mode: string) {
-  const expanded = mobile.value;
-  if (mode === "impact") void openImpact(row, expanded);
-  else void openPreview(row, expanded);
-}
-function command(value: string, row: RuleItem) {
-  if (value === "impact") inspect(row, "impact");
-  else void openImport([row]);
+function inspect(row: RuleItem) {
+  void openPreview(row, mobile.value);
 }
 function selectAll() {
   selectedIds.value =
@@ -294,23 +286,9 @@ function selectAll() {
                 {{ row.checksum ? `${row.ruleCount} 条` : "自动缓存中…" }}
               </div>
               <div class="row-actions">
-                <UiButton variant="ghost" @click="inspect(row, 'preview')"
-                  >预览</UiButton
-                ><el-dropdown trigger="click" @command="command($event, row)"
-                  ><UiButton
-                    variant="ghost"
-                    :icon="MoreFilled"
-                    :aria-label="`${row.name} 更多操作`"
-                    >更多</UiButton
-                  ><template #dropdown
-                    ><el-dropdown-menu
-                      ><el-dropdown-item command="impact"
-                        >查看变化</el-dropdown-item
-                      ><el-dropdown-item command="import"
-                        >加入模板</el-dropdown-item
-                      ></el-dropdown-menu
-                    ></template
-                  ></el-dropdown
+                <UiButton variant="ghost" @click="inspect(row)">预览</UiButton
+                ><UiButton variant="ghost" @click="openImport([row])"
+                  >加入模板</UiButton
                 >
               </div>
             </article>
@@ -376,7 +354,6 @@ function selectAll() {
             v-if="focusedRule"
             variant="ghost"
             :icon="FullScreen"
-            :disabled="operationLoading"
             aria-label="展开规则分析"
             @click="detailOpen = true"
             >展开</UiButton

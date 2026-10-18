@@ -4,7 +4,6 @@ import { Plus, Refresh } from "@element-plus/icons-vue";
 import {
   PageHeader,
   UiButton,
-  UiSegmented,
   UiStat,
   UiSkeleton,
   EmptyState,
@@ -13,7 +12,6 @@ import {
 import { useStagger, useMotion } from "@/motion";
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue";
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue";
-import NodeQualityDialog from "@/components/NodeQualityDialog.vue";
 import { provideNodes } from "./nodes/useNodes";
 import NodeRow from "./nodes/NodeRow.vue";
 import NodeDrawers from "./nodes/NodeDrawers.vue";
@@ -23,13 +21,11 @@ const {
   loadError,
   busy,
   overviewList,
-  viewMode,
   activeGroup,
   searchText,
   filterCountries,
   countryOptions,
   filteredNodes,
-  cardGroups,
   groupTree,
   groupedCount,
   selectedCount,
@@ -47,14 +43,12 @@ const {
   bulk,
   unlockVisible,
   tcpVisible,
-  qualityVisible,
   testNode,
-  qualityNode,
 } = provideNodes();
 const root = ref<HTMLElement>();
 const stagger = useStagger();
 const { reduced, animate } = useMotion();
-watch([loading, viewMode], async () => {
+watch(loading, async () => {
   if (!loading.value) {
     await nextTick();
     if (root.value) stagger(root.value.querySelectorAll(".node-row"));
@@ -168,14 +162,7 @@ function leaveBar(element: Element, done: () => void) {
           /></el-select>
         </div>
         <div class="view-toolbar">
-          <UiSegmented
-            v-model="viewMode"
-            :options="[
-              { label: '列表', value: 'list' },
-              { label: '卡片', value: 'card' },
-            ]"
-            label="节点视图"
-          /><span class="result-count mono"
+          <span class="result-count mono"
             >{{ filteredNodes.length }} 个节点</span
           ><UiButton
             v-if="filteredNodes.length"
@@ -226,7 +213,7 @@ function leaveBar(element: Element, done: () => void) {
               ><UiButton @click="clearFilters">清除筛选</UiButton></template
             ></EmptyState
           >
-          <template v-else-if="viewMode === 'list'">
+          <template v-else>
             <div class="list-heading" aria-hidden="true">
               <span>节点 / 主机</span><span>协议</span><span>延迟</span
               ><span>可见</span><span class="actions-heading">操作</span>
@@ -240,36 +227,6 @@ function leaveBar(element: Element, done: () => void) {
                 :key="node.id"
                 :node="node"
             /></TransitionGroup>
-          </template>
-          <template v-else>
-            <section
-              v-for="group in cardGroups"
-              :key="group.country"
-              class="country-section"
-            >
-              <header class="country-heading">
-                <el-checkbox
-                  :model-value="allSelected(group.items)"
-                  :aria-label="`全选 ${group.country} 节点`"
-                  @change="toggleNodes(group.items)"
-                />
-                <h2>{{ group.country }}</h2>
-                <span class="mono">{{ group.items.length }}</span
-                ><UiButton variant="ghost" @click="toggleNodes(group.items)">{{
-                  allSelected(group.items) ? "取消全选" : "全选"
-                }}</UiButton>
-              </header>
-              <TransitionGroup
-                tag="div"
-                :name="reduced ? '' : 'nodes'"
-                class="card-grid"
-                ><NodeRow
-                  v-for="node in group.items"
-                  :key="node.id"
-                  :node="node"
-                  card
-              /></TransitionGroup>
-            </section>
           </template>
         </div>
       </section>
@@ -305,7 +262,6 @@ function leaveBar(element: Element, done: () => void) {
       :node-id="testNode.id"
       :node-name="testNode.name"
     />
-    <NodeQualityDialog v-model:visible="qualityVisible" :node="qualityNode" />
   </div>
 </template>
 <style scoped>
@@ -431,37 +387,7 @@ function leaveBar(element: Element, done: () => void) {
 .actions-heading {
   text-align: right;
 }
-.country-section + .country-section {
-  margin-top: 20px;
-}
-.country-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-.country-heading h2 {
-  margin: 0;
-  font: 600 15px/1.4 var(--font-ui);
-}
-.country-heading :deep(.el-checkbox) {
-  margin: 0;
-}
-.country-heading .mono {
-  color: var(--c-muted);
-}
-.country-heading :deep(.ui-button) {
-  margin-left: auto;
-}
-.card-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
-  gap: 12px;
-}
 .node-list,
-.card-grid {
-  position: relative;
-}
 .nodes-move,
 .nodes-enter-active,
 .nodes-leave-active {

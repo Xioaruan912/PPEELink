@@ -5,9 +5,8 @@ import { provideSubscriptions } from "./subs/useSubscriptions";
 import SubscriptionList from "./subs/SubscriptionList.vue";
 import EditorDrawer from "./subs/EditorDrawer.vue";
 import DetailDrawer from "./subs/DetailDrawer.vue";
-import ArtifactDrawer from "./subs/ArtifactDrawer.vue";
 import ShareDialogs from "./subs/ShareDialogs.vue";
-import PublishDialogs from "./subs/PublishDialogs.vue";
+import ConfirmDialog from "./subs/ConfirmDialog.vue";
 defineOptions({ name: "SubsPage" });
 const { handleAddSub } = provideSubscriptions();
 </script>
@@ -21,7 +20,7 @@ const { handleAddSub } = provideSubscriptions();
       ></PageHeader
     >
     <SubscriptionList />
-    <EditorDrawer /><DetailDrawer /><ArtifactDrawer /><ShareDialogs /><PublishDialogs />
+    <EditorDrawer /><DetailDrawer /><ShareDialogs /><ConfirmDialog />
   </div>
 </template>
 <style scoped>

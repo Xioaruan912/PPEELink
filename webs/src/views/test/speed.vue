@@ -314,7 +314,6 @@
         ></EmptyState
       >
     </section>
-    <QualityTrend />
   </div>
 </template>
 <script setup lang="ts">
@@ -337,7 +336,6 @@ import { usePrefersReducedMotion } from "@/motion";
 import { useResultMotion } from "@/components/node-tests/useNodeTestSession";
 import { useTestStream } from "./useTestStream";
 import { defaultSpeedTarget, speedTarget } from "./speed/settings";
-import QualityTrend from "./speed/QualityTrend.vue";
 defineOptions({ name: "SpeedTest" });
 type NodeItem = { id: number; name: string; rtt: number; countryCode?: string };
 type SpeedResult = {

@@ -6,7 +6,6 @@ const step = ref<string | number>("filter");
 const steps = [
   { label: "筛选", value: "filter" },
   { label: "命名与排序", value: "organize" },
-  { label: "属性与脚本", value: "advanced" },
 ];
 const {
   pipeline,
@@ -103,29 +102,6 @@ const {
               :max="9999"
               controls-position="right" /></el-form-item
         ></el-col>
-        <el-col v-show="step === 'filter'" :span="8" :xs="16"
-          ><el-form-item label="倍率上限（0=不限）"
-            ><el-input-number
-              v-model="pipeline.maxMultiplier"
-              :min="0"
-              :max="100"
-              :step="0.5"
-              controls-position="right" /></el-form-item
-        ></el-col>
-        <el-col v-show="step === 'filter'" :span="12" :xs="24"
-          ><el-form-item label="正则删除节点"
-            ><el-input
-              v-model="pipeline.deletePattern"
-              placeholder="命中即删除，例如 测试|到期"
-              clearable /></el-form-item
-        ></el-col>
-        <el-col v-show="step === 'organize'" :span="12" :xs="24"
-          ><el-form-item label="关键字排序（| 分隔）"
-            ><el-input
-              v-model="pipeline.regexSort"
-              placeholder="例如 香港|日本|美国"
-              clearable /></el-form-item
-        ></el-col>
         <el-col v-show="step === 'filter'" :span="12" :xs="24"
           ><el-form-item
             ><el-checkbox v-model="pipeline.excludePlaceholder"
@@ -133,48 +109,6 @@ const {
             ></el-form-item
           ></el-col
         >
-        <el-col v-show="step === 'advanced'" :span="12" :xs="24"
-          ><el-form-item
-            ><el-checkbox v-model="pipeline.resolveDomain"
-              >域名解析为 IP 后再下发</el-checkbox
-            ></el-form-item
-          ></el-col
-        >
-        <el-col v-show="step === 'advanced'" :span="24"
-          ><el-form-item label="节点属性覆盖">
-            <div class="flag-row">
-              <span class="flag-label">UDP</span
-              ><el-select
-                v-model="pipeline.setUdp"
-                clearable
-                placeholder="默认"
-                class="flag-select"
-                ><el-option label="开启" value="on" /><el-option
-                  label="关闭"
-                  value="off"
-              /></el-select>
-              <span class="flag-label">TFO</span
-              ><el-select
-                v-model="pipeline.setTfo"
-                clearable
-                placeholder="默认"
-                class="flag-select"
-                ><el-option label="开启" value="on" /><el-option
-                  label="关闭"
-                  value="off"
-              /></el-select>
-              <span class="flag-label">跳过证书校验</span
-              ><el-select
-                v-model="pipeline.setSkipCertVerify"
-                clearable
-                placeholder="默认"
-                class="flag-select"
-                ><el-option label="开启" value="on" /><el-option
-                  label="关闭"
-                  value="off"
-              /></el-select>
-            </div> </el-form-item
-        ></el-col>
         <el-col v-show="step === 'organize'" :span="24"
           ><el-form-item label="国旗 Emoji">
             <div class="flag-row">
@@ -192,14 +126,6 @@ const {
               class="emoji-rules"
               placeholder="自定义映射（可选），每行一个：关键字=国旗，例如 香港=🇭🇰"
             /> </el-form-item
-        ></el-col>
-        <el-col v-show="step === 'advanced'" :span="24"
-          ><el-form-item label="脚本操作（仅管理员）"
-            ><el-input
-              v-model="pipeline.script"
-              type="textarea"
-              :rows="4"
-              placeholder="function operator(proxies) { return proxies.filter(p => p.name.indexOf('香港') >= 0); }" /></el-form-item
         ></el-col>
       </el-row>
       <div class="pipeline-footer">
