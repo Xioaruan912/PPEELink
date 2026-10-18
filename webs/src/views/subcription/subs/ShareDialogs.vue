@@ -202,8 +202,8 @@ watch(importSub, () => (selected.value = "clash"));
   transform: translateY(-1px);
 }
 .client-tile[aria-checked="true"] {
-  border-color: var(--c-signal);
-  box-shadow: inset 0 0 0 1px var(--c-signal);
+  border-color: var(--c-focus);
+  box-shadow: inset 0 0 0 1px var(--c-focus);
   background: var(--c-selected);
 }
 .client-mark {

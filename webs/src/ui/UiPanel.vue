@@ -70,7 +70,8 @@ const open = ref(props.defaultOpen ?? !props.collapsible);
   background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-panel);
+  box-shadow: var(--shadow-panel), var(--edge-highlight);
+  overflow: clip;
 }
 .ui-panel__header {
   display: flex;
@@ -123,7 +124,7 @@ h2 {
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   color: var(--c-muted);
 }
 .ui-panel__toggle:hover {

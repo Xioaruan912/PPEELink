@@ -98,6 +98,7 @@ export function useRouteTransition() {
         target.style.removeProperty("opacity");
         target.style.removeProperty("transform");
         target.style.removeProperty("clip-path");
+        target.style.removeProperty("filter");
       }
       done();
     };
@@ -139,17 +140,18 @@ export function useRouteTransition() {
     run(
       element,
       targets,
-      { opacity: 0, y: 20, clipPath: "inset(0 0 12% 0)" },
+      { opacity: 0, y: 28, scale: 0.985, filter: "blur(8px)" },
       {
         opacity: 1,
         y: 0,
-        clipPath: "inset(0 0 0% 0)",
-        duration: 0.32,
-        stagger: Math.min(0.04, 0.24 / Math.max(1, targets.length - 1)),
-        ease: "power3.out",
-        clearProps: "transform,opacity,clipPath",
+        scale: 1,
+        filter: "blur(0px)",
+        duration: 0.62,
+        stagger: Math.min(0.06, 0.42 / Math.max(1, targets.length - 1)),
+        ease: "expo.out",
+        clearProps: "transform,opacity,filter",
       },
-      560,
+      1100,
       done
     );
   }
@@ -160,10 +162,12 @@ export function useRouteTransition() {
       { opacity: 1, y: 0 },
       {
         opacity: 0,
-        y: -6,
-        duration: 0.14,
+        y: -8,
+        filter: "blur(4px)",
+        duration: 0.16,
+        clearProps: "filter",
       },
-      140,
+      180,
       done
     );
   }
@@ -181,7 +185,7 @@ export function useCountUp(value: MaybeRefOrGetter<number>, decimals = 0) {
       animate(
         current,
         { value: current.value },
-        { value: next, duration: 0.56, ease: "power3.out" }
+        { value: next, duration: 1.1, ease: "expo.out" }
       );
     },
     { immediate: true }
@@ -322,5 +326,38 @@ export function useStagger() {
         clearProps: "opacity,transform",
       }
     );
+  };
+}
+
+/**
+ * Pointer spotlight: surfaces opted in by CSS (see base.scss) get --mx/--my set
+ * to the pointer position so a soft accent glow follows the cursor. One
+ * delegated listener, rAF-throttled; skipped for reduced motion and touch.
+ */
+const SPOTLIGHT =
+  ".cell, .ui-panel, .stat-tiles > .ui-stat, .client-row, .group-card, .client-tile";
+export function installSpotlight() {
+  if (window.matchMedia("(hover: none)").matches) return () => {};
+  let frame = 0;
+  let last: PointerEvent | null = null;
+  const update = () => {
+    frame = 0;
+    if (!last || prefersReducedMotion()) return;
+    const target = (last.target as Element | null)?.closest<HTMLElement>(
+      SPOTLIGHT
+    );
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    target.style.setProperty("--mx", `${last.clientX - rect.left}px`);
+    target.style.setProperty("--my", `${last.clientY - rect.top}px`);
+  };
+  const onMove = (event: PointerEvent) => {
+    last = event;
+    if (!frame) frame = requestAnimationFrame(update);
+  };
+  document.addEventListener("pointermove", onMove, { passive: true });
+  return () => {
+    document.removeEventListener("pointermove", onMove);
+    cancelAnimationFrame(frame);
   };
 }

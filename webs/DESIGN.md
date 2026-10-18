@@ -1,53 +1,39 @@
-# PPEELink 设计规范 —— "Signal Atlas"
+# PPEELink 设计规范 - "Ion"（v3，2026-10-18 起，取代 Signal Atlas）
 
-> 这是本次前端完全重构的唯一视觉/交互标准。所有实现必须对照本文件；验收方按第 9 节逐项检查。
-> taste-skill 档位：**DESIGN_VARIANCE 10 · MOTION_INTENSITY 10 · VISUAL_DENSITY 4**。
+> 前端唯一视觉/交互标准。taste-skill 档位：**DESIGN_VARIANCE 10 · MOTION_INTENSITY 10 · VISUAL_DENSITY 4**（用户要求设计与动效开到最大）。
 
 ## 1. Design Read
-自托管网络/订阅运维台，用户是懂行的单人管理员（中文界面）。语言：**编辑感排版 + 精密仪器感数据**。
-像一份会动的航线图/信号报告，而不是 Element Admin 模板。不要：紫色渐变、满屏玻璃拟态、霓虹赛博网格、
-居中大 Hero、三等分特性卡片、Inter + slate 默认风、emoji 当图标、到处 badge。
+自托管代理订阅控制台的整体视觉重做，用户是懂行的单人管理员。语言：**dark-tech 精密仪器感**，冷色 zinc 中性色 + 唯一的青柠强调色，深浅双主题。
+不要：衬线大标题（Instrument Serif 已移除）、暖米色/骨白底、紫色渐变、三等分卡片、emoji 当图标、装饰性网格线、em-dash。
 
-## 2. 设计 tokens（唯一色源，组件里禁止硬编码散色）
-定义在 `src/styles/tokens.scss`，`:root` 为浅色，`html.dark`（沿用现有 dark class 机制）为深色，并同步映射到 Element Plus 的 `--el-*` 变量。
+## 2. 设计 tokens（`src/styles/tokens.scss`，`:root` 浅色，`html.dark` 深色）
 
 | token | 浅色 | 深色 | 用途 |
 |---|---|---|---|
-| `--c-canvas` | `#F3F1EC` | `#121314` | 页面底 |
-| `--c-surface` | `#FBFAF7` | `#1A1B1D` | 面板 |
-| `--c-surface-2` | `#ECE9E2` | `#222326` | 凹陷区/表头/输入底 |
-| `--c-line` | `#DAD6CD` | `#2E3033` | 发丝线 1px |
-| `--c-ink` | `#17181A` | `#ECEAE4` | 主文字 |
-| `--c-muted` | `#625F5A` | `#9A9891` | 次要文字（对比度 ≥ 4.5:1） |
-| `--c-signal` | `#E4472B` | `#FF6A4D` | 图形强调：填充背景、边框、焦点环、指示条与图形 |
-| `--c-signal-text` | `#AF301A` | `#FF8A70` | 文字强调：选中项、计数、链接式按钮、eyebrow 与强调数字（对比度 ≥ 4.5:1） |
-| `--c-data` | `#2F5BEA` | `#6E8CFF` | 数据/图表/链接 |
-| `--c-ok` | `#1F9D6B` | `#3CC48D` | 正常/在线 |
-| `--c-warn` | `#D99A1E` | `#F0B43C` | 警告/偏慢 |
-| `--c-bad` | `#C8321E` | `#FF5A45` | 失败/离线 |
+| `--c-canvas` | `#F3F4F6` | `#0B0C0E` | 页面底 |
+| `--c-surface` | `#FCFCFD` | `#131418` | 卡片 / 面板 |
+| `--c-surface-2` | `#ECEEF1` | `#1B1D22` | 输入底、悬停、凹陷区 |
+| `--c-line` | `#DCDFE4` | `#262930` | 1px 边线 |
+| `--c-ink` | `#101216` | `#ECEEF2` | 主文字 |
+| `--c-muted` | `#596070` | `#8D93A0` | 次要文字 |
+| `--c-signal` | `#C2EC2C` | `#C8F03A` | 强调**填充**（主按钮、选中图标块、进度、地图节点光晕）。其上文字一律 `--c-on-signal` |
+| `--c-signal-text` | `#4B6600` | `#D2F55C` | 强调**文字** |
+| `--c-focus` | `#4B6600` | `#C8F03A` | 焦点环、选中描边、开关、地图节点（满足 3:1） |
+| `--c-data` | `#2F6BFF` | `#6F9BFF` | 第二数据色（图表、渐变） |
+| `--c-ok / warn / bad` | `#14915C / #C27A06 / #D63A3F` | `#3FD18F / #F4B13D / #FF6467` | 状态 |
+| `--c-glow` | lime 18% | lime 14% | 光晕、聚光灯 |
 
-对比度核算（WCAG sRGB，依次为 canvas / surface / surface-2）：浅色 muted **5.63 / 6.09 / 5.24 : 1**；深色 muted **6.44 / 5.97 / 5.44 : 1**。
-
-文字强调色对比度（依次为 canvas / surface / surface-2）：浅色 **5.71 / 6.17 / 5.31 : 1**，深色 **8.08 / 7.49 / 6.83 : 1**。在三种底色分别叠加 signal 12% 后，浅色为 **4.91 / 5.28 / 4.59 : 1**，深色为 **6.94 / 6.35 / 5.76 : 1**。朱红文字统一用 `--c-signal-text`，不从填充色派生；Element Plus 的 primary 文字及旧 ui-accent 别名映射到文字色，实心按钮等图形填充单独保留 `--c-signal`。
-
-派生：`color-mix(in srgb, var(--c-signal) 12%, transparent)` 用作选中底色；阴影只用一层极淡 `0 1px 0 var(--c-line)` + 弹层用 `0 24px 48px -24px rgb(0 0 0 / .25)`。
-圆角：控件 10px，面板 16px，弹层 20px，状态点/标签 999px。
+形状规则：按钮 / 分段 / 标签 / 胶囊 = `--radius-pill`；输入 10px；卡片与面板 16px；弹层 20px。卡片阴影 = `--shadow-panel` + `--edge-highlight`（顶部 1px 内高光）。
 
 ## 3. 字体与字号
-- 自托管 woff2（`public/fonts/`，在 `src/styles/fonts.css` 用 `@font-face` + `font-display: swap`，base 为 `/static/fonts/...` 时需走 Vite 资源路径，确保生产和开发都能加载）：
-  - 展示：**Instrument Serif**（400 normal/italic）→ `--font-display`。用于页面大标题、英雄数字、关键大数字旁的标签、页面级空状态标题。中文回退 `"Songti SC","Noto Serif SC",serif`。
-  - 界面：**Geist**（variable）→ `--font-ui`，回退 `"PingFang SC","HarmonyOS Sans SC","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif`。
-  - 数字/代码/链接/IP：**JetBrains Mono**（variable）→ `--font-mono`，统一 `font-variant-numeric: tabular-nums`。
-- `UiStat` 通过 `size` 控制数字层级：仅 `hero`（仪表盘节点总数）使用 `--font-display`；`large` 为 Geist 26px 600；`medium` / `small` 使用 mono。
-- 字号：正文 14 / 次要 13 / 元信息 12（行内副标题、列表表头、徽标、计数）；页面标题 22px UI 字体 600（不用 display 字体）；面板标题 15px 600。最小字号 12。
-- 行高：正文 1.6，控件 1.4。
+- 只用两套自托管字体：**Geist**（标题与界面，`--font-ui` / `--font-display` 同指 Geist）+ **JetBrains Mono**（数字、主机、链接）。
+- 页面标题 clamp(24px, 2.4vw, 32px) 600，字距 -0.02em（中文不能再紧）；面板标题 15px 600；正文 14；次要 13；元信息 12（最小）。
+- `UiStat`：`hero` 为首页超大数字（Geist 600，最高 112px，-0.06em）；`large` 26px 600；`medium/small` mono。
 
-## 4. 布局（v2 "Console"，2026-10-18 起）
-- **外壳**：桌面 = 左侧 236px 带文字的侧栏（Logo + 产品名、按路由分组的小标题 + 导航行、底部任务状态 / 主题 / 账户卡），可收起为 68px 图标栏（偏好存 localStorage）；选中行有弹簧滑动的高亮块。主列顶部 60px 粘性顶栏：面包屑（分组 / 页面）+ 右侧搜索框（⌘K）。<1024px 侧栏变为左侧滑出抽屉，顶栏出现菜单按钮；手机不再有底部 dock。
-- **页面骨架**：`PageHeader`（标题 + 一句说明 + 右侧主操作）→ 可选 `.stat-tiles` 指标卡行 → 一个或多个 `UiPanel` 区块。每个区块 = 带边框卡片，头部为「标题 + 计数徽标 + 一句说明 / 右侧筛选与操作」，列表放在 `flush` 面板里，表头为浅底 12px mono。次要信息（如规则源）用 `collapsible` 折叠面板。
-- 区块间距 16px；页面内边距桌面 28px、平板 20px、手机 12px；内容最大宽 1480px。
-- 列表行高约 64–72px，主行文字 14px 600，副行 12px muted；手机下行转为单列堆叠，不出现横向滚动。
-- 空状态：`EmptyState size="page"` / `section` / `inline` 规则不变；绝不塞假数据。
+## 4. 布局
+- **外壳**：顶部 64px 粘性栏，毛玻璃底。左：Logo + 字标；中：胶囊形主导航，"首页 / 订阅管理 / 测试 / 模板"，分组悬停或点击展开下拉菜单（图标块 + 名称 + 一句说明），胶囊高亮弹簧跟随指针；右：搜索胶囊（⌘K）、测试任务按钮（仅在真实运行时出现状态点）、主题切换、头像菜单。<1100px 主导航收进右侧菜单按钮，展开为全屏页面清单。页面顶部有一团极淡的青柠光晕。
+- **内容**：最大宽 1400px 居中；页面 = PageHeader → 可选 `.stat-tiles` → 若干 `UiPanel`。首页为 12 列 bento：节点总数大块（2 行，青柠/蓝色渐变底）、订阅、连接评分环、机场流量、节点地图（点阵大陆）、所在地区，单元格数量与内容一致，手机单列。
+- **登录页**：左侧圆角深色舞台（缓慢漂移的三色光场 + 大标题），右侧表单。
 
 ## 5. 组件层（`src/ui/`，全部自建，EP 仅作复杂控件底座）
 `UiButton`（primary=signal 实心 / secondary=描边 / ghost / danger；支持 loading、icon、磁吸 `v-magnetic` 仅用于 primary）、`UiPanel`、`PageHeader`、`UiStat`（按 size 区分 display / mono 数字 + 计数动画 + 标签 + 可选趋势）、`StatusDot`（ok/warn/bad/idle，ok 带呼吸脉冲）、`UiTable`（包 el-table，统一样式 + 移动卡片插槽）、`EmptyState`、`UiSkeleton`、`UiDialog` / `UiDrawer`（包 el-dialog/el-drawer，统一头尾）、`UiSegmented`（分段切换，滑块弹簧动画）、`UiTag`、`CommandPalette`（⌘K / Ctrl+K，模糊搜索所有路由 + 常用动作，方向键 + Enter）。
@@ -59,7 +45,7 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
   1. 路由过渡：内容区 clip/translate+opacity 交错入场（标题先、内容后，stagger 40ms），离场 140ms。
   2. 列表/表格首屏行 stagger 入场；筛选结果变化用 `<TransitionGroup>` FLIP。
   3. `UiStat` 数字从 0 滚动到值（字体按第 3 节 size 规则）；延迟数值变化时颜色随阈值过渡。
-  4. 侧栏选中高亮块弹簧滑动；图标 hover 位移；收起/展开与抽屉为宽度/位移过渡。
+  4. 顶栏导航胶囊弹簧跟随悬停项；下拉菜单缩放淡入；主题图标旋转切换；卡片/面板指针聚光灯（`installSpotlight`）；路由内容模糊 + 位移交错入场（expo.out）；数字计数 1.1s；首页评分环描边动画；地图节点脉冲；登录页光场漂移。
   5. 主按钮 `v-magnetic` 磁吸（指针 24px 内吸附，离开弹回）。
   6. 状态脉冲：在线点呼吸、测速/检测进行中扫描线或进度波纹。
   7. 仪表盘地图/地球：底图始终渲染，缓慢扫描 / 经纬线描线可暂停，reduced-motion 静止；节点位置点与标注线仅来自 `getNodeMap` 真实数据，无节点时左下角叠加小号说明与管理节点按钮。

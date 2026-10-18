@@ -41,9 +41,9 @@
             )
           "
         />
-        <span class="category-emoji" aria-hidden="true">{{
-          category.emoji
-        }}</span>
+        <span class="category-emoji" aria-hidden="true"
+          ><component :is="category.icon"
+        /></span>
         <span class="category-copy"
           ><strong>{{ category.label }}</strong
           ><small>{{ targetLabel(category) }}</small></span
@@ -127,7 +127,7 @@ h3 {
   min-height: 52px;
   padding: 8px 10px;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-control);
+  border-radius: 14px;
   background: var(--c-surface);
   cursor: pointer;
   transition:
@@ -142,11 +142,11 @@ h3 {
   transform: scale(0.97);
 }
 .category.is-on {
-  border-color: var(--c-signal);
+  border-color: color-mix(in srgb, var(--c-focus) 70%, var(--c-line));
   background: var(--c-selected);
 }
 .category:focus-within {
-  outline: 2px solid var(--c-signal);
+  outline: 2px solid var(--c-focus);
   outline-offset: 2px;
 }
 .category input {
@@ -162,12 +162,20 @@ h3 {
   height: 30px;
   border-radius: 8px;
   background: var(--c-surface-2);
-  font-size: 16px;
-  transition: transform var(--duration-medium) var(--ease-spring);
+  color: var(--c-muted);
+  transition:
+    transform var(--duration-medium) var(--ease-spring),
+    background-color var(--duration-fast),
+    color var(--duration-fast);
+}
+.category-emoji svg {
+  width: 17px;
+  height: 17px;
 }
 .is-on .category-emoji {
   transform: rotate(-8deg) scale(1.08);
-  background: var(--c-surface);
+  background: var(--c-signal);
+  color: var(--c-on-signal);
 }
 .category-copy {
   display: grid;

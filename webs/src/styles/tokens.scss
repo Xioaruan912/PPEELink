@@ -1,51 +1,64 @@
 :root {
-  --c-canvas: #f3f1ec;
-  --c-surface: #fbfaf7;
-  --c-surface-2: #ece9e2;
-  --c-line: #dad6cd;
-  --c-ink: #17181a;
-  --c-muted: #625f5a;
-  --c-signal: #e4472b;
-  --c-signal-text: #af301a;
-  --c-data: #2f5bea;
-  --c-ok: #1f9d6b;
-  --c-warn: #d99a1e;
-  --c-bad: #c8321e;
+  // "Ion" palette: cool zinc neutrals, one lime accent. Text on the accent
+  // fill is always --c-on-signal; accent-coloured text uses --c-signal-text.
+  --c-canvas: #f3f4f6;
+  --c-surface: #fcfcfd;
+  --c-surface-2: #eceef1;
+  --c-line: #dcdfe4;
+  --c-ink: #101216;
+  --c-muted: #596070;
+  --c-signal: #c2ec2c;
+  --c-signal-text: #4b6600;
+  --c-focus: #4b6600;
+  --c-data: #2f6bff;
+  --c-ok: #14915c;
+  --c-warn: #c27a06;
+  --c-bad: #d63a3f;
+  --c-glow: rgb(194 236 44 / 0.18);
 
   --font-display:
-    "Instrument Serif", "Songti SC", "Noto Serif SC", "STSong", serif;
+    "Geist", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei",
+    "Noto Sans SC", system-ui, sans-serif;
   --font-ui:
     "Geist", "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei",
     "Noto Sans SC", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --duration-fast: 180ms;
-  --duration-medium: 320ms;
-  --duration-slow: 560ms;
-  --radius-control: 8px;
-  --radius-panel: 12px;
-  --radius-overlay: 14px;
-  --shadow-panel: 0 1px 0 var(--c-line);
-  --shadow-overlay: 0 24px 48px -24px rgb(0 0 0 / 0.25);
-  --c-on-signal: #121314;
-  // Dock 30, tools 40; Element Plus owns overlays (2000+).
+  --duration-fast: 160ms;
+  --duration-medium: 300ms;
+  --duration-slow: 600ms;
+  // Shape rule: buttons and chips are pills, inputs 10px, cards 16px.
+  --radius-control: 10px;
+  --radius-pill: 999px;
+  --radius-panel: 16px;
+  --radius-overlay: 20px;
+  --shadow-panel:
+    0 1px 2px rgb(16 18 22 / 0.04), 0 8px 24px -16px rgb(16 18 22 / 0.18);
+  --shadow-overlay: 0 32px 64px -24px rgb(16 18 22 / 0.32);
+  --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
+  --c-on-signal: #0d0f12;
   --z-dock: 30;
   --z-tools: 40;
 }
 html.dark {
-  --c-canvas: #121314;
-  --c-surface: #1a1b1d;
-  --c-surface-2: #222326;
-  --c-line: #2e3033;
-  --c-ink: #eceae4;
-  --c-muted: #9a9891;
-  --c-signal: #ff6a4d;
-  --c-signal-text: #ff8a70;
-  --c-data: #6e8cff;
-  --c-ok: #3cc48d;
-  --c-warn: #f0b43c;
-  --c-bad: #ff5a45;
+  --c-canvas: #0b0c0e;
+  --c-surface: #131418;
+  --c-surface-2: #1b1d22;
+  --c-line: #262930;
+  --c-ink: #eceef2;
+  --c-muted: #8d93a0;
+  --c-signal: #c8f03a;
+  --c-signal-text: #d2f55c;
+  --c-focus: #c8f03a;
+  --c-data: #6f9bff;
+  --c-ok: #3fd18f;
+  --c-warn: #f4b13d;
+  --c-bad: #ff6467;
+  --c-glow: rgb(200 240 58 / 0.14);
+  --shadow-panel: 0 1px 0 rgb(0 0 0 / 0.4), 0 12px 32px -20px rgb(0 0 0 / 0.7);
+  --shadow-overlay: 0 40px 80px -24px rgb(0 0 0 / 0.75);
+  --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
 }
 :root,
 html.dark {
@@ -86,7 +99,7 @@ html.dark {
   );
   --el-border-radius-base: var(--radius-control);
   --el-border-radius-small: var(--radius-control);
-  --el-border-radius-round: 999px;
+  --el-border-radius-round: var(--radius-pill);
   --el-font-family: var(--font-ui);
   --el-font-size-extra-small: 13px;
   --el-font-size-small: 14px;
@@ -291,7 +304,7 @@ html.dark {
   --ui-danger-soft: color-mix(in srgb, var(--c-bad) 12%, var(--c-surface));
   --ui-success-soft: color-mix(in srgb, var(--c-ok) 12%, var(--c-surface));
   --ui-warning-soft: color-mix(in srgb, var(--c-warn) 12%, var(--c-surface));
-  --ui-focus-ring: var(--c-signal);
+  --ui-focus-ring: var(--c-focus);
   --ui-panel-shadow: var(--shadow-panel);
   --ui-accent-shadow: var(--shadow-panel);
   --font-data: var(--font-mono);

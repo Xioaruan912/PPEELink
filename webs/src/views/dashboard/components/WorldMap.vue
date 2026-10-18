@@ -31,20 +31,20 @@
         @pointerup="stopPan"
         @pointercancel="stopPan"
       >
+        <defs>
+          <pattern
+            id="land-dots"
+            width="5"
+            height="5"
+            patternUnits="userSpaceOnUse"
+          >
+            <circle class="land-dot" cx="2.5" cy="2.5" r="1.05" />
+          </pattern>
+        </defs>
         <g
           :transform="`translate(${offset.x} ${offset.y}) translate(500 250) scale(${zoom}) translate(-500 -250)`"
         >
           <path class="land" :d="landPath" />
-          <path class="graticule" :d="graticule" aria-hidden="true" />
-          <g class="scan-lines" aria-hidden="true"><path :d="graticule" /></g>
-          <rect
-            class="scan-front"
-            x="0"
-            y="56"
-            width="2"
-            height="388"
-            aria-hidden="true"
-          />
           <g ref="leaders" class="map-leaders" aria-hidden="true">
             <path
               v-for="(point, index) in projected"
@@ -271,7 +271,7 @@ const mapError = ref("");
 const stage = ref<HTMLElement>();
 const leaders = ref<SVGGElement>();
 const { animate, stop, reduced } = useMotion();
-// Geographical scanning is independent of node data and uses only CSS motion.
+// Node pulses run only while the map is visible, playing and motion is allowed.
 const playing = ref(true);
 const hidden = ref(false);
 const inactive = ref(false);
@@ -284,10 +284,6 @@ const scanPaused = computed(
     inactive.value ||
     !inView.value
 );
-const graticule = [
-  ...Array.from({ length: 11 }, (_, i) => `M${((i + 1) * 1000) / 12},56 V444`),
-  ...Array.from({ length: 5 }, (_, i) => `M0,${((i + 1) * 500) / 6} H1000`),
-].join(" ");
 let visibilityObserver: IntersectionObserver | undefined;
 const syncVisibility = () => {
   hidden.value = document.hidden;
@@ -475,7 +471,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--c-surface-2);
 }
 .map-panel :deep(.ui-panel__header) {
   margin-bottom: 0;
@@ -497,85 +492,18 @@ onBeforeUnmount(() => {
   touch-action: pan-y;
 }
 .land {
-  fill: var(--c-canvas);
-  stroke: var(--c-line);
-  stroke-width: 0.6;
+  fill: url(#land-dots);
   fill-rule: evenodd;
 }
-.graticule {
-  fill: none;
-  stroke: var(--c-line);
-  stroke-width: 0.7;
-}
-.scan-lines {
-  pointer-events: none;
-}
-.scan-lines path {
-  fill: none;
-  stroke: var(--c-data);
-  stroke-width: 0.9;
-  opacity: 0.45;
-}
-.scan-front {
-  fill: var(--c-data);
-  opacity: 0.25;
-  pointer-events: none;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .scan-lines {
-    animation: atlas-lines 12s linear infinite;
-  }
-  .scan-front {
-    animation: atlas-scan 12s linear infinite;
-  }
-}
-.is-paused .scan-lines,
-.is-paused .scan-front {
-  animation-play-state: paused;
-}
-.is-reduced .scan-lines,
-.is-reduced .scan-front {
-  animation: none;
-}
-.is-reduced .scan-front {
-  opacity: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .scan-front {
-    opacity: 0;
-  }
-}
-@keyframes atlas-lines {
-  0% {
-    clip-path: inset(0 100% 0 0);
-  }
-  85%,
-  100% {
-    clip-path: inset(0 0 0 0);
-  }
-}
-@keyframes atlas-scan {
-  0% {
-    transform: translateX(0);
-    opacity: 0;
-  }
-  8% {
-    opacity: 0.25;
-  }
-  85% {
-    transform: translateX(1000px);
-    opacity: 0.25;
-  }
-  100% {
-    transform: translateX(1000px);
-    opacity: 0;
-  }
+.land-dot {
+  fill: color-mix(in srgb, var(--c-muted) 55%, transparent);
 }
 .map-leaders path {
   fill: none;
-  stroke: var(--c-data);
-  stroke-width: 1;
-  opacity: 0.6;
+  stroke: var(--c-signal-text);
+  stroke-width: 0.8;
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
   transform-box: fill-box;
 }
 .node-hit {
@@ -584,11 +512,28 @@ onBeforeUnmount(() => {
   stroke-width: 44px;
 }
 .node-halo {
-  fill: var(--c-selected);
+  fill: var(--c-glow);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .map-stage:not(.is-paused):not(.is-reduced) .node-halo {
+    animation: node-pulse 2.4s var(--ease-out) infinite;
+  }
+}
+@keyframes node-pulse {
+  0% {
+    transform: scale(0.6);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
 }
 .node-mark {
-  fill: var(--c-signal);
-  stroke: var(--c-surface);
+  fill: var(--c-focus);
+  stroke: var(--c-canvas);
   stroke-width: 1;
 }
 .map-node {

@@ -1,6 +1,6 @@
 {
-  "version": 3,
-  "at": "2026-10-17",
+  "version": 4,
+  "at": "2026-10-18",
   "primarySkill": "https://github.com/leonxlnx/taste-skill/tree/main/skills/taste-skill-v1",
   "supportingSkill": "redesign-existing-projects",
   "configuration": {
@@ -8,30 +8,31 @@
     "MOTION_INTENSITY": 10,
     "VISUAL_DENSITY": 4
   },
-  "brief": "Full rewrite of PPEELink's Vue console; keep real APIs, routes and workflows. Executed by Codex (gpt-6.1-sol, high), reviewed by Claude.",
-  "direction": "Signal Atlas: editorial display type + precise instrument-like data, bone/graphite canvas, signal vermilion accent. See webs/DESIGN.md.",
+  "brief": "Full visual overhaul requested by the user: discard Signal Atlas, dials at max. Claude implements directly.",
+  "direction": "Ion: dark-tech precision console, cool zinc neutrals, single lime accent, Geist + JetBrains Mono, top capsule navigation, bento dashboard. See webs/DESIGN.md.",
   "palette": {
-    "canvas": "#F3F1EC",
-    "surface": "#FBFAF7",
-    "ink": "#17181A",
-    "muted": "#6B6A66",
-    "signal": "#E4472B",
-    "data": "#2F5BEA"
+    "canvas": "#F3F4F6 / #0B0C0E",
+    "surface": "#FCFCFD / #131418",
+    "ink": "#101216 / #ECEEF2",
+    "muted": "#596070 / #8D93A0",
+    "signal": "#C2EC2C / #C8F03A",
+    "data": "#2F6BFF / #6F9BFF"
   },
   "type": {
-    "display": "Instrument Serif",
+    "display": "Geist",
     "interface": "Geist + Chinese system fallbacks",
     "numbers": "JetBrains Mono",
     "hosting": "self-hosted woff2"
   },
   "motion": [
-    "orthographic canvas globe",
-    "keyboard and pointer rotation",
-    "magnetic primary actions",
-    "spring dock",
-    "route transitions",
-    "tab and filtered-list transitions",
-    "skeleton and status feedback"
+    "capsule nav spring pill",
+    "dropdown scale-in",
+    "pointer spotlight on surfaces",
+    "blur+rise route stagger",
+    "count-up numbers",
+    "score ring draw",
+    "map node pulse",
+    "login aurora drift"
   ],
   "constraints": [
     "existing Vue stack",
@@ -39,9 +40,9 @@
     "single-column phone composition",
     "reduced motion",
     "keyboard access",
-    "no backend changes",
-    "Preserve the original logo",
-    "16px body / 15px controls / 14px secondary text",
-    "Remove repetitive microcopy"
+    "Remove repetitive microcopy",
+    "Phosphor icons via unplugin-icons",
+    "no emoji icons",
+    "no em-dash"
   ]
 }

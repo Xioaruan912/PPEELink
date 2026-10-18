@@ -79,13 +79,13 @@ textarea,
   -webkit-tap-highlight-color: transparent;
 }
 :root :focus-visible {
-  outline: 2px solid var(--c-signal) !important;
+  outline: 2px solid var(--c-focus) !important;
   outline-offset: 2px !important;
 }
 // Monaco focuses a hidden textarea; keep its containing editor visibly focused.
 .monaco-host:focus-within,
 .diff-host:focus-within {
-  outline: 2px solid var(--c-signal);
+  outline: 2px solid var(--c-focus);
   outline-offset: 2px;
 }
 ::selection {
@@ -114,10 +114,10 @@ p {
   margin: 0;
 }
 h1 {
-  font-size: 22px;
+  font-size: clamp(24px, 2.4vw, 32px);
   font-weight: 600;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 h2 {
   font-size: 17px;
@@ -196,5 +196,62 @@ html[data-motion="reduced"] {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+}
+
+// Pointer spotlight (driven by installSpotlight in src/motion).
+:is(
+  .cell,
+  .ui-panel,
+  .stat-tiles > .ui-stat,
+  .client-row,
+  .group-card,
+  .client-tile
+) {
+  position: relative;
+  isolation: isolate;
+}
+:is(
+  .cell,
+  .ui-panel,
+  .stat-tiles > .ui-stat,
+  .client-row,
+  .group-card,
+  .client-tile
+)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    420px circle at var(--mx, 50%) var(--my, 0%),
+    var(--c-glow),
+    transparent 45%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--duration-medium) var(--ease-out);
+}
+:is(
+    .cell,
+    .ui-panel,
+    .stat-tiles > .ui-stat,
+    .client-row,
+    .group-card,
+    .client-tile
+  ):hover::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  :is(
+    .cell,
+    .ui-panel,
+    .stat-tiles > .ui-stat,
+    .client-row,
+    .group-card,
+    .client-tile
+  )::after {
+    display: none;
   }
 }

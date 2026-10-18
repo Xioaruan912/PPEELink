@@ -357,7 +357,7 @@ watch(savedRevision, async () => {
 .preview-outline {
   position: absolute;
   inset: -1px;
-  border: 2px solid var(--c-signal);
+  border: 2px solid var(--c-focus);
   border-radius: var(--radius-panel);
   pointer-events: none;
   opacity: 0;

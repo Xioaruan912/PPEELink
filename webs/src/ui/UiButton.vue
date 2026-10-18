@@ -40,7 +40,7 @@ withDefaults(
   gap: 8px;
   padding: 8px 16px;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   color: var(--c-ink);
   background: var(--c-surface);
   font: 500 14px/1.4 var(--font-ui);
@@ -62,9 +62,15 @@ withDefaults(
   color: var(--c-on-signal);
   background: var(--c-signal);
   border-color: var(--c-signal);
+  box-shadow:
+    var(--edge-highlight),
+    0 6px 18px -8px var(--c-glow);
 }
 .ui-button--primary:hover {
-  background: color-mix(in srgb, var(--c-signal) 88%, var(--c-surface));
+  background: color-mix(in srgb, var(--c-signal) 90%, var(--c-ink));
+  box-shadow:
+    var(--edge-highlight),
+    0 10px 28px -8px var(--c-glow);
 }
 .ui-button--primary:disabled {
   color: var(--c-muted);

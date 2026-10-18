@@ -125,7 +125,7 @@
   cursor: pointer;
 }
 .category-list button.active {
-  border-color: var(--c-signal);
+  border-color: var(--c-focus);
   background: color-mix(in srgb, var(--c-signal) 10%, transparent);
   color: var(--c-signal-text);
 }

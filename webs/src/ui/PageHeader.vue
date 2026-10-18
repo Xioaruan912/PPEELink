@@ -27,7 +27,7 @@ defineProps<{
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 h1 {
   margin: 0;
@@ -37,8 +37,8 @@ h1 {
 }
 .page-header__description {
   color: var(--c-muted);
-  font-size: 13px;
-  margin: 4px 0 0;
+  font-size: 14px;
+  margin: 6px 0 0;
 }
 .page-header__actions {
   display: flex;
