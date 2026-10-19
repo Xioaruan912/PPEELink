@@ -473,6 +473,29 @@ func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlC
 	return proxys
 }
 
+// takeGlobalFingerprint 移除模板里的 global-client-fingerprint 并返回其值。
+// 新版 mihomo 已删除该顶层配置（存在时拒绝加载），需要改为在每个节点上设置 client-fingerprint。
+func takeGlobalFingerprint(config map[interface{}]interface{}) string {
+	v, ok := config["global-client-fingerprint"]
+	if !ok {
+		return ""
+	}
+	delete(config, "global-client-fingerprint")
+	fp, _ := v.(string)
+	return strings.TrimSpace(fp)
+}
+
+// usesTLS 节点是否走 TLS（指纹只对 TLS 握手有意义）。
+func usesTLS(p Proxy) bool {
+	switch p.Type {
+	case "trojan", "anytls":
+		return true
+	case "vless", "vmess":
+		return p.Tls || p.Reality_opts != nil
+	}
+	return false
+}
+
 // DecodeClash 用于解析 Clash 配置文件
 // loadClashTemplate 读取本地或远程 Clash 模板。
 func loadClashTemplate(yamlfile string) (map[interface{}]interface{}, error) {
@@ -511,6 +534,7 @@ func EncodeClashProvider(yamlfile, providerName, providerURL, testURL string) ([
 	if err != nil {
 		return nil, err
 	}
+	takeGlobalFingerprint(config)
 	if testURL == "" {
 		testURL = "https://www.gstatic.com/generate_204"
 	}
@@ -557,6 +581,8 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 		return nil, err
 	}
 
+	fingerprint := takeGlobalFingerprint(config)
+
 	// 检查 "proxies" 键是否存在于 config 中
 	proxies, ok := config["proxies"].([]interface{})
 	if !ok {
@@ -568,6 +594,9 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 	// 添加新代理
 	for _, p := range proxys {
 		ProxiesNameList = append(ProxiesNameList, p.Name)
+		if fingerprint != "" && p.Client_fingerprint == "" && usesTLS(p) {
+			p.Client_fingerprint = fingerprint
+		}
 		proxies = append(proxies, p)
 	}
 	// proxies = append(proxies, newProxy)

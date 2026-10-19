@@ -7,37 +7,36 @@ import (
 
 func TestBuildClashYAMLFull(t *testing.T) {
 	req := BuilderRequest{
-		Filename:                "mihomo.yaml",
-		Port:                    7890,
-		SocksPort:               7891,
-		MixedPort:               7892,
-		RedirPort:               7893,
-		TproxyPort:              7894,
-		PortOffset:              true,
-		AllowLan:                true,
-		Mode:                    "rule",
-		LogLevel:                "info",
-		IPv6:                    true,
-		UDP:                     true,
-		ExternalController:      "0.0.0.0:9090",
-		UnifiedDelay:            true,
-		GeodataLoader:           "standard",
-		GeoAutoUpdate:           true,
-		GeoUpdateInterval:       24,
-		TcpConcurrent:           true,
-		FindProcessMode:         "strict",
-		GlobalClientFingerprint: "chrome",
-		SnifferEnable:           true,
-		TunEnable:               true,
-		TunStack:                "system",
-		DNSEnable:               true,
-		DNSEnhancedMode:         "fake-ip",
-		DNSListenPort:           1053,
-		TestURL:                 "http://www.gstatic.com/generate_204",
-		Interval:                300,
-		Groups:                  defaultGroups(),
-		RuleProviders:           defaultRuleProviders(),
-		Rules:                   defaultRules(),
+		Filename:           "mihomo.yaml",
+		Port:               7890,
+		SocksPort:          7891,
+		MixedPort:          7892,
+		RedirPort:          7893,
+		TproxyPort:         7894,
+		PortOffset:         true,
+		AllowLan:           true,
+		Mode:               "rule",
+		LogLevel:           "info",
+		IPv6:               true,
+		UDP:                true,
+		ExternalController: "0.0.0.0:9090",
+		UnifiedDelay:       true,
+		GeodataLoader:      "standard",
+		GeoAutoUpdate:      true,
+		GeoUpdateInterval:  24,
+		TcpConcurrent:      true,
+		FindProcessMode:    "strict",
+		SnifferEnable:      true,
+		TunEnable:          true,
+		TunStack:           "system",
+		DNSEnable:          true,
+		DNSEnhancedMode:    "fake-ip",
+		DNSListenPort:      1053,
+		TestURL:            "http://www.gstatic.com/generate_204",
+		Interval:           300,
+		Groups:             defaultGroups(),
+		RuleProviders:      defaultRuleProviders(),
+		Rules:              defaultRules(),
 	}
 	out, err := buildClashYAML(req)
 	if err != nil {
@@ -46,7 +45,7 @@ func TestBuildClashYAMLFull(t *testing.T) {
 	t.Logf("yaml:\n%s", out)
 
 	// 基础配置
-	for _, s := range []string{"port: 7890", "mixed-port: 7892", "tproxy-port: 7894", "proxies: ~", "unified-delay: true", "global-client-fingerprint: chrome", "external-controller: 0.0.0.0:9090"} {
+	for _, s := range []string{"port: 7890", "mixed-port: 7892", "tproxy-port: 7894", "proxies: ~", "unified-delay: true", "external-controller: 0.0.0.0:9090"} {
 		if !strings.Contains(out, s) {
 			t.Errorf("缺少: %s", s)
 		}
@@ -121,4 +120,36 @@ func TestPortOffsetLinkage(t *testing.T) {
 		t.Errorf("external-controller 异常: %s", req.ExternalController)
 	}
 	t.Logf("port=%d mixed=%d socks=%d dns=%d ec=%s", req.Port, req.MixedPort, req.SocksPort, req.DNSListenPort, req.ExternalController)
+}
+
+func TestParseBuilderYAMLRoundTrip(t *testing.T) {
+	want := defaultBuilderRequest()
+	text, err := buildClashYAML(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := parseBuilderYAML("mine.yaml", text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := buildClashYAML(got)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != text {
+		t.Fatalf("parse then rebuild must reproduce the template\nwant:\n%s\ngot:\n%s", text, again)
+	}
+	if got.EditOldname != "mine.yaml" || len(got.Groups) != len(want.Groups) || len(got.RuleProviders) != len(want.RuleProviders) {
+		t.Fatalf("form not restored: %+v", got)
+	}
+}
+
+func TestParseBuilderYAMLDropsConfigLinesFromRules(t *testing.T) {
+	got, err := parseBuilderYAML("x.yaml", "rules:\n  - 'allow-lan: true'\n  - 'dns:'\n  - RULE-SET,AI,AI\n  - MATCH,DIRECT\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Rules) != 2 || got.Rules[0] != "RULE-SET,AI,AI" {
+		t.Fatalf("config lines must not become rules: %v", got.Rules)
+	}
 }

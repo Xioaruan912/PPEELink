@@ -19,3 +19,13 @@ export function GetDefaultTemplate() {
     method: "get",
   });
 }
+
+/** 把已保存的 mihomo 模板解析成构建器表单。 */
+export function ParseTemplateForBuilder(filename: string, text: string) {
+  return request({
+    url: "/api/v1/template/parse",
+    method: "post",
+    data: { filename, text },
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+}

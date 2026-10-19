@@ -24,7 +24,6 @@ export function createClashPreview(
     "geo-update-interval": form.geo_update_interval,
     "tcp-concurrent": form.tcp_concurrent,
     "find-process-mode": form.find_process_mode,
-    "global-client-fingerprint": form.global_client_fingerprint,
   };
   if (form.geodata_loader !== undefined)
     config["geodata-loader"] = form.geodata_loader;
