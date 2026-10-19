@@ -272,7 +272,7 @@ function createTemplateBuilder() {
     redir_port: 7893,
     tproxy_port: 7894,
     dns_listen_port: 1053,
-    external_controller: "0.0.0.0:9090",
+    external_controller: "127.0.0.1:9090",
     port_offset: true,
     allow_lan: true,
     ipv6: true,

@@ -11,9 +11,6 @@ func Clients(r *gin.Engine) {
 	ClientsGroup := r.Group("/c")
 	ClientsGroup.Use(middlewares.GetIp)
 	{
-		// ClientsGroup.GET("/v2ray/:subname", api.GetV2ray)
-		// ClientsGroup.GET("/clash/:subname", api.GetClash)
-		// ClientsGroup.GET("/surge/:subname", api.GetSurge)
 		ClientsGroup.GET("/", api.GetClient)
 	}
 	// 单节点临时订阅（签名链接，到期自动失效）

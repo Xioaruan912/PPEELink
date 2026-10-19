@@ -69,7 +69,7 @@ const { form, rulesText, addRP, removeRP, router } = useTemplateBuilder();
       <el-form-item label="外部控制">
         <el-input
           v-model="form.external_controller"
-          placeholder="0.0.0.0:9090"
+          placeholder="127.0.0.1:9090"
           class="full"
         />
       </el-form-item>

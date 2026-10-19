@@ -5,11 +5,8 @@ import IconHouse from "~icons/ph/house-simple";
 import IconLink from "~icons/ph/link-simple";
 import IconStack from "~icons/ph/stack";
 import IconNodes from "~icons/ph/graph";
-import IconAirplane from "~icons/ph/airplane-tilt";
 import IconDevices from "~icons/ph/devices";
 import IconGauge from "~icons/ph/gauge";
-import IconLock from "~icons/ph/lock-key-open";
-import IconPulse from "~icons/ph/pulse";
 import IconFiles from "~icons/ph/files";
 import IconSliders from "~icons/ph/sliders-horizontal";
 import IconBooks from "~icons/ph/books";
@@ -36,16 +33,13 @@ const META: Record<string, { icon: Component; hint?: string }> = {
   "/subcription/subs": { icon: IconLink, hint: "生成与分发订阅链接" },
   "/subcription/collections": { icon: IconStack, hint: "多份订阅合成一个链接" },
   "/subcription/nodes": { icon: IconNodes, hint: "分组、编辑与检测节点" },
-  "/subcription/airport": { icon: IconAirplane, hint: "机场来源、同步与流量" },
   "/subcription/servers": {
     icon: IconServer,
-    hint: "运行 xray-core，按账户发节点",
+    hint: "在自己的服务器上运行 xray-core",
   },
   "/subcription/clients": { icon: IconDevices, hint: "各平台客户端下载" },
   "/test": { icon: IconFlask },
-  "/test/speed": { icon: IconGauge, hint: "经节点测量真实吞吐" },
-  "/test/unlock": { icon: IconLock, hint: "AI 与流媒体可用性" },
-  "/test/tcp": { icon: IconPulse, hint: "各省运营商连通性" },
+  "/test/index": { icon: IconGauge, hint: "测速、解锁与 TCP 连通性" },
   "/template": { icon: IconCode },
   "/template/list": { icon: IconFiles, hint: "编辑客户端配置模板" },
   "/template/builder": { icon: IconSliders, hint: "勾选规则、拖拽分组" },

@@ -13,7 +13,7 @@ import (
 // 自建节点：面板在本机或远程服务器上运行 xray-core，按账户发放凭据并统计流量。
 
 const (
-	ServerKindLocal = "local" // 与面板同机，由面板进程直接管理
+	ServerKindLocal = "local" // 面板服务器：xray 与面板装在同一台机器，由面板进程直接管理
 	ServerKindAgent = "agent" // 远程服务器上的 agent 主动连回面板
 )
 
@@ -30,7 +30,8 @@ type ProxyServer struct {
 	Running    bool       `json:"running"`
 	LastError  string     `gorm:"type:text" json:"lastError"`
 	LastSeenAt *time.Time `json:"lastSeenAt"`
-	AppliedRev string     `gorm:"size:64" json:"appliedRev"` // agent 已应用的配置摘要
+	AppliedRev string     `gorm:"size:64" json:"appliedRev"`              // agent 已应用的配置摘要
+	Removing   bool       `gorm:"not null;default:false" json:"removing"` // 已在面板删除，等待 agent 卸载后回报
 	CreatedAt  time.Time  `json:"createdAt"`
 }
 

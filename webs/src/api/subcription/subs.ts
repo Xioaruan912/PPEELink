@@ -83,3 +83,12 @@ export function getImportLinks(id: number) {
 export function createShortLink(data: any) {
   return request({ url: "/api/v1/shortlinks/create", method: "post", data });
 }
+
+/** 立即刷新订阅的上游来源。 */
+export function syncSubSource(id: number) {
+  return request({
+    url: "/api/v1/subcription/sync-source",
+    method: "post",
+    params: { id },
+  });
+}

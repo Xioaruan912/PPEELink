@@ -55,6 +55,23 @@ export const constantRoutes: RouteRecordRaw[] = [
     ],
   },
 
+  // 旧地址：测试页已合并、机场并入订阅的上游来源
+  ...(["speed", "unlock", "tcp"] as const).map((tab) => ({
+    path: `/test/${tab}`,
+    redirect: { path: "/test/index", query: { tab } },
+    meta: { hidden: true },
+  })),
+  {
+    path: "/subcription/unlock",
+    redirect: { path: "/test/index", query: { tab: "unlock" } },
+    meta: { hidden: true },
+  },
+  {
+    path: "/subcription/airport",
+    redirect: "/subcription/subs",
+    meta: { hidden: true },
+  },
+
   // 外部链接
   // {
   //   path: "/external-link",

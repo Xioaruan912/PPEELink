@@ -4,86 +4,15 @@ package api
 
 import (
 	"fmt"
-	"io"
-	"net/http"
+
 	"strconv"
 	"strings"
 	"time"
 
 	"ppeelink/models"
-	"ppeelink/node"
-	"ppeelink/utils"
 
 	"github.com/gin-gonic/gin"
 )
-
-// fetchSubscriptionSource supports newline/comma separated fallback sources.
-// The first successful 2xx response wins, so one failed airport endpoint no
-// longer prevents a subscription from being refreshed.
-func fetchSubscriptionSource(raw string) ([]byte, string, error) {
-	parts := strings.FieldsFunc(raw, func(r rune) bool { return r == '\n' || r == ',' })
-	client := utils.SafeHTTPClient(15 * time.Second)
-	var lastErr error
-	for _, source := range parts {
-		source = strings.TrimSpace(source)
-		if source == "" {
-			continue
-		}
-		req, err := http.NewRequest("GET", source, nil)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		req.Header.Set("User-Agent", "v2rayNG/1.8.5")
-		resp, err := client.Do(req)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if readErr != nil {
-			lastErr = readErr
-			continue
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			lastErr = fmt.Errorf("%s 返回 HTTP %d", source, resp.StatusCode)
-			continue
-		}
-		if len(body) == 0 {
-			lastErr = fmt.Errorf("%s 返回空内容", source)
-			continue
-		}
-		return body, source, nil
-	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("没有可用的订阅源")
-	}
-	return nil, "", lastErr
-}
-
-// ensureAirportFromSub 订阅从外部机场URL导入节点后，自动创建/复用同名机场记录
-func ensureAirportFromSub(name, url string, nodeCount int) {
-	now := time.Now()
-	var ap models.Airport
-	err := models.DB.Where("name = ?", name).First(&ap).Error
-	if err == nil {
-		// 复用更新
-		models.DB.Model(&ap).Updates(map[string]interface{}{
-			"url":        url,
-			"node_count": nodeCount,
-			"last_sync":  now,
-		})
-		return
-	}
-	// 新建
-	models.DB.Create(&models.Airport{
-		Name:      name,
-		URL:       url,
-		LastSync:  &now,
-		NodeCount: nodeCount,
-	})
-}
 
 // parseGroups 解析逗号分隔的分组 ID 参数为 GroupNode 引用列表
 func parseGroups(groups string) ([]models.GroupNode, error) {
@@ -200,7 +129,7 @@ func SubAdd(c *gin.Context) {
 	name := c.PostForm("name")
 	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
-	airportUrl := c.PostForm("airport_url")
+	sourceURLs := strings.TrimSpace(c.PostForm("source_urls"))
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
 	if err := ensureScriptAllowed(c, pipeline); err != nil {
@@ -214,9 +143,9 @@ func SubAdd(c *gin.Context) {
 		})
 		return
 	}
-	if nodes == "" && airportUrl == "" && groups == "" {
+	if nodes == "" && sourceURLs == "" && groups == "" {
 		c.JSON(400, gin.H{
-			"msg": "必须提供节点列表、机场订阅链接或分组引用",
+			"msg": "必须选择节点、分组或填写上游订阅链接",
 		})
 		return
 	}
@@ -229,50 +158,15 @@ func SubAdd(c *gin.Context) {
 
 	var NodesData []models.Node
 	var nodeNames []string
-	var lastSyncAt *time.Time
 
-	// 如果提供了机场URL，优先从机场获取节点
-	if airportUrl != "" {
-		body, activeURL, err := fetchSubscriptionSource(airportUrl)
+	// 上游订阅：先拉取校验，订阅创建后再写入节点
+	var pull sourcePull
+	if sourceURLs != "" {
+		pull, err = pullSubscriptionSource(sourceURLs)
 		if err != nil {
-			c.JSON(400, gin.H{"msg": "请求订阅链接失败: " + err.Error()})
+			c.JSON(400, gin.H{"msg": "拉取上游订阅失败: " + err.Error()})
 			return
 		}
-		now := time.Now()
-		lastSyncAt = &now
-
-		// 尝试 Base64 解码，绝大多数标准订阅都是 Base64 编码的链接列表
-		decodedStr := node.Base64Decode(string(body))
-		links := strings.Split(decodedStr, "\n")
-
-		for _, link := range links {
-			link = strings.TrimSpace(link)
-			if link == "" || !strings.Contains(link, "://") {
-				continue
-			}
-			n := models.Node{Link: link}
-			n, err = DocodeNodeName(&n) // 解析节点名称
-			if err != nil || n.Name == "" {
-				continue
-			}
-			// 保存到数据库
-			n.Add()
-
-			// 为了防止重名导致获取错节点，我们通过精确查找获取 ID
-			var dbNode models.Node
-			models.DB.Model(models.Node{}).Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
-			if dbNode.ID != 0 {
-				NodesData = append(NodesData, dbNode)
-				nodeNames = append(nodeNames, dbNode.Name)
-
-				// 自动将机场抓取到的节点归类到一个以订阅名称命名的分组，防止在节点列表中过于杂乱
-				gn := models.GroupNode{Name: name}
-				gn.Add()
-				dbNode.UpdateGroup([]models.GroupNode{{Name: name}})
-			}
-		}
-		// 自动创建/复用同名机场记录，使其出现在机场管理
-		ensureAirportFromSub(name, activeURL, len(nodeNames))
 	} else {
 		// 常规的手动选择节点
 		for _, nodeName := range strings.Split(nodes, ",") {
@@ -299,9 +193,8 @@ func SubAdd(c *gin.Context) {
 		Nodes:            NodesData,
 		GroupRefs:        groupRefs,
 		Pipeline:         pipeline,
-		SourceURLs:       airportUrl,
+		SourceURLs:       sourceURLs,
 		LastGoodSnapshot: strings.Join(nodeNames, "\n"),
-		LastSyncAt:       lastSyncAt,
 	}
 	err = sub.Add()
 	if err != nil {
@@ -309,6 +202,12 @@ func SubAdd(c *gin.Context) {
 			"msg": "添加订阅失败: " + err.Error(),
 		})
 		return
+	}
+	if sourceURLs != "" {
+		if err := applySubscriptionSource(sub.ID, pull); err != nil {
+			c.JSON(400, gin.H{"msg": "写入上游节点失败: " + err.Error()})
+			return
+		}
 	}
 
 	c.JSON(200, gin.H{
@@ -323,7 +222,7 @@ func SubUpdate(c *gin.Context) {
 	OldName := c.PostForm("oldname")
 	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
-	airportUrl := c.PostForm("airport_url")
+	sourceURLs := strings.TrimSpace(c.PostForm("source_urls"))
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
 	if err := ensureScriptAllowed(c, pipeline); err != nil {
@@ -337,9 +236,9 @@ func SubUpdate(c *gin.Context) {
 		})
 		return
 	}
-	if nodes == "" && airportUrl == "" && groups == "" {
+	if nodes == "" && sourceURLs == "" && groups == "" {
 		c.JSON(400, gin.H{
-			"msg": "必须提供节点列表、机场订阅链接或分组引用",
+			"msg": "必须选择节点、分组或填写上游订阅链接",
 		})
 		return
 	}
@@ -352,60 +251,17 @@ func SubUpdate(c *gin.Context) {
 
 	var NodesData []models.Node
 	var nodeNames []string
-	var lastSyncAt *time.Time
-	var lastSyncError string
+	var existing models.Subcription
+	if err := models.DB.Preload("Nodes").Where("name = ?", OldName).First(&existing).Error; err != nil {
+		c.JSON(404, gin.H{"msg": "订阅不存在"})
+		return
+	}
 
-	if airportUrl != "" {
-		body, activeURL, err := fetchSubscriptionSource(airportUrl)
-		if err != nil {
-			// Keep serving the last known-good nodes when every source is down.
-			var existing models.Subcription
-			if dbErr := models.DB.Preload("Nodes").Where("name = ?", OldName).First(&existing).Error; dbErr != nil || len(existing.Nodes) == 0 {
-				c.JSON(400, gin.H{"msg": "请求订阅链接失败且无可用缓存: " + err.Error()})
-				return
-			}
-			NodesData = append(NodesData, existing.Nodes...)
-			for _, cached := range existing.Nodes {
-				nodeNames = append(nodeNames, cached.Name)
-			}
-			lastSyncError = err.Error()
-		} else {
-			now := time.Now()
-			lastSyncAt = &now
-		}
-
-		decodedStr := ""
-		if len(body) > 0 {
-			decodedStr = node.Base64Decode(string(body))
-		}
-		links := strings.Split(decodedStr, "\n")
-
-		for _, link := range links {
-			link = strings.TrimSpace(link)
-			if link == "" || !strings.Contains(link, "://") {
-				continue
-			}
-			n := models.Node{Link: link}
-			n, err = DocodeNodeName(&n)
-			if err != nil || n.Name == "" {
-				continue
-			}
-			n.Add()
-
-			var dbNode models.Node
-			models.DB.Model(models.Node{}).Where("name = ? AND link = ?", n.Name, n.Link).First(&dbNode)
-			if dbNode.ID != 0 {
-				NodesData = append(NodesData, dbNode)
-				nodeNames = append(nodeNames, dbNode.Name)
-
-				gn := models.GroupNode{Name: NewName}
-				gn.Add()
-				dbNode.UpdateGroup([]models.GroupNode{{Name: NewName}})
-			}
-		}
-		// 自动创建/复用同名机场记录，使其出现在机场管理
-		if activeURL != "" {
-			ensureAirportFromSub(NewName, activeURL, len(nodeNames))
+	if sourceURLs != "" {
+		// 上游订阅：保存时先沿用现有节点，保存后再拉取刷新
+		NodesData = existing.Nodes
+		if existing.Name != NewName {
+			models.DB.Model(&models.GroupNode{}).Where("name = ?", existing.Name).Update("name", NewName)
 		}
 	} else {
 		for _, nodeName := range strings.Split(nodes, ",") {
@@ -433,10 +289,13 @@ func SubUpdate(c *gin.Context) {
 		Nodes:            NodesData,
 		GroupRefs:        groupRefs,
 		Pipeline:         pipeline,
-		SourceURLs:       airportUrl,
-		LastGoodSnapshot: strings.Join(nodeNames, "\n"),
-		LastSyncAt:       lastSyncAt,
-		LastSyncError:    lastSyncError,
+		SourceURLs:       sourceURLs,
+		LastGoodSnapshot: existing.LastGoodSnapshot,
+		LastSyncAt:       existing.LastSyncAt,
+		LastSyncError:    existing.LastSyncError,
+	}
+	if sourceURLs == "" {
+		NewSub.LastGoodSnapshot = strings.Join(nodeNames, "\n")
 	}
 
 	err = OldSub.Update(&NewSub)
@@ -445,6 +304,12 @@ func SubUpdate(c *gin.Context) {
 			"msg": "更新订阅失败: " + err.Error(),
 		})
 		return
+	}
+	if sourceURLs != "" {
+		if _, err := SyncSubscriptionSource(existing.ID); err != nil {
+			c.JSON(200, gin.H{"code": "00000", "msg": "已保存，但拉取上游失败，继续使用上次的节点: " + err.Error()})
+			return
+		}
 	}
 
 	c.JSON(200, gin.H{
@@ -484,6 +349,9 @@ func SubDel(c *gin.Context) {
 			"msg": "删除订阅失败: " + err.Error(),
 		})
 		return
+	}
+	if strings.TrimSpace(sub.SourceURLs) != "" {
+		removeSubscriptionSource(sub.Name)
 	}
 	c.JSON(200, gin.H{
 		"code": "00000",

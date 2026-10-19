@@ -33,7 +33,7 @@ func setupTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Subcription{}, &models.Node{}, &models.GroupNode{}, &models.Airport{},
+	if err := db.AutoMigrate(&models.User{}, &models.Subcription{}, &models.Node{}, &models.GroupNode{},
 		&models.SubLogs{}, &models.SubscriptionArtifact{}, &models.SubscriptionArtifactPointer{}, &models.APIToken{}); err != nil {
 		t.Fatal(err)
 	}
@@ -115,18 +115,14 @@ func TestVerifyFlagsDefaultPassword(t *testing.T) {
 
 func TestGetClientStatusCodesAndTraffic(t *testing.T) {
 	setupTestDB(t)
-	group := models.GroupNode{Name: "Sky"}
-	models.DB.Create(&group)
 	expired := time.Now().Add(-time.Hour)
-	active := models.Subcription{Name: "active", Token: "aaaa1111", Config: `{"udp":true}`}
+	updated := time.Now()
+	sourceExpire := time.Now().Add(48 * time.Hour)
+	active := models.Subcription{Name: "active", Token: "aaaa1111", Config: `{"udp":true}`, SourceURLs: "https://example.com/sub",
+		SourceUpload: 10, SourceDownload: 20, SourceTotal: 1000, SourceExpire: &sourceExpire, SourceTrafficAt: &updated}
 	old := models.Subcription{Name: "old", Token: "bbbb2222", ExpiresAt: &expired}
 	models.DB.Create(&active)
 	models.DB.Create(&old)
-	_ = models.DB.Model(&active).Association("GroupRefs").Append(&group)
-	updated := time.Now()
-	airportExpire := time.Now().Add(48 * time.Hour)
-	models.DB.Create(&models.Airport{Name: "Sky", URL: "https://example.com", TrafficUpload: 10, TrafficDownload: 20,
-		TrafficTotal: 1000, TrafficExpire: &airportExpire, TrafficUpdatedAt: &updated})
 
 	call := func(token string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()

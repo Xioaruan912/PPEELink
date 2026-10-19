@@ -40,6 +40,13 @@ export interface Sub {
   GroupRefs?: GroupRef[];
   Pipeline?: string;
   SourceURLs?: string;
+  lastSyncAt?: string | null;
+  lastSyncError?: string;
+  sourceUpload?: number;
+  sourceDownload?: number;
+  sourceTotal?: number;
+  sourceExpire?: string | null;
+  sourceTrafficAt?: string | null;
   SubLogs: SubLogs[];
 }
 export interface Node {
@@ -100,8 +107,8 @@ export function createSubscriptions() {
   const SubTitle = ref("");
   const Subname = ref("");
   const oldSubname = ref("");
-  const airportUrl = ref("");
-  const isAirportUrl = ref(false);
+  const sourceUrl = ref("");
+  const isSourceMode = ref(false);
   const dialogVisible = ref(false);
   const NodesList = ref<Node[]>([]);
   const value1 = ref<string[]>([]);
@@ -524,7 +531,7 @@ export function createSubscriptions() {
       return;
     }
     if (
-      !isAirportUrl.value &&
+      !isSourceMode.value &&
       value1.value.length === 0 &&
       selectedGroups.value.length === 0
     ) {
@@ -532,9 +539,9 @@ export function createSubscriptions() {
       ElMessage.warning("请选择至少一个节点或分组");
       return;
     }
-    if (isAirportUrl.value && !airportUrl.value.trim()) {
+    if (isSourceMode.value && !sourceUrl.value.trim()) {
       editorSection.value = "sources";
-      ElMessage.warning("机场订阅链接不能为空");
+      ElMessage.warning("上游订阅链接不能为空");
       return;
     }
 
@@ -555,21 +562,23 @@ export function createSubscriptions() {
           name: Subname.value.trim(),
           nodes: value1.value.join(","),
           groups: groupStr,
-          airport_url: isAirportUrl.value ? airportUrl.value.trim() : "",
+          source_urls: isSourceMode.value ? sourceUrl.value.trim() : "",
           pipeline: pipelineJSON(),
         });
         ElMessage.success("添加成功");
       } else {
-        await UpdateSub({
+        const res: any = await UpdateSub({
           config,
           name: Subname.value.trim(),
           nodes: value1.value.join(","),
           groups: groupStr,
           oldname: oldSubname.value,
-          airport_url: isAirportUrl.value ? airportUrl.value.trim() : "",
+          source_urls: isSourceMode.value ? sourceUrl.value.trim() : "",
           pipeline: pipelineJSON(),
         });
-        ElMessage.success("更新成功");
+        // 上游拉取失败时后端仍会保存，并在 msg 里说明沿用上次的节点
+        if (res?.msg?.includes("失败")) ElMessage.warning(res.msg);
+        else ElMessage.success("更新成功");
       }
       await getsubs();
       dialogVisible.value = false;
@@ -583,8 +592,8 @@ export function createSubscriptions() {
     SubTitle.value = "添加订阅";
     Subname.value = "";
     oldSubname.value = "";
-    airportUrl.value = "";
-    isAirportUrl.value = false;
+    sourceUrl.value = "";
+    isSourceMode.value = false;
     udpOn.value = false;
     certOn.value = false;
     providerOn.value = false;
@@ -623,8 +632,8 @@ export function createSubscriptions() {
     SubTitle.value = "编辑订阅";
     Subname.value = sub.Name;
     oldSubname.value = sub.Name;
-    airportUrl.value = sub.SourceURLs || "";
-    isAirportUrl.value = !!sub.SourceURLs;
+    sourceUrl.value = sub.SourceURLs || "";
+    isSourceMode.value = !!sub.SourceURLs;
     udpOn.value = !!config.udp;
     certOn.value = !!config.cert;
     providerOn.value = !!config.proxyProvider;
@@ -938,8 +947,8 @@ export function createSubscriptions() {
     SubTitle,
     Subname,
     oldSubname,
-    airportUrl,
-    isAirportUrl,
+    sourceUrl,
+    isSourceMode,
     dialogVisible,
     NodesList,
     value1,

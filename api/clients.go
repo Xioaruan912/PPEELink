@@ -1,8 +1,6 @@
 package api
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,14 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
-
-// md5加密
-func Md5(src string) string {
-	m := md5.New()
-	m.Write([]byte(src))
-	res := hex.EncodeToString(m.Sum(nil))
-	return res
-}
 
 // expandNodeLink 将一个存储的节点链接展开为一到多个分享链接。
 // 支持逗号分隔的多链接、远程订阅/转换地址（base64/明文链接列表或 Clash YAML）以及普通链接。
@@ -122,7 +112,7 @@ func collectNodeInputs(nodes []models.Node) ([]string, map[string]node.NodeFlags
 }
 
 // mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后）
-// 分组引用按 ID 关联，机场重同步后分组节点更新，订阅拉取时自动跟进
+// 分组引用按 ID 关联，分组节点变化后订阅拉取时自动跟进
 func mergeGroupNodes(sub *models.Subcription) error {
 	if sub.ID == 0 {
 		return nil
@@ -143,33 +133,13 @@ func mergeGroupNodes(sub *models.Subcription) error {
 		merged = append(merged, n)
 	}
 
-	// 提前查出所有配置了勾选节点的机场，按名称构建快速过滤表
-	var apList []models.Airport
-	models.DB.Where("selected_nodes != ?", "").Find(&apList)
-	apMap := make(map[string]map[string]bool)
-	for _, ap := range apList {
-		set := make(map[string]bool)
-		for _, s := range strings.Split(ap.SelectedNodes, ",") {
-			s = strings.TrimSpace(s)
-			if s != "" {
-				set[s] = true
-			}
-		}
-		apMap[ap.Name] = set
-	}
-
 	// 追加各分组当前节点
 	for _, g := range withRefs.GroupRefs {
 		if g.Hidden {
 			continue
 		}
-		groupFilter, hasFilter := apMap[g.Name]
 		for _, n := range g.Nodes {
 			if n.Name == "" || n.Hidden || hiddenIDs[n.ID] {
-				continue
-			}
-			// 如果该分组对应的机场有勾选设置，且该节点不在勾选中，则跳过
-			if hasFilter && !groupFilter[n.Name] {
 				continue
 			}
 			if seen[n.Name] {
@@ -178,17 +148,6 @@ func mergeGroupNodes(sub *models.Subcription) error {
 			seen[n.Name] = true
 			merged = append(merged, n)
 		}
-	}
-
-	// 兜底兼容：订阅名匹配某个配置了勾选节点的机场时，统一按勾选再过滤一次（覆盖手动 Nodes）
-	if subFilter, hasFilter := apMap[sub.Name]; hasFilter {
-		filtered := merged[:0]
-		for _, n := range merged {
-			if subFilter[n.Name] {
-				filtered = append(filtered, n)
-			}
-		}
-		merged = filtered
 	}
 
 	sub.Nodes = merged
@@ -297,7 +256,7 @@ func GetV2ray(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
-	// 合并引用分组节点（机场同步自动跟进）
+	// 合并引用分组节点（分组变化自动跟进）
 	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
@@ -325,7 +284,7 @@ func GetClash(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
-	// 合并引用分组节点（机场同步自动跟进）
+	// 合并引用分组节点（分组变化自动跟进）
 	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
@@ -374,7 +333,7 @@ func GetSurge(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
-	// 合并引用分组节点（机场同步自动跟进）
+	// 合并引用分组节点（分组变化自动跟进）
 	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
@@ -419,7 +378,7 @@ func GetLoon(c *gin.Context) {
 		c.Writer.WriteString("找不到这个订阅:" + subName(c))
 		return
 	}
-	// 合并引用分组节点（机场同步自动跟进）
+	// 合并引用分组节点（分组变化自动跟进）
 	sub.Pipeline = pipelineWithOverrides(sub.Pipeline, c)
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)

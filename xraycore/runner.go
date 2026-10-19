@@ -203,6 +203,41 @@ func (r *Runner) Stop() {
 	}
 }
 
+// Uninstall 停止 xray 并删除 systemd 服务、二进制与配置目录。
+func (r *Runner) Uninstall() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.stopLocked()
+	if r.systemd {
+		_ = exec.Command("systemctl", "disable", "--now", r.Unit).Run()
+		path := "/etc/systemd/system/" + r.Unit + ".service"
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		_ = exec.Command("systemctl", "daemon-reload").Run()
+	}
+	r.rev, r.apiPort, r.lastErr = "", 0, ""
+	return removeManagedDir(r.Dir)
+}
+
+// removeManagedDir 只删除确实由我们创建的目录（含 xray 或 config.json），防止误删。
+func removeManagedDir(dir string) error {
+	dir = filepath.Clean(dir)
+	if !filepath.IsAbs(dir) || strings.Count(dir, string(filepath.Separator)) < 2 {
+		return fmt.Errorf("拒绝删除目录 %s", dir)
+	}
+	managed := false
+	for _, name := range []string{"xray", "config.json"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err == nil {
+			managed = true
+		}
+	}
+	if !managed {
+		return nil
+	}
+	return os.RemoveAll(dir)
+}
+
 // Collect 读取并清零用户流量计数，同时统计每个用户的在线 IP 数。
 func (r *Runner) Collect(ctx context.Context) (map[string]Counter, map[string]int, error) {
 	r.mu.Lock()

@@ -94,7 +94,7 @@ async function importConfig(event: Event) {
   }
   try {
     await ElMessageBox.confirm(
-      "将合并恢复模板、订阅配置与机场设置；节点、账户和令牌不会被修改。",
+      "将合并恢复模板与订阅配置；节点、账户和令牌不会被修改。",
       "导入配置备份",
       { type: "warning", confirmButtonText: "导入", cancelButtonText: "取消" }
     );
@@ -225,7 +225,7 @@ onMounted(loadSummary);
         </section>
         <UiPanel
           title="配置导出与导入"
-          description="只含模板、订阅配置与机场设置，不含节点与凭据，适合在两台服务之间同步配置。"
+          description="只含模板与订阅配置，不含节点与凭据，适合在两台服务之间同步配置。"
           data-enter
         >
           <dl v-if="summary" class="summary">
@@ -236,10 +236,6 @@ onMounted(loadSummary);
             <div>
               <dt>订阅</dt>
               <dd class="mono">{{ summary.subscriptions }}</dd>
-            </div>
-            <div>
-              <dt>机场</dt>
-              <dd class="mono">{{ summary.airports }}</dd>
             </div>
           </dl>
           <div class="row-actions">

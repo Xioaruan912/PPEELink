@@ -32,7 +32,7 @@
           {{
             summary.total
               ? `分布在 ${countries.length} 个地区`
-              : "添加节点或同步机场后显示网络规模"
+              : "添加节点或上游订阅后显示网络规模"
           }}
         </p>
         <div class="hero-health">
@@ -85,12 +85,12 @@
       <section
         v-reveal
         class="cell cell-traffic"
-        aria-label="机场流量"
+        aria-label="上游流量"
         data-enter
       >
         <header class="cell-head">
           <div>
-            <h2>机场流量</h2>
+            <h2>上游流量</h2>
             <p>
               剩余
               <strong class="mono">{{
@@ -98,22 +98,22 @@
               }}</strong>
             </p>
           </div>
-          <UiButton variant="ghost" @click="router.push('/subcription/airport')"
-            >全部机场</UiButton
+          <UiButton variant="ghost" @click="router.push('/subcription/subs')"
+            >全部订阅</UiButton
           >
         </header>
         <UiSkeleton v-if="loading" :lines="2" height="40px" />
-        <ul v-else-if="airports.length" class="airport-traffic">
-          <li v-for="airport in airports.slice(0, 4)" :key="airport.ID">
-            <span class="airport-name">{{ airport.Name }}</span>
-            <TrafficMeter :traffic="trafficOf(airport)" />
+        <ul v-else-if="upstreams.length" class="upstream-traffic">
+          <li v-for="sub in upstreams.slice(0, 4)" :key="sub.ID">
+            <span class="upstream-name">{{ sub.Name }}</span>
+            <TrafficMeter :traffic="sourceTrafficOf(sub)" />
           </li>
         </ul>
         <EmptyState
           v-else
           size="inline"
-          title="还没有机场"
-          description="添加机场订阅后显示流量与到期。"
+          title="还没有上游订阅"
+          description="在订阅里填写上游订阅链接后，这里显示流量与到期。"
         />
       </section>
 
@@ -166,10 +166,13 @@ import { useRouter } from "vue-router";
 import { computed, ref, onMounted } from "vue";
 import { getSubTotal, getNodeMap } from "@/api/total";
 import { getNodeQualitySummary } from "@/api/subcription/node";
-import { getAirports } from "@/api/subcription/airport";
-import TrafficMeter from "@/views/subcription/airport/TrafficMeter.vue";
-import type { Airport } from "@/views/subcription/airport/useAirports";
-import { formatBytes, trafficOf } from "@/utils/traffic";
+import { getSubs } from "@/api/subcription/subs";
+import TrafficMeter from "@/components/share/TrafficMeter.vue";
+import {
+  formatBytes,
+  sourceTrafficOf,
+  type SourceTraffic,
+} from "@/utils/traffic";
 import { Refresh, TopRight } from "@element-plus/icons-vue";
 import IconLink from "~icons/ph/link-simple";
 import IconArrow from "~icons/ph/arrow-up-right";
@@ -198,9 +201,14 @@ const summary = ref({
 const mapPoints = ref<
   { lat: number; lng: number; name: string; country: string }[]
 >([]);
-const airports = ref<Airport[]>([]);
+type Upstream = SourceTraffic & {
+  ID: number;
+  Name: string;
+  SourceURLs?: string;
+};
+const upstreams = ref<Upstream[]>([]);
 const traffic = computed(() => {
-  const reports = airports.value.map(trafficOf).filter((t) => !!t);
+  const reports = upstreams.value.map(sourceTrafficOf).filter((t) => !!t);
   return {
     reported: reports.length > 0,
     remaining: reports.reduce((sum, t) => sum + t!.remaining, 0),
@@ -244,13 +252,13 @@ async function loadOverview() {
     getSubTotal(),
     getNodeQualitySummary(),
     getNodeMap(),
-    getAirports(),
+    getSubs(),
   ]);
-  const [subs, quality, map, airportList] = results;
-  if (airportList.status === "fulfilled")
-    airports.value = Array.isArray(airportList.value.data)
-      ? airportList.value.data
-      : [];
+  const [subs, quality, map, subList] = results;
+  if (subList.status === "fulfilled")
+    upstreams.value = (
+      Array.isArray(subList.value.data) ? subList.value.data : []
+    ).filter((s: Upstream) => !!s.SourceURLs?.trim());
   if (subs.status === "fulfilled")
     subTotal.value = Number(subs.value.data) || 0;
   if (quality.status === "fulfilled")
@@ -431,17 +439,17 @@ onMounted(loadOverview);
   color: var(--c-ink);
   font-weight: 500;
 }
-.airport-traffic {
+.upstream-traffic {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 16px 20px;
 }
-.airport-traffic li {
+.upstream-traffic li {
   display: grid;
   gap: 6px;
   min-width: 0;
 }
-.airport-name {
+.upstream-name {
   overflow: hidden;
   font-size: 14px;
   font-weight: 500;

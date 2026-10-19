@@ -8,7 +8,7 @@ import { EmptyState, PageHeader, UiButton, UiSkeleton } from "@/ui";
 import { useStagger } from "@/motion";
 import { useUserStore } from "@/store";
 import ClientShare from "@/components/share/ClientShare.vue";
-import TrafficMeter from "@/views/subcription/airport/TrafficMeter.vue";
+import TrafficMeter from "@/components/share/TrafficMeter.vue";
 import { trafficOf } from "@/utils/traffic";
 import { formatDateTime } from "@/utils/date";
 
@@ -26,7 +26,7 @@ const active = computed(
 );
 const expired = (s: MySubscription) =>
   !!s.expiresAt && new Date(s.expiresAt).getTime() <= Date.now();
-// 复用机场页的流量组件：把汇总流量转换成它需要的字段
+// 复用流量组件：把汇总流量转换成它需要的字段
 const traffic = (s: MySubscription) =>
   s.traffic.reported
     ? trafficOf({

@@ -47,6 +47,9 @@ func activeAccounts(now time.Time) ([]models.ProxyAccount, error) {
 
 // BuildServerSpec 一台服务器的期望状态：启用的入站 × 有效账户。
 func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
+	if server.Removing {
+		return xraycore.Spec{Uninstall: true}, nil
+	}
 	spec := xraycore.Spec{
 		Version: xraycore.DefaultVersion, Enabled: server.Enabled, APIPort: xrayAPIPort,
 		BlockPrivate: true, BlockBitTorrent: true,
@@ -164,8 +167,34 @@ func (l localSource) Report(_ context.Context, report xraycore.Report) error {
 var localProxy struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
+	done   chan struct{}
+	runner *xraycore.Runner
 	id     uint
 	wake   chan struct{}
+}
+
+const localXrayDir = "./xray"
+
+// UninstallLocalProxy 停止面板服务器的同步循环，并卸载 xray（systemd 服务、二进制与配置）。
+func UninstallLocalProxy() error {
+	localProxy.mu.Lock()
+	cancel, done, runner := localProxy.cancel, localProxy.done, localProxy.runner
+	localProxy.cancel, localProxy.done, localProxy.runner = nil, nil, nil
+	localProxy.mu.Unlock()
+	// 等循环退出后再卸载，避免它在卸载过程中重新拉起 xray；循环内可能回调 NotifyProxyChanged，所以不能持锁等待
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(15 * time.Second):
+		}
+	}
+	if runner == nil {
+		runner = xraycore.NewRunner(localXrayDir, "ppeelink-xray")
+	}
+	return runner.Uninstall()
 }
 
 // StartLocalProxy 存在本机服务器时在后台运行同步循环；服务器被删除时停止。
@@ -188,9 +217,11 @@ func StartLocalProxy() {
 		localProxy.cancel()
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	localProxy.cancel, localProxy.id = cancel, s.ID
-	runner := xraycore.NewRunner("./xray", "ppeelink-xray")
+	done := make(chan struct{})
+	runner := xraycore.NewRunner(localXrayDir, "ppeelink-xray")
+	localProxy.cancel, localProxy.id, localProxy.done, localProxy.runner = cancel, s.ID, done, runner
 	go func() {
+		defer close(done)
 		defer func() {
 			if r := recover(); r != nil {
 				log.Printf("[xray] 本机同步异常: %v", r)
@@ -259,7 +290,7 @@ func AccountNodes(acc models.ProxyAccount) []models.Node {
 const selfHostedGroupPrefix = "自建·"
 
 // SyncSelfHostedNodes 用第一个开通了自建节点的管理员账户生成节点，放进“自建·服务器名”分组，
-// 这样已有订阅和合集可以像引用机场一样引用自建节点。
+// 这样已有订阅和合集可以像引用普通分组一样引用自建节点。
 func SyncSelfHostedNodes() error {
 	var admins []models.User
 	models.DB.Where("(role = ? OR role = '' OR role IS NULL) AND disabled = ?", models.RoleAdmin, false).Order("id asc").Find(&admins)

@@ -15,10 +15,9 @@ import (
 func StartCronTasks() {
 	c := cron.New(cron.WithSeconds()) // 支持秒级
 
-	// 每天凌晨 3:00 跑一次机场节点拉取与测活清理
+	// 每天凌晨 3:00 清理历史数据
 	_, err := c.AddFunc("0 0 3 * * *", func() {
-		defer utils.RecoverPanic("cron-airport-sync")
-		api.SyncAllAirports()
+		defer utils.RecoverPanic("cron-cleanup")
 		if err := models.CleanupNodeQuality(time.Now().Add(-7 * 24 * time.Hour)); err != nil {
 			log.Println("[Cron] 清理节点质量历史失败:", err)
 		}
@@ -54,11 +53,11 @@ func StartCronTasks() {
 	}
 
 	_, err = c.AddFunc("0 15 * * * *", func() {
-		defer utils.RecoverPanic("cron-airport-interval")
-		api.SyncDueAirports()
+		defer utils.RecoverPanic("cron-sub-source")
+		api.SyncDueSubscriptionSources()
 	})
 	if err != nil {
-		log.Println("[Cron] 添加机场间隔同步任务失败:", err)
+		log.Println("[Cron] 添加上游订阅同步任务失败:", err)
 		return
 	}
 
@@ -80,5 +79,5 @@ func StartCronTasks() {
 			log.Println("[RuleCenter] 启动同步失败，保留现有缓存:", err)
 		}
 	}()
-	log.Println("[Cron] 机场/规则同步、机场间隔同步与节点每10分钟 TCP 质量检测已启动")
+	log.Println("[Cron] 规则同步、上游订阅同步与节点每10分钟 TCP 质量检测已启动")
 }
