@@ -42,8 +42,7 @@
             :label="node.name"
             :value="node.id"
             ><span class="node-option"
-              ><span>{{ node.name }}</span
-              ><small>{{ node.rtt }} ms</small></span
+              ><span>{{ node.name }}</span></span
             ></el-option
           ></el-select
         >
@@ -224,7 +223,7 @@ import {
 import ChinaTcpMap from "@/components/node-tests/ChinaTcpMap.vue";
 import { useTestStream } from "./useTestStream";
 defineOptions({ name: "TcpTest" });
-type NodeItem = { id: number; name: string; rtt: number };
+type NodeItem = { id: number; name: string; valid: boolean };
 const nodes = ref<NodeItem[]>([]),
   nodesLoading = ref(true),
   selectedNodeId = ref<number>();
@@ -352,8 +351,10 @@ async function loadNodes() {
     const { data } = await getNodeOverview();
     if (disposed) return;
     nodes.value = (data || [])
-      .filter((node: NodeItem) => node.rtt >= 0)
-      .sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
+      .filter((node: NodeItem) => node.valid)
+      .sort((a: NodeItem, b: NodeItem) =>
+        a.name.localeCompare(b.name, "zh-CN")
+      );
     selectedNodeId.value ||= nodes.value[0]?.id;
     restoreCache();
   } catch {

@@ -21,14 +21,7 @@ import {
   SetNodeVisibility,
   SetGroupVisibility,
 } from "@/api/subcription/node";
-import {
-  clashDelayAll,
-  ClashError,
-  loadController,
-  saveController,
-  RTT_NOT_IN_CLASH,
-  type ClashController,
-} from "@/utils/clashController";
+
 import { copySubscriptionText } from "../subs/clipboard";
 
 export interface OverviewItem {
@@ -38,14 +31,10 @@ export interface OverviewItem {
   server: string;
   country: string;
   countryCode: string;
-  rtt: number;
+  /** 面板服务器能连上节点端口即有效 */
+  valid: boolean;
+  checkedAt: string;
   groups: string[];
-  score: number;
-  availability: number;
-  averageRtt: number;
-  jitter: number;
-  sampleCount: number;
-  lastTestedAt: string;
   relayId?: number;
   udp?: boolean;
   tfo?: boolean;
@@ -65,24 +54,8 @@ export interface GroupDetail {
   node_count: number;
   hidden: boolean;
 }
-export const rttState = (rtt: number) =>
-  rtt < 0
-    ? rtt === -2 || rtt === RTT_NOT_IN_CLASH
-      ? "idle"
-      : "bad"
-    : rtt < 100
-      ? "ok"
-      : rtt < 300
-        ? "warn"
-        : "bad";
-export const rttText = (rtt: number) =>
-  rtt === -2
-    ? "测试中"
-    : rtt === RTT_NOT_IN_CLASH
-      ? "Clash 中没有"
-      : rtt < 0
-        ? "超时"
-        : `${rtt} ms`;
+export const validState = (node: OverviewItem) => (node.valid ? "ok" : "bad");
+export const validText = (node: OverviewItem) => (node.valid ? "有效" : "无效");
 export const nodeEffectiveHidden = (node?: NodeItem) =>
   !!node?.Hidden || (node?.GroupNodes || []).some((g) => !!g.Hidden);
 const key: InjectionKey<ReturnType<typeof createNodes>> = Symbol("nodes");
@@ -169,19 +142,12 @@ function createNodes() {
     filterCountries.value = [];
   };
   let alive = true,
-    loadSequence = 0,
-    pingController: AbortController | undefined;
-  // 延迟来源：server = 面板所在服务器 TCP 连接节点；clash = 用户电脑上的 Clash 经节点实测
-  const localTesting = ref(false);
-  const latencySource = ref<"server" | "clash">("server");
-  const serverRtt = new Map<number, number>();
-  const clashController = ref<ClashController | null>(loadController());
-  const clashDialog = ref(false);
-  const clashError = ref("");
+    loadSequence = 0;
+  // 有效性检测：面板服务器 TCP 连接节点端口，连得上即有效
+  const checking = ref(false);
   async function loadAll() {
     if (!alive) return;
     const sequence = ++loadSequence;
-    pingController?.abort();
     loading.value = true;
     loadError.value = "";
     try {
@@ -191,12 +157,9 @@ function createNodes() {
         GetGroupFull(true),
       ]);
       if (!alive || sequence !== loadSequence) return;
-      // 保留服务器侧 TCP 延迟；本机检测由用户手动触发后覆盖
       overviewList.value = (ov?.data || []).map((n: OverviewItem) => ({
         ...n,
       }));
-      serverRtt.clear();
-      for (const n of overviewList.value) serverRtt.set(n.id, n.rtt);
       fullNodes.value = nd?.data || [];
       groupDetails.value = Array.isArray(gp?.data) ? gp.data : [];
       selectedIds.value = new Set(
@@ -214,9 +177,6 @@ function createNodes() {
         !groupDetails.value.some((g) => g.id === manageGroupId.value)
       )
         manageGroupId.value = groupDetails.value[0]?.id;
-      // 延迟默认用服务器侧 TCP 检测结果；浏览器直连节点只在用户主动点击时进行，
-      // 避免每次打开页面都从本机向所有代理服务器发起连接。
-      latencySource.value = "server";
     } catch {
       if (alive && sequence === loadSequence)
         loadError.value = "请检查连接后重试。";
@@ -224,53 +184,33 @@ function createNodes() {
       if (alive && sequence === loadSequence) loading.value = false;
     }
   }
-  function useServerLatency() {
-    pingController?.abort();
-    localTesting.value = false;
-    latencySource.value = "server";
-    for (const n of overviewList.value) n.rtt = serverRtt.get(n.id) ?? n.rtt;
-  }
-  async function runClashLatency() {
-    const c = clashController.value;
-    if (!c) {
-      clashDialog.value = true;
-      return;
-    }
-    pingController?.abort();
-    const controller = new AbortController();
-    pingController = controller;
-    const nodes = overviewList.value;
-    localTesting.value = true;
-    latencySource.value = "clash";
-    clashError.value = "";
+  // 立即重新检测全部节点是否有效
+  async function checkValidity() {
+    if (checking.value) return;
+    checking.value = true;
     try {
-      await clashDelayAll(
-        c,
-        nodes.map((n) => n.name),
-        (index, rtt) => {
-          if (!controller.signal.aborted && alive && nodes[index])
-            nodes[index].rtt = rtt;
-        },
-        controller.signal
+      const { data } = await getNodeOverview(true);
+      if (!alive) return;
+      const byId = new Map<number, OverviewItem>(
+        (data || []).map((n: OverviewItem) => [n.id, n])
       );
-    } catch (e) {
-      if (controller.signal.aborted) return;
-      clashError.value =
-        e instanceof ClashError ? e.message : "读取 Clash 延迟失败";
-      useServerLatency();
-      clashDialog.value = true;
+      for (const n of overviewList.value) {
+        const fresh = byId.get(n.id);
+        if (fresh)
+          Object.assign(n, { valid: fresh.valid, checkedAt: fresh.checkedAt });
+      }
+      const bad = overviewList.value.filter((n) => !n.valid).length;
+      ElMessage.success(
+        bad ? `检测完成，${bad} 个节点无效` : "检测完成，全部有效"
+      );
     } finally {
-      if (pingController === controller) localTesting.value = false;
+      checking.value = false;
     }
-  }
-  function setClashController(c: ClashController) {
-    clashController.value = c;
-    saveController(c);
   }
   const nodeDialog = ref(false),
     groupDialog = ref(false),
     dialogMode = ref<"add" | "edit">("add");
-  const nodeForm = ref({ ID: 0, Name: "", Link: "" }),
+  const nodeForm = ref({ ID: 0, Name: "", Link: "", Country: "auto" }),
     groupMode = ref("existing"),
     chosenGroups = ref<string[]>([]),
     newGroups = ref("");
@@ -296,7 +236,7 @@ function createNodes() {
   };
   function handleAddNode() {
     dialogMode.value = "add";
-    nodeForm.value = { ID: 0, Name: "", Link: "" };
+    nodeForm.value = { ID: 0, Name: "", Link: "", Country: "auto" };
     resetGroups();
     nodeDialog.value = true;
   }
@@ -308,6 +248,7 @@ function createNodes() {
       ID: row.id,
       Name: row.name,
       Link: full?.Link || row.link,
+      Country: "auto",
     };
     chosenGroups.value = (full?.GroupNodes || []).map((g) => g.Name);
     // Hidden groups remain selectable while editing existing membership.
@@ -334,13 +275,18 @@ function createNodes() {
     try {
       if (dialogMode.value === "add") {
         for (const item of links)
-          await AddNodes({ link: item, group: groups.join(",") });
+          await AddNodes({
+            link: item,
+            group: groups.join(","),
+            country: nodeForm.value.Country,
+          });
       } else
         await UpdateNode({
           id: nodeForm.value.ID,
           name: nodeForm.value.Name,
           link,
           group: groups.join(","),
+          country: nodeForm.value.Country,
         });
       ElMessage.success(
         dialogMode.value === "add" ? "节点添加成功" : "节点更新成功"
@@ -560,7 +506,6 @@ function createNodes() {
   onBeforeUnmount(() => {
     alive = false;
     ++loadSequence;
-    pingController?.abort();
   });
   return {
     loading,
@@ -587,14 +532,8 @@ function createNodes() {
     toggleSelect,
     clearSelection,
     clearFilters,
-    localTesting,
-    latencySource,
-    clashController,
-    clashDialog,
-    clashError,
-    useServerLatency,
-    runClashLatency,
-    setClashController,
+    checking,
+    checkValidity,
     loadAll,
     nodeDialog,
     groupDialog,

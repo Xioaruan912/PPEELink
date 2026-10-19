@@ -14,7 +14,7 @@ const props = defineProps<{ serverId: number; inbound: ProxyInbound | null }>();
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ saved: [] }>();
 
-// 常用伪装目标：需支持 TLS 1.3 与 h2，建议选与服务器同地区、延迟低的站点
+// 常用伪装目标：需支持 TLS 1.3 与 h2，建议选与服务器同地区的站点
 const targets = [
   "www.apple.com",
   "dl.google.com",
@@ -162,8 +162,7 @@ async function save() {
             class="check-result"
             :class="check.ok ? (check.h2 ? 'is-ok' : 'is-warn') : 'is-bad'"
           >
-            {{ check.message
-            }}<template v-if="check.ok"> · {{ check.latency }} ms</template>
+            {{ check.message }}
           </span>
         </Transition>
       </div>

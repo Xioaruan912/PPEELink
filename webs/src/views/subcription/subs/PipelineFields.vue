@@ -89,10 +89,8 @@ const {
                 value="name" /><el-option
                 label="国家/地区"
                 value="country" /><el-option
-                label="低延迟优先"
-                value="latency" /><el-option
-                label="质量分优先"
-                value="quality" /></el-select></el-form-item
+                label="有效节点优先"
+                value="valid" /></el-select></el-form-item
         ></el-col>
         <el-col v-show="step === 'filter'" :span="4" :xs="8"
           ><el-form-item label="最多节点"

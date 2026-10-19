@@ -3,10 +3,11 @@ import { CopyDocument, Edit, MoreFilled } from "@element-plus/icons-vue";
 import { StatusDot } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import CountryFlag from "@/ui/CountryFlag.vue";
+import { formatDateTime } from "@/utils/date";
 import {
   useNodes,
-  rttState,
-  rttText,
+  validState,
+  validText,
   nodeEffectiveHidden,
   type OverviewItem,
 } from "./useNodes";
@@ -22,6 +23,7 @@ const {
   setRowVisible,
   activeGroup,
   nodeName,
+  checking,
 } = useNodes();
 </script>
 <template>
@@ -54,10 +56,17 @@ const {
     <div class="row-protocol mono">
       <span class="mobile-label">协议</span>{{ protocol(node) }}
     </div>
-    <div class="latency" :class="`latency--${rttState(node.rtt)}`">
-      <span class="mobile-label">延迟</span
-      ><StatusDot :state="rttState(node.rtt)" :running="node.rtt === -2"
-        ><span class="mono">{{ rttText(node.rtt) }}</span></StatusDot
+    <div class="latency" :class="`latency--${validState(node)}`">
+      <span class="mobile-label">状态</span
+      ><StatusDot
+        :state="validState(node)"
+        :running="checking"
+        :title="
+          node.checkedAt
+            ? `检测于 ${formatDateTime(node.checkedAt)}`
+            : undefined
+        "
+        ><span>{{ validText(node) }}</span></StatusDot
       >
     </div>
     <div class="row-visibility">

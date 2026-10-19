@@ -28,7 +28,7 @@ const {
   getsubs,
   tableData,
   parseConfig,
-  rttLabel,
+  validLabel,
   expireClear,
   expirePick,
   expireSaving,
@@ -131,17 +131,10 @@ const sections = [
                 >{{ node.name
                 }}<small class="mono">{{ node.server }}</small></span
               ><StatusDot
-                :running="node.rtt === -2"
                 :state="
-                  node.rtt === -2 || node.rtt === -3
-                    ? 'idle'
-                    : node.rtt < 0
-                      ? 'bad'
-                      : node.rtt < 100
-                        ? 'ok'
-                        : 'warn'
+                  node.valid === undefined ? 'idle' : node.valid ? 'ok' : 'bad'
                 "
-                :label="rttLabel(node.rtt)"
+                :label="validLabel(node)"
               />
             </div></section></template
         ><EmptyState

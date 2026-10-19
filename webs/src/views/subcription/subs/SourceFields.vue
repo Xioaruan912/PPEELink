@@ -15,6 +15,7 @@ const {
   nodeQuality,
   nodeQualityByName,
   nodeQualityLabel,
+  validLabel,
   groupedNodes,
   removeNode,
   selectAllNodes,
@@ -87,11 +88,11 @@ const {
                 >
                 <span
                   class="picker-group-confidence"
-                  :class="{ empty: group.qualityScore < 0 }"
+                  :class="{ empty: !group.validCount }"
                   >{{
-                    group.qualityScore >= 0
-                      ? `最高质量 ${group.qualityScore}分`
-                      : "暂无在线节点"
+                    group.validCount
+                      ? `${group.validCount} 个有效`
+                      : "暂无有效节点"
                   }}</span
                 >
               </template>
@@ -109,17 +110,8 @@ const {
                     <span class="picker-node-name">{{ item.Name }}</span>
                     <span
                       class="picker-node-confidence"
-                      :class="{
-                        empty:
-                          !nodeQuality(item)?.sampleCount ||
-                          (nodeQuality(item)?.rtt ?? -1) < 0,
-                      }"
+                      :class="{ empty: !nodeQuality(item)?.valid }"
                       >{{ nodeQualityLabel(item) }}</span
-                    >
-                    <span
-                      v-if="nodeQuality(item)?.sampleCount"
-                      class="picker-node-samples"
-                      >样本 {{ nodeQuality(item)?.sampleCount }}</span
                     >
                   </span>
                 </el-checkbox>
@@ -146,18 +138,8 @@ const {
             <span class="order-name">{{ nodeName }}</span>
             <span
               class="order-confidence"
-              :class="{
-                empty:
-                  !nodeQualityByName(nodeName)?.sampleCount ||
-                  (nodeQualityByName(nodeName)?.rtt ?? -1) < 0,
-              }"
-              >{{
-                !nodeQualityByName(nodeName)?.sampleCount
-                  ? "暂无质量数据"
-                  : (nodeQualityByName(nodeName)?.rtt ?? -1) < 0
-                    ? "当前离线"
-                    : `质量 ${nodeQualityByName(nodeName)?.score}分`
-              }}</span
+              :class="{ empty: !nodeQualityByName(nodeName)?.valid }"
+              >{{ validLabel(nodeQualityByName(nodeName)) }}</span
             >
             <UiButton
               variant="ghost"

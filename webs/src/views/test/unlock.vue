@@ -10,7 +10,7 @@ interface NodeItem {
   id: number;
   name: string;
   link: string;
-  rtt: number;
+  valid: boolean;
 }
 const nodes = ref<NodeItem[]>([]),
   selectedNodeId = ref<number>();
@@ -27,8 +27,10 @@ async function loadNodes() {
     const { data } = await getNodeOverview();
     if (alive)
       nodes.value = (data || [])
-        .filter((node: NodeItem) => node.rtt >= 0)
-        .sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
+        .filter((node: NodeItem) => node.valid)
+        .sort((a: NodeItem, b: NodeItem) =>
+          a.name.localeCompare(b.name, "zh-CN")
+        );
   } catch {
     if (alive) nodesError.value = "无法加载节点，请重试。";
   } finally {
@@ -89,8 +91,7 @@ onBeforeUnmount(() => {
             :label="node.name"
             :value="node.id"
             ><span class="node-option"
-              ><span>{{ node.name }}</span
-              ><span class="mono">{{ node.rtt }} ms</span></span
+              ><span>{{ node.name }}</span></span
             ></el-option
           ></el-select
         >

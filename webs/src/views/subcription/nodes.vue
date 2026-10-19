@@ -1,17 +1,8 @@
 <script setup lang="ts">
 import { ref, nextTick, watch } from "vue";
 import { Plus, Refresh } from "@element-plus/icons-vue";
-import {
-  PageHeader,
-  UiButton,
-  UiPanel,
-  UiSkeleton,
-  EmptyState,
-  UiSegmented,
-} from "@/ui";
-import RowIconButton from "@/ui/RowIconButton.vue";
-import IconGear from "~icons/ph/gear-six";
-import ClashLatencyDialog from "./nodes/ClashLatencyDialog.vue";
+import { PageHeader, UiButton, UiPanel, UiSkeleton, EmptyState } from "@/ui";
+import IconPulse from "~icons/ph/pulse";
 import { useStagger, useMotion } from "@/motion";
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue";
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue";
@@ -37,12 +28,9 @@ const {
   toggleNodes,
   clearSelection,
   clearFilters,
-  localTesting,
-  latencySource,
   loadAll,
-  useServerLatency,
-  runClashLatency,
-  clashDialog,
+  checking,
+  checkValidity,
   handleAddNode,
   openGroupManager,
   hideActiveGroup,
@@ -54,10 +42,6 @@ const {
   openTool,
 } = provideNodes();
 const root = ref<HTMLElement>();
-function switchLatency(value: string | number) {
-  if (value === "clash") void runClashLatency();
-  else useServerLatency();
-}
 const stagger = useStagger();
 const { reduced, animate } = useMotion();
 watch(loading, async () => {
@@ -156,7 +140,7 @@ function leaveBar(element: Element, done: () => void) {
         class="node-main"
         title="节点列表"
         :count="filteredNodes.length"
-        description="名称可点开编辑；延迟可选面板服务器到节点的 TCP 连接，或你电脑上 Clash 的实测。"
+        description="名称可点开编辑；状态为面板服务器能否连上节点。"
         :aria-busy="loading"
       >
         <div class="node-toolbar">
@@ -180,27 +164,14 @@ function leaveBar(element: Element, done: () => void) {
           /></el-select>
         </div>
         <div class="view-toolbar">
-          <UiSegmented
-            :model-value="latencySource"
-            label="延迟来源"
-            :options="[
-              { label: '面板服务器', value: 'server' },
-              { label: '我的 Clash', value: 'clash' },
-            ]"
-            @update:model-value="switchLatency"
-          /><UiButton
-            v-if="latencySource === 'clash'"
+          <UiButton
             variant="ghost"
-            :loading="localTesting"
-            :disabled="loading"
-            @click="runClashLatency"
-            >{{ localTesting ? "测试中" : "重新测" }}</UiButton
-          ><RowIconButton
-            v-if="latencySource === 'clash'"
-            :icon="IconGear"
-            label="Clash 连接设置"
-            @click="clashDialog = true"
-          /><span class="result-count mono"
+            :icon="IconPulse"
+            :loading="checking"
+            :disabled="loading || !overviewList.length"
+            @click="checkValidity"
+            >{{ checking ? "检测中" : "检测有效性" }}</UiButton
+          ><span class="result-count mono"
             >{{ filteredNodes.length }} 个节点</span
           ><UiButton
             v-if="filteredNodes.length"
@@ -240,7 +211,7 @@ function leaveBar(element: Element, done: () => void) {
           >
           <template v-else>
             <div class="list-heading" aria-hidden="true">
-              <span>节点 / 主机</span><span>协议</span><span>延迟</span
+              <span>节点 / 主机</span><span>协议</span><span>状态</span
               ><span>可见</span><span class="actions-heading">操作</span>
             </div>
             <TransitionGroup
@@ -291,7 +262,6 @@ function leaveBar(element: Element, done: () => void) {
       :node-id="testNode.id"
       :node-name="testNode.name"
     />
-    <ClashLatencyDialog />
   </div>
 </template>
 <style scoped>

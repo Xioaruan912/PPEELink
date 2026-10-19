@@ -1,11 +1,11 @@
 <template>
   <div class="health-strip">
-    <p class="health-label">连接正常率</p>
+    <p class="health-label">有效率</p>
     <UiSkeleton v-if="loading" :lines="2" height="24px" />
     <template v-else-if="summary.total">
       <UiStat
         size="medium"
-        label="连接正常率"
+        label="有效率"
         :value="rate"
         :decimals="1"
         unit="%"
@@ -13,7 +13,7 @@
       <div
         class="health-ratio"
         role="img"
-        :aria-label="`正常 ${summary.healthy}，待检查 ${summary.warning}，不可用 ${summary.offline}`"
+        :aria-label="`有效 ${summary.valid}，无效 ${summary.invalid}`"
       >
         <span
           v-for="item in states"
@@ -36,7 +36,7 @@
       v-else
       class="health-empty"
       title="等待连接"
-      description="添加节点后查看连接健康。"
+      description="添加节点后查看节点是否有效。"
     />
   </div>
 </template>
@@ -44,7 +44,7 @@
 import { computed } from "vue";
 import { EmptyState, StatusDot, UiSkeleton, UiStat } from "@/ui";
 const props = defineProps<{
-  summary: { total: number; healthy: number; warning: number; offline: number };
+  summary: { total: number; valid: number; invalid: number };
   rate: number;
   loading: boolean;
 }>();
@@ -52,20 +52,14 @@ const states = computed(() => [
   {
     key: "healthy",
     state: "ok" as const,
-    label: "正常",
-    value: props.summary.healthy,
-  },
-  {
-    key: "warning",
-    state: "warn" as const,
-    label: "待检查",
-    value: props.summary.warning,
+    label: "有效",
+    value: props.summary.valid,
   },
   {
     key: "offline",
     state: "bad" as const,
-    label: "不可用",
-    value: props.summary.offline,
+    label: "无效",
+    value: props.summary.invalid,
   },
 ]);
 </script>

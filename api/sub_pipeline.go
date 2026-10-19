@@ -333,10 +333,7 @@ func applyEmoji(items []pipelineItem, cfg SubscriptionPipeline) {
 			}
 		}
 		if emoji == "" {
-			code := p.CountryCode()
-			if code == "" {
-				code = node.CountryFromName(name)
-			}
+			code := p.WithName(name).CountryCode()
 			emoji = node.FlagEmoji(code)
 		}
 		if emoji == "" {
@@ -360,27 +357,15 @@ func sortItems(items []pipelineItem, cfg SubscriptionPipeline) {
 		sort.SliceStable(items, func(i, j int) bool {
 			return countryOf(items[i].P) < countryOf(items[j].P)
 		})
-	case "latency", "quality":
+	case "latency", "quality", "valid":
+		// 可用的节点排在前面（latency/quality 为旧配置的取值，同样按可用性排）
 		stats, _ := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
+		valid := func(id int) bool {
+			s, ok := stats[id]
+			return ok && s.LastRtt >= 0
+		}
 		sort.SliceStable(items, func(i, j int) bool {
-			a, aok := stats[items[i].ID]
-			b, bok := stats[items[j].ID]
-			if !aok {
-				return false
-			}
-			if !bok {
-				return true
-			}
-			if cfg.Sort == "quality" {
-				return a.Score > b.Score
-			}
-			if a.AverageRtt < 0 {
-				return false
-			}
-			if b.AverageRtt < 0 {
-				return true
-			}
-			return a.AverageRtt < b.AverageRtt
+			return valid(items[i].ID) && !valid(items[j].ID)
 		})
 	}
 	if strings.TrimSpace(cfg.RegexSort) != "" {
@@ -417,10 +402,7 @@ func applyRegexSort(items []pipelineItem, pattern string) {
 }
 
 func countryOf(p node.Outbound) string {
-	if code := p.CountryCode(); code != "" {
-		return code
-	}
-	return node.CountryFromName(p.Name)
+	return p.CountryCode()
 }
 
 func runScriptOperator(items []pipelineItem, code string) ([]pipelineItem, error) {

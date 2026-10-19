@@ -273,3 +273,23 @@ func TestSpeedGuard(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestApplyCountryRenamesNameAndLink(t *testing.T) {
+	name, link := applyCountry("Nosla-JP", testLinkA, "jp")
+	if name != "🇯🇵 Nosla-JP" || !strings.Contains(link, "Nosla-JP") {
+		t.Fatalf("got %q %q", name, link)
+	}
+	p, err := node.ParseOutbound(link)
+	if err != nil || p.Name != "🇯🇵 Nosla-JP" {
+		t.Fatalf("link name not updated: %v %+v", err, p)
+	}
+	if name, _ := applyCountry("🇭🇰 Nosla-JP", testLinkA, ""); name != "Nosla-JP" {
+		t.Fatalf("empty country must strip the flag: %q", name)
+	}
+	if name, _ := applyCountry("lighelayer_USA", testLinkA, "auto"); name != "🇺🇸 lighelayer_USA" {
+		t.Fatalf("auto must detect from the name: %q", name)
+	}
+	if name, _ := applyCountry("Test Reality", testLinkA, "auto"); name != "Test Reality" {
+		t.Fatalf("auto without a hint must keep the name: %q", name)
+	}
+}

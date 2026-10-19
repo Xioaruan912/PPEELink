@@ -7,30 +7,32 @@ export function getNodes(includeHidden = false) {
   });
 }
 
-// 节点概览（含国家/延迟/分组）
-export function getNodeOverview() {
+// 节点概览（国家、分组与有效性）；refresh 为 true 时立即重新检测
+export function getNodeOverview(refresh = false) {
   return request({
     url: "/api/v1/nodes/overview",
     method: "get",
+    params: refresh ? { refresh: 1 } : undefined,
   });
 }
 
-export function getNodeQualityHistory(id: number, hours = 24) {
-  return request({
-    url: "/api/v1/nodes/quality/history",
-    method: "get",
-    params: { id, hours },
-  });
-}
-
+// 有效 / 无效节点数
 export function getNodeQualitySummary() {
   return request({
     url: "/api/v1/nodes/quality/summary",
     method: "get",
   });
 }
-export function getNodeRecommendations() {
-  return request({ url: "/api/v1/nodes/recommendations", method: "get" });
+
+export interface CountryOption {
+  code: string;
+  name: string;
+  flag: string;
+  aliases: string[];
+}
+// 国家/地区列表：命名时选择国旗
+export function getCountries() {
+  return request({ url: "/api/v1/nodes/countries", method: "get" });
 }
 export function getNodeHealthEvents(limit = 30) {
   return request({

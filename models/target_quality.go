@@ -119,22 +119,6 @@ func GetNodeTargetQualityStats(since time.Time) (map[int]map[string]TargetQualit
 	return result, nil
 }
 
-func GetNodeSceneQualityStats(since time.Time) (map[int]map[string]TargetQualityStats, error) {
-	var samples []NodeTargetQualitySample
-	if err := DB.Where("checked_at >= ?", since).Order("node_id, scene, checked_at").Find(&samples).Error; err != nil {
-		return nil, err
-	}
-	flat := aggregateTargetQuality(samples, true)
-	result := map[int]map[string]TargetQualityStats{}
-	for k, stat := range flat {
-		if result[k.nodeID] == nil {
-			result[k.nodeID] = map[string]TargetQualityStats{}
-		}
-		result[k.nodeID][k.label] = stat
-	}
-	return result, nil
-}
-
 func CleanupNodeTargetQuality(before time.Time) error {
 	return DB.Where("checked_at < ?", before).Delete(&NodeTargetQualitySample{}).Error
 }

@@ -83,16 +83,12 @@ interface OverviewItem {
   server: string;
   country: string;
   countryCode: string;
-  rtt: number;
+  /** 未检测时为 undefined */
+  valid?: boolean;
   groups: string[];
-  score: number;
-  availability: number;
-  confidence: number;
-  sampleCount: number;
 }
 
 import { ElMessage } from "element-plus";
-import { extractHostPort } from "@/utils/ping";
 import { copySubscriptionText } from "./clipboard";
 
 export function createSubscriptions() {
@@ -126,12 +122,10 @@ export function createSubscriptions() {
     const node = nodeByName.value.get(name);
     return node ? nodeQuality(node) : undefined;
   };
-  const nodeQualityLabel = (node: Node) => {
-    const q = nodeQuality(node);
-    if (!q || q.sampleCount <= 0) return "暂无质量数据";
-    if (q.rtt < 0) return "当前离线";
-    return `质量 ${q.score}分`;
-  };
+  /** 有效 / 无效 / 未检测 */
+  const validLabel = (q?: OverviewItem) =>
+    q?.valid === undefined ? "未检测" : q.valid ? "有效" : "无效";
+  const nodeQualityLabel = (node: Node) => validLabel(nodeQuality(node));
   const groupedNodes = computed(() => {
     const by = new Map<string, Node[]>();
     for (const n of NodesList.value) {
@@ -144,35 +138,24 @@ export function createSubscriptions() {
     return [...by.entries()]
 
       .map(([name, nodes]) => {
-        const sortedNodes = [...nodes].sort((a, b) => {
-          const qa = nodeQuality(a);
-          const qb = nodeQuality(b);
-          const onlineDiff =
-            Number((qb?.rtt ?? -1) >= 0) - Number((qa?.rtt ?? -1) >= 0);
-          if (onlineDiff) return onlineDiff;
-          const scoreDiff = (qb?.score || 0) - (qa?.score || 0);
-          if (scoreDiff) return scoreDiff;
-          const availabilityDiff =
-            (qb?.availability || 0) - (qa?.availability || 0);
-          return availabilityDiff || a.Name.localeCompare(b.Name, "zh-CN");
-        });
-        const qualitySamples = sortedNodes
-          .map((node) => nodeQuality(node))
-          .filter(
-            (q): q is OverviewItem => !!q && q.sampleCount > 0 && q.rtt >= 0
-          );
+        // 有效的排前面，其余按名称
+        const sortedNodes = [...nodes].sort(
+          (a, b) =>
+            Number(!!nodeQuality(b)?.valid) - Number(!!nodeQuality(a)?.valid) ||
+            a.Name.localeCompare(b.Name, "zh-CN")
+        );
+        const validCount = sortedNodes.filter(
+          (node) => nodeQuality(node)?.valid
+        ).length;
         return {
           name,
           nodes: sortedNodes,
-          qualityScore: qualitySamples.length
-            ? Math.max(...qualitySamples.map((q) => q.score))
-            : -1,
+          validCount,
         };
       })
       .sort(
         (a, b) =>
-          b.qualityScore - a.qualityScore ||
-          a.name.localeCompare(b.name, "zh-CN")
+          b.validCount - a.validCount || a.name.localeCompare(b.name, "zh-CN")
       );
   });
   const udpOn = ref(false);
@@ -349,6 +332,9 @@ export function createSubscriptions() {
       /* use defaults */
     }
     const value = { ...defaults, ...parsed };
+    // 旧配置的“低延迟优先 / 质量分优先”统一为“有效节点优先”
+    if (value.sort === "latency" || value.sort === "quality")
+      value.sort = "valid";
     value.setUdp =
       typeof parsed.setUdp === "boolean" ? (parsed.setUdp ? "on" : "off") : "";
     value.setTfo =
@@ -744,7 +730,6 @@ export function createSubscriptions() {
       previewNodesList.value = previewRes.data || [];
 
       drawerLoading.value = false;
-      await testPreviewNodes();
     } catch {
       if (alive && version === probeVersion)
         previewError.value = "节点详情加载失败，请重试";
@@ -765,12 +750,7 @@ export function createSubscriptions() {
           server: "",
           country: "未知",
           countryCode: "",
-          rtt: -3,
           groups: [],
-          score: 0,
-          availability: 0,
-          confidence: 0,
-          sampleCount: 0,
         }
     );
     // 按国家聚合
@@ -791,14 +771,6 @@ export function createSubscriptions() {
     return (sub.GroupRefs || []).map((g) => ({ ...g }));
   });
 
-  const rttLabel = (rtt: number) =>
-    rtt === -3
-      ? "未检测"
-      : rtt === -2
-        ? "测试中…"
-        : rtt < 0
-          ? "不可达"
-          : `${rtt}ms`;
   const expireSaving = ref(false);
   const saveExpire = async () => {
     if (
@@ -855,69 +827,15 @@ export function createSubscriptions() {
       }
     }
   );
-  const probeControllers = new Map<
-    AbortController,
-    { quality: OverviewItem; rtt: number }
-  >();
+  // 抽屉关闭或重新打开时，丢弃还在路上的旧请求结果
   let probeVersion = 0;
   const abortProbes = () => {
     probeVersion++;
-    probeControllers.forEach(({ quality, rtt }, controller) => {
-      if (quality.rtt === -2) quality.rtt = rtt;
-      controller.abort();
-    });
-    probeControllers.clear();
   };
   watch(drawerVisible, (visible) => {
     if (!visible) abortProbes();
   });
   onBeforeUnmount(abortProbes);
-  const testPreviewNodes = async () => {
-    const version = probeVersion;
-    const nodes = previewNodesList.value.map((node) => ({
-      node,
-      quality: overview.value.find((o) => o.id === node.ID),
-    }));
-    let cursor = 0;
-    const worker = async () => {
-      while (
-        cursor < nodes.length &&
-        alive &&
-        drawerVisible.value &&
-        version === probeVersion
-      ) {
-        const { node, quality } = nodes[cursor++];
-        const target = extractHostPort(node.Link);
-        if (!target || !quality || quality.rtt === -1) continue;
-        const controller = new AbortController();
-        probeControllers.set(controller, { quality, rtt: quality.rtt });
-        quality.rtt = -2;
-        const started = performance.now();
-        const timer = setTimeout(() => controller.abort(), 2000);
-        try {
-          await fetch(`https://${target.host}:${target.port}`, {
-            mode: "no-cors",
-            cache: "no-cache",
-            signal: controller.signal,
-          });
-          if (alive && version === probeVersion)
-            quality.rtt = Math.round(performance.now() - started);
-        } catch (error) {
-          if (alive && version === probeVersion)
-            quality.rtt =
-              (error as { name?: string } | null)?.name === "AbortError"
-                ? -1
-                : Math.round(performance.now() - started);
-        } finally {
-          clearTimeout(timer);
-          probeControllers.delete(controller);
-        }
-      }
-    };
-    await Promise.all(
-      Array.from({ length: Math.min(6, nodes.length) }, worker)
-    );
-  };
   const moveNode = (index: number, offset: number) => {
     const target = index + offset;
     if (target < 0 || target >= value1.value.length) return;
@@ -1021,7 +939,7 @@ export function createSubscriptions() {
     openDrawer,
     drawerNodesByCountry,
     drawerGroupRefs,
-    rttLabel,
+    validLabel,
     expireSaving,
     saveExpire: withFeedback(saveExpire),
     detailSection,
@@ -1030,7 +948,6 @@ export function createSubscriptions() {
     confirmAction,
     resolveConfirmation,
     abortProbes,
-    testPreviewNodes,
     moveNode,
     getsubs,
   };
