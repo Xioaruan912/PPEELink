@@ -34,7 +34,7 @@ type UnlockCheckResult struct {
 	Name      string    `json:"name"`
 	Group     string    `json:"group"`
 	Ok        bool      `json:"ok"`
-	Rtt       int       `json:"rtt"` // 毫秒，-1 表示失败
+	Rtt       int       `json:"-"` // 毫秒，-1 表示失败；仅内部使用，不对外展示
 	Note      string    `json:"note"`
 	Status    string    `json:"status"` // available / blocked / unknown
 	Region    string    `json:"region,omitempty"`

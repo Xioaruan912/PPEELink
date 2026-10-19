@@ -1,7 +1,7 @@
 <template>
   <UiDialog
     :model-value="visible"
-    title="链路检测"
+    title="国内可达性"
     width="1120px"
     top="5vh"
     :close-on-click-modal="false"
@@ -25,10 +25,10 @@
     <div class="test-toolbar">
       <div class="test-context">
         <UiButton variant="primary" :loading="loading" @click="startTest">{{
-          targets.length ? "重新测速" : "开始测速"
+          targets.length ? "重新检测" : "开始检测"
         }}</UiButton
         ><UiButton v-if="loading" variant="danger" @click="stopTest"
-          >停止测试</UiButton
+          >停止检测</UiButton
         >
       </div>
       <UiSegmented
@@ -37,12 +37,15 @@
         :options="ports"
       />
     </div>
-    <p class="method-hint">VPS → 节点 → 国内目标 · 双样本均值</p>
-    <div class="legend" aria-label="延迟图例">
+    <p class="method-hint">
+      经节点连接国内各省三大运营商的服务器；连不上通常说明节点 IP
+      被墙或线路异常。
+    </p>
+    <div class="legend" aria-label="图例">
       <span
-        v-for="(label, index) in latencyLegend"
+        v-for="(label, index) in reachLegend"
         :key="label"
-        :class="`latency-${index}`"
+        :class="`reach-${index}`"
         ><i aria-hidden="true"></i>{{ label }}</span
       >
     </div>
@@ -63,10 +66,7 @@
           >
             <div class="province-heading">
               <h3>{{ group.province }}</h3>
-              <span
-                >{{ group.okCount }}/{{ group.items.length }} 可达 ·
-                {{ group.avg >= 0 ? `${group.avg} ms` : "超时" }}</span
-              >
+              <span>{{ group.okCount }}/{{ group.items.length }} 可达</span>
             </div>
             <TransitionGroup
               name="result-list"
@@ -79,7 +79,7 @@
                 v-for="(target, targetIndex) in group.items"
                 :key="`${target.ip}:${target.port}`"
                 class="target"
-                :class="`latency-${latencyBand(target.rtt)}`"
+                :class="`reach-${target.ok ? 0 : 2}`"
                 :data-index="targetIndex"
               >
                 <div>
@@ -87,15 +87,9 @@
                   ><span>{{ target.isp }}</span>
                 </div>
                 <StatusDot
-                  class="test-mono target-rtt"
-                  :state="
-                    target.rtt < 0 || target.rtt >= 300
-                      ? 'bad'
-                      : target.rtt < 100
-                        ? 'ok'
-                        : 'warn'
-                  "
-                  :label="target.rtt < 0 ? '超时' : `${target.rtt} ms`"
+                  class="target-rtt"
+                  :state="target.ok ? 'ok' : 'bad'"
+                  :label="target.ok ? '可达' : '不可达'"
                 /></article
             ></TransitionGroup></section></TransitionGroup
         ><EmptyState
@@ -103,7 +97,7 @@
           size="section"
           :title="loading ? '正在探测各省' : '暂无检测结果'"
           :description="
-            loading ? '结果将按省份陆续显示' : '开始测速以查看国内链路'
+            loading ? '结果将按省份陆续显示' : '开始检测以查看各省是否可达'
           "
         />
       </div>
@@ -117,13 +111,13 @@
         <article
           v-for="item in zstaticResults"
           :key="item.port"
-          :class="`latency-${latencyBand(item.rtt)}`"
+          :class="`reach-${item.ok ? 0 : 2}`"
         >
           <span
             >端口 <strong class="test-mono">{{ item.port }}</strong></span
           ><StatusDot
-            :state="item.rtt < 0 ? 'bad' : 'ok'"
-            :label="item.rtt < 0 ? '超时' : `${item.rtt} ms`"
+            :state="item.ok ? 'ok' : 'bad'"
+            :label="item.ok ? '可达' : '不可达'"
           />
         </article>
       </div>
@@ -146,10 +140,10 @@ import StatusDot from "@/ui/StatusDot.vue";
 import EmptyState from "@/ui/EmptyState.vue";
 import ChinaTcpMap from "./node-tests/ChinaTcpMap.vue";
 import {
-  latencyBand,
-  latencyLegend,
+  normalizeTarget,
+  reachLegend,
   type ChinaTarget,
-} from "./node-tests/latency";
+} from "./node-tests/reach";
 import {
   readEvents,
   token,
@@ -164,7 +158,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ "update:visible": [value: boolean] }>();
 const targets = ref<ChinaTarget[]>([]);
-const zstaticResults = ref<{ port: number; rtt: number }[]>([]);
+const zstaticResults = ref<{ port: number; ok: boolean }[]>([]);
 const zstaticPort = ref<string | number>("443");
 const ports = [
   { label: "zstaticcdn · 443", value: "443" },
@@ -183,14 +177,10 @@ const provinceGroups = computed(() => {
   return [...groups]
     .sort(([a], [b]) => a.localeCompare(b, "zh-CN"))
     .map(([province, items]) => {
-      const ok = items.filter((item) => item.rtt >= 0);
       return {
         province,
         items,
-        okCount: ok.length,
-        avg: ok.length
-          ? Math.round(ok.reduce((sum, item) => sum + item.rtt, 0) / ok.length)
-          : -1,
+        okCount: items.filter((item) => item.ok).length,
       };
     });
 });
@@ -228,12 +218,12 @@ async function startTest() {
               ])
             );
             data.targets.forEach((target: ChinaTarget) =>
-              merged.set(`${target.ip}:${target.port}`, target)
+              merged.set(`${target.ip}:${target.port}`, normalizeTarget(target))
             );
             targets.value = [...merged.values()];
           } else if (type === "zstatic" && Array.isArray(data?.zstatic))
             zstaticResults.value = data.zstatic;
-          else if (type === "error") throw new Error(data?.msg || "测速失败");
+          else if (type === "error") throw new Error(data?.msg || "检测失败");
         },
         current,
         setReader
@@ -246,7 +236,7 @@ async function startTest() {
     });
   } catch (cause: any) {
     if (cause?.name !== "AbortError")
-      ElMessage.error(cause?.message || "测速失败");
+      ElMessage.error(cause?.message || "检测失败");
   }
 }
 async function stopTest() {
@@ -258,8 +248,11 @@ async function stopTest() {
 }
 function restore() {
   const cached = getTcp(props.nodeId);
-  targets.value = cached?.targets || [];
-  zstaticResults.value = cached?.zstatic || [];
+  targets.value = (cached?.targets || []).map(normalizeTarget);
+  zstaticResults.value = (cached?.zstatic || []).map((z: any) => ({
+    port: z.port,
+    ok: typeof z.ok === "boolean" ? z.ok : Number(z.rtt) >= 0,
+  }));
 }
 watch(
   () => props.nodeId,
@@ -302,23 +295,14 @@ watch(
   border-radius: 4px;
   background: var(--latency);
 }
-.latency-0 {
+.reach-0 {
   --latency: var(--c-ok);
 }
-.latency-1 {
-  --latency: var(--c-data);
-}
-.latency-2 {
+.reach-1 {
   --latency: var(--c-warn);
 }
-.latency-3 {
-  --latency: var(--c-signal);
-}
-.latency-4 {
+.reach-2 {
   --latency: var(--c-bad);
-}
-.latency-5 {
-  --latency: var(--c-muted);
 }
 .tcp-layout {
   display: grid;

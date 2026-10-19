@@ -1,34 +1,30 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch, type Component } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import IconGauge from "~icons/ph/gauge";
 import IconLock from "~icons/ph/lock-key-open";
 import IconPulse from "~icons/ph/pulse";
-import SpeedTest from "./speed.vue";
 import UnlockTest from "./unlock.vue";
 import TcpTest from "./tcp.vue";
 
-/** 节点测试：真实测速、解锁检测、TCP 连通性合并在一个页面，用顶部标签切换。 */
+/** 节点测试：解锁检测与国内可达性在一个页面，用顶部标签切换。 */
 defineOptions({ name: "NodeTest" });
 
-type TabKey = "speed" | "unlock" | "tcp";
+type TabKey = "unlock" | "tcp";
 const tabs: { key: TabKey; label: string; hint: string; icon: Component }[] = [
-  {
-    key: "speed",
-    label: "真实测速",
-    hint: "经节点下载测吞吐",
-    icon: IconGauge,
-  },
   {
     key: "unlock",
     label: "解锁检测",
     hint: "AI 与流媒体可用性",
     icon: IconLock,
   },
-  { key: "tcp", label: "TCP 连通", hint: "各省运营商连通性", icon: IconPulse },
+  {
+    key: "tcp",
+    label: "国内可达性",
+    hint: "节点 IP 是否被墙",
+    icon: IconPulse,
+  },
 ];
 const views: Record<TabKey, Component> = {
-  speed: SpeedTest,
   unlock: UnlockTest,
   tcp: TcpTest,
 };
@@ -36,7 +32,7 @@ const views: Record<TabKey, Component> = {
 const route = useRoute();
 const router = useRouter();
 const isTab = (v: unknown): v is TabKey => tabs.some((t) => t.key === v);
-const active = ref<TabKey>(isTab(route.query.tab) ? route.query.tab : "speed");
+const active = ref<TabKey>(isTab(route.query.tab) ? route.query.tab : "unlock");
 watch(
   () => route.query.tab,
   (tab) => {
@@ -125,7 +121,7 @@ const current = computed(() => views[active.value]);
 .test-tabs {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   margin-bottom: 28px;
   padding: 4px;

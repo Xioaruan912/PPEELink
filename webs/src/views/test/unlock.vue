@@ -72,7 +72,7 @@ onBeforeUnmount(() => {
   <div class="unlock-page">
     <PageHeader
       title="解锁检测"
-      description="检查节点的 AI、影视与论坛可用性。"
+      description="检查节点能否使用 AI、影视与论坛服务。服务只看节点的出口 IP，所以结果和从哪台电脑使用一致。"
     />
     <section class="test-controls" data-enter>
       <div class="node-picker">

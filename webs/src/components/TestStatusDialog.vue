@@ -10,7 +10,7 @@
     <template v-if="status && !failed"
       ><div class="test-context">
         <StatusDot state="warn" running label="测试进行中" /><span>{{
-          status.type === "unlock" ? "解锁检测" : "TCP 测速"
+          status.type === "unlock" ? "解锁检测" : "国内可达性检测"
         }}</span>
       </div>
       <div class="elapsed">

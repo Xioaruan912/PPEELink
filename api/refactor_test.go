@@ -243,37 +243,6 @@ func TestClashProviderMode(t *testing.T) {
 	}
 }
 
-func TestSpeedGuard(t *testing.T) {
-	speedGuard = &speedBudget{}
-	now := time.Now()
-	if msg := checkSpeedPlan(speedMaxNodesPerRun+1, 1<<20, now); msg == "" {
-		t.Fatal("too many nodes must be rejected")
-	}
-	if msg := checkSpeedPlan(20, 100<<20, now); msg == "" {
-		t.Fatal("2 GB in one run must be rejected")
-	}
-	if msg := checkSpeedPlan(5, 10<<20, now); msg != "" {
-		t.Fatalf("small run rejected: %s", msg)
-	}
-	speedGuard.add(speedDailyBudget - (5 << 20))
-	if msg := checkSpeedPlan(1, 10<<20, now); msg == "" {
-		t.Fatal("run beyond daily budget must be rejected")
-	}
-	speedGuard = &speedBudget{}
-	speedGuard.finish()
-	if msg := checkSpeedPlan(1, 1<<20, time.Now()); msg == "" {
-		t.Fatal("cooldown must apply right after a run")
-	}
-	for _, bad := range []string{"http://127.0.0.1/x", "https://192.168.1.1/", "http://localhost:8000/", "ftp://example.com/", "http://[::1]/"} {
-		if validateSpeedTarget(bad) == nil {
-			t.Fatalf("%s must be rejected", bad)
-		}
-	}
-	if err := validateSpeedTarget("https://speed.cloudflare.com/__down?bytes=1000"); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestApplyCountryRenamesNameAndLink(t *testing.T) {
 	name, link := applyCountry("Nosla-JP", testLinkA, "jp")
 	if name != "🇯🇵 Nosla-JP" || !strings.Contains(link, "Nosla-JP") {

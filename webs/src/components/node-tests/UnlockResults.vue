@@ -22,15 +22,10 @@
       >
         <div class="unlock-item-heading">
           <strong>{{ item.name }}</strong
-          ><StatusDot
-            :state="item.ok ? 'ok' : 'bad'"
-            :label="item.ok ? '已解锁' : '未解锁'"
-          />
+          ><StatusDot :state="state(item)" :label="label(item)" />
         </div>
-        <div class="unlock-meta">
-          <span v-if="item.rtt > 0" class="test-mono">{{ item.rtt }} ms</span
-          ><span v-if="item.region">{{ item.region }}</span
-          ><span v-if="item.status">{{ item.status }}</span>
+        <div v-if="item.region" class="unlock-meta">
+          <span>地区 {{ item.region }}</span>
         </div>
         <p v-if="item.note" class="item-note">{{ item.note }}</p>
       </article></TransitionGroup
@@ -41,7 +36,7 @@
 import { computed } from "vue";
 import StatusDot from "@/ui/StatusDot.vue";
 import { useResultMotion } from "./useNodeTestSession";
-import type { UnlockResult } from "./unlock";
+import type { UnlockCheckResult, UnlockResult } from "./unlock";
 const props = defineProps<{ result: UnlockResult }>();
 const { enter, leave } = useResultMotion();
 const groups = [
@@ -59,6 +54,11 @@ const visibleGroups = computed(() => {
     (group) => resultByGroup(group.key).length
   );
 });
+// unknown 表示请求失败或页面无法判断，和“未解锁”分开显示
+const state = (item: UnlockCheckResult) =>
+  item.ok ? "ok" : item.status === "unknown" ? "warn" : "bad";
+const label = (item: UnlockCheckResult) =>
+  item.ok ? "已解锁" : item.status === "unknown" ? "无法判断" : "未解锁";
 const resultByGroup = (group: string) =>
   (props.result?.results || []).filter((item) => item.group === group);
 </script>

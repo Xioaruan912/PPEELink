@@ -27,8 +27,6 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.DELETE("/egress-targets", api.EgressTargetDelete)
 		NodesGroup.POST("/chinaping", api.NodeChinaPing)
 		NodesGroup.POST("/chinaping/stream", api.NodeChinaPingStream)
-		NodesGroup.POST("/speedtest/stream", api.NodeSpeedTestStream)
-		NodesGroup.GET("/speedtest/budget", api.SpeedTestBudget)
 		NodesGroup.GET("/test/status", api.TestStatus)
 		NodesGroup.POST("/test/cancel", api.TestCancel)
 		NodesGroup.POST("/batch", api.NodeBatch)

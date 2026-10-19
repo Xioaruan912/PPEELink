@@ -108,7 +108,7 @@ const {
         <RowIconButton :icon="MoreFilled" :label="`${node.name} 更多操作`" />
         <template #dropdown
           ><el-dropdown-menu>
-            <el-dropdown-item command="tcp">链路 TCP 检测</el-dropdown-item>
+            <el-dropdown-item command="tcp">国内可达性</el-dropdown-item>
             <el-dropdown-item command="unlock">解锁检测</el-dropdown-item>
             <el-dropdown-item command="chain" divided
               >设置中转</el-dropdown-item

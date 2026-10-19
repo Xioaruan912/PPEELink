@@ -3,7 +3,6 @@ export interface UnlockCheckResult {
   name: string;
   group: string;
   ok: boolean;
-  rtt: number;
   note: string;
   region?: string;
   status?: string;

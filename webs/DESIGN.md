@@ -44,7 +44,7 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 - 必做：
   1. 路由过渡：内容区 clip/translate+opacity 交错入场（标题先、内容后，stagger 40ms），离场 140ms。
   2. 列表/表格首屏行 stagger 入场；筛选结果变化用 `<TransitionGroup>` FLIP。
-  3. `UiStat` 数字从 0 滚动到值（字体按第 3 节 size 规则）；延迟数值变化时颜色随阈值过渡。
+  3. `UiStat` 数字从 0 滚动到值（字体按第 3 节 size 规则）。
   4. 顶栏导航胶囊弹簧跟随悬停项；下拉菜单缩放淡入；主题图标旋转切换；卡片/面板指针聚光灯（`installSpotlight`）；路由内容模糊 + 位移交错入场（expo.out）；数字计数 1.1s；首页评分环描边动画；地图节点脉冲；登录页光场漂移。
   5. 主按钮 `v-magnetic` 磁吸（指针 24px 内吸附，离开弹回）。
   6. 状态脉冲：在线点呼吸、测速/检测进行中扫描线或进度波纹。
@@ -53,7 +53,7 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 - 守则：所有动画经 `useMotion()`/`prefersReducedMotion` 守卫，reduced-motion 时直接到终态；组件卸载时 kill tween / 移除监听 / cancel rAF；只动 transform/opacity/clip-path；除可暂停的地图底图扫描外，不要永不停的装饰性无限循环（脉冲仅限真实状态）。
 
 ## 7. 文案
-中文、短、具体。标题 2–6 字；说明 ≤ 25 字；按钮用动词（"添加节点"、"开始测速"）。删除重复说明、英文装饰词（如 "TELEMETRY"、"LIVE"、"CORE"），mono eyebrow 只用于分组名（如 `订阅 / 01`）。
+中文、短、具体。标题 2–6 字；说明 ≤ 25 字；按钮用动词（"添加节点"、"开始检测"）。删除重复说明、英文装饰词（如 "TELEMETRY"、"LIVE"、"CORE"），mono eyebrow 只用于分组名（如 `订阅 / 01`）。
 
 ## 8. 无障碍与响应式
 - 所有可交互元素可 Tab 到达，`:focus-visible` 为 2px `--c-signal` 外环 + 2px offset；图标按钮必须有 `aria-label`。
@@ -109,9 +109,9 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 - 节点批量：正则改名（预览后应用，订阅中的节点顺序同步改名）、加 / 去国旗、UDP / TFO / 跳过证书开关、按“协议+服务器+端口”去重（引用转移给保留的节点）。
 - 链式代理：节点设置中转节点，Clash 输出 `dialer-proxy`、Surge 输出 `underlying-proxy`，中转不在订阅里时自动补上。
 - 上游订阅：订阅的节点来源可填上游订阅链接（主源 + 备用源），按“协议+服务器+端口”沿用原节点记录，每 6 小时自动刷新，订阅详情可立即同步；原“机场”页面已并入这里。
-- 节点不展示延迟：面板服务器 TCP 连接节点端口，连得上即“有效”，否则“无效”；节点页可“检测有效性”立即重测。首页显示有效节点数与有效率，订阅编辑、测试页的节点选择只按有效与否排序/过滤。只有“节点测试”里的测速与各省 TCP 连通是测试结果本身。
+- 节点不展示延迟：面板服务器 TCP 连接节点端口，连得上即“有效”，否则“无效”；节点页可“检测有效性”立即重测。首页显示有效节点数与有效率，订阅编辑、测试页的节点选择只按有效与否排序/过滤。“节点测试”里也只显示可用/可达，不显示毫秒。
 - 国旗：国家按名称识别优先（国旗 emoji、中文/英文名、全大写的 JP / USA 等代码片段），识别不到才用 GeoIP；添加/编辑节点时可选“自动 / 指定国家 / 不加国旗”，保存时把国旗写到名称前。国家表在 `node/country.go`，前端经 `/api/v1/nodes/countries` 共用。
-- 节点测试：真实测速、解锁检测、TCP 连通合并为 `/test/index` 一个页面，顶部标签切换（`?tab=`），旧地址自动跳转。
+- 节点测试：`/test/index` 两个标签——解锁检测（结果由节点出口 IP 决定，与从哪台电脑发起无关）和国内可达性（经节点连国内各省三网服务器，判断节点 IP 是否被墙）。测速已删除：从面板服务器测出的速度不代表用户电脑上的体验。旧地址自动跳转。
 - Clash 节点集合：订阅可改用 proxy-provider 引用 `client=clash-proxies` 节点列表，客户端每小时自动刷新。
 - 多用户：管理员 / 普通用户，普通用户只看到“我的订阅”；新账户与默认密码账户首次登录必须改密码。
 - 单节点临时订阅：HMAC 签名、自带到期时间的 `/t/` 链接。

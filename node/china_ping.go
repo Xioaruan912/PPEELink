@@ -22,10 +22,11 @@ type ChinaPingTarget struct {
 	Lng      float64 `json:"lng"`
 	IP       string  `json:"ip"`
 	Port     int     `json:"port"`
-	Rtt      int     `json:"rtt"` // 毫秒，-1 失败
+	OK       bool    `json:"ok"` // 经节点能连上即可达；连不上通常说明节点 IP 被墙或线路异常
+	Rtt      int     `json:"-"`  // 毫秒，-1 失败；仅用于判断可达，不对外展示
 }
 
-// ChinaPingResult 中国延迟测试总结果
+// ChinaPingResult 国内可达性检测总结果
 type ChinaPingResult struct {
 	NodeName string            `json:"nodeName"`
 	Targets  []ChinaPingTarget `json:"targets"`
@@ -33,13 +34,14 @@ type ChinaPingResult struct {
 	Error    string            `json:"error,omitempty"`
 }
 
-// ZStaticResult zstaticcdn 延迟结果
+// ZStaticResult zstaticcdn 可达结果
 type ZStaticResult struct {
-	Port int `json:"port"`
-	Rtt  int `json:"rtt"`
+	Port int  `json:"port"`
+	OK   bool `json:"ok"`
+	Rtt  int  `json:"-"`
 }
 
-// RunChinaPing 走节点对中国各地运营商 + zstaticcdn 做 TCP 延迟测试。
+// RunChinaPing 经节点连接国内各省运营商与 zstaticcdn，检测是否可达。
 func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []string, zstaticPorts []int) (*ChinaPingResult, error) {
 	timeout := cfg.Timeout
 	if timeout <= 0 {
@@ -103,7 +105,7 @@ func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []s
 			rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), timeout)
 			results[i] = ChinaPingTarget{
 				Province: t.Province, City: t.City, ISP: t.ISP,
-				Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port, Rtt: rtt,
+				Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port, Rtt: rtt, OK: rtt >= 0,
 			}
 		}(i, t)
 	}
@@ -123,7 +125,7 @@ func RunChinaPing(ctx context.Context, cfg UnlockTestConfig, provinces, isps []s
 	}
 	for _, p := range zstaticPorts {
 		rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(zstaticcdnHost, strconv.Itoa(p)), timeout)
-		result.ZStatic = append(result.ZStatic, ZStaticResult{Port: p, Rtt: rtt})
+		result.ZStatic = append(result.ZStatic, ZStaticResult{Port: p, Rtt: rtt, OK: rtt >= 0})
 	}
 
 	return result, nil
@@ -215,7 +217,7 @@ func RunChinaPingStream(ctx context.Context, cfg UnlockTestConfig, provinces, is
 					}
 					defer func() { <-sem }()
 					rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(t.IP, strconv.Itoa(t.Port)), timeout)
-					results[i] = ChinaPingTarget{Province: t.Province, City: t.City, ISP: t.ISP, Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port, Rtt: rtt}
+					results[i] = ChinaPingTarget{Province: t.Province, City: t.City, ISP: t.ISP, Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port, Rtt: rtt, OK: rtt >= 0}
 				}(i, t)
 			}
 			wg.Wait()
@@ -243,7 +245,7 @@ func RunChinaPingStream(ctx context.Context, cfg UnlockTestConfig, provinces, is
 	}
 	for _, p := range zstaticPorts {
 		rtt := tcpPingStableVia(ctx, contextDialer, net.JoinHostPort(zstaticcdnHost, strconv.Itoa(p)), timeout)
-		result.ZStatic = append(result.ZStatic, ZStaticResult{Port: p, Rtt: rtt})
+		result.ZStatic = append(result.ZStatic, ZStaticResult{Port: p, Rtt: rtt, OK: rtt >= 0})
 	}
 
 	return result, nil
