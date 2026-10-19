@@ -50,6 +50,9 @@ func NodeUpdadte(c *gin.Context) {
 		})
 		return
 	}
+	if code, ok := c.GetPostForm("country"); ok {
+		NewName, Newlink = applyCountry(NewName, Newlink, code)
+	}
 	OldNode := &models.Node{
 		ID: index,
 	}
@@ -317,6 +320,10 @@ func NodeAdd(c *gin.Context) {
 		return
 	}
 
+	if code, ok := c.GetPostForm("country"); ok {
+		n.Name, n.Link = applyCountry(n.Name, n.Link, code)
+	}
+
 	// 添加节点
 	err = n.Add()
 	if err != nil {
@@ -488,4 +495,29 @@ func NodesTotal(c *gin.Context) {
 		"data": count,
 		"msg":  "取得节点统计",
 	})
+}
+
+// applyCountry 按选择的国家给名称加上国旗（替换已有国旗），并同步链接里的名称。
+// code 为 "auto" 时按名称识别（识别不到则名称不变），为空表示去掉国旗。
+func applyCountry(name, link, code string) (string, string) {
+	code = strings.ToUpper(strings.TrimSpace(code))
+	if code == "AUTO" {
+		if code = node.CountryFromName(name); code == "" {
+			return name, link
+		}
+	}
+	renamed := node.WithFlag(name, code)
+	if renamed == "" || renamed == name {
+		return name, link
+	}
+	if p, err := node.ParseOutbound(link); err == nil {
+		return renamed, p.WithName(renamed).Link
+	}
+	return renamed, link
+}
+
+// NodeCountries 国家/地区列表（国旗、中文名与识别用的别名），供命名时选择。
+// GET /api/v1/nodes/countries
+func NodeCountries(c *gin.Context) {
+	c.JSON(200, gin.H{"code": "00000", "data": node.Countries(), "msg": "国家列表"})
 }

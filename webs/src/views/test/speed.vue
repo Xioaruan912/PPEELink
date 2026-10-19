@@ -141,8 +141,7 @@
             :label="node.name"
             :value="node.id"
             ><span class="node-option"
-              ><span>{{ node.name }}</span
-              ><small>{{ node.rtt }} ms</small></span
+              ><span>{{ node.name }}</span></span
             ></el-option
           >
         </el-select>
@@ -257,15 +256,12 @@
           /><el-select v-model="sort" aria-label="结果排序"
             ><el-option label="速度从高到低" value="fast" /><el-option
               label="速度从低到高"
-              value="slow" /><el-option
-              label="连接延迟"
-              value="rtt" /><el-option label="返回顺序" value="arrival"
+              value="slow" /><el-option label="返回顺序" value="arrival"
           /></el-select>
         </div>
       </template>
       <div v-if="results.length" class="result-columns" aria-hidden="true">
-        <span>节点 / 状态</span><span>下载速度</span><span>连接响应</span
-        ><span>下载量 / 耗时</span>
+        <span>节点 / 状态</span><span>下载速度</span><span>下载量 / 耗时</span>
       </div>
       <TransitionGroup
         appear
@@ -305,10 +301,6 @@
               ></i
             ></span>
           </div>
-          <span class="result-rtt mono" :class="rttClass(row.rtt)"
-            ><small class="mobile-label">连接响应</small
-            >{{ row.rtt >= 0 ? `${row.rtt} ms` : "超时" }}</span
-          >
           <span class="result-volume mono"
             ><small class="mobile-label">下载量 / 耗时</small
             >{{ row.ok ? `${(row.bytes / 1048576).toFixed(1)} MB` : "未完成"
@@ -372,7 +364,12 @@ import { useResultMotion } from "@/components/node-tests/useNodeTestSession";
 import { useTestStream } from "./useTestStream";
 import { defaultSpeedTarget, speedTarget } from "./speed/settings";
 defineOptions({ name: "SpeedTest" });
-type NodeItem = { id: number; name: string; rtt: number; countryCode?: string };
+type NodeItem = {
+  id: number;
+  name: string;
+  valid: boolean;
+  countryCode?: string;
+};
 type SpeedResult = {
   id: number;
   name: string;
@@ -449,11 +446,7 @@ const sortedResults = computed(() => {
   return sort.value === "arrival"
     ? rows
     : [...rows].sort((a, b) =>
-        sort.value === "rtt"
-          ? (a.rtt < 0 ? Infinity : a.rtt) - (b.rtt < 0 ? Infinity : b.rtt)
-          : sort.value === "slow"
-            ? a.mbps - b.mbps
-            : b.mbps - a.mbps
+        sort.value === "slow" ? a.mbps - b.mbps : b.mbps - a.mbps
       );
 });
 function persist() {
@@ -474,14 +467,12 @@ function setSize(mb: number) {
   sizeMB.value = mb;
   target.value = speedTarget(target.value, mb);
 }
-// 全选只取延迟最低的若干个，避免一次测完全部节点
+// 全选只取前若干个有效节点，避免一次测完全部节点
 function selectAll() {
   const limit = budget.value?.maxNodes || 30;
   selectedIds.value = nodes.value.slice(0, limit).map((node) => node.id);
   if (nodes.value.length > limit)
-    ElMessage.info(
-      `已选延迟最低的 ${limit} 个节点，单次测速上限为 ${limit} 个`
-    );
+    ElMessage.info(`已选前 ${limit} 个有效节点，单次测速上限为 ${limit} 个`);
 }
 const budget = ref<SpeedBudget | null>(null);
 async function loadBudget() {
@@ -520,15 +511,6 @@ function formatBytes(n: number) {
   if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`;
   return `${Math.round(n / 1048576)} MB`;
 }
-function rttClass(rtt: number) {
-  return rtt < 0
-    ? "result-error"
-    : rtt < 100
-      ? "result-ok"
-      : rtt < 250
-        ? "result-warn"
-        : "result-error";
-}
 async function loadNodes() {
   nodesLoading.value = true;
   nodesError.value = "";
@@ -536,8 +518,10 @@ async function loadNodes() {
     const { data } = await getNodeOverview();
     if (disposed) return;
     nodes.value = (data || [])
-      .filter((node: NodeItem) => node.rtt >= 0)
-      .sort((a: NodeItem, b: NodeItem) => a.rtt - b.rtt);
+      .filter((node: NodeItem) => node.valid)
+      .sort((a: NodeItem, b: NodeItem) =>
+        a.name.localeCompare(b.name, "zh-CN")
+      );
     selectedIds.value = selectedIds.value.filter((id) =>
       nodes.value.some((node) => node.id === id)
     );
@@ -862,9 +846,7 @@ onBeforeUnmount(() => {
 .result-columns,
 .speed-result {
   display: grid;
-  grid-template-columns:
-    minmax(0, 2.4fr) minmax(0, 1.4fr) minmax(0, 1fr)
-    minmax(0, 1.2fr);
+  grid-template-columns: minmax(0, 2.4fr) minmax(0, 1.6fr) minmax(0, 1.2fr);
   gap: 16px;
   align-items: center;
 }
@@ -942,9 +924,6 @@ onBeforeUnmount(() => {
   font-size: 14px;
   color: var(--c-muted);
   margin-top: 4px;
-}
-.result-rtt {
-  font-size: 14px;
 }
 .mobile-label {
   display: none;

@@ -229,14 +229,14 @@ func (p Outbound) WithName(name string) Outbound {
 	return p
 }
 
-// CountryCode resolves the proxy server to an ISO country code using the
-// embedded GeoIP database. It returns "" when the server cannot be resolved.
+// CountryCode resolves the proxy's country: the name's country hint first
+// (what the user meant), then the embedded GeoIP database for the server.
 func (p Outbound) CountryCode() string {
 	host := p.Server
 	if host == "" {
 		host, _ = ExtractServerHost(p.Link)
 	}
-	return LookupCountry(host)
+	return NodeCountry(p.Name, host)
 }
 
 // FlagEmoji returns the regional-indicator flag emoji for an ISO country code.
@@ -249,60 +249,6 @@ func FlagEmoji(code string) string {
 		rune(0x1F1E6 + int(code[0]-'A')),
 		rune(0x1F1E6 + int(code[1]-'A')),
 	})
-}
-
-// countryKeywords maps common node-name tokens (in several languages) to ISO
-// country codes, used as a fallback when GeoIP cannot resolve the server.
-var countryKeywords = []struct {
-	Keyword string
-	Code    string
-}{
-	{"香港", "HK"}, {"HongKong", "HK"}, {"Hong Kong", "HK"}, {"HKG", "HK"}, {"hk", "HK"},
-	{"台湾", "TW"}, {"臺灣", "TW"}, {"Taiwan", "TW"}, {"TWN", "TW"}, {"tw", "TW"},
-	{"日本", "JP"}, {"Japan", "JP"}, {"Tokyo", "JP"}, {"Osaka", "JP"}, {"JPN", "JP"}, {"jp", "JP"},
-	{"新加坡", "SG"}, {"狮城", "SG"}, {"Singapore", "SG"}, {"SGP", "SG"}, {"sg", "SG"},
-	{"韩国", "KR"}, {"韓國", "KR"}, {"Korea", "KR"}, {"Seoul", "KR"}, {"KOR", "KR"}, {"kr", "KR"},
-	{"美国", "US"}, {"美國", "US"}, {"United States", "US"}, {"Los Angeles", "US"}, {"Seattle", "US"}, {"USA", "US"}, {"us", "US"},
-	{"英国", "GB"}, {"英國", "GB"}, {"United Kingdom", "GB"}, {"London", "GB"}, {"UK", "GB"}, {"gb", "GB"},
-	{"德国", "DE"}, {"德國", "DE"}, {"Germany", "DE"}, {"Frankfurt", "DE"}, {"DE", "DE"},
-	{"法国", "FR"}, {"France", "FR"}, {"Paris", "FR"}, {"FR", "FR"},
-	{"荷兰", "NL"}, {"Netherlands", "NL"}, {"Amsterdam", "NL"}, {"NL", "NL"},
-	{"俄罗斯", "RU"}, {"Russia", "RU"}, {"Moscow", "RU"}, {"RU", "RU"},
-	{"加拿大", "CA"}, {"Canada", "CA"}, {"Toronto", "CA"}, {"CA", "CA"},
-	{"澳大利亚", "AU"}, {"Australia", "AU"}, {"Sydney", "AU"}, {"AU", "AU"},
-	{"印度", "IN"}, {"India", "IN"}, {"Mumbai", "IN"}, {"IN", "IN"},
-	{"土耳其", "TR"}, {"Turkey", "TR"}, {"TR", "TR"},
-	{"马来西亚", "MY"}, {"Malaysia", "MY"}, {"MY", "MY"},
-	{"泰国", "TH"}, {"Thailand", "TH"}, {"TH", "TH"},
-	{"越南", "VN"}, {"Vietnam", "VN"}, {"VN", "VN"},
-	{"菲律宾", "PH"}, {"Philippines", "PH"}, {"PH", "PH"},
-	{"印尼", "ID"}, {"印度尼西亚", "ID"}, {"Indonesia", "ID"}, {"ID", "ID"},
-	{"巴西", "BR"}, {"Brazil", "BR"}, {"BR", "BR"},
-	{"意大利", "IT"}, {"Italy", "IT"}, {"IT", "IT"},
-	{"西班牙", "ES"}, {"Spain", "ES"}, {"ES", "ES"},
-	{"瑞士", "CH"}, {"Switzerland", "CH"}, {"CH", "CH"},
-	{"瑞典", "SE"}, {"Sweden", "SE"}, {"SE", "SE"},
-	{"波兰", "PL"}, {"Poland", "PL"}, {"PL", "PL"},
-	{"阿根廷", "AR"}, {"Argentina", "AR"}, {"AR", "AR"},
-	{"南非", "ZA"}, {"South Africa", "ZA"}, {"ZA", "ZA"},
-	{"阿联酋", "AE"}, {"迪拜", "AE"}, {"Dubai", "AE"}, {"AE", "AE"},
-	{"以色列", "IL"}, {"Israel", "IL"}, {"IL", "IL"},
-	{"乌克兰", "UA"}, {"Ukraine", "UA"}, {"UA", "UA"},
-	{"墨西哥", "MX"}, {"Mexico", "MX"}, {"MX", "MX"},
-}
-
-// CountryFromName guesses an ISO country code from the node name.
-func CountryFromName(name string) string {
-	if name == "" {
-		return ""
-	}
-	lower := strings.ToLower(name)
-	for _, item := range countryKeywords {
-		if strings.Contains(lower, strings.ToLower(item.Keyword)) {
-			return item.Code
-		}
-	}
-	return ""
 }
 
 // ResolveDomain resolves a domain server to an IP literal. It returns the

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { UiDrawer, UiButton, EmptyState, StatusDot } from "@/ui";
 import GroupFields from "./GroupFields.vue";
+import CountryPicker from "./CountryPicker.vue";
 import { useNodes, nodeEffectiveHidden } from "./useNodes";
 const {
   nodeDialog,
@@ -42,8 +43,20 @@ const {
         /></el-form-item>
         <p class="field-hint">添加时每行一个链接；编辑时修改当前节点。</p>
         <el-form-item v-if="dialogMode === 'edit'" label="节点名称"
-          ><el-input v-model="nodeForm.Name" placeholder="节点名称"
+          ><el-input
+            v-model="nodeForm.Name"
+            placeholder="例如 东京 01、Nosla-JP、AKKO_USA"
         /></el-form-item>
+      </section>
+      <section class="form-section">
+        <h3>国旗</h3>
+        <el-form-item label="国家/地区">
+          <CountryPicker
+            v-model="nodeForm.Country"
+            :name="dialogMode === 'edit' ? nodeForm.Name : ''"
+            :multiple="dialogMode === 'add'"
+          />
+        </el-form-item>
       </section>
       <section class="form-section">
         <h3>节点分组</h3>

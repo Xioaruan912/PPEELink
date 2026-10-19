@@ -42,17 +42,10 @@ func renameNode(name string, re *regexp.Regexp, replacement string) string {
 	return strings.TrimSpace(re.ReplaceAllString(name, replacement))
 }
 
-// withFlagEmoji 先去掉已有国旗，再按国家补上（GeoIP 优先，名称兜底）。
+// withFlagEmoji 先去掉已有国旗，再按国家补上（名称里的线索优先，GeoIP 兜底）。
 func withFlagEmoji(p node.Outbound) string {
 	bare := strings.TrimSpace(leadingFlag.ReplaceAllString(p.Name, ""))
-	code := p.CountryCode()
-	if code == "" {
-		code = node.CountryFromName(bare)
-	}
-	if flag := node.FlagEmoji(code); flag != "" {
-		return flag + " " + bare
-	}
-	return bare
+	return node.WithFlag(bare, p.WithName(bare).CountryCode())
 }
 
 // NodeBatch 批量改名、加减国旗或设置 UDP/TFO/跳过证书校验。

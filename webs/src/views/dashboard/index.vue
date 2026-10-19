@@ -39,7 +39,7 @@
           <HealthStrip
             :summary="summary"
             :loading="loading"
-            :rate="survivalRate"
+            :rate="validRate"
           />
         </div>
       </section>
@@ -67,17 +67,15 @@
               cx="60"
               cy="60"
               r="52"
-              :style="{ '--score': scoreRatio }"
+              :style="{ '--score': validRatio }"
             />
           </svg>
         </div>
         <UiStat
           size="large"
-          label="连接评分"
-          :value="
-            loading || !summary.total ? null : Math.round(summary.averageScore)
-          "
-          unit="/100"
+          label="有效节点"
+          :value="loading || !summary.total ? null : summary.valid"
+          :unit="`/${summary.total}`"
         />
         <IconArrow class="cell-arrow" aria-hidden="true" />
       </RouterLink>
@@ -193,10 +191,8 @@ const loading = ref(true),
   subTotal = ref(0);
 const summary = ref({
   total: 0,
-  healthy: 0,
-  warning: 0,
-  offline: 0,
-  averageScore: 0,
+  valid: 0,
+  invalid: 0,
 });
 const mapPoints = ref<
   { lat: number; lng: number; name: string; country: string }[]
@@ -214,8 +210,8 @@ const traffic = computed(() => {
     remaining: reports.reduce((sum, t) => sum + t!.remaining, 0),
   };
 });
-const scoreRatio = computed(() =>
-  summary.value.total ? Math.min(summary.value.averageScore / 100, 1) : 0
+const validRatio = computed(() =>
+  summary.value.total ? summary.value.valid / summary.value.total : 0
 );
 const greeting = computed(() => {
   const hour = new Date().getHours();
@@ -229,8 +225,8 @@ const greeting = computed(() => {
           : "晚上好";
   return `${part}，网络运行概况如下。`;
 });
-const survivalRate = computed(() => {
-  const { total, offline } = summary.value;
+const validRate = computed(() => {
+  const { total, invalid: offline } = summary.value;
   return total
     ? Math.round((Math.max(total - offline, 0) / total) * 1000) / 10
     : 0;

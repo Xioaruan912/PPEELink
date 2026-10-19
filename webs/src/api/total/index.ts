@@ -17,9 +17,3 @@ export function getNodeMap() {
     method: "get",
   });
 }
-export function getNodePing() {
-  return request({
-    url: "/api/v1/nodes/ping",
-    method: "get",
-  });
-}

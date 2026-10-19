@@ -1,7 +1,6 @@
 package api
 
 import (
-	"strconv"
 	"sync"
 	"time"
 
@@ -12,31 +11,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// NodeOverviewItem 节点概览（含国家与延迟）
+// NodeOverviewItem 节点概览：国家、分组与有效性。
+// 有效性由面板服务器 TCP 连接节点端口判断，连得上即有效；耗时只在内部使用，不对外展示。
 type NodeOverviewItem struct {
-	ID                  int       `json:"id"`
-	Name                string    `json:"name"`
-	Link                string    `json:"link"`
-	Server              string    `json:"server"`
-	Port                int       `json:"port"`
-	Country             string    `json:"country"`
-	CountryCode         string    `json:"countryCode"`
-	Rtt                 int       `json:"rtt"` // 毫秒，-1 失败
-	Groups              []string  `json:"groups"`
-	Score               int       `json:"score"`
-	Availability        float64   `json:"availability"`
-	AverageRtt          int       `json:"averageRtt"`
-	Jitter              int       `json:"jitter"`
-	P95Rtt              int       `json:"p95Rtt"`
-	ConsecutiveFailures int       `json:"consecutiveFailures"`
-	Confidence          int       `json:"confidence"`
-	SampleCount         int       `json:"sampleCount"`
-	LastTestedAt        time.Time `json:"lastTestedAt"`
-	Multiplier          float64   `json:"multiplier"`
-	RelayID             int       `json:"relayId,omitempty"` // 链式代理的中转节点
-	UDP                 bool      `json:"udp,omitempty"`
-	TFO                 bool      `json:"tfo,omitempty"`
-	SkipCertVerify      bool      `json:"skipCertVerify,omitempty"`
+	ID             int       `json:"id"`
+	Name           string    `json:"name"`
+	Link           string    `json:"link"`
+	Server         string    `json:"server"`
+	Port           int       `json:"port"`
+	Country        string    `json:"country"`
+	CountryCode    string    `json:"countryCode"`
+	Valid          bool      `json:"valid"`
+	CheckedAt      time.Time `json:"checkedAt"`
+	Groups         []string  `json:"groups"`
+	Multiplier     float64   `json:"multiplier"`
+	RelayID        int       `json:"relayId,omitempty"` // 链式代理的中转节点
+	UDP            bool      `json:"udp,omitempty"`
+	TFO            bool      `json:"tfo,omitempty"`
+	SkipCertVerify bool      `json:"skipCertVerify,omitempty"`
+	rtt            int       // 本次连接耗时，-1 失败；仅用于记录与健康事件
 }
 
 // qualityCheckConcurrency 节点 TCP 质量检测的最大并发连接数。
@@ -59,11 +52,11 @@ func InvalidateOverview() {
 	oCache.mu.Unlock()
 }
 
-// NodeOverview 返回所有节点概览：国家（GeoIP）+ 服务器 TCP 延迟 + 分组。
-// GET /api/v1/nodes/overview
+// NodeOverview 返回所有节点概览：国家（名称优先，GeoIP 兜底）+ 有效性 + 分组。
+// GET /api/v1/nodes/overview?refresh=1 立即重新检测
 func NodeOverview(c *gin.Context) {
 	oCache.mu.Lock()
-	if oCache.data != nil && time.Now().Before(oCache.expires) {
+	if c.Query("refresh") != "1" && oCache.data != nil && time.Now().Before(oCache.expires) {
 		data := oCache.data
 		oCache.mu.Unlock()
 		c.JSON(200, gin.H{"code": "00000", "data": data, "msg": "节点概览（缓存）"})
@@ -107,7 +100,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 			defer func() { <-slots }()
 			item := NodeOverviewItem{
 				ID: n.ID, Name: n.Name, Link: n.Link,
-				Rtt:        -1,
+				rtt:        -1,
 				Groups:     make([]string, 0),
 				Multiplier: node.ParseMultiplier(n.Name),
 			}
@@ -121,111 +114,63 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 			if host != "" {
 				item.Server = host
 				item.Port = port
-				item.CountryCode = node.LookupCountry(host)
+				item.CountryCode = node.NodeCountry(n.Name, host)
 				item.Country = countryName(item.CountryCode)
 				addr := host
 				if port > 0 {
 					addr = host + ":" + itoa(port)
 				}
-				item.Rtt = node.TCPPing(addr, 3*time.Second)
+				item.rtt = node.TCPPing(addr, 3*time.Second)
 			}
+			item.Valid = item.rtt >= 0
 			results[i] = item
 		}(i, n)
 	}
 	wg.Wait()
 	checkedAt := time.Now()
+	for i := range results {
+		results[i].CheckedAt = checkedAt
+	}
 	samples := make([]models.NodeQualitySample, 0, len(results))
 	for _, item := range results {
 		samples = append(samples, models.NodeQualitySample{
-			NodeID: item.ID, Rtt: item.Rtt, Success: item.Rtt >= 0, CheckedAt: checkedAt,
+			NodeID: item.ID, Rtt: item.rtt, Success: item.Valid, CheckedAt: checkedAt,
 		})
 	}
 	if err := models.RecordNodeQuality(samples); err != nil {
 		return nil, err
 	}
 	processNodeHealthEvents(results)
-	stats, err := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
-	if err != nil {
-		return nil, err
-	}
-	for i := range results {
-		if stat, ok := stats[results[i].ID]; ok {
-			results[i].Score = stat.Score
-			results[i].Availability = stat.Availability
-			results[i].AverageRtt = stat.AverageRtt
-			results[i].Jitter = stat.Jitter
-			results[i].P95Rtt = stat.P95Rtt
-			results[i].ConsecutiveFailures = stat.ConsecutiveFailures
-			results[i].Confidence = stat.Confidence
-			results[i].SampleCount = stat.SampleCount
-			results[i].LastTestedAt = stat.LastTestedAt
-		}
-	}
 	return results, nil
 }
 
-// NodeQualityHistory returns recent raw samples for a node, oldest first.
-func NodeQualityHistory(c *gin.Context) {
-	nodeID, err := strconv.Atoi(c.Query("id"))
-	if err != nil || nodeID <= 0 {
-		c.JSON(400, gin.H{"code": "40000", "msg": "节点 id 格式错误"})
-		return
-	}
-	hours := 24
-	if value, parseErr := strconv.Atoi(c.DefaultQuery("hours", "24")); parseErr == nil && value >= 1 && value <= 720 {
-		hours = value
-	}
-	var samples []models.NodeQualitySample
-	err = models.DB.Where("node_id = ? AND checked_at >= ?", nodeID, time.Now().Add(-time.Duration(hours)*time.Hour)).
-		Order("checked_at ASC").Limit(5000).Find(&samples).Error
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取质量历史失败"})
-		return
-	}
-	c.JSON(200, gin.H{"code": "00000", "data": samples, "msg": "节点质量历史"})
-}
-
-// NodeQualitySummary provides actionable dashboard numbers.
+// NodeQualitySummary 首页用：有效与无效节点数（按最近一次检测）。
 func NodeQualitySummary(c *gin.Context) {
 	stats, err := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
 	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取质量汇总失败"})
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点状态失败"})
 		return
 	}
-	total, healthy, warning, offline, scoreSum := len(stats), 0, 0, 0, 0
-	for _, stat := range stats {
-		scoreSum += stat.Score
-		switch {
-		case stat.LastRtt < 0:
-			offline++
-		case stat.Score >= 80:
-			healthy++
-		default:
-			warning++
+	// 只统计当前可见的节点（已删除或隐藏的节点在 24 小时内仍有检测记录）
+	nodes, err := models.GetNodeList()
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点失败"})
+		return
+	}
+	total, valid := 0, 0
+	for _, n := range nodes {
+		stat, ok := stats[n.ID]
+		if !ok {
+			continue
+		}
+		total++
+		if stat.LastRtt >= 0 {
+			valid++
 		}
 	}
-	averageScore := 0
-	if total > 0 {
-		averageScore = scoreSum / total
-	}
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
-		"total": total, "healthy": healthy, "warning": warning,
-		"offline": offline, "averageScore": averageScore,
-	}, "msg": "节点质量汇总"})
-}
-
-// NodeQualityTrend 返回按小时聚合的质量趋势（用于观察晚高峰表现）。
-func NodeQualityTrend(c *gin.Context) {
-	hours := 168
-	if v, err := strconv.Atoi(c.DefaultQuery("hours", "168")); err == nil && v >= 1 && v <= 720 {
-		hours = v
-	}
-	points, err := models.GetQualityHourlyTrend(time.Now().Add(-time.Duration(hours) * time.Hour))
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取质量趋势失败"})
-		return
-	}
-	c.JSON(200, gin.H{"code": "00000", "data": points, "msg": "质量时段趋势"})
+		"total": total, "valid": valid, "invalid": total - valid,
+	}, "msg": "节点有效性"})
 }
 
 // itoa 简易整数转字符串
