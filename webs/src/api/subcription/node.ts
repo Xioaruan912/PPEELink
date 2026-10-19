@@ -240,19 +240,3 @@ export function nodeTempLink(nodeId: number, hours: number) {
     data: { nodeId, hours },
   });
 }
-
-export interface SpeedBudget {
-  used: number;
-  remaining: number;
-  daily: number;
-  maxNodes: number;
-  maxBytesPerRun: number;
-  cooldownSeconds: number;
-}
-/** 测速护栏：今日已用 / 剩余额度、单次上限与冷却时间。 */
-export function getSpeedBudget() {
-  return request<SpeedBudget>({
-    url: "/api/v1/nodes/speedtest/budget",
-    method: "get",
-  });
-}

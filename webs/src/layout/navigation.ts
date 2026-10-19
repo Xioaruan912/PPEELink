@@ -39,7 +39,7 @@ const META: Record<string, { icon: Component; hint?: string }> = {
   },
   "/subcription/clients": { icon: IconDevices, hint: "各平台客户端下载" },
   "/test": { icon: IconFlask },
-  "/test/index": { icon: IconGauge, hint: "测速、解锁与 TCP 连通性" },
+  "/test/index": { icon: IconGauge, hint: "解锁检测与国内可达性" },
   "/template": { icon: IconCode },
   "/template/list": { icon: IconFiles, hint: "编辑客户端配置模板" },
   "/template/builder": { icon: IconSliders, hint: "勾选规则、拖拽分组" },

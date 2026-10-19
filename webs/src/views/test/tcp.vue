@@ -1,6 +1,8 @@
 <template>
   <div class="test-page tcp-page">
-    <PageHeader title="中国 TCP" description="从所选节点检测各省网络连通性。"
+    <PageHeader
+      title="国内可达性"
+      description="经节点连接国内各省三大运营商的服务器。连不上通常说明节点 IP 被墙或线路异常；只检测 IP 是否可达，不代表某个端口或协议没被干扰。"
       ><template #actions
         ><UiButton
           v-if="loading"
@@ -14,7 +16,7 @@
           :loading="loading"
           :disabled="!selectedNodeId || nodesLoading"
           @click="startTest"
-          >{{ loading ? "正在检测" : "开始测试" }}</UiButton
+          >{{ loading ? "正在检测" : "开始检测" }}</UiButton
         ></template
       ></PageHeader
     >
@@ -106,7 +108,7 @@
     <div class="tcp-stage" data-enter>
       <section class="tcp-map-section" aria-labelledby="tcp-map-title">
         <header class="section-heading">
-          <h2 id="tcp-map-title">连通分布</h2>
+          <h2 id="tcp-map-title">可达分布</h2>
           <span class="muted"
             >{{ reachable }} / {{ filteredTargets.length }} 个目标可达</span
           >
@@ -114,9 +116,9 @@
         <div class="tcp-map-wrap" :class="{ 'is-running': loading }">
           <ChinaTcpMap :groups="provinceGroups" />
         </div>
-        <div class="latency-legend" aria-label="延迟图例">
-          <span v-for="(label, index) in latencyLegend" :key="label"
-            ><i :class="`latency-band-${index}`"></i>{{ label }}</span
+        <div class="latency-legend" aria-label="图例">
+          <span v-for="(label, index) in reachLegend" :key="label"
+            ><i :class="`reach-band-${index}`"></i>{{ label }}</span
           >
         </div>
         <div v-if="zstaticResults.length" class="zstatic-results">
@@ -124,16 +126,14 @@
           <span
             v-for="item in zstaticResults"
             :key="item.port"
-            class="mono"
-            :class="`latency-text-${latencyBand(item.rtt)}`"
-            >端口 {{ item.port }} ·
-            {{ item.rtt >= 0 ? `${item.rtt} ms` : "超时" }}</span
+            :class="`reach-text-${item.ok ? 0 : 2}`"
+            >端口 {{ item.port }} · {{ item.ok ? "可达" : "不可达" }}</span
           >
         </div>
       </section>
       <aside class="tcp-rankings" aria-labelledby="ranking-title">
         <header class="section-heading">
-          <h2 id="ranking-title">延迟排行</h2>
+          <h2 id="ranking-title">按地区</h2>
           <UiSegmented
             v-model="ranking"
             label="排行类型"
@@ -163,9 +163,11 @@
               }}</span
               ><strong>{{ group.name }}</strong
               ><span
-                class="rank-rtt mono"
-                :class="`latency-text-${latencyBand(group.avg)}`"
-                >{{ group.avg >= 0 ? `${group.avg} ms` : "超时" }}</span
+                class="rank-rtt"
+                :class="`reach-text-${reachBand(group.okCount, group.items.length)}`"
+                >{{
+                  reachLegend[reachBand(group.okCount, group.items.length)]
+                }}</span
               >
             </div>
             <p>{{ group.okCount }} / {{ group.items.length }} 可达</p>
@@ -178,11 +180,9 @@
                 <span
                   >{{ ranking === "province" ? item.city : item.province }} ·
                   {{ ranking === "province" ? item.isp : item.city }}</span
-                ><b
-                  class="mono"
-                  :class="`latency-text-${latencyBand(item.rtt)}`"
-                  >{{ item.rtt >= 0 ? `${item.rtt} ms` : "超时" }}</b
-                >
+                ><b :class="`reach-text-${item.ok ? 0 : 2}`">{{
+                  item.ok ? "可达" : "不可达"
+                }}</b>
               </div>
             </div>
           </article></TransitionGroup
@@ -191,13 +191,13 @@
           v-if="!rankGroups.length"
           size="section"
           :title="loading ? '等待省份返回' : '暂无检测结果'"
-          description="地图与排行会随检测结果逐省更新。"
+          description="地图和列表会随检测结果逐省更新。"
           ><template #action
             ><UiButton
               v-if="!loading"
               :disabled="!selectedNodeId"
               @click="startTest"
-              >开始测试</UiButton
+              >开始检测</UiButton
             ></template
           ></EmptyState
         >
@@ -216,10 +216,11 @@ import { formatDateTime } from "@/utils/date";
 import { usePrefersReducedMotion } from "@/motion";
 import { useResultMotion } from "@/components/node-tests/useNodeTestSession";
 import {
-  latencyBand,
-  latencyLegend,
+  normalizeTarget,
+  reachBand,
+  reachLegend,
   type ChinaTarget,
-} from "@/components/node-tests/latency";
+} from "@/components/node-tests/reach";
 import ChinaTcpMap from "@/components/node-tests/ChinaTcpMap.vue";
 import { useTestStream } from "./useTestStream";
 defineOptions({ name: "TcpTest" });
@@ -228,7 +229,7 @@ const nodes = ref<NodeItem[]>([]),
   nodesLoading = ref(true),
   selectedNodeId = ref<number>();
 const targets = ref<ChinaTarget[]>([]),
-  zstaticResults = ref<{ port: number; rtt: number }[]>([]);
+  zstaticResults = ref<{ port: number; ok: boolean }[]>([]);
 const filterProvinces = ref<string[]>([]),
   filterIsps = ref<string[]>([]),
   zstaticPort = ref("443");
@@ -284,7 +285,7 @@ const filteredTargets = computed(() =>
   )
 );
 const reachable = computed(
-  () => filteredTargets.value.filter((item) => item.rtt >= 0).length
+  () => filteredTargets.value.filter((item) => item.ok).length
 );
 function aggregate(key: "province" | "isp") {
   const groups = new Map<string, ChinaTarget[]>();
@@ -294,15 +295,11 @@ function aggregate(key: "province" | "isp") {
     groups.set(item[key], items);
   });
   return [...groups].map(([name, items]) => {
-    const ok = items.filter((item) => item.rtt >= 0);
     return {
       name,
       province: name,
       items,
-      okCount: ok.length,
-      avg: ok.length
-        ? Math.round(ok.reduce((sum, item) => sum + item.rtt, 0) / ok.length)
-        : -1,
+      okCount: items.filter((item) => item.ok).length,
     };
   });
 }
@@ -310,9 +307,10 @@ const provinceGroups = computed(() => aggregate("province"));
 const rankGroups = computed(() =>
   (ranking.value === "province" ? provinceGroups.value : aggregate("isp"))
     .slice()
+    // 有问题的地区排前面：可达比例低的在上
     .sort(
       (a, b) =>
-        (a.avg < 0 ? Infinity : a.avg) - (b.avg < 0 ? Infinity : b.avg) ||
+        a.okCount / a.items.length - b.okCount / b.items.length ||
         a.name.localeCompare(b.name, "zh")
     )
 );
@@ -331,8 +329,11 @@ function persist(id: number) {
 }
 function restoreCache() {
   const cached = selectedNodeId.value ? getTcp(selectedNodeId.value) : null;
-  targets.value = cached?.targets || [];
-  zstaticResults.value = cached?.zstatic || [];
+  targets.value = (cached?.targets || []).map(normalizeTarget);
+  zstaticResults.value = (cached?.zstatic || []).map((z: any) => ({
+    port: z.port,
+    ok: typeof z.ok === "boolean" ? z.ok : Number(z.rtt) >= 0,
+  }));
   cachedAt.value = cached?.updatedAt || 0;
   status.value = cached
     ? cached.status === "检测中"
@@ -392,8 +393,9 @@ async function startTest() {
           const index = targets.value.findIndex(
             (old) => old.ip === item.ip && old.port === item.port
           );
-          if (index >= 0) targets.value[index] = item;
-          else targets.value.push(item);
+          const target = normalizeTarget(item);
+          if (index >= 0) targets.value[index] = target;
+          else targets.value.push(target);
         }
         persist(id);
       }
@@ -405,7 +407,7 @@ async function startTest() {
         completed = true;
         status.value = "检测完成";
         persist(id);
-        ElMessage.success("TCP 检测完成");
+        ElMessage.success("国内可达性检测完成");
       }
     });
     if (
@@ -523,41 +525,23 @@ onBeforeUnmount(() => {
   width: 16px;
   height: 2px;
 }
-.latency-band-0 {
+.reach-band-0 {
   background: var(--c-ok);
 }
-.latency-band-1 {
-  background: var(--c-data);
-}
-.latency-band-2 {
+.reach-band-1 {
   background: var(--c-warn);
 }
-.latency-band-3 {
-  background: var(--c-signal);
-}
-.latency-band-4 {
+.reach-band-2 {
   background: var(--c-bad);
 }
-.latency-band-5 {
-  background: var(--c-muted);
-}
-.latency-text-0 {
+.reach-text-0 {
   color: var(--c-ok);
 }
-.latency-text-1 {
-  color: var(--c-data);
-}
-.latency-text-2 {
+.reach-text-1 {
   color: var(--c-warn-ink);
 }
-.latency-text-3 {
-  color: var(--c-signal-text);
-}
-.latency-text-4 {
+.reach-text-2 {
   color: var(--c-bad);
-}
-.latency-text-5 {
-  color: var(--c-muted);
 }
 .ranking-list {
   position: relative;

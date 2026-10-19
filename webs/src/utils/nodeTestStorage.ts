@@ -63,10 +63,3 @@ export function getTcp(nodeId: number): any {
 export function clearTcp(nodeId: number) {
   remove(`tcp_${nodeId}`);
 }
-// 真实测速页沿用节点测试的一小时缓存策略。
-export function saveSpeed<T>(data: T) {
-  write("speed", data);
-}
-export function getSpeed<T>(): T | null {
-  return read<T>("speed");
-}

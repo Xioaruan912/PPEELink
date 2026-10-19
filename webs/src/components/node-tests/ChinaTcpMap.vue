@@ -4,7 +4,7 @@
       ref="root"
       class="china-map"
       role="img"
-      aria-label="中国各省 TCP 平均延迟分布"
+      aria-label="国内各省可达性分布"
     ></div>
     <p v-if="error" class="map-note" role="status">{{ error }}</p>
     <p v-else-if="!groups.length" class="map-note">等待各省检测结果</p>
@@ -21,7 +21,7 @@ import {
 import { MapChart } from "echarts/charts";
 import { CanvasRenderer } from "echarts/renderers";
 import { usePrefersReducedMotion } from "@/motion";
-import { latencyColor, type ProvinceGroup } from "./latency";
+import { reachColor, type ProvinceGroup } from "./reach";
 echarts.use([
   TooltipComponent,
   GeoComponent,
@@ -52,9 +52,11 @@ function render() {
   const color = (name: string) => styles.getPropertyValue(name).trim();
   const data = props.groups.map((group) => ({
     name: group.province,
-    value: group.avg,
+    value: group.okCount,
     targets: group.items,
-    itemStyle: { areaColor: latencyColor(group.avg, color) },
+    itemStyle: {
+      areaColor: reachColor(group.okCount, group.items.length, color),
+    },
   }));
   chart.setOption(
     {
@@ -79,14 +81,14 @@ function render() {
             isps
               .map((isp) => {
                 const list = items.filter((item: any) => item.isp === isp);
-                const ok = list.filter((item: any) => item.rtt >= 0);
-                const avg = ok.length
-                  ? Math.round(
-                      ok.reduce((sum: number, item: any) => sum + item.rtt, 0) /
-                        ok.length
-                    )
-                  : -1;
-                return `<br>${escape(String(isp))} · ${avg >= 0 ? `${avg} ms` : "超时"} · ${escape([...new Set(list.map((item: any) => item.city))].join(" / "))}`;
+                const ok = list.filter((item: any) => item.ok).length;
+                const state =
+                  ok === list.length
+                    ? "可达"
+                    : ok
+                      ? `${ok}/${list.length} 可达`
+                      : "不可达";
+                return `<br>${escape(String(isp))} · ${state} · ${escape([...new Set(list.map((item: any) => item.city))].join(" / "))}`;
               })
               .join("")
           );
@@ -94,7 +96,7 @@ function render() {
       },
       series: [
         {
-          name: "TCP 延迟",
+          name: "国内可达性",
           type: "map",
           map: "node-test-china",
           roam: true,
