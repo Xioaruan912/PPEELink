@@ -102,7 +102,8 @@ const visible = computed(() =>
 }
 .flag {
   font-family:
-    "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    "Twemoji Country Flags", "Apple Color Emoji", "Segoe UI Emoji",
+    "Noto Color Emoji", sans-serif;
 }
 .hint {
   margin: 0;

@@ -5,33 +5,21 @@ const props = defineProps<{ code?: string; label?: string }>();
 const code = computed(() =>
   /^[a-z]{2}$/i.test(props.code || "") ? props.code!.toUpperCase() : "??"
 );
-const supported = ref(false);
-// Only display a flag after proving that the platform paints a colour emoji.
-// Letter pairs, missing-glyph boxes and monochrome fonts use the safe code label.
-onMounted(() => {
+// 国旗由自带的 Twemoji 国旗字体绘制（Windows 系统字体没有国旗）。
+// 字体加载失败时（极少见）退回显示国家代码。
+const supported = ref(true);
+onMounted(async () => {
   try {
-    const canvas = document.createElement("canvas");
-    canvas.width = 64;
-    canvas.height = 40;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
-    ctx.font =
-      '28px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif';
-    ctx.fillText(countryFlag("US"), 0, 30);
-    const pixels = ctx.getImageData(0, 0, 64, 40).data;
-    for (let i = 0; i < pixels.length; i += 4) {
-      if (
-        pixels[i + 3] > 128 &&
-        Math.max(pixels[i], pixels[i + 1], pixels[i + 2]) -
-          Math.min(pixels[i], pixels[i + 1], pixels[i + 2]) >
-          40
-      ) {
-        supported.value = true;
-        break;
-      }
-    }
+    await document.fonts.load(
+      '17px "Twemoji Country Flags"',
+      countryFlag("US")
+    );
+    supported.value = document.fonts.check(
+      '17px "Twemoji Country Flags"',
+      countryFlag("US")
+    );
   } catch {
-    /* Canvas may be unavailable; country codes remain readable. */
+    supported.value = false;
   }
 });
 </script>
@@ -53,7 +41,10 @@ onMounted(() => {
   width: 36px;
   height: 28px;
   overflow: hidden;
-  font-size: 17px;
+  font-family:
+    "Twemoji Country Flags", "Apple Color Emoji", "Segoe UI Emoji",
+    "Noto Color Emoji", sans-serif;
+  font-size: 20px;
   line-height: 1;
 }
 .is-code {
