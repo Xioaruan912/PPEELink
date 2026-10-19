@@ -83,7 +83,7 @@ async function call(
     if (e instanceof ClashError) throw e;
     if (signal?.aborted) throw e;
     throw new ClashError(
-      "连不上 Clash 的控制接口。请确认 Clash 正在运行、已开启外部控制且地址端口正确；浏览器询问是否允许访问本地网络时请选择允许。",
+      "连不上 Clash 的控制接口。最常见的原因是 Clash Verge 没有放行本站跨域（见下方说明）；也请确认已启用外部控制器、地址端口正确，浏览器询问是否允许访问本地网络时选择允许。",
       "unreachable"
     );
   } finally {

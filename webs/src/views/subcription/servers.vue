@@ -6,6 +6,7 @@ import {
   onMounted,
   reactive,
   ref,
+  watch,
 } from "vue";
 import IconPlus from "~icons/ph/plus";
 import IconServer from "~icons/ph/hard-drives";
@@ -144,7 +145,20 @@ const serverForm = reactive({
 });
 const savingServer = ref(false);
 const install = ref<{ name: string; command: string } | null>(null);
+// 从引导卡片选过类型、或面板服务器已添加过时，对话框不再重复询问类型
+const kindLocked = ref(false);
+const hasLocal = computed(() => servers.value.some((x) => x.kind === "local"));
+const serverDialogTitle = computed(() =>
+  serverForm.id
+    ? "编辑服务器"
+    : !kindLocked.value
+      ? "添加服务器"
+      : serverForm.kind === "local"
+        ? "添加面板服务器"
+        : "添加远程服务器"
+);
 function openServer(s?: ProxyServer, kind?: "local" | "agent") {
+  kindLocked.value = !!kind || hasLocal.value;
   Object.assign(
     serverForm,
     s
@@ -158,15 +172,24 @@ function openServer(s?: ProxyServer, kind?: "local" | "agent") {
       : {
           id: 0,
           name: "",
-          kind:
-            kind ||
-            (servers.value.some((x) => x.kind === "local") ? "agent" : "local"),
-          publicHost: "",
+          kind: kind || (hasLocal.value ? "agent" : "local"),
+          // 面板服务器的连接地址通常就是当前访问面板的域名
+          publicHost:
+            (kind || (hasLocal.value ? "agent" : "local")) === "local"
+              ? window.location.hostname
+              : "",
           enabled: true,
         }
   );
   serverDialog.value = true;
 }
+watch(
+  () => serverForm.kind,
+  (kind) => {
+    if (kind === "local" && !serverForm.id && !serverForm.publicHost)
+      serverForm.publicHost = window.location.hostname;
+  }
+);
 async function submitServer() {
   savingServer.value = true;
   try {
@@ -524,13 +547,9 @@ const usageRatio = (a: ProxyAccount) =>
       </UiPanel>
     </div>
 
-    <UiDialog
-      v-model="serverDialog"
-      :title="serverForm.id ? '编辑服务器' : '添加服务器'"
-      width="480px"
-    >
+    <UiDialog v-model="serverDialog" :title="serverDialogTitle" width="480px">
       <el-form label-position="top" @submit.prevent="submitServer">
-        <el-form-item v-if="!serverForm.id" label="类型">
+        <el-form-item v-if="!serverForm.id && !kindLocked" label="类型">
           <UiSegmented
             v-model="serverForm.kind"
             label="服务器类型"

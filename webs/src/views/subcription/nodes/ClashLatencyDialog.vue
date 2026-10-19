@@ -24,6 +24,16 @@ const form = reactive<ClashController>({
   testUrl: DEFAULT_TEST_URL,
 });
 const checking = ref(false);
+// Clash Verge 只放行自带面板的来源，需要把本站加入“外部控制跨域设置 → 允许的来源”
+const origin = window.location.origin;
+async function copyOrigin() {
+  try {
+    await navigator.clipboard.writeText(origin);
+    ElMessage.success("已复制");
+  } catch {
+    ElMessage.warning("复制失败，请手动选中复制");
+  }
+}
 const result = ref<{ ok: boolean; text: string } | null>(null);
 watch(clashDialog, (open) => {
   if (!open) return;
@@ -112,11 +122,29 @@ async function save() {
     >
       {{ result.text }}
     </p>
-    <p class="hint small">
-      在 Clash Verge 的“设置 → 外部控制”里可以看到地址与密钥；只用 mihomo
-      内核时对应配置里的 <span class="mono">external-controller</span> 和
-      <span class="mono">secret</span>。
-    </p>
+    <section class="verge" aria-label="Clash Verge 设置说明">
+      <strong>Clash Verge 需要先放行本站</strong>
+      <ol>
+        <li>
+          设置 → Clash 设置 → 外部控制：打开“启用外部控制器”，记下地址和密钥。
+        </li>
+        <li>
+          点“外部控制”右边的齿轮进入“外部控制跨域设置”，打开“允许专用网络访问”，在“允许的来源”里添加：
+          <span class="origin">
+            <code class="mono">{{ origin }}</code>
+            <button type="button" class="copy" @click="copyOrigin">复制</button>
+          </span>
+        </li>
+      </ol>
+      <p>
+        只用 mihomo 内核时，对应配置里的
+        <span class="mono">external-controller</span>、<span class="mono"
+          >secret</span
+        >
+        与
+        <span class="mono">external-controller-cors</span>（默认放行所有来源）。
+      </p>
+    </section>
     <template #footer>
       <UiButton :loading="checking" @click="check">测试连接</UiButton>
       <UiButton variant="primary" :loading="checking" @click="save"
@@ -135,6 +163,57 @@ async function save() {
 .hint.small {
   margin: 12px 0 0;
   font-size: 12px;
+}
+.verge {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
+  background: var(--c-surface-2);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--c-muted);
+}
+.verge strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--c-ink);
+  font-size: 13px;
+}
+.verge ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.verge p {
+  margin: 6px 0 0;
+}
+.origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: 2px;
+}
+.origin code {
+  overflow-wrap: anywhere;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--c-surface);
+  color: var(--c-ink);
+}
+.copy {
+  flex: 0 0 auto;
+  padding: 1px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-pill);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font: inherit;
+  cursor: pointer;
+}
+.copy:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
 }
 .presets {
   display: flex;
