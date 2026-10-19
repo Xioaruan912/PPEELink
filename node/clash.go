@@ -485,6 +485,44 @@ func takeGlobalFingerprint(config map[interface{}]interface{}) string {
 	return strings.TrimSpace(fp)
 }
 
+// NormalizeRule 把一行规则整理成 mihomo 能接受的形式：去掉误存进来的 "- " 列表前缀和引号。
+// 不像规则（没有逗号）的返回空串。
+func NormalizeRule(raw string) string {
+	r := strings.TrimSpace(raw)
+	for strings.HasPrefix(r, "- ") {
+		r = strings.TrimSpace(r[2:])
+	}
+	r = strings.Trim(r, "'\"")
+	kind, _, found := strings.Cut(r, ",")
+	if !found || !ruleType.MatchString(strings.TrimSpace(kind)) {
+		return ""
+	}
+	return r
+}
+
+// ruleType 规则类型都是大写字母、数字与连字符，如 DOMAIN-SUFFIX、RULE-SET、GEOIP、MATCH。
+var ruleType = regexp.MustCompile(`^[A-Z][A-Z0-9-]*$`)
+
+// cleanRules 丢掉模板 rules 里不是规则的条目（例如被误存成规则的配置行），
+// 否则 mihomo 会因 "format invalid" 拒绝整份配置。
+func cleanRules(config map[interface{}]interface{}) {
+	rules, ok := config["rules"].([]interface{})
+	if !ok {
+		return
+	}
+	kept := make([]interface{}, 0, len(rules))
+	for _, r := range rules {
+		text, ok := r.(string)
+		if !ok {
+			continue
+		}
+		if rule := NormalizeRule(text); rule != "" {
+			kept = append(kept, rule)
+		}
+	}
+	config["rules"] = kept
+}
+
 // usesTLS 节点是否走 TLS（指纹只对 TLS 握手有意义）。
 func usesTLS(p Proxy) bool {
 	switch p.Type {
@@ -535,6 +573,7 @@ func EncodeClashProvider(yamlfile, providerName, providerURL, testURL string) ([
 		return nil, err
 	}
 	takeGlobalFingerprint(config)
+	cleanRules(config)
 	if testURL == "" {
 		testURL = "https://www.gstatic.com/generate_204"
 	}
@@ -582,6 +621,7 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 	}
 
 	fingerprint := takeGlobalFingerprint(config)
+	cleanRules(config)
 
 	// 检查 "proxies" 键是否存在于 config 中
 	proxies, ok := config["proxies"].([]interface{})

@@ -29,3 +29,42 @@ func TestDecodeClashMovesGlobalFingerprintToProxies(t *testing.T) {
 		t.Fatalf("fingerprint must move onto TLS proxies without overriding their own:\n%s", text)
 	}
 }
+
+func TestDecodeClashRepairsCorruptedRules(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.yaml")
+	tmpl := `proxies: ~
+proxy-groups:
+  - name: 日常使用
+    type: select
+    proxies: []
+rules:
+  - 'allow-lan: true'
+  - 'dns:'
+  - '- 223.5.5.5'
+  - '- filter: (?i)US|USA|United States|美国|JP'
+  - 'url: https://kelee.one/Tool/Clash/Rule/AI.yaml'
+  - 'rules:'
+  - '- RULE-SET, LAN, DIRECT'
+  - '- GEOIP, CN, DIRECT'
+  - '- MATCH, 日常使用'
+  - DOMAIN-SUFFIX,example.com,DIRECT
+`
+	if err := os.WriteFile(path, []byte(tmpl), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, err := DecodeClash(nil, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(out)
+	for _, bad := range []string{"allow-lan", "dns:", "223.5.5.5", "filter:", "url:", "'- "} {
+		if strings.Contains(text[strings.Index(text, "rules:"):], bad) {
+			t.Fatalf("rules still contain %q:\n%s", bad, text)
+		}
+	}
+	for _, want := range []string{"RULE-SET, LAN, DIRECT", "GEOIP, CN, DIRECT", "MATCH, 日常使用", "DOMAIN-SUFFIX,example.com,DIRECT"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("rule %q lost:\n%s", want, text)
+		}
+	}
+}
