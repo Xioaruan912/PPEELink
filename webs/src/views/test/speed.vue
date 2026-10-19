@@ -186,7 +186,7 @@
             {{
               budget
                 ? `今日已用 ${formatBytes(budget.used)} / ${formatBytes(budget.daily)}，单次最多 ${budget.maxNodes} 个节点、${formatBytes(budget.maxBytesPerRun)}。`
-                : "测速会经节点下载数据，消耗机场流量与服务器带宽。"
+                : "测速会经节点下载数据，消耗节点流量与服务器带宽。"
             }}
             <template v-if="planReason"
               ><br /><b>{{ planReason }}</b></template
@@ -558,11 +558,11 @@ async function startTest() {
     ElMessage.warning(planReason.value);
     return;
   }
-  // 大于 300 MB 时再确认一次，避免误点耗掉机场流量
+  // 大于 300 MB 时再确认一次，避免误点耗掉节点流量
   if (plannedBytes.value > 300 * 1048576) {
     try {
       await ElMessageBox.confirm(
-        `本次将经 ${selectedIds.value.length} 个节点各下载 ${sizeMB.value} MB，预计消耗 ${formatBytes(plannedBytes.value)} 机场流量。`,
+        `本次将经 ${selectedIds.value.length} 个节点各下载 ${sizeMB.value} MB，预计消耗 ${formatBytes(plannedBytes.value)} 节点流量。`,
         "确认测速",
         {
           confirmButtonText: "开始测速",

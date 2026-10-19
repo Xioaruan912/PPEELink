@@ -331,7 +331,7 @@ func applyBuilderDefaults(req *BuilderRequest) {
 		req.LogLevel = "info"
 	}
 	if req.ExternalController == "" {
-		req.ExternalController = "0.0.0.0:9090"
+		req.ExternalController = "127.0.0.1:9090"
 	}
 	if req.TestURL == "" {
 		req.TestURL = defaultTestURL
@@ -405,7 +405,7 @@ func TemplateGetDefault(c *gin.Context) {
 		LogLevel:                "info",
 		IPv6:                    true,
 		UDP:                     true,
-		ExternalController:      "0.0.0.0:9090",
+		ExternalController:      "127.0.0.1:9090",
 		UnifiedDelay:            true,
 		GeodataMode:             false,
 		GeodataLoader:           "standard",

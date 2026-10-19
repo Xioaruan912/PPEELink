@@ -94,7 +94,7 @@ func ProxyServerSave(c *gin.Context) {
 		return
 	}
 	if req.ID != 0 {
-		res := models.DB.Model(&models.ProxyServer{}).Where("id = ?", req.ID).
+		res := models.DB.Model(&models.ProxyServer{}).Where("id = ? AND removing = ?", req.ID, false).
 			Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled})
 		if res.Error != nil || res.RowsAffected == 0 {
 			c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
@@ -112,11 +112,11 @@ func ProxyServerSave(c *gin.Context) {
 		var n int64
 		models.DB.Model(&models.ProxyServer{}).Where("kind = ?", models.ServerKindLocal).Count(&n)
 		if n > 0 {
-			c.JSON(400, gin.H{"code": "40000", "msg": "本机服务器已存在"})
+			c.JSON(400, gin.H{"code": "40000", "msg": "面板服务器已经添加过了"})
 			return
 		}
 		if runtime.GOOS != "linux" {
-			c.JSON(400, gin.H{"code": "40000", "msg": "本机运行 xray 仅支持 Linux"})
+			c.JSON(400, gin.H{"code": "40000", "msg": "在面板服务器上运行 xray 仅支持 Linux"})
 			return
 		}
 	}
@@ -151,22 +151,53 @@ func ProxyServerResetToken(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"token": token, "install": installCommand(c, token)}, "msg": "令牌已重置"})
 }
 
-// ProxyServerDelete 删除服务器及其入站；对应的自建节点分组随之清理。
+// agentUninstallCommand agent 离线时在服务器上手动执行的卸载命令。
+const agentUninstallCommand = "systemctl disable --now ppeelink-agent ppeelink-xray; " +
+	"rm -rf /etc/systemd/system/ppeelink-agent.service /etc/systemd/system/ppeelink-xray.service " +
+	"/etc/ppeelink-agent /var/lib/ppeelink-agent /usr/local/bin/ppeelink-agent; systemctl daemon-reload"
+
+// ProxyServerDelete 删除服务器并清理机器上的 xray。
+//   - 面板服务器：立即停止并卸载本机 xray。
+//   - 远程服务器：标记为卸载中，agent 下一轮拉取时卸载 xray 和自身，回报后删除记录。
+//     agent 从未连上或 force=1 时直接删除记录，并返回手动卸载命令。
 func ProxyServerDelete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("id"))
+	force := c.Query("force") == "1"
 	var s models.ProxyServer
 	if err := models.DB.First(&s, id).Error; err != nil {
 		c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
 		return
 	}
 	models.DB.Where("server_id = ?", s.ID).Delete(&models.ProxyInbound{})
-	// 先停用让同步清空节点，再删除记录
+	// 先停用让同步清空节点
 	models.DB.Model(&s).Update("enabled", false)
 	_ = SyncSelfHostedNodes()
-	models.DB.Delete(&s)
 	models.DB.Where("name = ?", selfHostedGroupPrefix+s.Name).Delete(&models.GroupNode{})
+
+	if s.Kind == models.ServerKindAgent && !force && s.LastSeenAt != nil {
+		models.DB.Model(&s).Update("removing", true)
+		c.JSON(200, gin.H{"code": "00000", "data": gin.H{"pending": true},
+			"msg": "已通知 agent 卸载，一分钟内完成后自动移除"})
+		return
+	}
+	purgeProxyServer(s)
+	if s.Kind == models.ServerKindLocal {
+		if err := UninstallLocalProxy(); err != nil {
+			c.JSON(200, gin.H{"code": "00000", "msg": "已删除，但卸载 xray 失败: " + err.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"code": "00000", "msg": "已删除，并卸载了面板服务器上的 xray"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"uninstall": agentUninstallCommand},
+		"msg": "已删除；请在服务器上执行卸载命令"})
+}
+
+// purgeProxyServer 删除服务器记录与入站（流量历史保留）。
+func purgeProxyServer(s models.ProxyServer) {
+	models.DB.Where("server_id = ?", s.ID).Delete(&models.ProxyInbound{})
+	models.DB.Delete(&models.ProxyServer{}, s.ID)
 	NotifyProxyChanged()
-	c.JSON(200, gin.H{"code": "00000", "msg": "已删除；远程服务器上的 agent 可执行 systemctl disable --now ppeelink-agent ppeelink-xray 停止"})
 }
 
 // ---- 入站 ------------------------------------------------------------------
@@ -414,6 +445,9 @@ func AgentReport(c *gin.Context) {
 	if err := ApplyServerReport(*s, report); err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "记录失败"})
 		return
+	}
+	if s.Removing && report.Uninstalled {
+		purgeProxyServer(*s)
 	}
 	c.JSON(200, gin.H{"code": "00000", "msg": "ok"})
 }

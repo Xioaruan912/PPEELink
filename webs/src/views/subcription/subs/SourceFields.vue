@@ -5,8 +5,8 @@ import { VueDraggable } from "vue-draggable-plus";
 import { usePrefersReducedMotion } from "@/motion";
 const reduced = usePrefersReducedMotion();
 const {
-  airportUrl,
-  isAirportUrl,
+  sourceUrl,
+  isSourceMode,
   NodesList,
   value1,
   allGroups,
@@ -24,29 +24,32 @@ const {
 } = useSubscriptions();
 </script>
 <template>
-  <!-- 分区三：节点与机场订阅 -->
+  <!-- 分区三：节点来源（本地节点/分组，或上游订阅链接） -->
   <el-divider content-position="left">节点来源</el-divider>
   <div class="mb-4">
-    <el-radio-group v-model="isAirportUrl" class="w-full" style="display: flex">
+    <el-radio-group v-model="isSourceMode" class="w-full" style="display: flex">
       <el-radio-button :value="false" style="flex: 1" class="text-center"
         >本地节点与分组</el-radio-button
       >
       <el-radio-button :value="true" style="flex: 1" class="text-center"
-        >机场订阅导入</el-radio-button
+        >上游订阅链接</el-radio-button
       >
     </el-radio-group>
   </div>
 
-  <template v-if="isAirportUrl">
-    <el-form-item label="机场订阅源（支持主源 + 备用源）">
+  <template v-if="isSourceMode">
+    <el-form-item label="上游订阅链接（支持主源 + 备用源）">
       <el-input
-        v-model="airportUrl"
+        v-model="sourceUrl"
         type="textarea"
         :rows="3"
         placeholder="每行一个订阅链接；主源失败时自动尝试下一行"
         clearable
       />
-      <div class="field-hint">按顺序尝试，首个可用的 2xx 非空响应生效。</div>
+      <div class="field-hint">
+        保存时立即拉取，之后每 6
+        小时自动刷新；节点放进与订阅同名的分组，流量与到期取自上游。
+      </div>
     </el-form-item>
   </template>
 

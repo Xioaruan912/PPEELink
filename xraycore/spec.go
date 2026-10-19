@@ -27,6 +27,8 @@ type Spec struct {
 	// 防滥用：阻断访问内网与 BT 流量
 	BlockPrivate    bool `json:"blockPrivate"`
 	BlockBitTorrent bool `json:"blockBitTorrent"`
+	// 服务器已在面板删除：停止并卸载 xray，agent 随后移除自身
+	Uninstall bool `json:"uninstall,omitempty"`
 }
 
 type InboundSpec struct {
@@ -68,4 +70,5 @@ type Report struct {
 	Error       string             `json:"error"`
 	Traffic     map[string]Counter `json:"traffic"`
 	Online      map[string]int     `json:"online"` // email -> 在线 IP 数
+	Uninstalled bool               `json:"uninstalled,omitempty"`
 }

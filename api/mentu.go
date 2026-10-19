@@ -96,18 +96,6 @@ func GetMenus(c *gin.Context) {
 					},
 				},
 				{
-					Path:      "airport",
-					Component: "subcription/airport",
-					Name:      "Airport",
-					Meta: Meta{
-						Title:     "机场管理",
-						Icon:      "upload",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
 					Path:      "servers",
 					Component: "subcription/servers",
 					Name:      "ProxyServers",
@@ -127,54 +115,19 @@ func GetMenus(c *gin.Context) {
 				},
 			},
 		},
-		// 测试
+		// 测试：测速、解锁、TCP 合并为一个页面
 		{
 			Path:      "/test",
 			Component: "Layout",
-			Redirect:  "/test/unlock",
+			Redirect:  "/test/index",
 			Name:      "test",
-			Meta: Meta{
-				Title:  "test",
-				Icon:   "monitor",
-				Hidden: false,
-				Roles:  []string{"ADMIN"},
-			},
+			Meta:      Meta{Title: "test", Icon: "monitor", Roles: []string{"ADMIN"}},
 			Children: []Child{
 				{
-					Path:      "speed",
-					Component: "test/speed",
-					Name:      "SpeedTest",
-					Meta: Meta{
-						Title:     "真实测速",
-						Icon:      "monitor",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
-					Path:      "unlock",
-					Component: "subcription/unlock",
-					Name:      "Unlock",
-					Meta: Meta{
-						Title:     "unlocktest",
-						Icon:      "security",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
-					Path:      "tcp",
-					Component: "test/tcp",
-					Name:      "TcpTest",
-					Meta: Meta{
-						Title:     "tcptest",
-						Icon:      "link",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
+					Path:      "index",
+					Component: "test/index",
+					Name:      "NodeTest",
+					Meta:      Meta{Title: "节点测试", Icon: "monitor", Roles: []string{"ADMIN"}, KeepAlive: true},
 				},
 			},
 		},

@@ -20,9 +20,6 @@ var taskCancels sync.Map // task id -> context.CancelFunc
 type nodeEgressTaskRequest struct {
 	NodeID int `json:"nodeId"`
 }
-type airportSyncTaskRequest struct {
-	AirportID int `json:"airportId"`
-}
 type ruleSyncTaskRequest struct {
 	Source string `json:"source"`
 }
@@ -101,13 +98,6 @@ func executeStoredTask(task *models.TaskRun) {
 		if err == nil {
 			updateTaskProgress(task.ID, 20, "正在检测目标出口")
 			result, err = runNodeEgressTask(ctx, req.NodeID)
-		}
-	case "airport-sync":
-		var req airportSyncTaskRequest
-		err = json.Unmarshal([]byte(task.RequestJSON), &req)
-		if err == nil {
-			updateTaskProgress(task.ID, 20, "正在拉取并测活机场节点")
-			err = SyncAirportNodeTask(req.AirportID)
 		}
 	case "rule-sync":
 		var req ruleSyncTaskRequest

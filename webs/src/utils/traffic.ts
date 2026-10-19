@@ -42,3 +42,20 @@ export function trafficOf(row: TrafficInfo) {
     state,
   };
 }
+/** 订阅上游最近一次上报的流量（来自上游的 Subscription-Userinfo）。 */
+export interface SourceTraffic {
+  sourceUpload?: number;
+  sourceDownload?: number;
+  sourceTotal?: number;
+  sourceExpire?: string | null;
+  sourceTrafficAt?: string | null;
+}
+export function sourceTrafficOf(sub: SourceTraffic) {
+  return trafficOf({
+    TrafficUpload: sub.sourceUpload,
+    TrafficDownload: sub.sourceDownload,
+    TrafficTotal: sub.sourceTotal,
+    TrafficExpire: sub.sourceExpire,
+    TrafficUpdatedAt: sub.sourceTrafficAt,
+  });
+}

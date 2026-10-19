@@ -49,7 +49,7 @@ const {
           ><el-form-item label="重命名正则"
             ><el-input
               v-model="pipeline.renamePattern"
-              placeholder="例如 ^\[机场A\]\s*"
+              placeholder="例如 ^\[上游A\]\s*"
               clearable /></el-form-item
         ></el-col>
         <el-col v-show="step === 'organize'" :span="12" :xs="24"

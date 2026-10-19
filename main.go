@@ -9,7 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"ppeelink/api"
 	"ppeelink/middlewares"
 	"ppeelink/models"
@@ -192,14 +194,13 @@ func Run(port int) {
 	routers.Templates(r)
 	routers.Version(r, version)
 	routers.Downloads(r)
-	routers.AirportRoutes(r) // 注册机场管理路由
-	routers.Rules(r)         // 规则中心
-	routers.Tasks(r)         // 后台任务中心
-	routers.Tokens(r)        // API Token 管理
-	routers.Ops(r)           // 安全运维/备份
-	routers.Status(r)        // 公共只读状态页
-	routers.Audit(r)         // 管理操作审计
-	routers.ShortLinks(r)    // 内部短链与一键导入
+	routers.Rules(r)      // 规则中心
+	routers.Tasks(r)      // 后台任务中心
+	routers.Tokens(r)     // API Token 管理
+	routers.Ops(r)        // 安全运维/备份
+	routers.Status(r)     // 公共只读状态页
+	routers.Audit(r)      // 管理操作审计
+	routers.ShortLinks(r) // 内部短链与一键导入
 	routers.Collections(r)
 	routers.Proxy(r) // 多订阅合集与到期/用量告警
 	// 启动后台定时测活任务 (Cron)
@@ -228,6 +229,25 @@ func runAgent(args []string) {
 	defer stop()
 	runner := xraycore.NewRunner(*dir, "ppeelink-xray")
 	log.Printf("[agent] 已启动，面板 %s，每 %s 同步一次", *panel, *interval)
-	xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token}, runner, *interval)
+	if xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token}, runner, *interval) {
+		log.Printf("[agent] 服务器已在面板删除，xray 已卸载，正在移除 agent")
+		removeAgent()
+		return
+	}
 	runner.Stop()
+}
+
+// removeAgent 删除安装脚本创建的 agent 文件与 systemd 服务。最后一步停止服务会结束本进程。
+func removeAgent() {
+	_ = os.RemoveAll("/etc/ppeelink-agent")
+	if exe, err := os.Executable(); err == nil && filepath.Base(exe) == "ppeelink-agent" {
+		_ = os.Remove(exe)
+	}
+	if os.Getenv("INVOCATION_ID") == "" {
+		return // 不是由 systemd 启动的，没有服务需要清理
+	}
+	_ = exec.Command("systemctl", "disable", "ppeelink-agent").Run()
+	_ = os.Remove("/etc/systemd/system/ppeelink-agent.service")
+	_ = exec.Command("systemctl", "daemon-reload").Run()
+	_ = exec.Command("systemctl", "stop", "--no-block", "ppeelink-agent").Run()
 }

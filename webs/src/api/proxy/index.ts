@@ -27,6 +27,7 @@ export interface ProxyServer {
   lastError: string;
   lastSeenAt: string | null;
   appliedRev: string;
+  removing: boolean;
   inbounds: ProxyInbound[];
   online: boolean;
   todayUp: number;
@@ -95,11 +96,12 @@ export const resetServerToken = (id: number) =>
     method: "post",
     params: { id },
   });
-export const deleteProxyServer = (id: number) =>
+/** 删除服务器；force 跳过等待 agent 卸载。返回 data.pending（等待卸载）或 data.uninstall（需手动执行的卸载命令）。 */
+export const deleteProxyServer = (id: number, force = false) =>
   request({
     url: "/api/v1/proxy/servers/delete",
     method: "delete",
-    params: { id },
+    params: force ? { id, force: 1 } : { id },
   });
 export const saveProxyInbound = (
   data: Partial<ProxyInbound> & { regenerateKey?: boolean }

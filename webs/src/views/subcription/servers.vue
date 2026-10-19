@@ -116,6 +116,7 @@ const openAccounts = computed(
 );
 
 function status(s: ProxyServer) {
+  if (s.removing) return { tone: "warn" as const, text: "正在卸载" };
   if (!s.enabled) return { tone: "neutral" as const, text: "已停用" };
   if (s.kind === "agent" && !s.online)
     return {
@@ -209,11 +210,22 @@ async function showInstall(s: ProxyServer) {
   const { data } = await resetServerToken(s.id);
   install.value = { name: s.name, command: data.install };
 }
-async function removeServer(s: ProxyServer) {
+const uninstall = ref<{ name: string; command: string } | null>(null);
+function removeHint(s: ProxyServer) {
+  const common = `入站与“自建·${s.name}”节点分组会一起删除。`;
+  if (s.kind === "local")
+    return `将停止并卸载面板服务器上的 xray（systemd 服务、程序与配置）。${common}`;
+  if (s.lastSeenAt)
+    return `agent 会在一分钟内卸载 xray 和它自己，完成后记录自动移除。${common}`;
+  return `这台服务器从未连上面板，将直接删除记录；如果已经执行过安装命令，删除后按提示在服务器上手动卸载。${common}`;
+}
+async function removeServer(s: ProxyServer, force = false) {
   try {
     await ElMessageBox.confirm(
-      `删除服务器 ${s.name}？其上的入站与“自建·${s.name}”节点分组会一起删除。`,
-      "删除服务器",
+      force
+        ? `agent 没有回应卸载请求时使用：直接删除 ${s.name} 的记录，之后需要在服务器上手动执行卸载命令。`
+        : `删除服务器 ${s.name}？${removeHint(s)}`,
+      force ? "强制删除" : "删除服务器",
       {
         type: "warning",
         confirmButtonText: "删除",
@@ -224,9 +236,20 @@ async function removeServer(s: ProxyServer) {
   } catch {
     return;
   }
-  const res: any = await deleteProxyServer(s.id);
-  ElMessage.success(res?.msg || "已删除");
+  const res: any = await deleteProxyServer(s.id, force);
+  if (res?.data?.uninstall)
+    uninstall.value = { name: s.name, command: res.data.uninstall };
+  else ElMessage.success(res?.msg || "已删除");
   await load(true);
+}
+async function copyUninstall() {
+  if (!uninstall.value) return;
+  try {
+    await navigator.clipboard.writeText(uninstall.value.command);
+    ElMessage.success("已复制");
+  } catch {
+    ElMessage.warning("复制失败，请手动选中复制");
+  }
 }
 
 // ---- 入站 ----
@@ -353,7 +376,7 @@ const usageRatio = (a: ProxyAccount) =>
           <dl class="meta">
             <div>
               <dt>类型</dt>
-              <dd>{{ s.kind === "local" ? "本机" : "远程 agent" }}</dd>
+              <dd>{{ s.kind === "local" ? "面板服务器" : "远程服务器" }}</dd>
             </div>
             <div>
               <dt>xray</dt>
@@ -375,7 +398,7 @@ const usageRatio = (a: ProxyAccount) =>
           <p v-if="s.lastError" class="error-line">
             <IconWarning />{{ s.lastError }}
           </p>
-          <ul class="inbounds">
+          <ul v-if="!s.removing" class="inbounds">
             <li
               v-for="i in s.inbounds"
               :key="i.id"
@@ -407,7 +430,15 @@ const usageRatio = (a: ProxyAccount) =>
               还没有入站，添加一个即可开始发放节点。
             </li>
           </ul>
-          <footer class="card-actions">
+          <footer v-if="s.removing" class="card-actions is-removing">
+            <span class="removing-hint"
+              >已通知 agent 卸载 xray 与自身，完成后自动移除。</span
+            >
+            <UiButton variant="ghost" @click="removeServer(s, true)"
+              >强制删除</UiButton
+            >
+          </footer>
+          <footer v-else class="card-actions">
             <UiButton :icon="IconPlus" @click="openInbound(s)"
               >添加入站</UiButton
             >
@@ -505,11 +536,11 @@ const usageRatio = (a: ProxyAccount) =>
             label="服务器类型"
             :options="[
               {
-                label: '本机（面板所在服务器）',
+                label: '面板服务器',
                 value: 'local',
                 disabled: servers.some((x) => x.kind === 'local'),
               },
-              { label: '远程 agent', value: 'agent' },
+              { label: '远程服务器', value: 'agent' },
             ]"
           />
         </el-form-item>
@@ -525,7 +556,7 @@ const usageRatio = (a: ProxyAccount) =>
         <p class="dialog-hint">
           {{
             serverForm.kind === "local"
-              ? "面板会在本机下载官方 xray-core（校验 SHA-256 后运行），并以 systemd 服务托管，面板重启不影响连接。"
+              ? "xray 装在运行面板的这台机器上：面板下载官方 xray-core（校验 SHA-256 后运行），并以 systemd 服务托管，面板重启不影响连接。"
               : "保存后会给出一条安装命令，在远程服务器上以 root 执行即可。agent 主动连回面板，无需开放额外端口或提供 SSH 密码。"
           }}
         </p>
@@ -559,6 +590,25 @@ const usageRatio = (a: ProxyAccount) =>
           >完成</UiButton
         ></template
       >
+    </UiDialog>
+
+    <UiDialog
+      :model-value="!!uninstall"
+      title="在服务器上手动卸载"
+      width="620px"
+      @update:model-value="uninstall = null"
+    >
+      <template v-if="uninstall">
+        <p class="dialog-hint">
+          面板里的 <b>{{ uninstall.name }}</b> 已删除。用 root
+          登录这台服务器执行下面的命令，停止并删除 agent、xray 及其配置。
+        </p>
+        <pre class="cmd mono">{{ uninstall.command }}</pre>
+      </template>
+      <template #footer>
+        <UiButton @click="copyUninstall">复制命令</UiButton>
+        <UiButton variant="primary" @click="uninstall = null">完成</UiButton>
+      </template>
     </UiDialog>
 
     <InboundDrawer
@@ -886,6 +936,24 @@ const usageRatio = (a: ProxyAccount) =>
 }
 .acc-bar i.hot {
   background: var(--c-bad);
+}
+.card-actions.is-removing {
+  justify-content: space-between;
+}
+.removing-hint {
+  color: var(--c-warn-ink);
+  font-size: 13px;
+}
+.cmd {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
+  background: var(--c-surface-2);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 .dialog-hint {
   margin-bottom: 12px;

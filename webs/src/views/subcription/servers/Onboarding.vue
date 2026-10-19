@@ -11,7 +11,7 @@ defineProps<{ hasLocal?: boolean }>();
 const emit = defineEmits<{ add: [kind: "local" | "agent"] }>();
 
 const steps = [
-  { title: "接入服务器", text: "本机直接托管，或在 VPS 上装 agent" },
+  { title: "接入服务器", text: "用面板这台机器，或在其他 VPS 装 agent" },
   { title: "添加入站", text: "Reality Vision 或 XHTTP，端口自动分配" },
   { title: "给账户开通", text: "订阅里自动出现节点，按配额统计流量" },
 ];
@@ -52,16 +52,16 @@ const steps = [
       >
         <IconServer class="c-icon" />
         <span
-          ><strong>本机</strong
-          ><small>与面板同一台服务器，systemd 托管</small></span
+          ><strong>面板服务器</strong
+          ><small>xray 装在运行面板的这台机器上</small></span
         >
         <IconArrow class="c-go" />
       </button>
       <button type="button" class="choice" @click="emit('add', 'agent')">
         <IconCloud class="c-icon" />
         <span
-          ><strong>远程 VPS</strong
-          ><small>一行命令装 agent，无需开放端口</small></span
+          ><strong>远程服务器</strong
+          ><small>在其他 VPS 上一行命令装 agent</small></span
         >
         <IconArrow class="c-go" />
       </button>

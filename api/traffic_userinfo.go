@@ -7,7 +7,7 @@ import (
 	"ppeelink/models"
 )
 
-// trafficSummary 汇总若干机场最近一次上报的流量与最早到期时间。
+// trafficSummary 汇总若干上游最近一次上报的流量与最早到期时间。
 type trafficSummary struct {
 	Upload, Download, Total int64
 	Expire                  *time.Time
@@ -33,65 +33,42 @@ func (t trafficSummary) header() string {
 	return fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", t.Upload, t.Download, t.Total, expire)
 }
 
-// subscriptionGroupNames 订阅直接引用的分组，加上其固定节点所属的分组。
-// 机场同步时节点落在与机场同名的分组中，因此分组名即机场名。
-func subscriptionGroupNames(subID int) map[string]bool {
-	names := map[string]bool{}
-	var sub models.Subcription
-	if err := models.DB.Preload("GroupRefs").Preload("Nodes.GroupNodes").First(&sub, subID).Error; err != nil {
-		return names
-	}
-	for _, g := range sub.GroupRefs {
-		names[g.Name] = true
-	}
-	for _, n := range sub.Nodes {
-		for _, g := range n.GroupNodes {
-			names[g.Name] = true
-		}
-	}
-	return names
-}
-
-// airportTraffic 汇总名称落在 names 中且上报过流量的机场。
-func airportTraffic(names map[string]bool) trafficSummary {
+// sourceTraffic 订阅上游最近一次上报的流量。
+func sourceTraffic(sub models.Subcription) trafficSummary {
 	var out trafficSummary
-	if len(names) == 0 {
+	if sub.SourceTrafficAt == nil {
 		return out
 	}
-	list := make([]string, 0, len(names))
-	for n := range names {
-		list = append(list, n)
-	}
-	var airports []models.Airport
-	if err := models.DB.Where("name IN ? AND traffic_updated_at IS NOT NULL", list).Find(&airports).Error; err != nil {
-		return out
-	}
-	for _, a := range airports {
-		out.Reported = true
-		out.Upload += a.TrafficUpload
-		out.Download += a.TrafficDownload
-		out.Total += a.TrafficTotal
-		out.addExpire(a.TrafficExpire)
-	}
+	out.Reported = true
+	out.Upload, out.Download, out.Total = sub.SourceUpload, sub.SourceDownload, sub.SourceTotal
+	out.addExpire(sub.SourceExpire)
 	return out
 }
 
-// subscriptionUserinfo 订阅下发时的流量头：所用机场的流量之和，到期取机场与订阅中较早者。
+// subscriptionUserinfo 订阅下发时的流量头：上游流量，到期取上游与订阅中较早者。
 func subscriptionUserinfo(sub models.Subcription) string {
-	summary := airportTraffic(subscriptionGroupNames(sub.ID))
+	summary := sourceTraffic(sub)
 	summary.addExpire(sub.ExpiresAt)
 	return summary.header()
 }
 
-// collectionUserinfo 合集按成员订阅所用机场去重后汇总。
+// collectionUserinfo 合集汇总各成员订阅的上游流量。
 func collectionUserinfo(col models.Collection) string {
-	names := map[string]bool{}
+	var summary trafficSummary
 	for _, id := range parseMemberIDs(col.MemberIDs) {
-		for n := range subscriptionGroupNames(id) {
-			names[n] = true
+		var sub models.Subcription
+		if models.DB.First(&sub, id).Error != nil {
+			continue
 		}
+		part := sourceTraffic(sub)
+		if part.Reported {
+			summary.Reported = true
+			summary.Upload += part.Upload
+			summary.Download += part.Download
+			summary.Total += part.Total
+		}
+		summary.addExpire(part.Expire)
 	}
-	summary := airportTraffic(names)
 	summary.addExpire(col.ExpiresAt)
 	return summary.header()
 }

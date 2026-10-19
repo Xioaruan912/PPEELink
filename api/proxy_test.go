@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +167,62 @@ func TestPersonalSubscription(t *testing.T) {
 	}
 	if info := rec.Header().Get("Subscription-Userinfo"); !strings.Contains(info, "download=1048576; total=1073741824") {
 		t.Fatalf("userinfo wrong: %q", info)
+	}
+}
+
+func TestDeleteAgentServerUninstallsBeforePurge(t *testing.T) {
+	server, _ := setupProxyDB(t)
+	seen := time.Now()
+	models.DB.Model(&server).Update("last_seen_at", &seen)
+	del := func(query string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		c.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/proxy/server?"+query, nil)
+		ProxyServerDelete(c)
+		return rec
+	}
+	if rec := del("id=" + strconv.Itoa(int(server.ID))); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"pending":true`) {
+		t.Fatalf("connected agent must be asked to uninstall first: %s", rec.Body.String())
+	}
+	var s models.ProxyServer
+	if models.DB.First(&s, server.ID).Error != nil || !s.Removing {
+		t.Fatal("server must stay until the agent confirms")
+	}
+	spec, _ := BuildServerSpec(s)
+	if !spec.Uninstall || len(spec.Inbounds) != 0 {
+		t.Fatalf("spec must tell the agent to uninstall: %+v", spec)
+	}
+	report := func(r xraycore.Report) {
+		rec := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(rec)
+		raw, _ := json.Marshal(r)
+		c.Request = httptest.NewRequest(http.MethodPost, "/api/v1/agent/report", bytes.NewReader(raw))
+		c.Request.Header.Set("Authorization", "Agent agent-secret")
+		AgentReport(c)
+		if rec.Code != 200 {
+			t.Fatalf("report rejected: %s", rec.Body.String())
+		}
+	}
+	report(xraycore.Report{Error: "卸载失败"})
+	if models.DB.First(&models.ProxyServer{}, server.ID).Error != nil {
+		t.Fatal("failed uninstall must keep the record")
+	}
+	report(xraycore.Report{Uninstalled: true})
+	if models.DB.First(&models.ProxyServer{}, server.ID).Error == nil {
+		t.Fatal("confirmed uninstall must purge the server")
+	}
+}
+
+func TestDeleteOfflineAgentReturnsManualCommand(t *testing.T) {
+	server, _ := setupProxyDB(t) // 从未连上
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodDelete, "/api/v1/proxy/server?id="+strconv.Itoa(int(server.ID)), nil)
+	ProxyServerDelete(c)
+	if !strings.Contains(rec.Body.String(), "systemctl disable --now ppeelink-agent") {
+		t.Fatalf("manual uninstall command missing: %s", rec.Body.String())
+	}
+	if models.DB.First(&models.ProxyServer{}, server.ID).Error == nil {
+		t.Fatal("never-connected agent must be deleted immediately")
 	}
 }

@@ -21,11 +21,34 @@ type Source interface {
 
 // RunLoop 周期性地拉取期望状态、应用到 xray，并回报流量与运行状态。
 // 回报失败时把流量累计到下一轮，避免面板短暂不可达造成漏计。
-func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Duration) {
+// 面板要求卸载时，卸载 xray 并回报成功后返回 true。
+func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Duration) bool {
 	pending := map[string]Counter{}
-	tick := func() {
+	tick := func() bool {
 		report := Report{Arch: runtime.GOARCH, Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
+		if err == nil && spec.Uninstall {
+			// 先收最后一轮流量，再卸载
+			traffic, _, _ := runner.Collect(ctx)
+			for email, c := range traffic {
+				p := pending[email]
+				p.Up += c.Up
+				p.Down += c.Down
+				pending[email] = p
+			}
+			if err := runner.Uninstall(); err != nil {
+				log.Printf("[xray] 卸载失败: %v", err)
+				report.Error = "卸载失败: " + err.Error()
+			} else {
+				report.Uninstalled = true
+			}
+			report.Traffic = pending
+			if err := src.Report(ctx, report); err != nil {
+				log.Printf("[xray] 回报卸载结果失败: %v", err)
+				return false
+			}
+			return report.Uninstalled
+		}
 		if err != nil {
 			report.Error = "获取配置失败: " + err.Error()
 		} else if err := runner.Apply(ctx, spec); err != nil {
@@ -51,19 +74,24 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		report.XrayVersion = InstalledVersion(runner.Dir)
 		if err := src.Report(ctx, report); err != nil {
 			log.Printf("[xray] 回报失败（流量将在下一轮补报）: %v", err)
-			return
+			return false
 		}
 		pending = map[string]Counter{}
+		return false
 	}
-	tick()
+	if tick() {
+		return true
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return false
 		case <-ticker.C:
-			tick()
+			if tick() {
+				return true
+			}
 		}
 	}
 }

@@ -7,8 +7,11 @@ import {
   UiPanel,
   UiSkeleton,
   EmptyState,
-  StatusDot,
+  UiSegmented,
 } from "@/ui";
+import RowIconButton from "@/ui/RowIconButton.vue";
+import IconGear from "~icons/ph/gear-six";
+import ClashLatencyDialog from "./nodes/ClashLatencyDialog.vue";
 import { useStagger, useMotion } from "@/motion";
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue";
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue";
@@ -37,7 +40,9 @@ const {
   localTesting,
   latencySource,
   loadAll,
-  triggerLocalPing,
+  useServerLatency,
+  runClashLatency,
+  clashDialog,
   handleAddNode,
   openGroupManager,
   hideActiveGroup,
@@ -49,21 +54,9 @@ const {
   openTool,
 } = provideNodes();
 const root = ref<HTMLElement>();
-// 浏览器直连会从你当前的网络向每个代理服务器发起连接，首次使用前说明并确认
-async function confirmLocalPing() {
-  try {
-    if (localStorage.getItem("local-ping-ack") !== "1") {
-      await ElMessageBox.confirm(
-        "将从你当前的网络直接连接每个节点服务器来测延迟。这会暴露本机 IP 与节点的连接关系，且部分机场可能把频繁直连视为异常。",
-        "从本机检测延迟",
-        { confirmButtonText: "继续", cancelButtonText: "取消", type: "warning" }
-      );
-      localStorage.setItem("local-ping-ack", "1");
-    }
-  } catch (error) {
-    if (error === "cancel" || error === "close") return;
-  }
-  void triggerLocalPing();
+function switchLatency(value: string | number) {
+  if (value === "clash") void runClashLatency();
+  else useServerLatency();
 }
 const stagger = useStagger();
 const { reduced, animate } = useMotion();
@@ -163,7 +156,7 @@ function leaveBar(element: Element, done: () => void) {
         class="node-main"
         title="节点列表"
         :count="filteredNodes.length"
-        description="名称可点开编辑；延迟默认为服务器到节点的 TCP 检测。"
+        description="名称可点开编辑；延迟可选面板服务器到节点的 TCP 连接，或你电脑上 Clash 的实测。"
         :aria-busy="loading"
       >
         <div class="node-toolbar">
@@ -187,23 +180,27 @@ function leaveBar(element: Element, done: () => void) {
           /></el-select>
         </div>
         <div class="view-toolbar">
-          <StatusDot
-            :state="localTesting ? 'idle' : 'ok'"
-            :running="localTesting"
-            :label="
-              localTesting
-                ? '正在从本机检测'
-                : latencySource === 'local'
-                  ? '本机延迟'
-                  : '服务器延迟'
-            "
+          <UiSegmented
+            :model-value="latencySource"
+            label="延迟来源"
+            :options="[
+              { label: '面板服务器', value: 'server' },
+              { label: '我的 Clash', value: 'clash' },
+            ]"
+            @update:model-value="switchLatency"
           /><UiButton
+            v-if="latencySource === 'clash'"
             variant="ghost"
-            :disabled="loading || !overviewList.length"
             :loading="localTesting"
-            @click="confirmLocalPing"
-            >从本机检测</UiButton
-          ><span class="result-count mono"
+            :disabled="loading"
+            @click="runClashLatency"
+            >{{ localTesting ? "测试中" : "重新测" }}</UiButton
+          ><RowIconButton
+            v-if="latencySource === 'clash'"
+            :icon="IconGear"
+            label="Clash 连接设置"
+            @click="clashDialog = true"
+          /><span class="result-count mono"
             >{{ filteredNodes.length }} 个节点</span
           ><UiButton
             v-if="filteredNodes.length"
@@ -227,7 +224,7 @@ function leaveBar(element: Element, done: () => void) {
             size="page"
             v-if="!overviewList.length"
             title="建立你的连接"
-            description="粘贴节点链接，或从机场同步节点。"
+            description="粘贴节点链接，或在订阅里填写上游订阅链接。"
             ><template #action
               ><UiButton @click="handleAddNode">添加节点</UiButton></template
             ></EmptyState
@@ -294,6 +291,7 @@ function leaveBar(element: Element, done: () => void) {
       :node-id="testNode.id"
       :node-name="testNode.name"
     />
+    <ClashLatencyDialog />
   </div>
 </template>
 <style scoped>

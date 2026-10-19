@@ -21,7 +21,14 @@ import {
   SetNodeVisibility,
   SetGroupVisibility,
 } from "@/api/subcription/node";
-import { testLocalAll } from "@/utils/ping";
+import {
+  clashDelayAll,
+  ClashError,
+  loadController,
+  saveController,
+  RTT_NOT_IN_CLASH,
+  type ClashController,
+} from "@/utils/clashController";
 import { copySubscriptionText } from "../subs/clipboard";
 
 export interface OverviewItem {
@@ -60,7 +67,7 @@ export interface GroupDetail {
 }
 export const rttState = (rtt: number) =>
   rtt < 0
-    ? rtt === -2
+    ? rtt === -2 || rtt === RTT_NOT_IN_CLASH
       ? "idle"
       : "bad"
     : rtt < 100
@@ -69,7 +76,13 @@ export const rttState = (rtt: number) =>
         ? "warn"
         : "bad";
 export const rttText = (rtt: number) =>
-  rtt === -2 ? "测试中" : rtt < 0 ? "超时" : `${rtt} ms`;
+  rtt === -2
+    ? "测试中"
+    : rtt === RTT_NOT_IN_CLASH
+      ? "Clash 中没有"
+      : rtt < 0
+        ? "超时"
+        : `${rtt} ms`;
 export const nodeEffectiveHidden = (node?: NodeItem) =>
   !!node?.Hidden || (node?.GroupNodes || []).some((g) => !!g.Hidden);
 const key: InjectionKey<ReturnType<typeof createNodes>> = Symbol("nodes");
@@ -158,8 +171,13 @@ function createNodes() {
   let alive = true,
     loadSequence = 0,
     pingController: AbortController | undefined;
+  // 延迟来源：server = 面板所在服务器 TCP 连接节点；clash = 用户电脑上的 Clash 经节点实测
   const localTesting = ref(false);
-  const latencySource = ref<"server" | "local">("server");
+  const latencySource = ref<"server" | "clash">("server");
+  const serverRtt = new Map<number, number>();
+  const clashController = ref<ClashController | null>(loadController());
+  const clashDialog = ref(false);
+  const clashError = ref("");
   async function loadAll() {
     if (!alive) return;
     const sequence = ++loadSequence;
@@ -177,6 +195,8 @@ function createNodes() {
       overviewList.value = (ov?.data || []).map((n: OverviewItem) => ({
         ...n,
       }));
+      serverRtt.clear();
+      for (const n of overviewList.value) serverRtt.set(n.id, n.rtt);
       fullNodes.value = nd?.data || [];
       groupDetails.value = Array.isArray(gp?.data) ? gp.data : [];
       selectedIds.value = new Set(
@@ -204,25 +224,48 @@ function createNodes() {
       if (alive && sequence === loadSequence) loading.value = false;
     }
   }
-  async function triggerLocalPing() {
+  function useServerLatency() {
+    pingController?.abort();
+    localTesting.value = false;
+    latencySource.value = "server";
+    for (const n of overviewList.value) n.rtt = serverRtt.get(n.id) ?? n.rtt;
+  }
+  async function runClashLatency() {
+    const c = clashController.value;
+    if (!c) {
+      clashDialog.value = true;
+      return;
+    }
     pingController?.abort();
     const controller = new AbortController();
     pingController = controller;
     const nodes = overviewList.value;
     localTesting.value = true;
-    latencySource.value = "local";
+    latencySource.value = "clash";
+    clashError.value = "";
     try {
-      await testLocalAll(
-        nodes,
+      await clashDelayAll(
+        c,
+        nodes.map((n) => n.name),
         (index, rtt) => {
           if (!controller.signal.aborted && alive && nodes[index])
             nodes[index].rtt = rtt;
         },
         controller.signal
       );
+    } catch (e) {
+      if (controller.signal.aborted) return;
+      clashError.value =
+        e instanceof ClashError ? e.message : "读取 Clash 延迟失败";
+      useServerLatency();
+      clashDialog.value = true;
     } finally {
       if (pingController === controller) localTesting.value = false;
     }
+  }
+  function setClashController(c: ClashController) {
+    clashController.value = c;
+    saveController(c);
   }
   const nodeDialog = ref(false),
     groupDialog = ref(false),
@@ -546,8 +589,13 @@ function createNodes() {
     clearFilters,
     localTesting,
     latencySource,
+    clashController,
+    clashDialog,
+    clashError,
+    useServerLatency,
+    runClashLatency,
+    setClashController,
     loadAll,
-    triggerLocalPing,
     nodeDialog,
     groupDialog,
     dialogMode,

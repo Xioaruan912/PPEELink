@@ -25,11 +25,6 @@ type safeBackupSubscription struct {
 	Config   string `json:"config"`
 	Pipeline string `json:"pipeline"`
 }
-type safeBackupAirport struct {
-	Name        string `json:"name"`
-	AutoCleanup bool   `json:"autoCleanup"`
-	IsDedicated bool   `json:"isDedicated"`
-}
 type safeConfigBackup struct {
 	Version       int                      `json:"version"`
 	GeneratedAt   time.Time                `json:"generatedAt"`
@@ -37,11 +32,10 @@ type safeConfigBackup struct {
 	EgressTargets []models.EgressTarget    `json:"egressTargets"`
 	Alert         safeBackupAlert          `json:"alert"`
 	Subscriptions []safeBackupSubscription `json:"subscriptions"`
-	Airports      []safeBackupAirport      `json:"airports"`
 }
 
 func buildSafeConfigBackup() (safeConfigBackup, error) {
-	out := safeConfigBackup{Version: 1, GeneratedAt: time.Now(), Templates: map[string]string{}, EgressTargets: []models.EgressTarget{}, Subscriptions: []safeBackupSubscription{}, Airports: []safeBackupAirport{}}
+	out := safeConfigBackup{Version: 1, GeneratedAt: time.Now(), Templates: map[string]string{}, EgressTargets: []models.EgressTarget{}, Subscriptions: []safeBackupSubscription{}}
 	entries, err := os.ReadDir("template")
 	if err == nil {
 		for _, entry := range entries {
@@ -78,13 +72,6 @@ func buildSafeConfigBackup() (safeConfigBackup, error) {
 	for _, sub := range subs {
 		out.Subscriptions = append(out.Subscriptions, safeBackupSubscription{Name: sub.Name, Config: sub.Config, Pipeline: sub.Pipeline})
 	}
-	var airports []models.Airport
-	if err := models.DB.Select("name,auto_cleanup,is_dedicated").Find(&airports).Error; err != nil {
-		return out, err
-	}
-	for _, a := range airports {
-		out.Airports = append(out.Airports, safeBackupAirport{Name: a.Name, AutoCleanup: a.AutoCleanup, IsDedicated: a.IsDedicated})
-	}
 	return out, nil
 }
 
@@ -104,7 +91,7 @@ func ConfigBackupImport(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "备份格式或版本无效"})
 		return
 	}
-	templates, targets, subs, airports := 0, 0, 0, 0
+	templates, targets, subs := 0, 0, 0
 	for name, content := range backup.Templates {
 		name = strings.TrimSpace(name)
 		if name == "" || filepath.Base(name) != name {
@@ -150,20 +137,11 @@ func ConfigBackupImport(c *gin.Context) {
 			subs++
 		}
 	}
-	for _, item := range backup.Airports {
-		if strings.TrimSpace(item.Name) == "" {
-			continue
-		}
-		result := models.DB.Model(&models.Airport{}).Where("name = ?", item.Name).Updates(map[string]any{"auto_cleanup": item.AutoCleanup, "is_dedicated": item.IsDedicated})
-		if result.Error == nil && result.RowsAffected > 0 {
-			airports++
-		}
-	}
 	var alert models.AlertSetting
 	if models.DB.First(&alert).Error == nil {
 		_ = models.DB.Model(&alert).Updates(map[string]any{"enabled": backup.Alert.Enabled, "failure_threshold": backup.Alert.FailureThreshold, "maintenance_start": backup.Alert.MaintenanceStart, "maintenance_end": backup.Alert.MaintenanceEnd}).Error
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"templates": templates, "egressTargets": targets, "subscriptions": subs, "airports": airports}, "msg": "安全配置已合并恢复；敏感凭据和节点关系未被修改"})
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"templates": templates, "egressTargets": targets, "subscriptions": subs}, "msg": "安全配置已合并恢复；敏感凭据和节点关系未被修改"})
 }
 
 func ConfigBackupInspect(c *gin.Context) {
@@ -173,7 +151,7 @@ func ConfigBackupInspect(c *gin.Context) {
 		return
 	}
 	raw, _ := json.Marshal(backup)
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"version": backup.Version, "templates": len(backup.Templates), "egressTargets": len(backup.EgressTargets), "subscriptions": len(backup.Subscriptions), "airports": len(backup.Airports), "bytes": len(raw)}, "msg": "安全备份摘要"})
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"version": backup.Version, "templates": len(backup.Templates), "egressTargets": len(backup.EgressTargets), "subscriptions": len(backup.Subscriptions), "bytes": len(raw)}, "msg": "安全备份摘要"})
 }
 
 // ConfigBackupFull 完整备份：数据库一致性快照（VACUUM INTO）+ 模板目录，打包为 tar.gz 下载。
