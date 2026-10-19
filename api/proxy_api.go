@@ -26,6 +26,7 @@ type serverView struct {
 	TodayUp   int64                 `json:"todayUp"`
 	TodayDown int64                 `json:"todayDown"`
 	Users     int                   `json:"users"`
+	Quota     serverQuotaState      `json:"quota"`
 }
 
 // ProxyServerList 服务器、入站与今日流量。agent 超过 3 分钟没回报视为离线。
@@ -48,6 +49,7 @@ func ProxyServerList(c *gin.Context) {
 		var users int64
 		models.DB.Model(&models.ProxyTraffic{}).Where("day = ? AND server_id = ?", day, s.ID).Distinct("user_id").Count(&users)
 		v.Users = int(users)
+		v.Quota = serverQuota(s, time.Now())
 		views = append(views, v)
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": views, "msg": "自建服务器"})
@@ -59,6 +61,9 @@ type serverSaveRequest struct {
 	Kind       string `json:"kind"`
 	PublicHost string `json:"publicHost"`
 	Enabled    bool   `json:"enabled"`
+	// 月流量上限（GB，0 不限）与每月重置日（1-28）
+	TrafficLimitGB float64 `json:"trafficLimitGb"`
+	ResetDay       int     `json:"resetDay"`
 }
 
 func validHost(host string) bool {
@@ -93,9 +98,18 @@ func ProxyServerSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "请填写名称和客户端连接用的域名或 IP"})
 		return
 	}
+	if req.TrafficLimitGB < 0 || req.ResetDay < 0 || req.ResetDay > 28 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "月流量上限不能为负，重置日需在 1-28 之间"})
+		return
+	}
+	if req.ResetDay == 0 {
+		req.ResetDay = 1
+	}
+	limit := int64(req.TrafficLimitGB * (1 << 30))
 	if req.ID != 0 {
 		res := models.DB.Model(&models.ProxyServer{}).Where("id = ? AND removing = ?", req.ID, false).
-			Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled})
+			Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled,
+				"traffic_limit": limit, "reset_day": req.ResetDay})
 		if res.Error != nil || res.RowsAffected == 0 {
 			c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
 			return
@@ -120,7 +134,8 @@ func ProxyServerSave(c *gin.Context) {
 			return
 		}
 	}
-	server := models.ProxyServer{Name: req.Name, Kind: req.Kind, PublicHost: req.PublicHost, Enabled: true}
+	server := models.ProxyServer{Name: req.Name, Kind: req.Kind, PublicHost: req.PublicHost, Enabled: true,
+		TrafficLimit: limit, ResetDay: req.ResetDay}
 	token := ""
 	if req.Kind == models.ServerKindAgent {
 		token = models.RandomHex(24)

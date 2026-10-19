@@ -29,7 +29,9 @@ type NodeOverviewItem struct {
 	UDP            bool      `json:"udp,omitempty"`
 	TFO            bool      `json:"tfo,omitempty"`
 	SkipCertVerify bool      `json:"skipCertVerify,omitempty"`
-	rtt            int       // 本次连接耗时，-1 失败；仅用于记录与健康事件
+	// 暂不下发的原因（为空表示正常下发）
+	Blocked *deliveryBlock `json:"blocked,omitempty"`
+	rtt     int            // 本次连接耗时，-1 失败；仅用于记录与健康事件
 }
 
 // qualityCheckConcurrency 节点 TCP 质量检测的最大并发连接数。
@@ -59,7 +61,7 @@ func NodeOverview(c *gin.Context) {
 	if c.Query("refresh") != "1" && oCache.data != nil && time.Now().Before(oCache.expires) {
 		data := oCache.data
 		oCache.mu.Unlock()
-		c.JSON(200, gin.H{"code": "00000", "data": data, "msg": "节点概览（缓存）"})
+		c.JSON(200, gin.H{"code": "00000", "data": withBlocks(data), "msg": "节点概览（缓存）"})
 		return
 	}
 	oCache.mu.Unlock()
@@ -75,7 +77,21 @@ func NodeOverview(c *gin.Context) {
 	oCache.expires = time.Now().Add(5 * time.Minute)
 	oCache.mu.Unlock()
 
-	c.JSON(200, gin.H{"code": "00000", "data": items, "msg": "节点概览"})
+	c.JSON(200, gin.H{"code": "00000", "data": withBlocks(items), "msg": "节点概览"})
+}
+
+// withBlocks 复制概览并附上此刻的暂不下发原因（暂停、额度变化随时生效，不受缓存影响）。
+func withBlocks(items []NodeOverviewItem) []NodeOverviewItem {
+	blocks := undeliverableNodes(time.Now())
+	out := make([]NodeOverviewItem, len(items))
+	for i, item := range items {
+		if b, ok := blocks[item.ID]; ok {
+			b := b
+			item.Blocked = &b
+		}
+		out[i] = item
+	}
+	return out
 }
 
 // CollectNodeQuality checks every node, persists the result and returns the

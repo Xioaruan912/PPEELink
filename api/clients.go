@@ -111,15 +111,22 @@ func collectNodeInputs(nodes []models.Node) ([]string, map[string]node.NodeFlags
 	return append(relays, urls...), flags
 }
 
-// mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后）
+// mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后），
+// 并去掉暂不下发的节点（见 node_delivery.go）。
 // 分组引用按 ID 关联，分组节点变化后订阅拉取时自动跟进
 func mergeGroupNodes(sub *models.Subcription) error {
+	_, err := mergeGroupNodesDetailed(sub)
+	return err
+}
+
+// mergeGroupNodesDetailed 同 mergeGroupNodes，另外返回被暂不下发的节点及原因。
+func mergeGroupNodesDetailed(sub *models.Subcription) ([]excludedNode, error) {
 	if sub.ID == 0 {
-		return nil
+		return nil, nil
 	}
 	var withRefs models.Subcription
 	if err := models.DB.Preload("Nodes").Preload("GroupRefs.Nodes").First(&withRefs, sub.ID).Error; err != nil {
-		return err
+		return nil, err
 	}
 	// 收集当前手动节点（按名称去重）
 	seen := map[string]bool{}
@@ -150,15 +157,16 @@ func mergeGroupNodes(sub *models.Subcription) error {
 		}
 	}
 
+	merged, excluded := filterDeliverable(merged, undeliverableNodes(time.Now()))
 	sub.Nodes = merged
 	if sub.Pipeline != "" {
 		preview, err := ApplySubscriptionPipeline(sub.Nodes, sub.Pipeline)
 		if err != nil {
-			return err
+			return excluded, err
 		}
 		sub.Nodes = preview.Nodes
 	}
-	return nil
+	return excluded, nil
 }
 
 // subName 从请求上下文取订阅名（由 GetClient 匹配后设置，避免全局变量并发串号）

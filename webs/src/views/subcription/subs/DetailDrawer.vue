@@ -22,6 +22,7 @@ const {
   drawerGroupRefs,
   drawerNodesByCountry,
   previewNodesList,
+  previewExcluded,
   detailSection,
   previewError,
   openDrawer,
@@ -97,6 +98,23 @@ const sections = [
         <h3>
           包含节点 <span class="mono">{{ previewNodesList.length }}</span>
         </h3>
+        <div v-if="previewExcluded.length" class="excluded-box">
+          <strong
+            >暂不下发
+            <span class="mono">{{ previewExcluded.length }}</span></strong
+          >
+          <ul>
+            <li v-for="item in previewExcluded" :key="item.id">
+              <span>{{ item.name }}</span
+              ><small
+                >{{ item.reason
+                }}{{
+                  item.until ? `，${item.until.slice(5, 10)} 恢复` : ""
+                }}</small
+              >
+            </li>
+          </ul>
+        </div>
         <div v-if="drawerGroupRefs.length" class="group-tags">
           <span v-for="group in drawerGroupRefs" :key="group.ID"
             >{{ group.Name }} · {{ group.NodeCount }} 节点</span
@@ -216,6 +234,31 @@ const sections = [
 .upstream-head small {
   color: var(--c-muted);
   font-size: 12px;
+}
+.excluded-box {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--c-warn) 10%, transparent);
+  font-size: 13px;
+}
+.excluded-box ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.excluded-box li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.excluded-box small {
+  color: var(--c-warn-ink);
+  text-align: right;
 }
 .upstream-error {
   margin: 0;
