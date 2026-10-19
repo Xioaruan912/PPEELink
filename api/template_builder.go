@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -57,20 +58,19 @@ type BuilderRequest struct {
 	ExternalController string `json:"external_controller"`
 
 	// 高级配置
-	UnifiedDelay            bool   `json:"unified_delay"`
-	GeodataMode             bool   `json:"geodata_mode"`
-	GeodataLoader           string `json:"geodata_loader"`
-	GeoAutoUpdate           bool   `json:"geo_auto_update"`
-	GeoUpdateInterval       int    `json:"geo_update_interval"`
-	TcpConcurrent           bool   `json:"tcp_concurrent"`
-	FindProcessMode         string `json:"find_process_mode"`
-	GlobalClientFingerprint string `json:"global_client_fingerprint"`
-	SnifferEnable           bool   `json:"sniffer_enable"`
-	TunEnable               bool   `json:"tun_enable"`
-	TunStack                string `json:"tun_stack"`
-	DNSEnable               bool   `json:"dns_enable"`
-	DNSEnhancedMode         string `json:"dns_enhanced_mode"`
-	DNSListenPort           int    `json:"dns_listen_port"`
+	UnifiedDelay      bool   `json:"unified_delay"`
+	GeodataMode       bool   `json:"geodata_mode"`
+	GeodataLoader     string `json:"geodata_loader"`
+	GeoAutoUpdate     bool   `json:"geo_auto_update"`
+	GeoUpdateInterval int    `json:"geo_update_interval"`
+	TcpConcurrent     bool   `json:"tcp_concurrent"`
+	FindProcessMode   string `json:"find_process_mode"`
+	SnifferEnable     bool   `json:"sniffer_enable"`
+	TunEnable         bool   `json:"tun_enable"`
+	TunStack          string `json:"tun_stack"`
+	DNSEnable         bool   `json:"dns_enable"`
+	DNSEnhancedMode   string `json:"dns_enhanced_mode"`
+	DNSListenPort     int    `json:"dns_listen_port"`
 
 	// 分组
 	Groups   []BuilderGroup `json:"groups"`
@@ -281,7 +281,6 @@ func bindFormBuilder(req *BuilderRequest, c *gin.Context) {
 	req.GeoUpdateInterval, _ = strconv.Atoi(c.PostForm("geo_update_interval"))
 	req.TcpConcurrent = c.PostForm("tcp_concurrent") == "true"
 	req.FindProcessMode = c.PostForm("find_process_mode")
-	req.GlobalClientFingerprint = c.PostForm("global_client_fingerprint")
 	req.SnifferEnable = c.PostForm("sniffer_enable") == "true"
 	req.TunEnable = c.PostForm("tun_enable") == "true"
 	req.TunStack = c.PostForm("tun_stack")
@@ -348,9 +347,6 @@ func applyBuilderDefaults(req *BuilderRequest) {
 	if req.FindProcessMode == "" {
 		req.FindProcessMode = "strict"
 	}
-	if req.GlobalClientFingerprint == "" {
-		req.GlobalClientFingerprint = "chrome"
-	}
 	if req.DNSListenPort == 0 {
 		req.DNSListenPort = 1053
 	}
@@ -388,45 +384,198 @@ func applyBuilderDefaults(req *BuilderRequest) {
 	}
 }
 
+// defaultBuilderRequest 构建器的默认表单（内置 mihomo 默认模板）。
+func defaultBuilderRequest() BuilderRequest {
+	return BuilderRequest{
+		Filename:           "mihomo_default.yaml",
+		Source:             "default",
+		Port:               7890,
+		SocksPort:          7891,
+		MixedPort:          7892,
+		RedirPort:          7893,
+		TproxyPort:         7894,
+		PortOffset:         true,
+		AllowLan:           true,
+		Mode:               "rule",
+		LogLevel:           "info",
+		IPv6:               true,
+		UDP:                true,
+		ExternalController: "127.0.0.1:9090",
+		UnifiedDelay:       true,
+		GeodataMode:        false,
+		GeodataLoader:      "standard",
+		GeoAutoUpdate:      true,
+		GeoUpdateInterval:  24,
+		TcpConcurrent:      true,
+		FindProcessMode:    "strict",
+		SnifferEnable:      true,
+		TunEnable:          true,
+		TunStack:           "system",
+		DNSEnable:          true,
+		DNSEnhancedMode:    "fake-ip",
+		DNSListenPort:      1053,
+		TestURL:            defaultTestURL,
+		Interval:           300,
+		Groups:             defaultGroups(),
+		RuleProviders:      defaultRuleProviders(),
+		Rules:              defaultRules(),
+	}
+}
+
 // TemplateGetDefault 返回默认的 mihomo 配置（供前端预填表单）。
 // GET /api/v1/template/default
 func TemplateGetDefault(c *gin.Context) {
-	req := BuilderRequest{
-		Filename:                "mihomo_default.yaml",
-		Source:                  "default",
-		Port:                    7890,
-		SocksPort:               7891,
-		MixedPort:               7892,
-		RedirPort:               7893,
-		TproxyPort:              7894,
-		PortOffset:              true,
-		AllowLan:                true,
-		Mode:                    "rule",
-		LogLevel:                "info",
-		IPv6:                    true,
-		UDP:                     true,
-		ExternalController:      "127.0.0.1:9090",
-		UnifiedDelay:            true,
-		GeodataMode:             false,
-		GeodataLoader:           "standard",
-		GeoAutoUpdate:           true,
-		GeoUpdateInterval:       24,
-		TcpConcurrent:           true,
-		FindProcessMode:         "strict",
-		GlobalClientFingerprint: "chrome",
-		SnifferEnable:           true,
-		TunEnable:               true,
-		TunStack:                "system",
-		DNSEnable:               true,
-		DNSEnhancedMode:         "fake-ip",
-		DNSListenPort:           1053,
-		TestURL:                 defaultTestURL,
-		Interval:                300,
-		Groups:                  defaultGroups(),
-		RuleProviders:           defaultRuleProviders(),
-		Rules:                   defaultRules(),
+	c.JSON(200, gin.H{"code": "00000", "data": defaultBuilderRequest(), "msg": "默认配置"})
+}
+
+// parseBuilderYAML 把已有的 mihomo 模板解析回构建器表单。表单没有的设置用默认值，
+// 保存时按表单重新生成，所以只适合编辑由构建器生成或结构相近的模板。
+func parseBuilderYAML(filename, text string) (BuilderRequest, error) {
+	var cfg map[string]any
+	if err := yaml.Unmarshal([]byte(strings.ReplaceAll(text, "{{ nodes }}", "[]")), &cfg); err != nil {
+		return BuilderRequest{}, err
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": req, "msg": "默认配置"})
+	req := defaultBuilderRequest()
+	req.Filename, req.EditOldname, req.Source = filename, filename, "custom"
+	str := func(m map[string]any, k string, dst *string) {
+		if v, ok := m[k].(string); ok {
+			*dst = v
+		}
+	}
+	num := func(m map[string]any, k string, dst *int) {
+		if v, ok := m[k].(int); ok {
+			*dst = v
+		}
+	}
+	flag := func(m map[string]any, k string, dst *bool) {
+		if v, ok := m[k].(bool); ok {
+			*dst = v
+		}
+	}
+	num(cfg, "port", &req.Port)
+	num(cfg, "socks-port", &req.SocksPort)
+	num(cfg, "mixed-port", &req.MixedPort)
+	num(cfg, "redir-port", &req.RedirPort)
+	num(cfg, "tproxy-port", &req.TproxyPort)
+	req.PortOffset = false // 保留文件里的端口原样
+	flag(cfg, "allow-lan", &req.AllowLan)
+	str(cfg, "mode", &req.Mode)
+	str(cfg, "log-level", &req.LogLevel)
+	flag(cfg, "ipv6", &req.IPv6)
+	flag(cfg, "udp", &req.UDP)
+	str(cfg, "external-controller", &req.ExternalController)
+	flag(cfg, "unified-delay", &req.UnifiedDelay)
+	flag(cfg, "geodata-mode", &req.GeodataMode)
+	str(cfg, "geodata-loader", &req.GeodataLoader)
+	flag(cfg, "geo-auto-update", &req.GeoAutoUpdate)
+	num(cfg, "geo-update-interval", &req.GeoUpdateInterval)
+	flag(cfg, "tcp-concurrent", &req.TcpConcurrent)
+	str(cfg, "find-process-mode", &req.FindProcessMode)
+	if _, ok := cfg["listeners"]; ok {
+		req.Source = "default" // 生成时保留内置的 socks5 入口
+	}
+	if sn, ok := cfg["sniffer"].(map[string]any); ok {
+		req.SnifferEnable = true
+		flag(sn, "enable", &req.SnifferEnable)
+	} else {
+		req.SnifferEnable = false
+	}
+	if tun, ok := cfg["tun"].(map[string]any); ok {
+		req.TunEnable = true
+		flag(tun, "enable", &req.TunEnable)
+		str(tun, "stack", &req.TunStack)
+	} else {
+		req.TunEnable = false
+	}
+	if dns, ok := cfg["dns"].(map[string]any); ok {
+		req.DNSEnable = true
+		flag(dns, "enable", &req.DNSEnable)
+		str(dns, "enhanced-mode", &req.DNSEnhancedMode)
+		if listen, ok := dns["listen"].(string); ok {
+			if i := strings.LastIndex(listen, ":"); i >= 0 {
+				if port, err := strconv.Atoi(listen[i+1:]); err == nil {
+					req.DNSListenPort = port
+				}
+			}
+		}
+	} else {
+		req.DNSEnable = false
+	}
+	if groups, ok := cfg["proxy-groups"].([]any); ok {
+		req.Groups = req.Groups[:0]
+		for _, item := range groups {
+			g, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			bg := BuilderGroup{}
+			str(g, "name", &bg.Name)
+			str(g, "type", &bg.Type)
+			str(g, "filter", &bg.Filter)
+			flag(g, "include-all-providers", &bg.IncludeAllProviders)
+			if all, ok := g["include-all"].(bool); ok && all {
+				bg.IncludeAllProviders = true
+			}
+			if list, ok := g["proxies"].([]any); ok {
+				for _, p := range list {
+					if name, ok := p.(string); ok {
+						bg.Proxies = append(bg.Proxies, name)
+					}
+				}
+			}
+			if bg.Type == "url-test" || bg.Type == "fallback" {
+				str(g, "url", &req.TestURL)
+				num(g, "interval", &req.Interval)
+			}
+			if bg.Name != "" {
+				req.Groups = append(req.Groups, bg)
+			}
+		}
+	}
+	if providers, ok := cfg["rule-providers"].(map[string]any); ok {
+		names := make([]string, 0, len(providers))
+		for name := range providers {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		req.RuleProviders = req.RuleProviders[:0]
+		for _, name := range names {
+			m, ok := providers[name].(map[string]any)
+			if !ok {
+				continue
+			}
+			rp := RuleProvider{Name: name}
+			str(m, "type", &rp.Type)
+			str(m, "behavior", &rp.Behavior)
+			str(m, "format", &rp.Format)
+			str(m, "url", &rp.URL)
+			str(m, "path", &rp.Path)
+			str(m, "proxy", &rp.Proxy)
+			num(m, "interval", &rp.Interval)
+			req.RuleProviders = append(req.RuleProviders, rp)
+		}
+	}
+	if rules, ok := cfg["rules"].([]any); ok {
+		req.Rules = req.Rules[:0]
+		for _, r := range rules {
+			// 只保留像规则的条目（类型,内容,策略），避免把配置行误当成规则
+			if text, ok := r.(string); ok && strings.Contains(text, ",") {
+				req.Rules = append(req.Rules, text)
+			}
+		}
+	}
+	return req, nil
+}
+
+// TemplateParseForBuilder 把已保存的 mihomo 模板解析成构建器表单。
+// POST /api/v1/template/parse  form: filename, text
+func TemplateParseForBuilder(c *gin.Context) {
+	req, err := parseBuilderYAML(c.PostForm("filename"), c.PostForm("text"))
+	if err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "模板不是有效的 YAML: " + err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": req, "msg": "已载入"})
 }
 
 // buildClashYAML 根据表单输入生成完整 mihomo/clash YAML
@@ -460,7 +609,6 @@ func buildClashYAML(req BuilderRequest) (string, error) {
 	cfg["geo-update-interval"] = req.GeoUpdateInterval
 	cfg["tcp-concurrent"] = req.TcpConcurrent
 	cfg["find-process-mode"] = req.FindProcessMode
-	cfg["global-client-fingerprint"] = req.GlobalClientFingerprint
 
 	// geox-url
 	cfg["geox-url"] = map[string]string{

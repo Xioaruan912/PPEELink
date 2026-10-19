@@ -15,6 +15,7 @@ func Templates(r *gin.Engine) {
 		TempsGroup.POST("/update", api.UpdateTemp)
 		TempsGroup.POST("/build", api.TemplateBuild)
 		TempsGroup.GET("/default", api.TemplateGetDefault)
+		TempsGroup.POST("/parse", api.TemplateParseForBuilder)
 		TempsGroup.POST("/validate", api.ValidateTemp)
 	}
 

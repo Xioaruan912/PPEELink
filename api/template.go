@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -79,9 +80,40 @@ func validateTemplateText(filename, text string) ([]templateOutlineItem, []strin
 		var value interface{}
 		if err := yaml.Unmarshal([]byte(normalized), &value); err != nil {
 			errorsList = append(errorsList, err.Error())
+		} else {
+			errorsList = append(errorsList, mihomoTemplateProblems(value)...)
 		}
 	}
 	return outline, errorsList
+}
+
+// mihomoTemplateProblems 语法正确之外，检查 mihomo 会拒绝或误解的内容。
+func mihomoTemplateProblems(value interface{}) []string {
+	cfg, ok := value.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+	problems := []string{}
+	if _, ok := cfg["global-client-fingerprint"]; ok {
+		problems = append(problems, "global-client-fingerprint 已被新版 mihomo 移除，带着它的配置会导入失败。"+
+			"面板下发时会自动删掉并改为给每个节点设置 client-fingerprint，建议从模板里删除这一行")
+	}
+	if rules, ok := cfg["rules"].([]interface{}); ok {
+		bad := 0
+		for i, r := range rules {
+			text, isText := r.(string)
+			if !isText || !strings.Contains(text, ",") {
+				if bad < 5 {
+					problems = append(problems, fmt.Sprintf("rules 第 %d 条不是有效规则（应为“类型,内容,策略”）：%v", i+1, r))
+				}
+				bad++
+			}
+		}
+		if bad > 5 {
+			problems = append(problems, fmt.Sprintf("rules 里还有 %d 条无效规则", bad-5))
+		}
+	}
+	return problems
 }
 
 func ValidateTemp(c *gin.Context) {

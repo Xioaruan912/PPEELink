@@ -10,7 +10,11 @@ import {
 } from "vue";
 import { createClashPreview } from "./preview";
 import { useRouter } from "vue-router";
-import { BuildClashTemplate, GetDefaultTemplate } from "@/api/template/build";
+import {
+  BuildClashTemplate,
+  GetDefaultTemplate,
+  ParseTemplateForBuilder,
+} from "@/api/template/build";
 import { getTemp } from "@/api/template/temp";
 import {
   RULE_CATEGORIES,
@@ -279,7 +283,6 @@ function createTemplateBuilder() {
     udp: true,
     mode: "rule",
     log_level: "info",
-    global_client_fingerprint: "chrome",
     unified_delay: true,
     geodata_mode: false,
     geo_auto_update: true,
@@ -372,7 +375,25 @@ function createTemplateBuilder() {
           loonForm.value.rules = "";
         } else {
           target.value = "clash";
-          rulesText.value = item.text || "";
+          // 解析成表单，而不是把整份 YAML 塞进规则框（否则保存时每行都会变成一条“规则”）
+          const request = ++sourceRequest;
+          sourceLoading.value = true;
+          try {
+            const { data } = await ParseTemplateForBuilder(
+              fname,
+              item.text || ""
+            );
+            if (!alive || request !== sourceRequest || !data) return;
+            Object.assign(form, data, { filename: fname });
+            form.groups = (data.groups || []).map(normalizeGroup);
+            rulesText.value = (data.rules || []).join("\n");
+          } catch {
+            if (alive && request === sourceRequest)
+              sourceError.value =
+                "无法解析这个模板，可在模板列表里直接编辑文本";
+          } finally {
+            if (alive && request === sourceRequest) sourceLoading.value = false;
+          }
         }
       }
     }

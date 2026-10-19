@@ -1,6 +1,9 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidateTemplateTextAndOutline(t *testing.T) {
 	outline, errs := validateTemplateText("clash.yaml", "port: 7890\nproxy-groups:\n  - name: Auto\nproxies: {{ nodes }}\n")
@@ -16,5 +19,12 @@ func TestValidateTemplateTextReportsYAMLError(t *testing.T) {
 	_, errs := validateTemplateText("bad.yaml", "proxies: [\n")
 	if len(errs) == 0 {
 		t.Fatal("expected yaml syntax error")
+	}
+}
+
+func TestValidateTemplateFlagsMihomoProblems(t *testing.T) {
+	_, errs := validateTemplateText("a.yaml", "global-client-fingerprint: chrome\nrules:\n  - 'allow-lan: true'\n  - MATCH,DIRECT\n")
+	if len(errs) != 2 || !strings.Contains(errs[0], "global-client-fingerprint") || !strings.Contains(errs[1], "第 1 条") {
+		t.Fatalf("unexpected problems: %v", errs)
 	}
 }

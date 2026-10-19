@@ -118,13 +118,6 @@ const { form, rulesText, addRP, removeRP, router } = useTemplateBuilder();
                 label="error"
                 value="error" /></el-select></el-form-item
         ></el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="客户端指纹"
-            ><el-input
-              v-model="form.global_client_fingerprint"
-              placeholder="chrome"
-              class="full" /></el-form-item
-        ></el-col>
       </el-row>
     </section>
 
