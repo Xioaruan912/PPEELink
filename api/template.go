@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"ppeelink/models"
+	"ppeelink/node"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -102,7 +103,7 @@ func mihomoTemplateProblems(value interface{}) []string {
 		bad := 0
 		for i, r := range rules {
 			text, isText := r.(string)
-			if !isText || !strings.Contains(text, ",") {
+			if !isText || node.NormalizeRule(text) != strings.TrimSpace(text) {
 				if bad < 5 {
 					problems = append(problems, fmt.Sprintf("rules 第 %d 条不是有效规则（应为“类型,内容,策略”）：%v", i+1, r))
 				}

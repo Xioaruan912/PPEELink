@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"os"
+	"ppeelink/node"
 	"sort"
 	"strconv"
 	"strings"
@@ -558,9 +559,11 @@ func parseBuilderYAML(filename, text string) (BuilderRequest, error) {
 	if rules, ok := cfg["rules"].([]any); ok {
 		req.Rules = req.Rules[:0]
 		for _, r := range rules {
-			// 只保留像规则的条目（类型,内容,策略），避免把配置行误当成规则
-			if text, ok := r.(string); ok && strings.Contains(text, ",") {
-				req.Rules = append(req.Rules, text)
+			// 只保留像规则的条目（类型,内容,策略），配置行丢掉；被误存成 "- RULE-SET,..." 的规则会被还原
+			if text, ok := r.(string); ok {
+				if rule := node.NormalizeRule(text); rule != "" {
+					req.Rules = append(req.Rules, rule)
+				}
 			}
 		}
 	}
@@ -749,10 +752,16 @@ func buildClashYAML(req BuilderRequest) (string, error) {
 	}
 
 	// rules
-	if len(req.Rules) == 0 {
-		req.Rules = defaultRules()
+	rules := make([]string, 0, len(req.Rules))
+	for _, r := range req.Rules {
+		if rule := node.NormalizeRule(r); rule != "" {
+			rules = append(rules, rule)
+		}
 	}
-	cfg["rules"] = req.Rules
+	if len(rules) == 0 {
+		rules = defaultRules()
+	}
+	cfg["rules"] = rules
 
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
