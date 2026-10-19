@@ -13,3 +13,16 @@
   font-weight: 100 800;
   font-display: swap;
 }
+/*
+ * Windows 自带的 emoji 字体没有国旗，国旗 emoji 会显示成两个字母。
+ * 这里只为国旗码位（区域指示符与英格兰等子区旗）加载 Twemoji 国旗字体，
+ * 其它字符仍走原字体。来源：country-flag-emoji-polyfill 0.1.10（代码 MIT，图案 Twemoji CC-BY 4.0）。
+ */
+@font-face {
+  font-family: "Twemoji Country Flags";
+  src: url("../assets/fonts/twemoji-country-flags.woff2") format("woff2");
+  unicode-range:
+    U+1F1E6-1F1FF, U+1F3F4, U+E0062-E0063, U+E0065, U+E0067, U+E006C, U+E006E,
+    U+E0073-E0074, U+E0077, U+E007F;
+  font-display: swap;
+}
