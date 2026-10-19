@@ -54,6 +54,10 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		Version: xraycore.DefaultVersion, Enabled: server.Enabled, APIPort: xrayAPIPort,
 		BlockPrivate: true, BlockBitTorrent: true,
 	}
+	// 本月流量超出上限：停止 xray，到重置日后下一轮拉取时自动恢复
+	if server.TrafficLimit > 0 && serverQuota(server, time.Now()).Over {
+		spec.Enabled = false
+	}
 	var inbounds []models.ProxyInbound
 	if err := models.DB.Where("server_id = ? AND enabled = ?", server.ID, true).Order("id asc").Find(&inbounds).Error; err != nil {
 		return spec, err
@@ -281,7 +285,11 @@ func AccountNodes(acc models.ProxyAccount) []models.Node {
 	var servers []models.ProxyServer
 	models.DB.Where("enabled = ? AND public_host <> ''", true).Order("id asc").Find(&servers)
 	nodes := []models.Node{}
+	now := time.Now()
 	for _, s := range servers {
+		if s.TrafficLimit > 0 && serverQuota(s, now).Over {
+			continue // 本月流量用完，到重置日前不下发
+		}
 		nodes = append(nodes, serverNodes(s, acc)...)
 	}
 	return nodes
@@ -354,4 +362,34 @@ func SyncSelfHostedNodes() error {
 		}
 		return nil
 	})
+}
+
+// serverQuotaState 自建服务器本计费周期的流量使用情况。
+type serverQuotaState struct {
+	Used    int64     `json:"used"`
+	Limit   int64     `json:"limit"`
+	Over    bool      `json:"over"`
+	ResetAt time.Time `json:"resetAt"` // 下一次重置（恢复）时间
+}
+
+// quotaPeriod 返回 now 所在计费周期的起点和下一次重置时间。resetDay 取 1-28，其它值按 1 号。
+func quotaPeriod(now time.Time, resetDay int) (time.Time, time.Time) {
+	if resetDay < 1 || resetDay > 28 {
+		resetDay = 1
+	}
+	start := time.Date(now.Year(), now.Month(), resetDay, 0, 0, 0, 0, now.Location())
+	if now.Before(start) {
+		start = start.AddDate(0, -1, 0)
+	}
+	return start, start.AddDate(0, 1, 0)
+}
+
+// serverQuota 统计服务器本周期已用流量（按每日记录累加）。
+func serverQuota(s models.ProxyServer, now time.Time) serverQuotaState {
+	start, next := quotaPeriod(now, s.ResetDay)
+	var used int64
+	models.DB.Model(&models.ProxyTraffic{}).Select("COALESCE(SUM(up + down), 0)").
+		Where("server_id = ? AND day >= ?", s.ID, start.Format("2006-01-02")).Scan(&used)
+	return serverQuotaState{Used: used, Limit: s.TrafficLimit, ResetAt: next,
+		Over: s.TrafficLimit > 0 && used >= s.TrafficLimit}
 }

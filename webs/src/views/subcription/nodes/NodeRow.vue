@@ -12,6 +12,19 @@ import {
   type OverviewItem,
 } from "./useNodes";
 defineProps<{ node: OverviewItem }>();
+// 暂不下发标签：原因的简称 + 预计恢复日期
+const blockLabel = (node: OverviewItem) => {
+  const b = node.blocked!;
+  const short =
+    b.kind === "paused"
+      ? "已暂停"
+      : b.kind === "server-quota"
+        ? "服务器流量用完"
+        : b.kind === "upstream"
+          ? b.reason.replace("上游订阅", "上游")
+          : "连续检测无效";
+  return b.until ? `${short}，${b.until.slice(5, 10)} 恢复` : short;
+};
 const {
   selectedIds,
   toggleSelect,
@@ -46,6 +59,12 @@ const {
           node.server || "主机未知"
         }}</span>
         <span class="membership" :title="(node.groups || []).join(' / ')"
+          ><span
+            v-if="node.blocked"
+            class="block-badge"
+            :class="`block-${node.blocked.kind}`"
+            :title="node.blocked.reason"
+            >暂不下发 · {{ blockLabel(node) }}</span
           ><span v-if="node.relayId" class="relay-badge"
             >经 {{ nodeName(node.relayId) || "已删除节点" }} 中转</span
           >{{ node.country || "国家未知" }} ·
@@ -114,6 +133,15 @@ const {
               >设置中转</el-dropdown-item
             >
             <el-dropdown-item command="temp">临时订阅</el-dropdown-item>
+            <el-dropdown-item
+              v-if="node.blocked?.kind === 'paused'"
+              command="resume"
+              divided
+              >恢复下发</el-dropdown-item
+            >
+            <el-dropdown-item v-else command="pause" divided
+              >暂停下发…</el-dropdown-item
+            >
             <el-dropdown-item command="group" divided
               >加入分组</el-dropdown-item
             >
@@ -179,6 +207,19 @@ const {
   color: var(--c-muted);
   font-size: 12px;
   line-height: 1.5;
+}
+.block-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--c-warn) 16%, transparent);
+  color: var(--c-warn-ink);
+  font-size: 12px;
+}
+.block-badge.block-health {
+  background: color-mix(in srgb, var(--c-bad) 12%, transparent);
+  color: var(--c-bad);
 }
 .relay-badge {
   margin-right: 6px;

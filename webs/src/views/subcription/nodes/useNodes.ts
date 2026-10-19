@@ -11,6 +11,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import {
   getNodes,
   getNodeOverview,
+  pauseNodes,
   AddNodes,
   DelNode,
   UpdateNode,
@@ -33,6 +34,8 @@ export interface OverviewItem {
   countryCode: string;
   /** 面板服务器能连上节点端口即有效 */
   valid: boolean;
+  /** 暂不下发的原因；为空表示正常下发 */
+  blocked?: { kind: string; reason: string; until?: string };
   checkedAt: string;
   groups: string[];
   relayId?: number;
@@ -490,6 +493,15 @@ function createNodes() {
       openTool(command, [row]);
       return;
     }
+    if (command === "pause") {
+      pauseTargets.value = [row];
+      pauseDialog.value = true;
+      return;
+    }
+    if (command === "resume") {
+      void resumeNodes([row.id]);
+      return;
+    }
     if (command === "unlock" || command === "tcp") {
       testNode.value = row;
       if (command === "unlock") unlockVisible.value = true;
@@ -498,6 +510,22 @@ function createNodes() {
     else if (command === "delete") void deleteNode(row);
     else if (command === "group") openGroupManager(row);
     else if (command === "unbind") void unbindNode(row);
+  }
+  // 暂停下发：节点流量用完等情况，暂停到恢复日，期间不出现在任何订阅里
+  const pauseDialog = ref(false);
+  const pauseTargets = ref<OverviewItem[]>([]);
+  function openPause(rows: OverviewItem[]) {
+    if (!rows.length) {
+      ElMessage.warning("请选择节点");
+      return;
+    }
+    pauseTargets.value = rows;
+    pauseDialog.value = true;
+  }
+  async function resumeNodes(ids: number[]) {
+    const res: any = await pauseNodes(ids, "");
+    ElMessage.success(res?.msg || "已恢复下发");
+    await loadAll();
   }
   const fullNode = (id: number) => fullNodes.value.find((n) => n.ID === id);
   const protocol = (row: OverviewItem) =>
@@ -534,6 +562,10 @@ function createNodes() {
     clearFilters,
     checking,
     checkValidity,
+    pauseDialog,
+    pauseTargets,
+    openPause,
+    resumeNodes,
     loadAll,
     nodeDialog,
     groupDialog,

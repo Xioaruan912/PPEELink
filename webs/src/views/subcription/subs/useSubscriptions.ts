@@ -704,6 +704,10 @@ export function createSubscriptions() {
   const fmtTime = formatDateTime;
 
   const previewNodesList = ref<Node[]>([]);
+  /** 订阅里暂不下发的节点（暂停、流量用完、连续检测无效等） */
+  const previewExcluded = ref<
+    { id: number; name: string; reason: string; until?: string }[]
+  >([]);
 
   // ---- 抽屉 ----
   const openDrawer = async (sub: Sub) => {
@@ -728,6 +732,7 @@ export function createSubscriptions() {
       if (!alive || version !== probeVersion || !drawerVisible.value) return;
       if (overview.value.length === 0) overview.value = ovRes.data || [];
       previewNodesList.value = previewRes.data || [];
+      previewExcluded.value = (previewRes as any).excluded || [];
 
       drawerLoading.value = false;
     } catch {
@@ -936,6 +941,7 @@ export function createSubscriptions() {
     handleReset: withFeedback(handleReset),
     fmtTime,
     previewNodesList,
+    previewExcluded,
     openDrawer,
     drawerNodesByCountry,
     drawerGroupRefs,

@@ -240,3 +240,13 @@ export function nodeTempLink(nodeId: number, hours: number) {
     data: { nodeId, hours },
   });
 }
+
+/** 暂停下发到 until（YYYY-MM-DD，当天恢复）；until 为空表示立即恢复下发。 */
+export function pauseNodes(ids: number[], until: string, note = "") {
+  return request({
+    url: "/api/v1/nodes/pause",
+    method: "post",
+    data: { ids, until, note },
+    headers: { "Content-Type": "application/json" },
+  });
+}

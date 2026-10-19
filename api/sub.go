@@ -113,14 +113,16 @@ func SubPreviewNodes(c *gin.Context) {
 		c.JSON(404, gin.H{"code": "40400", "msg": "订阅不存在"})
 		return
 	}
-	if err := mergeGroupNodes(&sub); err != nil {
+	excluded, err := mergeGroupNodesDetailed(&sub)
+	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "合并节点失败", "error": err.Error()})
 		return
 	}
 	c.JSON(200, gin.H{
-		"code": "00000",
-		"data": sub.Nodes,
-		"msg":  "节点预览",
+		"code":     "00000",
+		"data":     sub.Nodes,
+		"excluded": excluded,
+		"msg":      "节点预览",
 	})
 }
 

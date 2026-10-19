@@ -10,6 +10,7 @@ import { provideNodes } from "./nodes/useNodes";
 import NodeRow from "./nodes/NodeRow.vue";
 import NodeDrawers from "./nodes/NodeDrawers.vue";
 import NodeTools from "./nodes/NodeTools.vue";
+import PauseDialog from "./nodes/PauseDialog.vue";
 defineOptions({ name: "NodesPage" });
 const {
   loading,
@@ -36,6 +37,8 @@ const {
   hideActiveGroup,
   copySelected,
   bulk,
+  openPause,
+  selectedNodes,
   unlockVisible,
   tcpVisible,
   testNode,
@@ -241,6 +244,8 @@ function leaveBar(element: Element, done: () => void) {
             :disabled="busy"
             @click="bulk('unbind')"
             >移出分组</UiButton
+          ><UiButton :disabled="busy" @click="openPause(selectedNodes)"
+            >暂停下发</UiButton
           ><UiButton :disabled="busy" @click="bulk('hide')">隐藏选中</UiButton
           ><UiButton variant="danger" :disabled="busy" @click="bulk('delete')"
             >删除选中</UiButton
@@ -249,6 +254,7 @@ function leaveBar(element: Element, done: () => void) {
       </div></Transition
     >
     <NodeDrawers />
+    <PauseDialog />
     <NodeTools />
     <NodeUnlockDialog
       v-if="testNode"

@@ -28,6 +28,10 @@ export interface ProxyServer {
   lastSeenAt: string | null;
   appliedRev: string;
   removing: boolean;
+  trafficLimit: number;
+  resetDay: number;
+  /** 本计费周期流量；over 为 true 时 xray 已停止、节点暂不下发，resetAt 恢复 */
+  quota: { used: number; limit: number; over: boolean; resetAt: string };
   inbounds: ProxyInbound[];
   online: boolean;
   todayUp: number;
@@ -84,6 +88,8 @@ export const saveProxyServer = (data: {
   kind?: "local" | "agent";
   publicHost: string;
   enabled: boolean;
+  trafficLimitGb?: number;
+  resetDay?: number;
 }) =>
   request<{ id: number; token?: string; install?: string }>({
     url: "/api/v1/proxy/servers/save",

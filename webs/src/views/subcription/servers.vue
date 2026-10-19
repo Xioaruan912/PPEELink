@@ -118,6 +118,11 @@ const openAccounts = computed(
 
 function status(s: ProxyServer) {
   if (s.removing) return { tone: "warn" as const, text: "正在卸载" };
+  if (s.quota?.over)
+    return {
+      tone: "warn" as const,
+      text: `本月流量用完 · ${s.quota.resetAt.slice(5, 10)} 恢复`,
+    };
   if (!s.enabled) return { tone: "neutral" as const, text: "已停用" };
   if (s.kind === "agent" && !s.online)
     return {
@@ -142,7 +147,10 @@ const serverForm = reactive({
   kind: "agent" as "local" | "agent",
   publicHost: "",
   enabled: true,
+  trafficLimitGb: 0,
+  resetDay: 1,
 });
+const GB = 1024 ** 3;
 const savingServer = ref(false);
 const install = ref<{ name: string; command: string } | null>(null);
 // 从引导卡片选过类型、或面板服务器已添加过时，对话框不再重复询问类型
@@ -168,6 +176,8 @@ function openServer(s?: ProxyServer, kind?: "local" | "agent") {
           kind: s.kind,
           publicHost: s.publicHost,
           enabled: s.enabled,
+          trafficLimitGb: Math.round((s.trafficLimit / GB) * 100) / 100,
+          resetDay: s.resetDay || 1,
         }
       : {
           id: 0,
@@ -179,6 +189,8 @@ function openServer(s?: ProxyServer, kind?: "local" | "agent") {
               ? window.location.hostname
               : "",
           enabled: true,
+          trafficLimitGb: 0,
+          resetDay: 1,
         }
   );
   serverDialog.value = true;
@@ -212,6 +224,8 @@ async function toggleServer(s: ProxyServer) {
     name: s.name,
     publicHost: s.publicHost,
     enabled: !s.enabled,
+    trafficLimitGb: s.trafficLimit / GB,
+    resetDay: s.resetDay || 1,
   });
   ElMessage.success(s.enabled ? "已停用，xray 将在一分钟内停止" : "已启用");
   await load(true);
@@ -396,6 +410,20 @@ const usageRatio = (a: ProxyAccount) =>
             </div>
             <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
           </header>
+          <div v-if="s.quota?.limit" class="quota-line">
+            <span
+              >本月 {{ formatBytes(s.quota.used) }} /
+              {{ formatBytes(s.quota.limit) }} ·
+              {{ s.quota.resetAt.slice(5, 10) }} 重置</span
+            ><span class="quota-bar"
+              ><i
+                :class="{ hot: s.quota.used / s.quota.limit > 0.9 }"
+                :style="{
+                  transform: `scaleX(${Math.min(s.quota.used / s.quota.limit, 1)})`,
+                }"
+              ></i
+            ></span>
+          </div>
           <dl class="meta">
             <div>
               <dt>类型</dt>
@@ -571,6 +599,28 @@ const usageRatio = (a: ProxyAccount) =>
             v-model="serverForm.publicHost"
             placeholder="例如 216.23.84.93"
           />
+        </el-form-item>
+        <el-form-item label="月流量上限（GB，0 为不限）">
+          <div class="quota-fields">
+            <el-input-number
+              v-model="serverForm.trafficLimitGb"
+              :min="0"
+              :step="100"
+              controls-position="right"
+            />
+            <span>每月</span>
+            <el-input-number
+              v-model="serverForm.resetDay"
+              :min="1"
+              :max="28"
+              controls-position="right"
+            />
+            <span>号重置</span>
+          </div>
+          <p class="field-hint">
+            按面板统计的上下行合计。用完后停止
+            xray、节点暂不下发，到重置日自动恢复。
+          </p>
         </el-form-item>
         <p class="dialog-hint">
           {{
@@ -973,6 +1023,42 @@ const usageRatio = (a: ProxyAccount) =>
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;
+}
+.quota-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-muted);
+  font-size: 13px;
+}
+.field-hint {
+  margin: 6px 0 0;
+  color: var(--c-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.quota-line {
+  display: grid;
+  gap: 6px;
+  color: var(--c-muted);
+  font-size: 12px;
+}
+.quota-bar {
+  height: 4px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--c-surface-2);
+}
+.quota-bar i {
+  display: block;
+  height: 100%;
+  background: var(--c-ok);
+  transform-origin: left;
+  transition: transform var(--duration-slow) var(--ease-out);
+}
+.quota-bar i.hot {
+  background: var(--c-bad);
 }
 .dialog-hint {
   margin-bottom: 12px;

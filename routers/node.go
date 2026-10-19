@@ -30,6 +30,7 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.GET("/test/status", api.TestStatus)
 		NodesGroup.POST("/test/cancel", api.TestCancel)
 		NodesGroup.POST("/batch", api.NodeBatch)
+		NodesGroup.POST("/pause", api.NodePause)
 		NodesGroup.POST("/temp-link", api.NodeTempLink)
 		NodesGroup.POST("/dedupe", api.NodeDedupe)
 		NodesGroup.POST("/visibility", api.NodeVisibility) // 全局隐藏/恢复单个节点
