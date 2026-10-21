@@ -22,6 +22,9 @@ type AlertSetting struct {
 	AutoDisableExpired   bool   `json:"autoDisableExpired"`
 	AccessLimit          int    `gorm:"not null;default:0" json:"accessLimit"`
 	AutoDisableOverLimit bool   `json:"autoDisableOverLimit"`
+	// AutoBlockInvalid 开启后，连续检测失败的节点会从订阅里暂不下发；
+	// 关闭后检测结果只作展示，所有节点始终下发。
+	AutoBlockInvalid bool `gorm:"not null;default:true" json:"autoBlockInvalid"`
 }
 
 type UnlockObservation struct {

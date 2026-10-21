@@ -10,7 +10,7 @@ import (
 func deliveryFixture(t *testing.T) (models.Subcription, models.GroupNode, []models.Node) {
 	t.Helper()
 	setupTestDB(t)
-	if err := models.DB.AutoMigrate(&models.NodeHealthEvent{}, &models.ProxyServer{}, &models.ProxyTraffic{}, &models.ProxyInbound{}, &models.ProxyAccount{}); err != nil {
+	if err := models.DB.AutoMigrate(&models.NodeHealthEvent{}, &models.AlertSetting{}, &models.ProxyServer{}, &models.ProxyTraffic{}, &models.ProxyInbound{}, &models.ProxyAccount{}); err != nil {
 		t.Fatal(err)
 	}
 	group := models.GroupNode{Name: "G"}
@@ -111,5 +111,42 @@ func TestQuotaPeriod(t *testing.T) {
 	start, next = quotaPeriod(time.Date(2026, 10, 3, 12, 0, 0, 0, loc), 15)
 	if start != time.Date(2026, 9, 15, 0, 0, 0, 0, loc) || next != time.Date(2026, 10, 15, 0, 0, 0, 0, loc) {
 		t.Fatalf("before reset day: %v %v", start, next)
+	}
+}
+
+func disableAutoBlock(t *testing.T) {
+	t.Helper()
+	if err := models.DB.Create(&models.AlertSetting{FailureThreshold: 3}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := models.DB.Model(&models.AlertSetting{}).Where("1 = 1").Update("auto_block_invalid", false).Error; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestHealthDownIgnoredWhenAutoBlockDisabled(t *testing.T) {
+	sub, _, nodes := deliveryFixture(t)
+	disableAutoBlock(t)
+	models.DB.Create(&models.NodeHealthEvent{NodeID: nodes[0].ID, Type: "down", CreatedAt: time.Now()})
+	names, excluded := deliveredNames(t, sub)
+	if len(names) != 2 || len(excluded) != 0 {
+		t.Fatalf("auto block disabled must keep every node: %v %+v", names, excluded)
+	}
+}
+
+func TestForceDeliverOverridesHealthBlockOnly(t *testing.T) {
+	sub, _, nodes := deliveryFixture(t)
+	models.DB.Create(&models.NodeHealthEvent{NodeID: nodes[0].ID, Type: "down", CreatedAt: time.Now()})
+	if err := models.DB.Model(&nodes[0]).Update("force_deliver", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	if names, _ := deliveredNames(t, sub); len(names) != 2 {
+		t.Fatalf("force-deliver node must stay: %v", names)
+	}
+	future := time.Now().Add(48 * time.Hour)
+	models.DB.Model(&nodes[0]).Updates(map[string]any{"paused_until": future, "pause_note": "手动暂停"})
+	names, excluded := deliveredNames(t, sub)
+	if len(names) != 1 || names[0] != "B" || len(excluded) != 1 || excluded[0].Kind != blockPaused {
+		t.Fatalf("manual pause must still win over force-deliver: %v %+v", names, excluded)
 	}
 }

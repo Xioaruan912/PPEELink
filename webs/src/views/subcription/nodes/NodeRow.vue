@@ -67,6 +67,11 @@ const {
             >暂不下发 · {{ blockLabel(node) }}</span
           ><span v-if="node.relayId" class="relay-badge"
             >经 {{ nodeName(node.relayId) || "已删除节点" }} 中转</span
+          ><span
+            v-if="node.forceDeliver"
+            class="force-badge"
+            title="检测无效时也不会从订阅中排除"
+            >始终下发</span
           >{{ node.country || "国家未知" }} ·
           {{ (node.groups || []).join(" / ") || "未分组" }}</span
         >
@@ -133,6 +138,11 @@ const {
               >设置中转</el-dropdown-item
             >
             <el-dropdown-item command="temp">临时订阅</el-dropdown-item>
+            <el-dropdown-item command="deliver">{{
+              node.forceDeliver
+                ? "恢复按检测结果下发"
+                : "始终下发（忽略检测）"
+            }}</el-dropdown-item>
             <el-dropdown-item
               v-if="node.blocked?.kind === 'paused'"
               command="resume"
@@ -227,6 +237,14 @@ const {
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--c-signal) 18%, transparent);
   color: var(--c-signal-text);
+  font-size: 12px;
+}
+.force-badge {
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--c-data) 15%, transparent);
+  color: var(--c-data);
   font-size: 12px;
 }
 .host.mono {

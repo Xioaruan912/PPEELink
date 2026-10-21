@@ -44,12 +44,18 @@ export function getNodeHealthEvents(limit = 30) {
 export function getAlertSetting() {
   return request({ url: "/api/v1/nodes/alerts", method: "get" });
 }
-export function updateAlertSetting(data: any) {
+export function updateAlertSetting(
+  data: Record<string, string | number | boolean>
+) {
+  const form = new FormData();
+  Object.entries(data).forEach(([key, value]) => {
+    if (value !== undefined && value !== null)
+      form.append(key, String(value));
+  });
   return request({
     url: "/api/v1/nodes/alerts",
     method: "post",
-    data,
-    headers: { "Content-Type": "multipart/form-data" },
+    data: form,
   });
 }
 
@@ -152,6 +158,14 @@ export function SetNodeVisibility(id: number, hidden: boolean) {
     url: "/api/v1/nodes/visibility",
     method: "post",
     data: { id, hidden },
+  });
+}
+// 即使检测无效也始终下发
+export function SetNodeForceDeliver(id: number, forceDeliver: boolean) {
+  return request({
+    url: "/api/v1/nodes/deliver",
+    method: "post",
+    data: { id, forceDeliver },
   });
 }
 export function SetGroupVisibility(id: number, hidden: boolean) {

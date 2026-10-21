@@ -21,6 +21,7 @@ import {
   DelGroup,
   SetNodeVisibility,
   SetGroupVisibility,
+  SetNodeForceDeliver,
 } from "@/api/subcription/node";
 
 import { copySubscriptionText } from "../subs/clipboard";
@@ -36,6 +37,8 @@ export interface OverviewItem {
   valid: boolean;
   /** 暂不下发的原因；为空表示正常下发 */
   blocked?: { kind: string; reason: string; until?: string };
+  /** 即使检测无效也照常下发 */
+  forceDeliver?: boolean;
   checkedAt: string;
   groups: string[];
   relayId?: number;
@@ -489,6 +492,10 @@ function createNodes() {
   const nodeName = (id?: number) =>
     id ? overviewList.value.find((n) => n.id === id)?.name : undefined;
   function nodeCommand(command: string, row: OverviewItem) {
+    if (command === "deliver") {
+      void toggleForceDeliver(row);
+      return;
+    }
     if (command === "temp" || command === "chain") {
       openTool(command, [row]);
       return;
@@ -521,6 +528,12 @@ function createNodes() {
     }
     pauseTargets.value = rows;
     pauseDialog.value = true;
+  }
+  async function toggleForceDeliver(row: OverviewItem) {
+    const next = !row.forceDeliver;
+    await mutation(async () => {
+      await SetNodeForceDeliver(row.id, next);
+    }, next ? "已设为始终下发" : "已恢复按检测结果下发");
   }
   async function resumeNodes(ids: number[]) {
     const res: any = await pauseNodes(ids, "");
@@ -566,6 +579,7 @@ function createNodes() {
     pauseTargets,
     openPause,
     resumeNodes,
+    toggleForceDeliver,
     loadAll,
     nodeDialog,
     groupDialog,
