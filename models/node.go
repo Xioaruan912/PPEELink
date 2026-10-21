@@ -27,9 +27,12 @@ type Node struct {
 	Flags  string `gorm:"type:text" json:"flags,omitempty"` // 每节点构建覆盖(udp/tfo/skip-cert-verify) JSON
 	Hidden bool   `gorm:"not null;default:false;index" json:"Hidden"`
 	// 手动暂停下发：到期前不出现在任何订阅里（例如节点本月流量用完，等下月恢复）
-	PausedUntil *time.Time  `json:"pausedUntil"`
-	PauseNote   string      `gorm:"size:120" json:"pauseNote"`
-	GroupNodes  []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
+	PausedUntil *time.Time `json:"pausedUntil"`
+	PauseNote   string     `gorm:"size:120" json:"pauseNote"`
+	// ForceDeliver 为 true 时即使检测无效也照常下发；只覆盖健康检测，
+	// 不覆盖手动暂停、服务器额度与上游到期。
+	ForceDeliver bool        `gorm:"not null;default:false" json:"forceDeliver"`
+	GroupNodes   []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
 }
 
 // hook Node 写入创建删除修改 等写入权限

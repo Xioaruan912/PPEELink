@@ -29,6 +29,8 @@ type NodeOverviewItem struct {
 	UDP            bool      `json:"udp,omitempty"`
 	TFO            bool      `json:"tfo,omitempty"`
 	SkipCertVerify bool      `json:"skipCertVerify,omitempty"`
+	// ForceDeliver 为 true 时检测无效也照常下发
+	ForceDeliver bool `json:"forceDeliver,omitempty"`
 	// 暂不下发的原因（为空表示正常下发）
 	Blocked *deliveryBlock `json:"blocked,omitempty"`
 	rtt     int            // 本次连接耗时，-1 失败；仅用于记录与健康事件
@@ -123,6 +125,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 			if f := decodeNodeFlags(n.Flags); !f.Empty() {
 				item.RelayID, item.UDP, item.TFO, item.SkipCertVerify = f.DialerProxyID, f.UDP, f.TFO, f.SkipCertVerify
 			}
+			item.ForceDeliver = n.ForceDeliver
 			for _, g := range n.GroupNodes {
 				item.Groups = append(item.Groups, g.Name)
 			}

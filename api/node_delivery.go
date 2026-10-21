@@ -83,14 +83,59 @@ func undeliverableNodes(now time.Time) map[int]deliveryBlock {
 		}
 	}
 
-	// 每个节点最近一次健康事件为 down，说明已连续多次检测无效
-	var downs []models.NodeHealthEvent
-	models.DB.Where("id IN (?)", models.DB.Model(&models.NodeHealthEvent{}).Select("MAX(id)").Group("node_id")).
-		Where("type = ?", "down").Find(&downs)
-	for _, e := range downs {
-		add(e.NodeID, deliveryBlock{Kind: blockHealth, Reason: "连续多次检测无效"})
+	// 自动判定关闭时，检测结果只作展示，不再拦住下发。
+	setting := currentAlertSetting()
+	if setting.AutoBlockInvalid {
+		// 手动设了“始终下发”的节点跳过健康检测这一条。
+		var forced []int
+		models.DB.Model(&models.Node{}).Where("force_deliver = ?", true).Pluck("id", &forced)
+		skip := make(map[int]bool, len(forced))
+		for _, id := range forced {
+			skip[id] = true
+		}
+		// 每个节点最近一次健康事件为 down，说明已连续多次检测无效
+		var downs []models.NodeHealthEvent
+		models.DB.Where("id IN (?)", models.DB.Model(&models.NodeHealthEvent{}).Select("MAX(id)").Group("node_id")).
+			Where("type = ?", "down").Find(&downs)
+		for _, e := range downs {
+			if skip[e.NodeID] {
+				continue
+			}
+			add(e.NodeID, deliveryBlock{Kind: blockHealth, Reason: "连续多次检测无效"})
+		}
 	}
 	return blocks
+}
+
+type nodeForceDeliverRequest struct {
+	ID           int  `json:"id"`
+	ForceDeliver bool `json:"forceDeliver"`
+}
+
+// NodeForceDeliver 设置节点是否忽略“检测无效”照常下发。
+// 只覆盖健康检测，手动暂停、服务器额度、上游到期仍然生效。
+// POST /api/v1/nodes/deliver
+func NodeForceDeliver(c *gin.Context) {
+	var req nodeForceDeliverRequest
+	if err := c.ShouldBindJSON(&req); err != nil || req.ID <= 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "节点 id 无效"})
+		return
+	}
+	var n models.Node
+	if err := models.DB.First(&n, req.ID).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
+		return
+	}
+	if err := models.DB.Model(&n).Update("force_deliver", req.ForceDeliver).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "保存失败"})
+		return
+	}
+	InvalidateOverview()
+	msg := "已恢复按检测结果下发"
+	if req.ForceDeliver {
+		msg = "已设为始终下发，检测无效也不会被排除"
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": msg})
 }
 
 func groupNodeIDs(groupName string) []int {
