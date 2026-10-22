@@ -94,8 +94,10 @@ func applyProbeResults(items []NodeOverviewItem) {
 	var rows []models.ProbeResult
 	models.DB.Where("agent_server_id IN ? AND node_id IN ? AND checked_at >= ?", agentIDs, ids, time.Now().Add(-probeResultTTL)).
 		Order("id desc").Find(&rows)
+	reported := make(map[uint]bool, len(agents))
 	latest := make(map[int]map[uint]models.ProbeResult, len(ids))
 	for _, row := range rows {
+		reported[row.AgentServerID] = true
 		byAgent, ok := latest[row.NodeID]
 		if !ok {
 			byAgent = map[uint]models.ProbeResult{}
@@ -105,6 +107,16 @@ func applyProbeResults(items []NodeOverviewItem) {
 			byAgent[row.AgentServerID] = row
 		}
 	}
+	activeAgents := make([]models.ProxyServer, 0, len(agents))
+	for _, agent := range agents {
+		if reported[agent.ID] {
+			activeAgents = append(activeAgents, agent)
+		}
+	}
+	if len(activeAgents) == 0 {
+		return
+	}
+	agents = activeAgents
 
 	for i := range items {
 		item := &items[i]
