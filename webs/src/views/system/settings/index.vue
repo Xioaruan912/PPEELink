@@ -1855,16 +1855,16 @@ onBeforeUnmount(() => {
 }
 .settings-layout {
   display: grid;
-  grid-template-columns: 262px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 244px minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
 }
 .settings-rail {
   position: sticky;
-  top: 88px;
+  top: 76px;
   display: grid;
-  gap: 4px;
-  padding: 8px;
+  gap: 2px;
+  padding: 6px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background: var(--c-surface);

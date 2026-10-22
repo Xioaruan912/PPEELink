@@ -279,13 +279,13 @@ function leaveBar(element: Element, done: () => void) {
 }
 .workbench-grid {
   display: grid;
-  grid-template-columns: minmax(220px, 3fr) minmax(0, 9fr);
-  gap: 16px;
+  grid-template-columns: 268px minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
 }
 .group-sidebar {
   position: sticky;
-  top: 84px;
+  top: 76px;
   min-width: 0;
 }
 .mono {
@@ -295,7 +295,7 @@ function leaveBar(element: Element, done: () => void) {
 .coverage,
 .group-hint {
   color: var(--c-muted);
-  font-size: 14px;
+  font-size: 12px;
   line-height: 1.6;
 }
 .coverage {
@@ -307,8 +307,8 @@ function leaveBar(element: Element, done: () => void) {
 .group-navigation {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 4px;
+  margin-bottom: 10px;
   max-height: 50dvh;
   overflow-y: auto;
 }
@@ -318,8 +318,8 @@ function leaveBar(element: Element, done: () => void) {
   justify-content: space-between;
   gap: 12px;
   width: 100%;
-  min-height: 40px;
-  padding: 10px 12px;
+  min-height: 34px;
+  padding: 7px 10px;
   border-radius: var(--radius-control);
   text-align: left;
   transition:

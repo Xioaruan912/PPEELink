@@ -720,8 +720,8 @@ const usageRatio = (a: ProxyAccount) =>
 .tm {
   position: relative;
   display: grid;
-  gap: 6px;
-  padding: 16px 20px;
+  gap: 4px;
+  padding: 12px 16px;
   border-left: 1px solid var(--c-line);
 }
 .tm:first-child {
@@ -735,7 +735,7 @@ const usageRatio = (a: ProxyAccount) =>
   font-size: 12px;
 }
 .tm-value {
-  font-size: 26px;
+  font-size: 23px;
   font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1;
@@ -795,15 +795,15 @@ const usageRatio = (a: ProxyAccount) =>
 }
 .server-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
-  gap: 14px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
+  margin-bottom: 12px;
 }
 .server-card {
   display: grid;
-  gap: 14px;
+  gap: 10px;
   align-content: start;
-  padding: 18px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
   background:
@@ -956,7 +956,7 @@ const usageRatio = (a: ProxyAccount) =>
 .lower-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 14px;
+  gap: 12px;
   align-items: start;
 }
 .accounts li {
