@@ -84,8 +84,9 @@ func runMonitorClient(args []string) {
 	log.Printf("[Monitor] 启动，面板 %s，间隔 %s", panelURL, *interval)
 
 	collector := &monitorCollector{}
-	// 预热一次，让 CPU / 网络速度从第二次开始有差值。
+	// 预热一次并等待 2 秒，让第一份上报就有可用的 CPU / 网络速度。
 	collector.collect()
+	time.Sleep(2 * time.Second)
 
 	for {
 		metrics := collector.collect()
