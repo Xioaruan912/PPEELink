@@ -37,7 +37,7 @@ func (h *HTTPSource) Update(ctx context.Context, expectedHash string) error {
 		return fmt.Errorf("面板未提供 agent 校验值")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		h.Panel+"/api/v1/agent/binary?arch="+runtime.GOARCH, nil)
+		h.Panel+"/agent/binary?arch="+runtime.GOARCH, nil)
 	if err != nil {
 		return err
 	}
