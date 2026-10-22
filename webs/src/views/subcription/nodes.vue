@@ -288,6 +288,20 @@ function leaveBar(element: Element, done: () => void) {
   top: 76px;
   min-width: 0;
 }
+.group-sidebar :deep(.ui-panel__header) {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+.group-sidebar :deep(.ui-panel__heading) {
+  flex-basis: 0;
+}
+.group-sidebar :deep(.ui-panel__actions) {
+  flex-shrink: 0;
+}
+.group-navigation button:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
+}
 .mono {
   font: 400 13px/1.6 var(--font-mono);
   font-variant-numeric: tabular-nums;

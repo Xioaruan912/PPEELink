@@ -806,13 +806,7 @@ const usageRatio = (a: ProxyAccount) =>
   padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
-  background:
-    radial-gradient(
-      120% 80% at 100% 0%,
-      color-mix(in srgb, var(--c-signal) 8%, transparent),
-      transparent 55%
-    ),
-    var(--c-surface);
+  background: var(--c-surface);
   box-shadow: var(--shadow-panel), var(--edge-highlight);
 }
 .server-card.is-off {
@@ -868,8 +862,8 @@ const usageRatio = (a: ProxyAccount) =>
 }
 .meta {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 120px), 1fr));
+  gap: 8px 16px;
   margin: 0;
 }
 .meta dt {
