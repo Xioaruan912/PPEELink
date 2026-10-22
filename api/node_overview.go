@@ -31,9 +31,24 @@ type NodeOverviewItem struct {
 	SkipCertVerify bool      `json:"skipCertVerify,omitempty"`
 	// ForceDeliver 为 true 时检测无效也照常下发
 	ForceDeliver bool `json:"forceDeliver,omitempty"`
+	// ProbePolicy 检测策略：panel / any / all / manual
+	ProbePolicy string `json:"probePolicy"`
+	// Probes 最近一次各探针结果
+	Probes []ProbeStatus `json:"probes,omitempty"`
 	// 暂不下发的原因（为空表示正常下发）
 	Blocked *deliveryBlock `json:"blocked,omitempty"`
 	rtt     int            // 本次连接耗时，-1 失败；仅用于记录与健康事件
+}
+
+// ProbeStatus 单个探针对某个节点的最近一次检测结果。
+type ProbeStatus struct {
+	ID        uint       `json:"id"`
+	Name      string     `json:"name"`
+	Region    string     `json:"region"`
+	Success   bool       `json:"success"`
+	RTT       int        `json:"rtt"`
+	Error     string     `json:"error,omitempty"`
+	CheckedAt *time.Time `json:"checkedAt,omitempty"`
 }
 
 // qualityCheckConcurrency 节点 TCP 质量检测的最大并发连接数。
@@ -54,6 +69,84 @@ func InvalidateOverview() {
 	oCache.data = nil
 	oCache.expires = time.Time{}
 	oCache.mu.Unlock()
+}
+
+// probeResultTTL 探针结果有效期：5 分钟一报，允许漏掉一轮。
+const probeResultTTL = 12 * time.Minute
+
+// applyProbeResults 按节点检测策略合并面板与探针结果。
+func applyProbeResults(items []NodeOverviewItem) {
+	probes, err := models.GetProbes(true)
+	if err != nil || len(probes) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, item.ID)
+	}
+	if len(ids) == 0 {
+		return
+	}
+	var rows []models.ProbeResult
+	models.DB.Where("node_id IN ? AND checked_at >= ?", ids, time.Now().Add(-probeResultTTL)).
+		Order("id desc").Find(&rows)
+	latest := make(map[int]map[uint]models.ProbeResult, len(ids))
+	for _, row := range rows {
+		byProbe, ok := latest[row.NodeID]
+		if !ok {
+			byProbe = map[uint]models.ProbeResult{}
+			latest[row.NodeID] = byProbe
+		}
+		if _, exists := byProbe[row.ProbeID]; !exists {
+			byProbe[row.ProbeID] = row
+		}
+	}
+
+	for i := range items {
+		item := &items[i]
+		panelValid := item.Valid
+		policy := item.ProbePolicy
+		if policy == "" {
+			policy = "panel"
+		}
+		statuses := make([]ProbeStatus, 0, len(probes))
+		allOK, anyOK, bestRTT := true, false, 0
+		for _, probe := range probes {
+			status := ProbeStatus{ID: probe.ID, Name: probe.Name, Region: probe.Region}
+			if row, ok := latest[item.ID][probe.ID]; ok {
+				status.Success = row.Success
+				status.RTT = row.RTT
+				status.Error = row.Error
+				t := row.CheckedAt
+				status.CheckedAt = &t
+				if row.Success {
+					anyOK = true
+					if row.RTT > 0 && (bestRTT == 0 || row.RTT < bestRTT) {
+						bestRTT = row.RTT
+					}
+				} else {
+					allOK = false
+				}
+			} else {
+				allOK = false
+			}
+			statuses = append(statuses, status)
+		}
+		switch policy {
+		case "manual":
+			item.Valid = true
+		case "any":
+			item.Valid = panelValid || anyOK
+		case "all":
+			item.Valid = panelValid && allOK
+		default:
+			item.Valid = panelValid
+		}
+		if item.Valid && item.rtt < 0 && bestRTT > 0 {
+			item.rtt = bestRTT
+		}
+		item.Probes = statuses
+	}
 }
 
 // NodeOverview 返回所有节点概览：国家（名称优先，GeoIP 兜底）+ 有效性 + 分组。
@@ -126,6 +219,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 				item.RelayID, item.UDP, item.TFO, item.SkipCertVerify = f.DialerProxyID, f.UDP, f.TFO, f.SkipCertVerify
 			}
 			item.ForceDeliver = n.ForceDeliver
+			item.ProbePolicy = n.ProbePolicy
 			for _, g := range n.GroupNodes {
 				item.Groups = append(item.Groups, g.Name)
 			}
@@ -146,6 +240,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 		}(i, n)
 	}
 	wg.Wait()
+	applyProbeResults(results)
 	checkedAt := time.Now()
 	for i := range results {
 		results[i].CheckedAt = checkedAt

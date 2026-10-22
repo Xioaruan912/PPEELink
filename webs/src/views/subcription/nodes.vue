@@ -11,6 +11,7 @@ import NodeRow from "./nodes/NodeRow.vue";
 import NodeDrawers from "./nodes/NodeDrawers.vue";
 import NodeTools from "./nodes/NodeTools.vue";
 import PauseDialog from "./nodes/PauseDialog.vue";
+import ProbePolicyDialog from "./nodes/ProbePolicyDialog.vue";
 defineOptions({ name: "NodesPage" });
 const {
   loading,
@@ -255,6 +256,7 @@ function leaveBar(element: Element, done: () => void) {
     >
     <NodeDrawers />
     <PauseDialog />
+    <ProbePolicyDialog />
     <NodeTools />
     <NodeUnlockDialog
       v-if="testNode"
