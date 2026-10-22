@@ -44,7 +44,7 @@ func (h *HTTPSource) Update(ctx context.Context, expectedHash string) error {
 	req.Header.Set("Authorization", "Agent "+h.Token)
 	client := h.Client
 	if client == nil {
-		client = &http.Client{Timeout: 90 * time.Second}
+		client = &http.Client{Timeout: 5 * time.Minute}
 	}
 	resp, err := client.Do(req)
 	if err != nil {
