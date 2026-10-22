@@ -14,6 +14,8 @@ import {
 } from "@/ui";
 import IconChartLine from "~icons/ph/chart-line";
 import MetricChart from "@/components/monitor/MetricChart.vue";
+import MonitorTerminal from "./MonitorTerminal.vue";
+import SshSettingsDialog from "./SshSettingsDialog.vue";
 import { formatBytes } from "@/utils/traffic";
 import { formatDateTime } from "@/utils/date";
 import {
@@ -119,6 +121,39 @@ const detailLoading = ref(false);
 const detailError = ref("");
 const range = ref<string | number>("24h");
 const activeMonitor = ref<MonitorItem | null>(null);
+const terminalVisible = ref(false);
+const terminalTarget = ref<MonitorItem | null>(null);
+const sshSettingsVisible = ref(false);
+const sshTarget = ref<MonitorItem | null>(null);
+
+function openTerminal(item: MonitorItem | null) {
+  if (!item) return;
+  if (!item.sshConfigured) {
+    sshTarget.value = item;
+    sshSettingsVisible.value = true;
+    return;
+  }
+  terminalTarget.value = item;
+  terminalVisible.value = true;
+}
+
+function openSSHSettings(item: MonitorItem | null) {
+  if (!item) return;
+  sshTarget.value = item;
+  sshSettingsVisible.value = true;
+}
+
+async function onSSHSaved() {
+  await load();
+  const updated = items.value.find((item) => item.id === sshTarget.value?.id);
+  if (updated) {
+    sshTarget.value = updated;
+    if (activeMonitor.value?.id === updated.id) activeMonitor.value = updated;
+    if (terminalTarget.value?.id === updated.id) terminalTarget.value = updated;
+  }
+  if (detailVisible.value) await loadDetail();
+}
+
 const rangeOptions = [
   { label: "1 小时", value: "1h" },
   { label: "6 小时", value: "6h" },
@@ -464,6 +499,10 @@ async function resetToken(item: MonitorItem | null) {
             >
           </div>
           <div class="detail-actions">
+            <UiButton variant="primary" @click="openTerminal(activeMonitor)"
+              >SSH 终端</UiButton
+            >
+            <UiButton @click="openSSHSettings(activeMonitor)">SSH 设置</UiButton>
             <UiButton
               :icon="Refresh"
               :loading="detailLoading"
@@ -556,6 +595,17 @@ async function resetToken(item: MonitorItem | null) {
         </div>
       </template>
     </UiDialog>
+
+    <MonitorTerminal
+      v-model="terminalVisible"
+      :monitor="terminalTarget"
+      @open-settings="openSSHSettings(terminalTarget)"
+    />
+    <SshSettingsDialog
+      v-model="sshSettingsVisible"
+      :monitor="sshTarget"
+      @saved="onSSHSaved"
+    />
   </div>
 </template>
 <style scoped>

@@ -49,6 +49,7 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20231101202521-4ca4178f5c7a // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/insomniacslk/dhcp v0.0.0-20250109001534-8abf58130905 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
