@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { Delete, Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -30,6 +31,12 @@ import {
 } from "@/api/monitor";
 
 defineOptions({ name: "MonitorPage" });
+const router = useRouter();
+function openWorkspace(tab: 'files' | 'docker') {
+  const id = activeMonitor.value?.id;
+  detailVisible.value = false;
+  void router.push({path:'/monitor/workspace',query:{...(id ? {id:String(id)} : {}),tab}});
+}
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const error = ref("");
@@ -533,6 +540,8 @@ async function resetToken(item: MonitorItem | null) {
             <UiButton variant="primary" @click="openTerminal(activeMonitor)"
               >SSH 终端</UiButton
             >
+            <UiButton @click="openWorkspace('files')">文件管理</UiButton>
+            <UiButton @click="openWorkspace('docker')">Docker 管理</UiButton>
             <UiButton @click="openSSHSettings(activeMonitor)">SSH 设置</UiButton>
             <UiButton
               :icon="Refresh"

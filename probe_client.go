@@ -54,6 +54,7 @@ func runProbeClient(args []string) {
 	panelURL := strings.TrimSuffix(*panel, "/")
 	client := &http.Client{Timeout: 45 * time.Second}
 	log.Printf("[Probe] 启动，面板 %s，间隔 %s", panelURL, *interval)
+	go runProbeTraceLoop(client, panelURL, *token)
 
 	for {
 		jobs, err := fetchProbeJobs(client, panelURL, *token)

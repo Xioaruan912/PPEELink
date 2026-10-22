@@ -208,16 +208,19 @@ func Run(port int) {
 	routers.Total(r)
 	routers.Templates(r)
 	routers.Version(r, version)
-	routers.Rules(r)      // 规则中心
-	routers.Tasks(r)      // 后台任务中心
-	routers.Tokens(r)     // API Token 管理
-	routers.Ops(r)        // 安全运维/备份
-	routers.Status(r)     // 公共只读状态页
-	routers.Audit(r)      // 管理操作审计
-	routers.ShortLinks(r) // 内部短链与一键导入
-	routers.Proxy(r)      // 自建节点与到期/用量告警
-	routers.Probes(r)     // 多视角检测探针
-	routers.Monitors(r)   // 服务器监控
+	routers.Rules(r)             // 规则中心
+	routers.Tasks(r)             // 后台任务中心
+	routers.Tokens(r)            // API Token 管理
+	routers.Ops(r)               // 安全运维/备份
+	routers.Status(r)            // 公共只读状态页
+	routers.Audit(r)             // 管理操作审计
+	routers.ShortLinks(r)        // 内部短链与一键导入
+	routers.Proxy(r)             // 自建节点与到期/用量告警
+	routers.Probes(r)            // 多视角检测探针
+	routers.Monitors(r)          // 服务器监控
+	routers.MonitorOperations(r) // SSH 文件与 Docker 管理
+	routers.NetworkTopology(r)   // 真实关联网络拓扑
+	routers.NetworkTraces(r)     // 多地路由追踪
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步

@@ -142,7 +142,7 @@ func AuthorizeUser(c *gin.Context, username string) bool {
 // 令牌/审计、备份导出需要 admin；其余写操作需要 write。
 func requiredScope(method, path string) string {
 	isRead := method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions
-	for _, prefix := range []string{"/api/v1/tokens", "/api/v1/audit", "/api/v1/proxy"} {
+	for _, prefix := range []string{"/api/v1/tokens", "/api/v1/audit", "/api/v1/proxy", "/api/v1/monitors/ssh", "/api/v1/monitors/files", "/api/v1/monitors/docker", "/api/v1/network"} {
 		if strings.HasPrefix(path, prefix) {
 			return "admin"
 		}

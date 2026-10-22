@@ -29,6 +29,10 @@ export interface NavigationItem {
 const META: Record<string, { icon: Component; hint?: string }> = {
   "/dashboard": { icon: IconHouse },
   "/monitor/index": { icon: IconChartLine, hint: "服务器指标与在线状态" },
+  "/monitor/workspace": { icon: IconServer, hint: "文件与 Docker 运维" },
+  "/network": { icon: IconNodes },
+  "/network/topology": { icon: IconNodes, hint: "订阅、分组和服务器的真实关联" },
+  "/network/traceroute": { icon: IconGauge, hint: "从面板与探针对比网络路径" },
   "/subcription": { icon: IconSubs },
   "/subcription/subs": { icon: IconLink, hint: "生成与分发订阅链接" },
   "/subcription/nodes": { icon: IconNodes, hint: "分组、编辑与检测节点" },
