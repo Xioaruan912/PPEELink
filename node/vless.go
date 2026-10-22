@@ -107,7 +107,7 @@ func DecodeVLESSURL(s string) (VLESS, error) {
 	var u *url.URL
 	var err error
 
-	// 有些机场返回的不是 Base64 编码的 vless 字符串，而是原生的 vless://xxxx 链接
+	// 有些订阅返回的不是 Base64 编码的 vless 字符串，而是原生的 vless://xxxx 链接
 	// 我们先尝试直接作为 URL 解析
 	u, err = url.Parse(s)
 

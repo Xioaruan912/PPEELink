@@ -20,7 +20,7 @@
 
 ## What PPEELink Is
 
-PPEELink is built for self-hosted proxy nodes, airport subscriptions, and complex Clash/Mihomo routing templates. Its goal is to turn a traditional subscription converter into a configuration validation, debugging, publishing, and rollback platform.
+PPEELink is built for self-hosted proxy nodes and complex Clash/Mihomo routing templates. Its goal is to turn a traditional subscription converter into a configuration validation, debugging, publishing, and rollback platform.
 
 Typical workflow:
 
@@ -122,7 +122,7 @@ Results distinguish native support, conversion requirements, unsupported combina
 
 ### Persistent Task Center
 
-Tracks node / egress tests, quality-matrix sampling, template routing validation, airport sync, rule sync, subscription builds, template validation, safe publish, and system deployment tasks.
+Tracks node / egress tests, quality-matrix sampling, template routing validation, rule sync, subscription builds, template validation, safe publish, and system deployment tasks.
 
 Tasks expose progress, duration, errors, cancellation, retry, and history. Interrupted tasks remain visible after a service restart.
 
@@ -143,7 +143,6 @@ Expected countries are never hardcoded into targets; region expectations are inf
 - every node must belong to at least one group
 - historical ungrouped nodes are assigned to a default group
 - nodes may belong to multiple groups
-- airport sync maintains its corresponding group automatically
 - individual nodes or entire groups can be globally hidden without deleting data
 - hidden nodes are excluded from normal lists, subscription output, quality sampling, recommendations, routing selection, and safe publishing
 
@@ -277,7 +276,7 @@ db/           Runtime SQLite/config/cache data
 - `db/` contains application data; do not treat it as disposable cache.
 - Back up `db/`, `template/`, and the running binary before upgrades.
 - For production, prefer: backup → temporary upload → SHA256 verification → atomic replacement → restart → HTTP/log verification.
-- Never commit passwords, API Tokens, airport URLs, or node links to a public repository.
+- Never commit passwords, API Tokens, or node links to a public repository.
 
 ## License
 

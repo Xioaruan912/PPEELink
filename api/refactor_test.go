@@ -113,13 +113,11 @@ func TestVerifyFlagsDefaultPassword(t *testing.T) {
 	}
 }
 
-func TestGetClientStatusCodesAndTraffic(t *testing.T) {
+func TestGetClientStatusCodesAndExpiry(t *testing.T) {
 	setupTestDB(t)
 	expired := time.Now().Add(-time.Hour)
-	updated := time.Now()
-	sourceExpire := time.Now().Add(48 * time.Hour)
-	active := models.Subcription{Name: "active", Token: "aaaa1111", Config: `{"udp":true}`, SourceURLs: "https://example.com/sub",
-		SourceUpload: 10, SourceDownload: 20, SourceTotal: 1000, SourceExpire: &sourceExpire, SourceTrafficAt: &updated}
+	future := time.Now().Add(48 * time.Hour)
+	active := models.Subcription{Name: "active", Token: "aaaa1111", Config: `{"udp":true}`, ExpiresAt: &future}
 	old := models.Subcription{Name: "old", Token: "bbbb2222", ExpiresAt: &expired}
 	models.DB.Create(&active)
 	models.DB.Create(&old)
@@ -138,8 +136,8 @@ func TestGetClientStatusCodesAndTraffic(t *testing.T) {
 		t.Fatalf("expired subscription: want 410, got %d", rec.Code)
 	}
 	header := subscriptionUserinfo(active)
-	if !strings.Contains(header, "upload=10; download=20; total=1000") || !strings.Contains(header, "expire=") {
-		t.Fatalf("traffic header not aggregated: %q", header)
+	if !strings.Contains(header, "expire=") {
+		t.Fatalf("expiry header missing: %q", header)
 	}
 }
 

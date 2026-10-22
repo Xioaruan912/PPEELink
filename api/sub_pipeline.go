@@ -54,7 +54,7 @@ type PipelinePreview struct {
 	Nodes    []models.Node  `json:"nodes"`
 }
 
-// defaultPlaceholderTerms 机场订阅里常见的占位/广告节点关键字。
+// defaultPlaceholderTerms 订阅里常见的占位/广告节点关键字。
 var defaultPlaceholderTerms = []string{
 	"官网", "到期", "剩余", "流量", "套餐", "续费", "余额", "过期", "expire",
 	"traffic", "重置", "客服", "电报", "telegram", "邀请", "注册", "试用",

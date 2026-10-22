@@ -39,14 +39,6 @@ export interface Sub {
   Nodes: Node[];
   GroupRefs?: GroupRef[];
   Pipeline?: string;
-  SourceURLs?: string;
-  lastSyncAt?: string | null;
-  lastSyncError?: string;
-  sourceUpload?: number;
-  sourceDownload?: number;
-  sourceTotal?: number;
-  sourceExpire?: string | null;
-  sourceTrafficAt?: string | null;
   SubLogs: SubLogs[];
 }
 export interface Node {
@@ -102,10 +94,7 @@ export function createSubscriptions() {
   const loonMode = ref("1");
   const SubTitle = ref("");
   const Subname = ref("");
-  const oldSubname = ref("");
-  const sourceUrl = ref("");
-  const isSourceMode = ref(false);
-  const dialogVisible = ref(false);
+  const oldSubname = ref("");  const dialogVisible = ref(false);
   const NodesList = ref<Node[]>([]);
   const value1 = ref<string[]>([]);
   const allGroups = ref<GroupRef[]>([]);
@@ -516,18 +505,9 @@ export function createSubscriptions() {
       ElMessage.warning("订阅名称不能为空");
       return;
     }
-    if (
-      !isSourceMode.value &&
-      value1.value.length === 0 &&
-      selectedGroups.value.length === 0
-    ) {
+    if (value1.value.length === 0 && selectedGroups.value.length === 0) {
       editorSection.value = "sources";
       ElMessage.warning("请选择至少一个节点或分组");
-      return;
-    }
-    if (isSourceMode.value && !sourceUrl.value.trim()) {
-      editorSection.value = "sources";
-      ElMessage.warning("上游订阅链接不能为空");
       return;
     }
 
@@ -548,23 +528,19 @@ export function createSubscriptions() {
           name: Subname.value.trim(),
           nodes: value1.value.join(","),
           groups: groupStr,
-          source_urls: isSourceMode.value ? sourceUrl.value.trim() : "",
           pipeline: pipelineJSON(),
         });
         ElMessage.success("添加成功");
       } else {
-        const res: any = await UpdateSub({
+        await UpdateSub({
           config,
           name: Subname.value.trim(),
           nodes: value1.value.join(","),
           groups: groupStr,
           oldname: oldSubname.value,
-          source_urls: isSourceMode.value ? sourceUrl.value.trim() : "",
           pipeline: pipelineJSON(),
         });
-        // 上游拉取失败时后端仍会保存，并在 msg 里说明沿用上次的节点
-        if (res?.msg?.includes("失败")) ElMessage.warning(res.msg);
-        else ElMessage.success("更新成功");
+        ElMessage.success("更新成功");
       }
       await getsubs();
       dialogVisible.value = false;
@@ -578,8 +554,6 @@ export function createSubscriptions() {
     SubTitle.value = "添加订阅";
     Subname.value = "";
     oldSubname.value = "";
-    sourceUrl.value = "";
-    isSourceMode.value = false;
     udpOn.value = false;
     certOn.value = false;
     providerOn.value = false;
@@ -618,8 +592,6 @@ export function createSubscriptions() {
     SubTitle.value = "编辑订阅";
     Subname.value = sub.Name;
     oldSubname.value = sub.Name;
-    sourceUrl.value = sub.SourceURLs || "";
-    isSourceMode.value = !!sub.SourceURLs;
     udpOn.value = !!config.udp;
     certOn.value = !!config.cert;
     providerOn.value = !!config.proxyProvider;
@@ -870,8 +842,6 @@ export function createSubscriptions() {
     SubTitle,
     Subname,
     oldSubname,
-    sourceUrl,
-    isSourceMode,
     dialogVisible,
     NodesList,
     value1,

@@ -131,7 +131,6 @@ func SubAdd(c *gin.Context) {
 	name := c.PostForm("name")
 	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
-	sourceURLs := strings.TrimSpace(c.PostForm("source_urls"))
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
 	if err := ensureScriptAllowed(c, pipeline); err != nil {
@@ -145,9 +144,9 @@ func SubAdd(c *gin.Context) {
 		})
 		return
 	}
-	if nodes == "" && sourceURLs == "" && groups == "" {
+	if nodes == "" && groups == "" {
 		c.JSON(400, gin.H{
-			"msg": "必须选择节点、分组或填写上游订阅链接",
+			"msg": "必须选择节点或分组",
 		})
 		return
 	}
@@ -160,32 +159,20 @@ func SubAdd(c *gin.Context) {
 
 	var NodesData []models.Node
 	var nodeNames []string
-
-	// 上游订阅：先拉取校验，订阅创建后再写入节点
-	var pull sourcePull
-	if sourceURLs != "" {
-		pull, err = pullSubscriptionSource(sourceURLs)
-		if err != nil {
-			c.JSON(400, gin.H{"msg": "拉取上游订阅失败: " + err.Error()})
+	for _, nodeName := range strings.Split(nodes, ",") {
+		if strings.TrimSpace(nodeName) == "" {
+			continue
+		}
+		FirstNode := models.Node{
+			Name: nodeName,
+		}
+		result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
+		if result.Error != nil {
+			c.JSON(400, gin.H{"msg": "节点不存在: " + result.Error.Error()})
 			return
 		}
-	} else {
-		// 常规的手动选择节点
-		for _, nodeName := range strings.Split(nodes, ",") {
-			if strings.TrimSpace(nodeName) == "" {
-				continue
-			}
-			FirstNode := models.Node{
-				Name: nodeName,
-			}
-			result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
-			if result.Error != nil {
-				c.JSON(400, gin.H{"msg": "节点不存在: " + result.Error.Error()})
-				return
-			}
-			NodesData = append(NodesData, FirstNode)
-			nodeNames = append(nodeNames, FirstNode.Name)
-		}
+		NodesData = append(NodesData, FirstNode)
+		nodeNames = append(nodeNames, FirstNode.Name)
 	}
 
 	sub := models.Subcription{
@@ -195,7 +182,6 @@ func SubAdd(c *gin.Context) {
 		Nodes:            NodesData,
 		GroupRefs:        groupRefs,
 		Pipeline:         pipeline,
-		SourceURLs:       sourceURLs,
 		LastGoodSnapshot: strings.Join(nodeNames, "\n"),
 	}
 	err = sub.Add()
@@ -204,12 +190,6 @@ func SubAdd(c *gin.Context) {
 			"msg": "添加订阅失败: " + err.Error(),
 		})
 		return
-	}
-	if sourceURLs != "" {
-		if err := applySubscriptionSource(sub.ID, pull); err != nil {
-			c.JSON(400, gin.H{"msg": "写入上游节点失败: " + err.Error()})
-			return
-		}
 	}
 
 	c.JSON(200, gin.H{
@@ -224,7 +204,6 @@ func SubUpdate(c *gin.Context) {
 	OldName := c.PostForm("oldname")
 	configs := c.PostForm("config")
 	nodes := c.PostForm("nodes")
-	sourceURLs := strings.TrimSpace(c.PostForm("source_urls"))
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
 	if err := ensureScriptAllowed(c, pipeline); err != nil {
@@ -238,9 +217,9 @@ func SubUpdate(c *gin.Context) {
 		})
 		return
 	}
-	if nodes == "" && sourceURLs == "" && groups == "" {
+	if nodes == "" && groups == "" {
 		c.JSON(400, gin.H{
-			"msg": "必须选择节点、分组或填写上游订阅链接",
+			"msg": "必须选择节点或分组",
 		})
 		return
 	}
@@ -253,34 +232,20 @@ func SubUpdate(c *gin.Context) {
 
 	var NodesData []models.Node
 	var nodeNames []string
-	var existing models.Subcription
-	if err := models.DB.Preload("Nodes").Where("name = ?", OldName).First(&existing).Error; err != nil {
-		c.JSON(404, gin.H{"msg": "订阅不存在"})
-		return
-	}
-
-	if sourceURLs != "" {
-		// 上游订阅：保存时先沿用现有节点，保存后再拉取刷新
-		NodesData = existing.Nodes
-		if existing.Name != NewName {
-			models.DB.Model(&models.GroupNode{}).Where("name = ?", existing.Name).Update("name", NewName)
+	for _, nodeName := range strings.Split(nodes, ",") {
+		if strings.TrimSpace(nodeName) == "" {
+			continue
 		}
-	} else {
-		for _, nodeName := range strings.Split(nodes, ",") {
-			if strings.TrimSpace(nodeName) == "" {
-				continue
-			}
-			FirstNode := models.Node{
-				Name: nodeName,
-			}
-			result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
-			if result.Error != nil {
-				c.JSON(400, gin.H{"msg": result.Error.Error()})
-				return
-			}
-			NodesData = append(NodesData, FirstNode)
-			nodeNames = append(nodeNames, FirstNode.Name)
+		FirstNode := models.Node{
+			Name: nodeName,
 		}
+		result := models.DB.Model(models.Node{}).Where("name = ?", FirstNode.Name).First(&FirstNode)
+		if result.Error != nil {
+			c.JSON(400, gin.H{"msg": result.Error.Error()})
+			return
+		}
+		NodesData = append(NodesData, FirstNode)
+		nodeNames = append(nodeNames, FirstNode.Name)
 	}
 
 	OldSub := models.Subcription{Name: OldName}
@@ -291,27 +256,14 @@ func SubUpdate(c *gin.Context) {
 		Nodes:            NodesData,
 		GroupRefs:        groupRefs,
 		Pipeline:         pipeline,
-		SourceURLs:       sourceURLs,
-		LastGoodSnapshot: existing.LastGoodSnapshot,
-		LastSyncAt:       existing.LastSyncAt,
-		LastSyncError:    existing.LastSyncError,
+		LastGoodSnapshot: strings.Join(nodeNames, "\n"),
 	}
-	if sourceURLs == "" {
-		NewSub.LastGoodSnapshot = strings.Join(nodeNames, "\n")
-	}
-
 	err = OldSub.Update(&NewSub)
 	if err != nil {
 		c.JSON(400, gin.H{
 			"msg": "更新订阅失败: " + err.Error(),
 		})
 		return
-	}
-	if sourceURLs != "" {
-		if _, err := SyncSubscriptionSource(existing.ID); err != nil {
-			c.JSON(200, gin.H{"code": "00000", "msg": "已保存，但拉取上游失败，继续使用上次的节点: " + err.Error()})
-			return
-		}
 	}
 
 	c.JSON(200, gin.H{
@@ -351,9 +303,6 @@ func SubDel(c *gin.Context) {
 			"msg": "删除订阅失败: " + err.Error(),
 		})
 		return
-	}
-	if strings.TrimSpace(sub.SourceURLs) != "" {
-		removeSubscriptionSource(sub.Name)
 	}
 	c.JSON(200, gin.H{
 		"code": "00000",

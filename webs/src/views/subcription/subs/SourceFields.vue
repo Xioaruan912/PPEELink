@@ -5,8 +5,6 @@ import { VueDraggable } from "vue-draggable-plus";
 import { usePrefersReducedMotion } from "@/motion";
 const reduced = usePrefersReducedMotion();
 const {
-  sourceUrl,
-  isSourceMode,
   NodesList,
   value1,
   allGroups,
@@ -25,36 +23,8 @@ const {
 } = useSubscriptions();
 </script>
 <template>
-  <!-- 分区三：节点来源（本地节点/分组，或上游订阅链接） -->
+  <!-- 分区三：节点来源（具体节点 / 关联分组） -->
   <el-divider content-position="left">节点来源</el-divider>
-  <div class="mb-4">
-    <el-radio-group v-model="isSourceMode" class="w-full" style="display: flex">
-      <el-radio-button :value="false" style="flex: 1" class="text-center"
-        >本地节点与分组</el-radio-button
-      >
-      <el-radio-button :value="true" style="flex: 1" class="text-center"
-        >上游订阅链接</el-radio-button
-      >
-    </el-radio-group>
-  </div>
-
-  <template v-if="isSourceMode">
-    <el-form-item label="上游订阅链接（支持主源 + 备用源）">
-      <el-input
-        v-model="sourceUrl"
-        type="textarea"
-        :rows="3"
-        placeholder="每行一个订阅链接；主源失败时自动尝试下一行"
-        clearable
-      />
-      <div class="field-hint">
-        保存时立即拉取，之后每 6
-        小时自动刷新；节点放进与订阅同名的分组，流量与到期取自上游。
-      </div>
-    </el-form-item>
-  </template>
-
-  <template v-else>
     <el-row :gutter="24">
       <el-col :span="12">
         <el-form-item label="选择具体节点">
@@ -203,6 +173,5 @@ const {
         </el-form-item>
       </el-col>
     </el-row>
-  </template>
 </template>
 <style scoped src="./forms.scss"></style>

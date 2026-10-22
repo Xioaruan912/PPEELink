@@ -307,7 +307,7 @@ func MySubscriptions(c *gin.Context) {
 	for i := range subs {
 		_ = subs[i].EnsureToken()
 		links, imports := subscriptionLinks(base, subs[i].Token)
-		summary := sourceTraffic(subs[i])
+		summary := trafficSummary{}
 		summary.addExpire(subs[i].ExpiresAt)
 		items = append(items, gin.H{
 			"id":        subs[i].ID,

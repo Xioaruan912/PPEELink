@@ -55,7 +55,7 @@ export const constantRoutes: RouteRecordRaw[] = [
     ],
   },
 
-  // 旧地址：测试页已合并、机场并入订阅的上游来源
+  // 旧地址：测试页已合并
   // 测速已删除，旧地址落到解锁检测
   {
     path: "/test/speed",
@@ -70,11 +70,6 @@ export const constantRoutes: RouteRecordRaw[] = [
   {
     path: "/subcription/unlock",
     redirect: { path: "/test/index", query: { tab: "unlock" } },
-    meta: { hidden: true },
-  },
-  {
-    path: "/subcription/airport",
-    redirect: "/subcription/subs",
     meta: { hidden: true },
   },
 

@@ -298,7 +298,7 @@ func AccountNodes(acc models.ProxyAccount) []models.Node {
 const selfHostedGroupPrefix = "自建·"
 
 // SyncSelfHostedNodes 用第一个开通了自建节点的管理员账户生成节点，放进“自建·服务器名”分组，
-// 这样已有订阅和合集可以像引用普通分组一样引用自建节点。
+// 这样已有订阅可以像引用普通分组一样引用自建节点。
 func SyncSelfHostedNodes() error {
 	var admins []models.User
 	models.DB.Where("(role = ? OR role = '' OR role IS NULL) AND disabled = ?", models.RoleAdmin, false).Order("id asc").Find(&admins)

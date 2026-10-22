@@ -17,7 +17,8 @@ func Subcription(r *gin.Engine) {
 		SubcriptionGroup.POST("/update", api.SubUpdate)
 		SubcriptionGroup.POST("/reset-token", api.ResetSubToken)
 		SubcriptionGroup.POST("/set-expire", api.SetSubExpire)
-		SubcriptionGroup.POST("/sync-source", api.SubSyncSource)
+		SubcriptionGroup.POST("/check-alerts", api.SubscriptionCheckAlerts)
+		SubcriptionGroup.GET("/usage", api.SubscriptionUsage)
 	}
 
 }

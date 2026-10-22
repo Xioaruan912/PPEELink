@@ -15,7 +15,6 @@ export default {
     unlocktest: "Unlock Test",
     test: "Test",
     tcptest: "TCP Test",
-    clientdownload: "Client Download",
   },
   // 登录页面国际化
   login: {

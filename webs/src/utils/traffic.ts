@@ -42,7 +42,7 @@ export function trafficOf(row: TrafficInfo) {
     state,
   };
 }
-/** 订阅上游最近一次上报的流量（来自上游的 Subscription-Userinfo）。 */
+/** 分享链接里的流量与到期快照。 */
 export interface SourceTraffic {
   sourceUpload?: number;
   sourceDownload?: number;

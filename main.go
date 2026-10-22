@@ -193,7 +193,6 @@ func Run(port int) {
 	routers.Total(r)
 	routers.Templates(r)
 	routers.Version(r, version)
-	routers.Downloads(r)
 	routers.Rules(r)      // 规则中心
 	routers.Tasks(r)      // 后台任务中心
 	routers.Tokens(r)     // API Token 管理
@@ -201,8 +200,7 @@ func Run(port int) {
 	routers.Status(r)     // 公共只读状态页
 	routers.Audit(r)      // 管理操作审计
 	routers.ShortLinks(r) // 内部短链与一键导入
-	routers.Collections(r)
-	routers.Proxy(r) // 多订阅合集与到期/用量告警
+	routers.Proxy(r)      // 自建节点与到期/用量告警
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步

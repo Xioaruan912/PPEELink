@@ -576,7 +576,7 @@ func GetPersonalSubscription(c *gin.Context) {
 	if client == "" {
 		client = clientFromUserAgent(c.Request.UserAgent())
 	}
-	body, ext, contentType := renderCollectionNodes(client, nodes, defaultTemplates())
+	body, ext, contentType := renderClientNodes(client, nodes, defaultTemplates())
 	c.Header("Subscription-Userinfo", accountUserinfo(acc))
 	c.Header("Profile-Update-Interval", "12")
 	c.Header("Content-Disposition", "inline; filename*=utf-8''"+strings.ReplaceAll("自建节点."+ext, " ", "%20"))

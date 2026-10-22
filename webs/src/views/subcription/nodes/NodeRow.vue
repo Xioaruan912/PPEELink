@@ -20,9 +20,7 @@ const blockLabel = (node: OverviewItem) => {
       ? "已暂停"
       : b.kind === "server-quota"
         ? "服务器流量用完"
-        : b.kind === "upstream"
-          ? b.reason.replace("上游订阅", "上游")
-          : "连续检测无效";
+        : "连续检测无效";
   return b.until ? `${short}，${b.until.slice(5, 10)} 恢复` : short;
 };
 const {

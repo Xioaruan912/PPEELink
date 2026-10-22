@@ -105,7 +105,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 	}
 
 	// 逐节点解析服务器地址 + GeoIP 国家 + TCP 延迟。
-	// 并发上限避免节点很多时瞬间向机场发起大量连接（易被判定为扫描）。
+	// 并发上限避免节点很多时瞬间发起大量连接（易被判定为扫描）。
 	var wg sync.WaitGroup
 	results := make([]NodeOverviewItem, len(nodes))
 	slots := make(chan struct{}, qualityCheckConcurrency)

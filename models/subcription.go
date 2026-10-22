@@ -16,25 +16,16 @@ type Subcription struct {
 	gorm.Model
 	ID               int
 	Name             string
-	Config           string     `gorm:"type:text"` // Config 存储为 JSON 字符串
-	NodeOrder        string     `gorm:"type:text"`
-	Pipeline         string     `gorm:"type:text"`
-	SourceURLs       string     `gorm:"type:text"`
-	LastGoodSnapshot string     `gorm:"type:text" json:"-"`
-	LastSyncAt       *time.Time `json:"lastSyncAt"`
-	LastSyncError    string     `gorm:"type:text" json:"lastSyncError"`
-	// 上游订阅响应头 Subscription-Userinfo 里的流量（字节），每次同步刷新
-	SourceUpload    int64       `json:"sourceUpload"`
-	SourceDownload  int64       `json:"sourceDownload"`
-	SourceTotal     int64       `json:"sourceTotal"`
-	SourceExpire    *time.Time  `json:"sourceExpire"`
-	SourceTrafficAt *time.Time  `json:"sourceTrafficAt"`
-	Token           string      `gorm:"type:text;index"` // 订阅链接身份令牌（随机生成，可重置）
-	ExpiresAt       *time.Time  // 过期时间，nil 表示永不过期
-	LastRemindedAt  *time.Time  `json:"lastRemindedAt"` // 上次到期/流量提醒时间（每天最多一次）
-	Nodes           []Node      `gorm:"many2many:subcription_nodes;"`
-	GroupRefs       []GroupNode `gorm:"many2many:subcription_groups;"` // 引用的分组（分组内节点变化时自动跟进）
-	SubLogs         []SubLogs   `gorm:"foreignKey:SubcriptionID;"`
+	Config           string      `gorm:"type:text"` // Config 存储为 JSON 字符串
+	NodeOrder        string      `gorm:"type:text"`
+	Pipeline         string      `gorm:"type:text"`
+	LastGoodSnapshot string      `gorm:"type:text" json:"-"`
+	Token            string      `gorm:"type:text;index"` // 订阅链接身份令牌（随机生成，可重置）
+	ExpiresAt        *time.Time  // 过期时间，nil 表示永不过期
+	LastRemindedAt   *time.Time  `json:"lastRemindedAt"` // 上次到期/流量提醒时间（每天最多一次）
+	Nodes            []Node      `gorm:"many2many:subcription_nodes;"`
+	GroupRefs        []GroupNode `gorm:"many2many:subcription_groups;"` // 引用的分组（分组内节点变化时自动跟进）
+	SubLogs          []SubLogs   `gorm:"foreignKey:SubcriptionID;"`
 }
 
 // Config 结构体，用于解析 Subcription.Config 字段的 JSON 内容
@@ -110,10 +101,7 @@ func (sub *Subcription) Update(NewName *Subcription) error {
 	existingSub.Name = NewName.Name // 新名称
 	existingSub.Config = NewName.Config
 	existingSub.Pipeline = NewName.Pipeline
-	existingSub.SourceURLs = NewName.SourceURLs
 	existingSub.LastGoodSnapshot = NewName.LastGoodSnapshot
-	existingSub.LastSyncAt = NewName.LastSyncAt
-	existingSub.LastSyncError = NewName.LastSyncError
 
 	// 更新 NodeOrder 字段
 	if len(NewName.Nodes) > 0 {
