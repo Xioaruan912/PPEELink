@@ -106,7 +106,7 @@ func MonitorList(c *gin.Context) {
 			"id": m.ID, "name": m.Name, "group": m.Group, "note": m.Note,
 			"enabled": m.Enabled, "hidden": m.Hidden, "os": m.OS, "arch": m.Arch,
 			"version": m.Version, "lastSeenAt": m.LastSeenAt, "createdAt": m.CreatedAt,
-			"online": monitorOnline(m, now),
+			"online": monitorOnline(m, now), "sshConfigured": monitorSSHConfigured(m),
 		}
 		if hasLatest {
 			item["latest"] = latest
@@ -221,7 +221,8 @@ func MonitorDetail(c *gin.Context) {
 
 	data := gin.H{
 		"monitor": monitor, "online": monitorOnline(monitor, time.Now()),
-		"metrics": rows, "range": rangeKey,
+		"sshConfigured": monitorSSHConfigured(monitor),
+		"metrics":       rows, "range": rangeKey,
 	}
 	if hasLatest {
 		data["latest"] = latest

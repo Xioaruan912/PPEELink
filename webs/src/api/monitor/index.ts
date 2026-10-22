@@ -37,6 +37,10 @@ export interface MonitorItem {
   lastSeenAt?: string | null;
   createdAt: string;
   online: boolean;
+  sshConfigured: boolean;
+  sshHost: string;
+  sshPort: number;
+  sshUser: string;
   latest?: MonitorMetric;
 }
 
@@ -50,8 +54,12 @@ export interface MonitorDetail {
     arch: string;
     version: string;
     lastSeenAt?: string | null;
+    sshHost: string;
+    sshPort: number;
+    sshUser: string;
   };
   online: boolean;
+  sshConfigured: boolean;
   latest?: MonitorMetric;
   metrics: MonitorMetric[];
   range: string;
@@ -97,5 +105,27 @@ export function getMonitorDetail(id: number, range = "24h") {
     url: "/api/v1/monitors/detail",
     method: "get",
     params: { id, range },
+  });
+}
+
+export function saveMonitorSSH(data: {
+  id: number;
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+}) {
+  return request({
+    url: "/api/v1/monitors/ssh/save",
+    method: "post",
+    data,
+  });
+}
+
+export function getMonitorSSHTicket(id: number) {
+  return request<{ ticket: string; expiresIn: number }>({
+    url: "/api/v1/monitors/ssh/ticket",
+    method: "post",
+    data: { id },
   });
 }
