@@ -432,6 +432,18 @@ async function resetToken(item: MonitorItem | null) {
             </footer>
           </template>
           <p v-else class="server-empty">等待服务器首次上报…</p>
+          <p v-if="item.check" class="check-line">
+            节点检测
+            <b :class="{ bad: item.check.success < item.check.total }"
+              >{{ item.check.success }}/{{ item.check.total }}</b
+            >
+            <span v-if="item.check.checkedAt"
+              >· {{ formatDateTime(item.check.checkedAt) }}</span
+            >
+          </p>
+          <p v-else-if="item.linked" class="check-line muted">
+            节点检测等待 agent 上报…
+          </p>
         </article>
       </div>
     </UiPanel>
@@ -784,6 +796,28 @@ async function resetToken(item: MonitorItem | null) {
   margin: 8px 0 0;
   color: var(--c-muted);
   font-size: 12px;
+}
+.check-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px;
+  margin: 6px 0 0;
+  padding-top: 6px;
+  border-top: 1px dashed var(--c-line);
+  color: var(--c-muted);
+  font-size: 11px;
+}
+.check-line b {
+  color: var(--c-ok);
+  font-weight: 600;
+}
+.check-line b.bad {
+  color: var(--c-warn);
+}
+.check-line.muted {
+  border-top: 0;
+  padding-top: 0;
 }
 .panel-pad {
   padding: 16px;

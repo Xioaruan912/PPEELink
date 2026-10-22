@@ -44,6 +44,7 @@ export interface MonitorItem {
   sshPort: number;
   sshUser: string;
   latest?: MonitorMetric;
+  check?: { total: number; success: number; checkedAt?: string | null };
 }
 
 export interface MonitorDetail {

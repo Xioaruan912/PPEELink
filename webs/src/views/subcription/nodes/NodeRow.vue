@@ -24,9 +24,9 @@ const probeTitle = (node: OverviewItem) =>
     .join("\n");
 const policyLabel = (policy?: string) =>
   policy === "any"
-    ? "任一探针"
+    ? "任一 Agent"
     : policy === "all"
-      ? "全部探针"
+      ? "全部 Agent"
       : policy === "manual"
         ? "手动有效"
         : "";
@@ -92,7 +92,7 @@ const {
             class="probe-badge"
             :class="{ 'is-bad': !node.probes.some((probe) => probe.success) }"
             :title="probeTitle(node)"
-            >探针 {{ node.probes.filter((probe) => probe.success).length }}/{{
+            >检测 {{ node.probes.filter((probe) => probe.success).length }}/{{
               node.probes.length
             }}</span
           ><span
