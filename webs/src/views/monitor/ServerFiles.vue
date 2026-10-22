@@ -69,7 +69,7 @@ const bytes = (n: number) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).t
 </script>
 
 <template>
- <UiPanel title="SFTP 文件" description="直接使用保存的 SSH 配置 · 上传/下载 64 MiB · UTF-8 编辑 1 MiB">
+ <UiPanel title="文件管理" description="通过 agent 本地读写 · 上传/下载 64 MiB · UTF-8 编辑 1 MiB">
   <template #actions><UiButton :disabled="locked" @click="load()">刷新</UiButton></template>
   <p v-if="offline" class="notice" role="status">网络已断开。保留上次目录供查看，恢复网络后请刷新。</p>
   <p v-if="busy" class="muted" role="status">正在处理，请等待完成后再进行其他操作。</p>

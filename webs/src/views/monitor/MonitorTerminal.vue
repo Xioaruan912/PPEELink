@@ -13,12 +13,11 @@ const props = defineProps<{
   monitor: {
     id: number;
     name: string;
-    sshConfigured?: boolean;
+    proxyServerId?: number | null;
   } | null;
 }>();
 const emit = defineEmits<{
   "update:modelValue": [value: boolean];
-  "open-settings": [];
 }>();
 
 const visible = computed({
@@ -110,8 +109,8 @@ function disconnect() {
 
 async function connect() {
   if (!props.monitor) return;
-  if (!props.monitor.sshConfigured) {
-    setStatus("还没有配置 SSH");
+  if (!props.monitor.proxyServerId) {
+    setStatus("该监控未关联自建服务器 agent");
     return;
   }
   disconnect();
@@ -209,7 +208,7 @@ async function runCommand(command: QuickCommand) {
 <template>
   <UiDialog
     v-model="visible"
-    :title="`WebSSH · ${monitor?.name || ''}`"
+    :title="`Agent 终端 · ${monitor?.name || ''}`"
     width="1120px"
     :destroy-on-close="false"
   >
@@ -223,7 +222,6 @@ async function runCommand(command: QuickCommand) {
           }}</UiTag>
           <span class="spacer"></span>
           <UiButton @click="connect">重连</UiButton>
-          <UiButton @click="emit('open-settings')">SSH 设置</UiButton>
         </div>
         <div ref="terminalHost" class="terminal"></div>
         <p class="terminal-note">
