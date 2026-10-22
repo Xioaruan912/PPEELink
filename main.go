@@ -85,6 +85,7 @@ func main() {
 	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
 		time.Local = loc
 	}
+	version = "2.1"
 	// agent 模式运行在远程服务器上，不需要面板的配置与数据库
 	if len(os.Args) > 1 && os.Args[1] == "agent" {
 		runAgent(os.Args[2:])
@@ -251,6 +252,7 @@ func runAgent(args []string) {
 	if err := os.MkdirAll(*dir, 0o700); err != nil {
 		log.Fatal(err)
 	}
+	xraycore.AgentVersion = version
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	runner := xraycore.NewRunner(*dir, "ppeelink-xray")

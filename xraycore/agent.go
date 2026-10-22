@@ -16,6 +16,9 @@ import (
 )
 
 // Source 期望状态的来源与回报去向：面板本机直接读写数据库，远程 agent 走 HTTPS。
+// AgentVersion 由 agent 主程序注入，随每次回报发送给面板。
+var AgentVersion = "dev"
+
 type Source interface {
 	Spec(ctx context.Context) (Spec, error)
 	Report(ctx context.Context, report Report) error
@@ -34,7 +37,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 	collector := monitorcore.NewCollector()
 	var lastMonitor time.Time
 	tick := func() bool {
-		report := Report{Arch: runtime.GOARCH, Traffic: map[string]Counter{}, Online: map[string]int{}}
+		report := Report{Arch: runtime.GOARCH, AgentVersion: AgentVersion, Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
 		if err == nil && spec.Uninstall {
 			// 先收最后一轮流量，再卸载

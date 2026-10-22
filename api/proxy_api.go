@@ -96,7 +96,7 @@ func ProxyServerSave(c *gin.Context) {
 	req.Name = strings.TrimSpace(req.Name)
 	req.PublicHost = strings.TrimSpace(req.PublicHost)
 	if req.Name == "" || !validHost(req.PublicHost) {
-		c.JSON(400, gin.H{"code": "40000", "msg": "请填写名称和客户端连接用的域名或 IP"})
+		c.JSON(400, gin.H{"code": "40000", "msg": "请填写名称和节点对外的代理 IP 或域名"})
 		return
 	}
 	if req.TrafficLimitGB < 0 || req.ResetDay < 0 || req.ResetDay > 28 {
@@ -119,21 +119,12 @@ func ProxyServerSave(c *gin.Context) {
 		c.JSON(200, gin.H{"code": "00000", "msg": "已保存"})
 		return
 	}
-	if req.Kind != models.ServerKindLocal && req.Kind != models.ServerKindAgent {
-		c.JSON(400, gin.H{"code": "40000", "msg": "未知的服务器类型"})
-		return
+	if req.Kind == "" {
+		req.Kind = models.ServerKindAgent
 	}
-	if req.Kind == models.ServerKindLocal {
-		var n int64
-		models.DB.Model(&models.ProxyServer{}).Where("kind = ?", models.ServerKindLocal).Count(&n)
-		if n > 0 {
-			c.JSON(400, gin.H{"code": "40000", "msg": "面板服务器已经添加过了"})
-			return
-		}
-		if runtime.GOOS != "linux" {
-			c.JSON(400, gin.H{"code": "40000", "msg": "在面板服务器上运行 xray 仅支持 Linux"})
-			return
-		}
+	if req.Kind != models.ServerKindAgent {
+		c.JSON(400, gin.H{"code": "40000", "msg": "现在只支持添加远程服务器；面板服务器已停用"})
+		return
 	}
 	server := models.ProxyServer{Name: req.Name, Kind: req.Kind, PublicHost: req.PublicHost, Enabled: true,
 		TrafficLimit: limit, ResetDay: req.ResetDay, MonitorEnabled: req.MonitorEnabled}

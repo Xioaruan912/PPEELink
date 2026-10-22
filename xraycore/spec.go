@@ -74,14 +74,15 @@ type Counter struct {
 
 // Report 服务器回报给面板的运行状态。Traffic 为自上次回报以来的增量。
 type Report struct {
-	Rev         string              `json:"rev"`
-	XrayVersion string              `json:"xrayVersion"`
-	AgentHash   string              `json:"agentHash,omitempty"`
-	Arch        string              `json:"arch"`
-	Running     bool                `json:"running"`
-	Error       string              `json:"error"`
-	Traffic     map[string]Counter  `json:"traffic"`
-	Online      map[string]int      `json:"online"` // email -> 在线 IP 数
-	Uninstalled bool                `json:"uninstalled,omitempty"`
-	Monitor     *monitorcore.Metric `json:"monitor,omitempty"`
+	Rev          string              `json:"rev"`
+	XrayVersion  string              `json:"xrayVersion"`
+	AgentVersion string              `json:"agentVersion,omitempty"`
+	AgentHash    string              `json:"agentHash,omitempty"`
+	Arch         string              `json:"arch"`
+	Running      bool                `json:"running"`
+	Error        string              `json:"error"`
+	Traffic      map[string]Counter  `json:"traffic"`
+	Online       map[string]int      `json:"online"` // email -> 在线 IP 数
+	Uninstalled  bool                `json:"uninstalled,omitempty"`
+	Monitor      *monitorcore.Metric `json:"monitor,omitempty"`
 }
