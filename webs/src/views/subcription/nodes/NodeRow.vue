@@ -13,6 +13,23 @@ import {
 } from "./useNodes";
 defineProps<{ node: OverviewItem }>();
 // 暂不下发标签：原因的简称 + 预计恢复日期
+const probeTitle = (node: OverviewItem) =>
+  (node.probes || [])
+    .map(
+      (probe) =>
+        `${probe.region || probe.name}: ${
+          probe.success ? `通 ${probe.rtt}ms` : probe.error || "失败"
+        }`
+    )
+    .join("\n");
+const policyLabel = (policy?: string) =>
+  policy === "any"
+    ? "任一探针"
+    : policy === "all"
+      ? "全部探针"
+      : policy === "manual"
+        ? "手动有效"
+        : "";
 const blockLabel = (node: OverviewItem) => {
   const b = node.blocked!;
   const short =
@@ -70,6 +87,19 @@ const {
             class="force-badge"
             title="检测无效时也不会从订阅中排除"
             >始终下发</span
+          ><span
+            v-if="node.probes?.length"
+            class="probe-badge"
+            :class="{ 'is-bad': !node.probes.some((probe) => probe.success) }"
+            :title="probeTitle(node)"
+            >探针 {{ node.probes.filter((probe) => probe.success).length }}/{{
+              node.probes.length
+            }}</span
+          ><span
+            v-if="node.probePolicy && node.probePolicy !== 'panel'"
+            class="policy-badge"
+            :title="`检测策略：${policyLabel(node.probePolicy)}`"
+            >{{ policyLabel(node.probePolicy) }}</span
           >{{ node.country || "国家未知" }} ·
           {{ (node.groups || []).join(" / ") || "未分组" }}</span
         >
@@ -136,6 +166,9 @@ const {
               >设置中转</el-dropdown-item
             >
             <el-dropdown-item command="temp">临时订阅</el-dropdown-item>
+            <el-dropdown-item command="probe-policy"
+              >检测策略…</el-dropdown-item
+            >
             <el-dropdown-item command="deliver">{{
               node.forceDeliver
                 ? "恢复按检测结果下发"
@@ -236,6 +269,25 @@ const {
   background: color-mix(in srgb, var(--c-signal) 18%, transparent);
   color: var(--c-signal-text);
   font-size: 12px;
+}
+.probe-badge,
+.policy-badge {
+  margin-right: 6px;
+  padding: 1px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+}
+.probe-badge {
+  background: color-mix(in srgb, var(--c-ok) 14%, transparent);
+  color: var(--c-ok);
+}
+.probe-badge.is-bad {
+  background: color-mix(in srgb, var(--c-bad) 12%, transparent);
+  color: var(--c-bad);
+}
+.policy-badge {
+  background: var(--c-surface-2);
+  color: var(--c-muted);
 }
 .force-badge {
   margin-right: 6px;

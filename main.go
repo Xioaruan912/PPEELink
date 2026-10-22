@@ -86,6 +86,10 @@ func main() {
 		runAgent(os.Args[2:])
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "probe" {
+		runProbeClient(os.Args[2:])
+		return
+	}
 	// 初始化配置
 	models.ConfigInit()
 	config := models.ReadConfig() // 读取配置文件
@@ -119,6 +123,9 @@ func main() {
 	case "setting":
 		settingCmd.Parse(args[2:])
 		settings.ResetUser(username, password)
+		return
+	case "probe-add":
+		runProbeAdd(args[2:])
 		return
 	case "run":
 		settingCmd.Parse(args[2:])
@@ -201,6 +208,7 @@ func Run(port int) {
 	routers.Audit(r)      // 管理操作审计
 	routers.ShortLinks(r) // 内部短链与一键导入
 	routers.Proxy(r)      // 自建节点与到期/用量告警
+	routers.Probes(r)     // 多视角检测探针
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步

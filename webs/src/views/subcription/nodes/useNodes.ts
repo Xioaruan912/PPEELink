@@ -23,6 +23,7 @@ import {
   SetGroupVisibility,
   SetNodeForceDeliver,
 } from "@/api/subcription/node";
+import { setNodeProbePolicy } from "@/api/subcription/probe";
 
 import { copySubscriptionText } from "../subs/clipboard";
 
@@ -39,6 +40,18 @@ export interface OverviewItem {
   blocked?: { kind: string; reason: string; until?: string };
   /** 即使检测无效也照常下发 */
   forceDeliver?: boolean;
+  /** 检测策略 */
+  probePolicy?: "panel" | "any" | "all" | "manual";
+  /** 最近一次各探针结果 */
+  probes?: {
+    id: number;
+    name: string;
+    region: string;
+    success: boolean;
+    rtt: number;
+    error?: string;
+    checkedAt?: string;
+  }[];
   checkedAt: string;
   groups: string[];
   relayId?: number;
@@ -211,6 +224,30 @@ function createNodes() {
       );
     } finally {
       checking.value = false;
+    }
+  }
+  const probePolicyDialog = ref(false),
+    probePolicyNode = ref<OverviewItem | null>(null),
+    probePolicy = ref<"panel" | "any" | "all" | "manual">("panel"),
+    savingProbePolicy = ref(false);
+  function openProbePolicy(row: OverviewItem) {
+    probePolicyNode.value = row;
+    probePolicy.value = row.probePolicy || "panel";
+    probePolicyDialog.value = true;
+  }
+  async function saveProbePolicy() {
+    if (!probePolicyNode.value || savingProbePolicy.value) return;
+    savingProbePolicy.value = true;
+    try {
+      await setNodeProbePolicy(probePolicyNode.value.id, probePolicy.value);
+      probePolicyNode.value.probePolicy = probePolicy.value;
+      ElMessage.success("检测策略已保存");
+      probePolicyDialog.value = false;
+      await loadAll();
+    } catch {
+      ElMessage.error("保存失败，请稍后重试");
+    } finally {
+      savingProbePolicy.value = false;
     }
   }
   const nodeDialog = ref(false),
@@ -492,6 +529,10 @@ function createNodes() {
   const nodeName = (id?: number) =>
     id ? overviewList.value.find((n) => n.id === id)?.name : undefined;
   function nodeCommand(command: string, row: OverviewItem) {
+    if (command === "probe-policy") {
+      openProbePolicy(row);
+      return;
+    }
     if (command === "deliver") {
       void toggleForceDeliver(row);
       return;
@@ -614,5 +655,11 @@ function createNodes() {
     tool,
     openTool,
     nodeName,
+    probePolicyDialog,
+    probePolicyNode,
+    probePolicy,
+    savingProbePolicy,
+    openProbePolicy,
+    saveProbePolicy,
   };
 }
