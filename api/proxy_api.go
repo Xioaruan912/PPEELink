@@ -19,6 +19,8 @@ import (
 
 // ---- 服务器 ----------------------------------------------------------------
 
+const agentVersionBase = "2.2"
+
 type serverView struct {
 	models.ProxyServer
 	Inbounds  []models.ProxyInbound `json:"inbounds"`
@@ -40,6 +42,9 @@ func ProxyServerList(c *gin.Context) {
 	views := make([]serverView, 0, len(servers))
 	for _, s := range servers {
 		v := serverView{ProxyServer: s, Inbounds: []models.ProxyInbound{}}
+		if s.Kind == models.ServerKindAgent {
+			v.AgentVersion = fmt.Sprintf("%s.%d", agentVersionBase, s.AgentRevision)
+		}
 		models.DB.Where("server_id = ?", s.ID).Order("id asc").Find(&v.Inbounds)
 		v.Online = s.LastSeenAt != nil && time.Since(*s.LastSeenAt) < 3*time.Minute
 		var sum struct{ Up, Down int64 }

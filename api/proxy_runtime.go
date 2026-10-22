@@ -123,6 +123,7 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 		}
 		if server.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == xraycore.ExecutableHash() {
 			updates["agent_update_requested"] = false
+			updates["agent_revision"] = gorm.Expr("agent_revision + 1")
 		}
 		if err := tx.Model(&models.ProxyServer{}).Where("id = ?", server.ID).Updates(updates).Error; err != nil {
 			return err
