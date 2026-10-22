@@ -16,6 +16,7 @@ import IconUserCircle from "~icons/ph/user-circle";
 import IconUsers from "~icons/ph/users-three";
 import IconGear from "~icons/ph/gear-six";
 import IconServer from "~icons/ph/hard-drives";
+import IconChartLine from "~icons/ph/chart-line";
 
 export interface NavigationItem {
   path: string;
@@ -27,6 +28,7 @@ export interface NavigationItem {
 // Per-route icon and one-line hint for menus; routes themselves come from the server.
 const META: Record<string, { icon: Component; hint?: string }> = {
   "/dashboard": { icon: IconHouse },
+  "/monitor/index": { icon: IconChartLine, hint: "服务器指标与在线状态" },
   "/subcription": { icon: IconSubs },
   "/subcription/subs": { icon: IconLink, hint: "生成与分发订阅链接" },
   "/subcription/nodes": { icon: IconNodes, hint: "分组、编辑与检测节点" },

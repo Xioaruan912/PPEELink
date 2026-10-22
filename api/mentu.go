@@ -46,6 +46,22 @@ func GetMenus(c *gin.Context) {
 				},
 			},
 		},
+		// 服务器监控
+		{
+			Path:      "/monitor",
+			Component: "Layout",
+			Redirect:  "/monitor/index",
+			Name:      "monitor",
+			Meta:      Meta{Title: "monitor", Icon: "monitor", Roles: []string{"ADMIN"}},
+			Children: []Child{
+				{
+					Path:      "index",
+					Component: "monitor/index",
+					Name:      "Monitor",
+					Meta:      Meta{Title: "monitor", Icon: "monitor", Roles: []string{"ADMIN"}, KeepAlive: true},
+				},
+			},
+		},
 		// 订阅管理
 		{
 			Path:      "/subcription",

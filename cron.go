@@ -24,6 +24,9 @@ func StartCronTasks() {
 		if err := models.CleanupProbeResults(time.Now().Add(-24 * time.Hour)); err != nil {
 			log.Println("[Cron] 清理探针结果失败:", err)
 		}
+		if err := models.CleanupMonitorMetrics(time.Now().Add(-7 * 24 * time.Hour)); err != nil {
+			log.Println("[Cron] 清理监控指标失败:", err)
+		}
 		models.CleanupMaintenance(time.Now())
 	})
 
