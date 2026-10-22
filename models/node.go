@@ -33,8 +33,11 @@ type Node struct {
 	// 不覆盖手动暂停与服务器额度。
 	ForceDeliver bool `gorm:"not null;default:false" json:"forceDeliver"`
 	// ProbePolicy 检测策略：panel 只看面板，any 任一探针通过，all 所有探针通过，manual 手动有效
-	ProbePolicy string      `gorm:"size:16;not null;default:panel" json:"probePolicy"`
-	GroupNodes  []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
+	ProbePolicy string `gorm:"size:16;not null;default:panel" json:"probePolicy"`
+	// Source 标记由面板自动维护的节点；目前只有自建节点使用 self-hosted，
+	// 用于避免把用户手工创建的同名节点当成可清理的自动节点。
+	Source     string      `gorm:"size:24;index" json:"source,omitempty"`
+	GroupNodes []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
 }
 
 // hook Node 写入创建删除修改 等写入权限
