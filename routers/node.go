@@ -31,7 +31,8 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.POST("/test/cancel", api.TestCancel)
 		NodesGroup.POST("/batch", api.NodeBatch)
 		NodesGroup.POST("/pause", api.NodePause)
-		NodesGroup.POST("/deliver", api.NodeForceDeliver) // 即使检测无效也始终下发
+		NodesGroup.POST("/deliver", api.NodeForceDeliver)     // 即使检测无效也始终下发
+		NodesGroup.POST("/probe-policy", api.NodeProbePolicy) // 节点检测策略
 		NodesGroup.POST("/temp-link", api.NodeTempLink)
 		NodesGroup.POST("/dedupe", api.NodeDedupe)
 		NodesGroup.POST("/visibility", api.NodeVisibility) // 全局隐藏/恢复单个节点
