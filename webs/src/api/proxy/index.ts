@@ -30,6 +30,7 @@ export interface ProxyServer {
   removing: boolean;
   trafficLimit: number;
   resetDay: number;
+  monitorEnabled: boolean;
   /** 本计费周期流量；over 为 true 时 xray 已停止、节点暂不下发，resetAt 恢复 */
   quota: { used: number; limit: number; over: boolean; resetAt: string };
   inbounds: ProxyInbound[];
@@ -90,6 +91,7 @@ export const saveProxyServer = (data: {
   enabled: boolean;
   trafficLimitGb?: number;
   resetDay?: number;
+  monitorEnabled?: boolean;
 }) =>
   request<{ id: number; token?: string; install?: string }>({
     url: "/api/v1/proxy/servers/save",

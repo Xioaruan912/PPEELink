@@ -11,6 +11,7 @@ func Monitors(r *gin.Engine) {
 	r.GET("/api/v1/monitor/config", api.MonitorConfig)
 	r.POST("/api/v1/monitor/report", api.MonitorReport)
 	r.GET("/api/v1/monitor/binary", api.MonitorBinary)
+	r.GET("/api/v1/monitor/install.sh", api.MonitorInstallScript)
 	r.GET("/api/v1/monitors/ssh/ws", api.MonitorSSHWS)
 
 	// 管理端接口：JWT。

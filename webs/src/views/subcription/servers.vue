@@ -149,6 +149,7 @@ const serverForm = reactive({
   enabled: true,
   trafficLimitGb: 0,
   resetDay: 1,
+  monitorEnabled: false,
 });
 const GB = 1024 ** 3;
 const savingServer = ref(false);
@@ -178,6 +179,7 @@ function openServer(s?: ProxyServer, kind?: "local" | "agent") {
           enabled: s.enabled,
           trafficLimitGb: Math.round((s.trafficLimit / GB) * 100) / 100,
           resetDay: s.resetDay || 1,
+          monitorEnabled: s.monitorEnabled,
         }
       : {
           id: 0,
@@ -191,6 +193,7 @@ function openServer(s?: ProxyServer, kind?: "local" | "agent") {
           enabled: true,
           trafficLimitGb: 0,
           resetDay: 1,
+          monitorEnabled: false,
         }
   );
   serverDialog.value = true;
@@ -226,6 +229,7 @@ async function toggleServer(s: ProxyServer) {
     enabled: !s.enabled,
     trafficLimitGb: s.trafficLimit / GB,
     resetDay: s.resetDay || 1,
+    monitorEnabled: s.monitorEnabled,
   });
   ElMessage.success(s.enabled ? "已停用，xray 将在一分钟内停止" : "已启用");
   await load(true);
@@ -621,6 +625,12 @@ const usageRatio = (a: ProxyAccount) =>
             按面板统计的上下行合计。用完后停止
             xray、节点暂不下发，到重置日自动恢复。
           </p>
+        </el-form-item>
+        <el-form-item label="服务器监控">
+          <div class="monitor-toggle">
+            <el-switch v-model="serverForm.monitorEnabled" />
+            <span>复用现有 agent 上报 CPU、内存、磁盘与网络，无需再装监控服务。</span>
+          </div>
         </el-form-item>
         <p class="dialog-hint">
           {{
@@ -1059,6 +1069,14 @@ const usageRatio = (a: ProxyAccount) =>
 }
 .quota-bar i.hot {
   background: var(--c-bad);
+}
+.monitor-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--c-muted);
+  font-size: 12px;
+  line-height: 1.6;
 }
 .dialog-hint {
   margin-bottom: 12px;

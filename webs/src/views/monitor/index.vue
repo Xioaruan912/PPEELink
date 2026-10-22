@@ -374,7 +374,11 @@ async function resetToken(item: MonitorItem | null) {
             }}</UiTag>
           </header>
           <p class="server-sub">
-            {{ item.group || "未分组" }} · {{ item.os || "unknown" }}/{{ item.arch || "?" }}
+            {{
+              item.linked
+                ? "自建节点 agent"
+                : `${item.group || "未分组"} · ${item.os || "unknown"}/${item.arch || "?"}`
+            }}
             <span v-if="item.lastSeenAt">
               · {{ formatDateTime(item.lastSeenAt) }}
             </span>
@@ -430,12 +434,16 @@ async function resetToken(item: MonitorItem | null) {
     >
       <template v-if="created">
         <p class="dialog-note">
-          在服务器上以 root 执行下面的命令。令牌只显示这一次，重置后旧命令会失效。
+          在服务器上以 root 执行下面这一行命令。令牌只显示这一次，重置后旧命令会失效。
         </p>
         <pre class="code-block install-code">{{ created.install }}</pre>
         <UiButton @click="copy(created.install)">复制安装命令</UiButton>
       </template>
       <el-form v-else label-position="top" @submit.prevent="submitAdd">
+        <p class="dialog-note">
+          如果这台机器已经装了自建节点 agent，不用在这里添加：到「自建节点」编辑服务器，打开「服务器监控」即可复用同一个
+          agent。
+        </p>
         <el-form-item label="名称" required>
           <el-input
             v-model="form.name"

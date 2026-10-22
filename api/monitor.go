@@ -65,24 +65,7 @@ func currentMonitor(c *gin.Context) (*models.Monitor, bool) {
 
 func monitorInstallCommand(c *gin.Context, token string) string {
 	panel := strings.TrimSuffix(baseURL(c), "/")
-	return fmt.Sprintf(`curl -fsSL -H 'Authorization: Monitor %s' '%s/api/v1/monitor/binary' -o /usr/local/bin/ppeelink-monitor
-chmod +x /usr/local/bin/ppeelink-monitor
-cat >/etc/systemd/system/ppeelink-monitor.service <<'UNIT'
-[Unit]
-Description=PPEELink monitor
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/usr/local/bin/ppeelink-monitor monitor -panel '%s' -token '%s' -interval 60s
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-systemctl daemon-reload
-systemctl enable --now ppeelink-monitor`, token, panel, panel, token)
+	return fmt.Sprintf("curl -fsSL -H 'Authorization: Monitor %s' '%s/api/v1/monitor/install.sh' | sh", token, panel)
 }
 
 func monitorOnline(monitor models.Monitor, now time.Time) bool {
@@ -107,6 +90,7 @@ func MonitorList(c *gin.Context) {
 			"enabled": m.Enabled, "hidden": m.Hidden, "os": m.OS, "arch": m.Arch,
 			"version": m.Version, "lastSeenAt": m.LastSeenAt, "createdAt": m.CreatedAt,
 			"online": monitorOnline(m, now), "sshConfigured": monitorSSHConfigured(m),
+			"proxyServerId": m.ProxyServerID, "linked": m.ProxyServerID != nil,
 		}
 		if hasLatest {
 			item["latest"] = latest
@@ -356,4 +340,37 @@ func MonitorBinary(c *gin.Context) {
 	}
 	c.Header("Content-Disposition", "attachment; filename=ppeelink-monitor")
 	c.File(exe)
+}
+
+// MonitorInstallScript 下发一行式安装脚本。
+func MonitorInstallScript(c *gin.Context) {
+	if _, ok := currentMonitor(c); !ok {
+		return
+	}
+	auth := strings.TrimSpace(c.GetHeader("Authorization"))
+	token := strings.TrimSpace(strings.TrimPrefix(auth, "Monitor "))
+	panel := strings.TrimSuffix(baseURL(c), "/")
+	script := fmt.Sprintf(`#!/bin/sh
+set -eu
+curl -fsSL -H 'Authorization: Monitor %s' '%s/api/v1/monitor/binary' -o /usr/local/bin/ppeelink-monitor
+chmod +x /usr/local/bin/ppeelink-monitor
+cat >/etc/systemd/system/ppeelink-monitor.service <<'UNIT'
+[Unit]
+Description=PPEELink monitor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/ppeelink-monitor monitor -panel '%s' -token '%s' -interval 60s
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now ppeelink-monitor
+`, token, panel, panel, token)
+	c.Header("Content-Type", "text/x-shellscript; charset=utf-8")
+	c.String(200, script)
 }

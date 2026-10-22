@@ -5,6 +5,7 @@ package xraycore
 
 import (
 	"crypto/sha256"
+	"ppeelink/monitorcore"
 	"encoding/hex"
 	"encoding/json"
 )
@@ -29,6 +30,13 @@ type Spec struct {
 	BlockBitTorrent bool `json:"blockBitTorrent"`
 	// 服务器已在面板删除：停止并卸载 xray，agent 随后移除自身
 	Uninstall bool `json:"uninstall,omitempty"`
+	// Monitor 为服务器监控开关；开启后 agent 会在回报里附带指标。
+	Monitor *MonitorSpec `json:"monitor,omitempty"`
+}
+
+type MonitorSpec struct {
+	Enabled         bool `json:"enabled"`
+	IntervalSeconds int  `json:"intervalSeconds"`
 }
 
 type InboundSpec struct {
@@ -71,4 +79,5 @@ type Report struct {
 	Traffic     map[string]Counter `json:"traffic"`
 	Online      map[string]int     `json:"online"` // email -> 在线 IP 数
 	Uninstalled bool               `json:"uninstalled,omitempty"`
+	Monitor     *monitorcore.Metric `json:"monitor,omitempty"`
 }
