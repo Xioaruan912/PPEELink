@@ -11,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"ppeelink/monitorcore"
 )
 
 // Source 期望状态的来源与回报去向：面板本机直接读写数据库，远程 agent 走 HTTPS。
@@ -24,6 +26,8 @@ type Source interface {
 // 面板要求卸载时，卸载 xray 并回报成功后返回 true。
 func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Duration) bool {
 	pending := map[string]Counter{}
+	collector := monitorcore.NewCollector()
+	var lastMonitor time.Time
 	tick := func() bool {
 		report := Report{Arch: runtime.GOARCH, Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
@@ -53,6 +57,17 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 			report.Error = "获取配置失败: " + err.Error()
 		} else if err := runner.Apply(ctx, spec); err != nil {
 			report.Error = err.Error()
+		}
+		if spec.Monitor != nil && spec.Monitor.Enabled {
+			interval := time.Duration(spec.Monitor.IntervalSeconds) * time.Second
+			if interval <= 0 {
+				interval = time.Minute
+			}
+			if lastMonitor.IsZero() || time.Since(lastMonitor) >= interval {
+				metric := collector.Collect()
+				report.Monitor = &metric
+				lastMonitor = time.Now()
+			}
 		}
 		traffic, online, err := runner.Collect(ctx)
 		if err != nil && report.Error == "" {

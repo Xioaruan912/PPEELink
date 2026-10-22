@@ -64,6 +64,7 @@ type serverSaveRequest struct {
 	// 月流量上限（GB，0 不限）与每月重置日（1-28）
 	TrafficLimitGB float64 `json:"trafficLimitGb"`
 	ResetDay       int     `json:"resetDay"`
+	MonitorEnabled bool    `json:"monitorEnabled"`
 }
 
 func validHost(host string) bool {
@@ -109,7 +110,7 @@ func ProxyServerSave(c *gin.Context) {
 	if req.ID != 0 {
 		res := models.DB.Model(&models.ProxyServer{}).Where("id = ? AND removing = ?", req.ID, false).
 			Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled,
-				"traffic_limit": limit, "reset_day": req.ResetDay})
+				"traffic_limit": limit, "reset_day": req.ResetDay, "monitor_enabled": req.MonitorEnabled})
 		if res.Error != nil || res.RowsAffected == 0 {
 			c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
 			return
@@ -135,7 +136,7 @@ func ProxyServerSave(c *gin.Context) {
 		}
 	}
 	server := models.ProxyServer{Name: req.Name, Kind: req.Kind, PublicHost: req.PublicHost, Enabled: true,
-		TrafficLimit: limit, ResetDay: req.ResetDay}
+		TrafficLimit: limit, ResetDay: req.ResetDay, MonitorEnabled: req.MonitorEnabled}
 	token := ""
 	if req.Kind == models.ServerKindAgent {
 		token = models.RandomHex(24)
@@ -211,6 +212,11 @@ func ProxyServerDelete(c *gin.Context) {
 // purgeProxyServer 删除服务器记录与入站（流量历史保留）。
 func purgeProxyServer(s models.ProxyServer) {
 	models.DB.Where("server_id = ?", s.ID).Delete(&models.ProxyInbound{})
+	var monitor models.Monitor
+	if models.DB.Where("proxy_server_id = ?", s.ID).First(&monitor).Error == nil {
+		models.DB.Where("monitor_id = ?", monitor.ID).Delete(&models.MonitorMetric{})
+		models.DB.Delete(&monitor)
+	}
 	models.DB.Delete(&models.ProxyServer{}, s.ID)
 	NotifyProxyChanged()
 }

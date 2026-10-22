@@ -13,6 +13,7 @@ type Monitor struct {
 	Name           string     `gorm:"size:80;not null" json:"name"`
 	Group          string     `gorm:"size:40" json:"group"`
 	Note           string     `gorm:"size:255" json:"note"`
+	ProxyServerID  *uint      `gorm:"uniqueIndex" json:"proxyServerId,omitempty"`
 	SSHHost        string     `gorm:"size:255" json:"sshHost"`
 	SSHPort        int        `gorm:"not null;default:22" json:"sshPort"`
 	SSHUser        string     `gorm:"size:80" json:"sshUser"`

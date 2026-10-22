@@ -32,6 +32,8 @@ type ProxyServer struct {
 	LastSeenAt *time.Time `json:"lastSeenAt"`
 	AppliedRev string     `gorm:"size:64" json:"appliedRev"`              // agent 已应用的配置摘要
 	Removing   bool       `gorm:"not null;default:false" json:"removing"` // 已在面板删除，等待 agent 卸载后回报
+	// MonitorEnabled 开启后复用同一个 agent 上报服务器指标，不再单独装监控服务
+	MonitorEnabled bool `gorm:"not null;default:false" json:"monitorEnabled"`
 	// 月流量上限（字节，0 不限）与每月重置日：超出后停止 xray、节点暂不下发，到重置日自动恢复
 	TrafficLimit int64     `json:"trafficLimit"`
 	ResetDay     int       `json:"resetDay"`

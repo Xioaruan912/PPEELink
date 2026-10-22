@@ -53,6 +53,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 	spec := xraycore.Spec{
 		Version: xraycore.DefaultVersion, Enabled: server.Enabled, APIPort: xrayAPIPort,
 		BlockPrivate: true, BlockBitTorrent: true,
+		Monitor: &xraycore.MonitorSpec{Enabled: server.MonitorEnabled, IntervalSeconds: 60},
 	}
 	// 本月流量超出上限：停止 xray，到重置日后下一轮拉取时自动恢复
 	if server.TrafficLimit > 0 && serverQuota(server, time.Now()).Over {
@@ -138,8 +139,51 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 			tx.Model(&models.ProxyAccount{}).Where("user_id = ?", a.UserID).Updates(updates)
 		}
 		resetDueAccounts(tx, now)
+		if err := applyAgentMonitor(tx, server, report, now); err != nil {
+			return err
+		}
 		return nil
 	})
+}
+
+// applyAgentMonitor 把同一个 agent 上报的服务器指标写入监控表。
+// 自建节点和服务器监控共用一条 agent 连接，不再额外安装监控服务。
+func applyAgentMonitor(tx *gorm.DB, server models.ProxyServer, report xraycore.Report, now time.Time) error {
+	if report.Monitor == nil || !server.MonitorEnabled {
+		return nil
+	}
+	var monitor models.Monitor
+	err := tx.Where("proxy_server_id = ?", server.ID).First(&monitor).Error
+	if err == gorm.ErrRecordNotFound {
+		serverID := server.ID
+		monitor = models.Monitor{
+			Name: server.Name, Group: "自建节点", ProxyServerID: &serverID, Enabled: true,
+		}
+		if err := tx.Create(&monitor).Error; err != nil {
+			return err
+		}
+	} else if err != nil {
+		return err
+	}
+	metric := models.MonitorMetric{
+		MonitorID: monitor.ID, CollectedAt: now,
+		CPUPercent: report.Monitor.CPUPercent,
+		MemUsed:    report.Monitor.MemUsed, MemTotal: report.Monitor.MemTotal,
+		SwapUsed: report.Monitor.SwapUsed, SwapTotal: report.Monitor.SwapTotal,
+		DiskUsed: report.Monitor.DiskUsed, DiskTotal: report.Monitor.DiskTotal,
+		Load1: report.Monitor.Load1, Load5: report.Monitor.Load5, Load15: report.Monitor.Load15,
+		Uptime:     report.Monitor.Uptime,
+		NetInSpeed: report.Monitor.NetInSpeed, NetOutSpeed: report.Monitor.NetOutSpeed,
+		TransferIn: report.Monitor.TransferIn, TransferOut: report.Monitor.TransferOut,
+		TCPConns: report.Monitor.TCPConns, UDPConns: report.Monitor.UDPConns,
+		ProcessCount: report.Monitor.ProcessCount,
+	}
+	if err := tx.Create(&metric).Error; err != nil {
+		return err
+	}
+	return tx.Model(&monitor).Updates(map[string]any{
+		"name": server.Name, "last_seen_at": now, "os": "linux", "arch": report.Arch,
+	}).Error
 }
 
 // ---- 本机服务器：面板进程内直接驱动 ------------------------------------------

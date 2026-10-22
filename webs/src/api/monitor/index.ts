@@ -38,6 +38,8 @@ export interface MonitorItem {
   createdAt: string;
   online: boolean;
   sshConfigured: boolean;
+  proxyServerId?: number | null;
+  linked?: boolean;
   sshHost: string;
   sshPort: number;
   sshUser: string;
