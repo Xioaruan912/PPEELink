@@ -205,6 +205,14 @@ gemini.google.com
 - 原始指标保留 7 天，按时间范围自动降采样
 - 当前版本只做监控展示，不包含通知、WebSSH、DDNS 和计划任务
 
+### 12. WebSSH 与快速指令
+
+- 每台监控服务器可以单独配置 SSH 地址、端口、用户和密码
+- SSH 密码使用面板 JWT Secret 派生的密钥加密保存，接口不回显
+- WebSSH 使用一次性票据 + WebSocket + xterm，不在 URL 里暴露登录 JWT
+- 快速指令来自 [Xioaruan912/Xcript](https://github.com/Xioaruan912/Xcript)，执行前会二次确认
+- 终端可以执行任意命令，仅限管理员使用；当前暂不支持 SSH Key 与主机指纹校验
+
 ## 订阅输出与客户端
 
 当前订阅产物支持：
@@ -238,6 +246,7 @@ gemini.google.com
 
 - 首页节点地图、健康状态与场景推荐
 - 独立服务器监控：CPU、内存、磁盘、网络与历史曲线
+- WebSSH 终端与 Xcript 快速指令
 - 节点分组、质量详情、TCP / 解锁检测与全局隐藏
 - 分流检测、规则解释器与节点 × 场景质量矩阵
 - Clash / Surge / Loon 模板编辑、发布前预检与分流回归
