@@ -21,6 +21,11 @@ type Source interface {
 	Report(ctx context.Context, report Report) error
 }
 
+// Updater 是可自更新的远端来源。HTTPSource 实现；面板本机来源不需要。
+type Updater interface {
+	Update(ctx context.Context, hash string) error
+}
+
 // RunLoop 周期性地拉取期望状态、应用到 xray，并回报流量与运行状态。
 // 回报失败时把流量累计到下一轮，避免面板短暂不可达造成漏计。
 // 面板要求卸载时，卸载 xray 并回报成功后返回 true。
@@ -55,8 +60,18 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		}
 		if err != nil {
 			report.Error = "获取配置失败: " + err.Error()
-		} else if err := runner.Apply(ctx, spec); err != nil {
-			report.Error = err.Error()
+		} else {
+			report.AgentHash = ExecutableHash()
+			if spec.AgentUpdate && spec.AgentHash != "" && report.AgentHash != spec.AgentHash {
+				if updater, ok := src.(Updater); ok {
+					if updateErr := updater.Update(ctx, spec.AgentHash); updateErr != nil {
+						report.Error = "agent 自更新失败: " + updateErr.Error()
+					}
+				}
+			}
+			if applyErr := runner.Apply(ctx, spec); applyErr != nil {
+				report.Error = applyErr.Error()
+			}
 		}
 		if spec.Monitor != nil && spec.Monitor.Enabled {
 			interval := time.Duration(spec.Monitor.IntervalSeconds) * time.Second

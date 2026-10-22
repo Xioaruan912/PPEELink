@@ -5,9 +5,9 @@ package xraycore
 
 import (
 	"crypto/sha256"
-	"ppeelink/monitorcore"
 	"encoding/hex"
 	"encoding/json"
+	"ppeelink/monitorcore"
 )
 
 // DefaultVersion 默认安装的 xray-core 版本（官方 release，下载后校验 SHA2-256）。
@@ -32,6 +32,9 @@ type Spec struct {
 	Uninstall bool `json:"uninstall,omitempty"`
 	// Monitor 为服务器监控开关；开启后 agent 会在回报里附带指标。
 	Monitor *MonitorSpec `json:"monitor,omitempty"`
+	// AgentUpdate 为面板主动请求 agent 自更新；AgentHash 是面板当前可执行文件的 SHA-256。
+	AgentUpdate bool   `json:"agentUpdate,omitempty"`
+	AgentHash   string `json:"agentHash,omitempty"`
 }
 
 type MonitorSpec struct {
@@ -71,13 +74,14 @@ type Counter struct {
 
 // Report 服务器回报给面板的运行状态。Traffic 为自上次回报以来的增量。
 type Report struct {
-	Rev         string             `json:"rev"`
-	XrayVersion string             `json:"xrayVersion"`
-	Arch        string             `json:"arch"`
-	Running     bool               `json:"running"`
-	Error       string             `json:"error"`
-	Traffic     map[string]Counter `json:"traffic"`
-	Online      map[string]int     `json:"online"` // email -> 在线 IP 数
-	Uninstalled bool               `json:"uninstalled,omitempty"`
+	Rev         string              `json:"rev"`
+	XrayVersion string              `json:"xrayVersion"`
+	AgentHash   string              `json:"agentHash,omitempty"`
+	Arch        string              `json:"arch"`
+	Running     bool                `json:"running"`
+	Error       string              `json:"error"`
+	Traffic     map[string]Counter  `json:"traffic"`
+	Online      map[string]int      `json:"online"` // email -> 在线 IP 数
+	Uninstalled bool                `json:"uninstalled,omitempty"`
 	Monitor     *monitorcore.Metric `json:"monitor,omitempty"`
 }

@@ -13,6 +13,7 @@ func Proxy(r *gin.Engine) {
 		g.GET("/servers", api.ProxyServerList)
 		g.POST("/servers/save", api.ProxyServerSave)
 		g.POST("/servers/reset-token", api.ProxyServerResetToken)
+		g.POST("/servers/update-agent", api.ProxyServerUpdateAgent)
 		g.DELETE("/servers/delete", api.ProxyServerDelete)
 		g.POST("/inbounds/save", api.ProxyInboundSave)
 		g.DELETE("/inbounds/delete", api.ProxyInboundDelete)

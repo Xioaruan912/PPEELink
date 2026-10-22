@@ -16,10 +16,12 @@ import IconPencil from "~icons/ph/pencil-simple";
 import IconTrash from "~icons/ph/trash";
 import IconWarning from "~icons/ph/warning";
 import IconPower from "~icons/ph/power";
+import IconRefresh from "~icons/ph/arrows-clockwise";
 import {
   deleteProxyInbound,
   deleteProxyServer,
   getProxyTraffic,
+  requestAgentUpdate,
   listProxyAccounts,
   listProxyServers,
   resetServerToken,
@@ -234,6 +236,26 @@ async function toggleServer(s: ProxyServer) {
   ElMessage.success(s.enabled ? "已停用，xray 将在一分钟内停止" : "已启用");
   await load(true);
 }
+async function updateAgent(s: ProxyServer) {
+  if (s.agentUpdateRequested) {
+    await requestAgentUpdate(s.id, true);
+    ElMessage.success("已撤销更新请求");
+    await load(true);
+    return;
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将请求 ${s.name} 的 agent 下载面板当前版本，校验后覆盖旧程序并自动重启。更新期间节点可能短暂重连。`,
+      "更新 Agent",
+      { type: "warning", confirmButtonText: "下发更新", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  await requestAgentUpdate(s.id);
+  ElMessage.success("已下发更新请求，agent 下次心跳时更新");
+  await load(true);
+}
 async function showInstall(s: ProxyServer) {
   try {
     await ElMessageBox.confirm(
@@ -253,7 +275,7 @@ async function showInstall(s: ProxyServer) {
 }
 const uninstall = ref<{ name: string; command: string } | null>(null);
 function removeHint(s: ProxyServer) {
-  const common = `入站与“自建·${s.name}”节点分组会一起删除。`;
+  const common = "入站与「自建」分组中对应的节点会一起删除。";
   if (s.kind === "local")
     return `将停止并卸载面板服务器上的 xray（systemd 服务、程序与配置）。${common}`;
   if (s.lastSeenAt)
@@ -412,6 +434,7 @@ const usageRatio = (a: ProxyAccount) =>
               <h2>{{ s.name }}</h2>
               <p class="mono">{{ s.publicHost }}</p>
             </div>
+            <UiTag v-if="s.agentUpdateRequested" tone="warn">待更新</UiTag>
             <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
           </header>
           <div v-if="s.quota?.limit" class="quota-line">
@@ -502,6 +525,13 @@ const usageRatio = (a: ProxyAccount) =>
                 :icon="IconPencil"
                 :label="`编辑服务器 ${s.name}`"
                 @click="openServer(s)"
+              />
+              <RowIconButton
+                v-if="s.kind === 'agent'"
+                :icon="IconRefresh"
+                :class="{ 'is-on': s.agentUpdateRequested }"
+                :label="s.agentUpdateRequested ? `撤销 ${s.name} 的 Agent 更新` : `更新 ${s.name} 的 Agent`"
+                @click="updateAgent(s)"
               />
               <RowIconButton
                 v-if="s.kind === 'agent'"
