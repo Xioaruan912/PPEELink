@@ -2,6 +2,7 @@ export default {
   // 路由国际化
   route: {
     dashboard: "首页",
+    monitor: "监控",
     document: "项目文档",
     userset: "修改密码",
     system: "系统管理",
