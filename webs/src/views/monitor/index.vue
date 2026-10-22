@@ -307,21 +307,22 @@ async function resetToken(item: MonitorItem | null) {
       </template>
     </PageHeader>
 
-    <div class="summary-grid">
-      <div class="summary-card">
+    <div class="summary-line">
+      <div>
         <span>服务器</span>
         <strong>{{ summary.total }}</strong>
-        <small>已接入监控的机器</small>
       </div>
-      <div class="summary-card">
+      <div>
         <span>在线</span>
         <strong class="ok">{{ summary.online }}</strong>
-        <small>{{ summary.offline }} 台离线</small>
       </div>
-      <div class="summary-card">
+      <div>
+        <span>离线</span>
+        <strong>{{ summary.offline }}</strong>
+      </div>
+      <div>
         <span>平均 CPU</span>
         <strong>{{ avgCPU.toFixed(1) }}<i>%</i></strong>
-        <small>仅统计在线服务器</small>
       </div>
     </div>
 
@@ -642,43 +643,48 @@ async function resetToken(item: MonitorItem | null) {
 .monitor-page {
   padding-bottom: 48px;
 }
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.summary-card {
-  display: grid;
-  gap: 2px;
-  padding: 14px 16px;
+.summary-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 12px;
+  padding: 8px 16px;
   border: 1px solid var(--c-line);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--c-surface);
 }
-.summary-card span {
+.summary-line > div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 22px;
+  border-right: 1px solid var(--c-line);
+}
+.summary-line > div:first-child {
+  padding-left: 0;
+}
+.summary-line > div:last-child {
+  border-right: 0;
+}
+.summary-line span {
   color: var(--c-muted);
-  font-size: 12px;
+  font-size: 11.5px;
 }
-.summary-card strong {
-  font-size: 26px;
-  font-weight: 600;
-  line-height: 1.2;
+.summary-line strong {
+  font: 600 18px/1.2 var(--font-ui);
 }
-.summary-card strong.ok {
+.summary-line strong.ok {
   color: var(--c-ok);
 }
-.summary-card strong i {
-  margin-left: 2px;
-  font-size: 12px;
-  font-style: normal;
+.summary-line strong i {
+  margin-left: 1px;
   color: var(--c-muted);
-}
-.summary-card small {
-  color: var(--c-subtle);
-  font-size: 11px;
+  font-size: 10px;
+  font-style: normal;
 }
 .server-grid {
+
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
@@ -969,8 +975,12 @@ async function resetToken(item: MonitorItem | null) {
   text-align: center;
 }
 @media (max-width: 767px) {
-  .summary-grid {
-    grid-template-columns: 1fr;
+  .summary-line {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+  .summary-line > div {
+    flex: none;
   }
   .detail-head {
     align-items: flex-start;
