@@ -36,7 +36,7 @@ defineProps<{
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 h1 {
   margin: 0;

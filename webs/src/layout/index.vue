@@ -254,10 +254,7 @@ onBeforeUnmount(() => {
 }
 .ion-shell {
   min-height: 100dvh;
-  /* One faint accent bloom anchors the top of every page. */
-  background:
-    radial-gradient(60% 420px at 85% -120px, var(--c-glow), transparent 70%),
-    var(--c-canvas);
+  background: var(--c-canvas);
 }
 .skip-link {
   position: fixed;
@@ -399,9 +396,9 @@ onBeforeUnmount(() => {
   display: none;
 }
 .ion-content {
-  max-width: 1400px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 32px 32px 56px;
+  padding: 24px 32px 40px;
   min-width: 0;
 }
 .mobile-sheet {

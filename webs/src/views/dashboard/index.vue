@@ -21,156 +21,174 @@
       >
     </div>
 
-    <div class="bento">
-      <section class="cell cell-hero" aria-label="节点总数" data-enter>
-        <UiStat
-          size="hero"
-          label="节点总数"
-          :value="loading ? null : summary.total"
-        />
-        <p class="hero-caption">
-          {{
-            summary.total
-              ? `分布在 ${countries.length} 个地区`
-              : "添加节点后显示网络规模"
-          }}
-        </p>
-        <div class="hero-health">
+    <div class="stat-strip">
+      <div class="stat-card">
+        <span>节点总数</span>
+        <strong>{{ loading ? "—" : summary.total }}</strong>
+        <small>分布在 {{ countries.length }} 个地区</small>
+      </div>
+      <div class="stat-card">
+        <span>有效节点</span>
+        <strong class="stat-ok">{{ loading ? "—" : summary.valid }}</strong>
+        <small>有效率 {{ loading ? "—" : `${validRate}%` }}</small>
+      </div>
+      <div class="stat-card">
+        <span>订阅</span>
+        <strong>{{ loading ? "—" : subTotal }}</strong>
+        <small>{{ expiring.length }} 个已设置到期</small>
+      </div>
+      <div class="stat-card">
+        <span>所在地区</span>
+        <strong>{{ loading ? "—" : countries.length }}</strong>
+        <small>{{ summary.invalid }} 个节点无效</small>
+      </div>
+    </div>
+
+    <div class="dashboard-grid">
+      <WorldMap
+        class="dash-map"
+        :points="mapPoints"
+        :loading="loading"
+        @refresh="loadOverview"
+      />
+
+      <aside class="side-stack">
+        <section class="dash-panel side-panel" aria-label="节点状态">
+          <header class="dash-head">
+            <div>
+              <h2>节点状态</h2>
+              <p>{{ summary.total }} 个节点</p>
+            </div>
+          </header>
           <HealthStrip
             :summary="summary"
             :loading="loading"
             :rate="validRate"
           />
-        </div>
-      </section>
+        </section>
 
-      <RouterLink
-        to="/subcription/subs"
-        class="cell cell-link cell-subs"
-        data-enter
-      >
-        <span class="cell-icon"><IconLink /></span>
-        <UiStat size="large" label="订阅" :value="loading ? null : subTotal" />
-        <IconArrow class="cell-arrow" aria-hidden="true" />
-      </RouterLink>
-
-      <RouterLink
-        to="/subcription/nodes"
-        class="cell cell-link cell-score"
-        data-enter
-      >
-        <div class="score-ring" aria-hidden="true">
-          <svg viewBox="0 0 120 120">
-            <circle class="ring-track" cx="60" cy="60" r="52" />
-            <circle
-              class="ring-value"
-              cx="60"
-              cy="60"
-              r="52"
-              :style="{ '--score': validRatio }"
-            />
-          </svg>
-        </div>
-        <UiStat
-          size="large"
-          label="有效节点"
-          :value="loading || !summary.total ? null : summary.valid"
-          :unit="`/${summary.total}`"
-        />
-        <IconArrow class="cell-arrow" aria-hidden="true" />
-      </RouterLink>
-
-      <section
-        v-reveal
-        class="cell cell-traffic"
-        aria-label="订阅到期"
-        data-enter
-      >
-        <header class="cell-head">
-          <div>
-            <h2>订阅到期</h2>
-            <p>{{ expiring.length }} 个订阅已设置到期时间</p>
-          </div>
-          <UiButton variant="ghost" @click="router.push('/subcription/subs')"
-            >全部订阅</UiButton
-          >
-        </header>
-        <UiSkeleton v-if="loading" :lines="2" height="40px" />
-        <ul v-else-if="expiring.length" class="expiry-list">
-          <li v-for="sub in expiring" :key="sub.ID">
-            <span class="expiry-name">{{ sub.Name }}</span>
-            <span
-              class="expiry-days mono"
-              :class="{ 'is-soon': daysLeft(sub.ExpiresAt) <= 7 }"
-              >{{ expiryLabel(sub.ExpiresAt) }}</span
+        <section class="dash-panel side-panel" aria-label="订阅到期">
+          <header class="dash-head">
+            <div>
+              <h2>订阅到期</h2>
+              <p>{{ expiring.length }} 个已设置到期时间</p>
+            </div>
+            <UiButton variant="ghost" @click="router.push('/subcription/subs')"
+              >全部</UiButton
             >
-          </li>
-        </ul>
-        <EmptyState
-          v-else
-          size="inline"
-          title="还没有到期时间"
-          description="在订阅详情里设置过期时间后，这里显示最近的续期提醒。"
-        />
-      </section>
+          </header>
+          <UiSkeleton v-if="loading" :lines="2" height="32px" />
+          <ul v-else-if="expiring.length" class="expiry-list">
+            <li v-for="sub in expiring" :key="sub.ID">
+              <span class="expiry-name">{{ sub.Name }}</span>
+              <span
+                class="expiry-days mono"
+                :class="{ 'is-soon': daysLeft(sub.ExpiresAt) <= 7 }"
+                >{{ expiryLabel(sub.ExpiresAt) }}</span
+              >
+            </li>
+          </ul>
+          <EmptyState
+            v-else
+            size="inline"
+            title="没有到期时间"
+            description="在订阅详情里设置后显示在这里。"
+          />
+        </section>
 
-      <WorldMap
-        class="cell-map"
-        :points="mapPoints"
-        :loading="loading"
-        data-enter
-        @refresh="loadOverview"
-      />
-
-      <section
-        v-reveal
-        class="cell cell-regions"
-        aria-label="所在地区"
-        data-enter
-      >
-        <header class="cell-head">
-          <div>
-            <h2>所在地区</h2>
-            <p>{{ countries.length }} 个地区</p>
-          </div>
-        </header>
-        <UiSkeleton v-if="loading" :lines="5" height="28px" />
-        <ol v-else-if="countries.length" class="region-list">
-          <li v-for="country in countries.slice(0, 8)" :key="country.name">
-            <span class="region-name">{{ country.name }}</span>
-            <span class="region-count mono">{{ country.count }}</span>
-            <span class="region-bar" aria-hidden="true"
-              ><i
-                :style="{
-                  transform: `scaleX(${country.count / (countries[0]?.count || 1)})`,
-                }"
-              ></i
-            ></span>
-          </li>
-        </ol>
-        <EmptyState
-          v-else
-          size="inline"
-          title="暂无地区"
-          description="节点定位后会显示所在地区。"
-        />
-      </section>
+        <section class="dash-panel side-panel" aria-label="所在地区">
+          <header class="dash-head">
+            <div>
+              <h2>所在地区</h2>
+              <p>{{ countries.length }} 个地区</p>
+            </div>
+          </header>
+          <UiSkeleton v-if="loading" :lines="3" height="24px" />
+          <ol v-else-if="countries.length" class="region-list">
+            <li v-for="country in countries.slice(0, 5)" :key="country.name">
+              <span class="region-name">{{ country.name }}</span>
+              <span class="region-count mono">{{ country.count }}</span>
+              <span class="region-bar" aria-hidden="true"
+                ><i
+                  :style="{
+                    transform: `scaleX(${country.count / (countries[0]?.count || 1)})`,
+                  }"
+                ></i
+              ></span>
+            </li>
+          </ol>
+          <EmptyState
+            v-else
+            size="inline"
+            title="暂无地区"
+            description="节点定位后显示在这里。"
+          />
+        </section>
+      </aside>
     </div>
+
+    <section class="dash-panel nodes-panel" aria-label="节点列表">
+      <header class="dash-head nodes-head">
+        <div>
+          <h2>节点</h2>
+          <p>最近检测状态与探针结果</p>
+        </div>
+        <UiButton variant="ghost" @click="router.push('/subcription/nodes')"
+          >管理全部</UiButton
+        >
+      </header>
+      <UiSkeleton v-if="loading" class="node-loading" :lines="3" height="40px" />
+      <div v-else-if="!nodes.length" class="node-empty">
+        <EmptyState
+          size="inline"
+          title="还没有节点"
+          description="添加第一个节点后，这里显示可用性与探针结果。"
+        />
+      </div>
+      <div v-else class="node-table">
+        <RouterLink
+          v-for="node in nodes.slice(0, 6)"
+          :key="node.id"
+          to="/subcription/nodes"
+          class="node-row"
+        >
+          <span
+            class="node-dot"
+            :class="{ 'is-bad': !node.valid }"
+            :aria-label="node.valid ? '有效' : '无效'"
+          ></span>
+          <div class="node-main">
+            <strong>{{ node.name }}</strong>
+            <small>{{ node.groups?.join(" · ") || "未分组" }}</small>
+          </div>
+          <span class="node-country">{{ node.country || "未识别" }}</span>
+          <span class="node-probes mono">
+            {{
+              node.probes?.length
+                ? `${node.probes.filter((probe) => probe.success).length}/${node.probes.length}`
+                : "—"
+            }}
+          </span>
+          <span class="node-valid" :class="{ 'is-bad': !node.valid }">{{
+            node.blocked ? "暂不下发" : node.valid ? "有效" : "无效"
+          }}</span>
+        </RouterLink>
+      </div>
+    </section>
   </div>
 </template>
 <script setup lang="ts">
 import { useRouter } from "vue-router";
 import { computed, ref, onMounted } from "vue";
 import { getSubTotal, getNodeMap } from "@/api/total";
+import { getNodeOverview } from "@/api/subcription/node";
+import type { OverviewItem } from "@/views/subcription/nodes/useNodes";
 import { getNodeQualitySummary } from "@/api/subcription/node";
 import { getSubs } from "@/api/subcription/subs";
 import { Refresh, TopRight } from "@element-plus/icons-vue";
-import IconLink from "~icons/ph/link-simple";
-import IconArrow from "~icons/ph/arrow-up-right";
 import {
   PageHeader,
   UiButton,
-  UiStat,
   UiSkeleton,
   StatusDot,
   EmptyState,
@@ -190,6 +208,7 @@ const summary = ref({
 const mapPoints = ref<
   { lat: number; lng: number; name: string; country: string }[]
 >([]);
+const nodes = ref<OverviewItem[]>([]);
 type SubSummary = { ID: number; Name: string; ExpiresAt: string | null };
 const subs = ref<SubSummary[]>([]);
 const expiring = computed(() =>
@@ -252,8 +271,9 @@ async function loadOverview() {
     getNodeQualitySummary(),
     getNodeMap(),
     getSubs(),
+    getNodeOverview(),
   ]);
-  const [subsCount, quality, map, subList] = results;
+  const [subsCount, quality, map, subList, overview] = results;
   if (subList.status === "fulfilled")
     subs.value = Array.isArray(subList.value.data) ? subList.value.data : [];
   if (subsCount.status === "fulfilled")
@@ -262,6 +282,8 @@ async function loadOverview() {
     summary.value = { ...summary.value, ...quality.value.data };
   if (map.status === "fulfilled")
     mapPoints.value = Array.isArray(map.value.data) ? map.value.data : [];
+  if (overview.status === "fulfilled")
+    nodes.value = Array.isArray(overview.value.data) ? overview.value.data : [];
   if (results.some((r) => r.status === "rejected"))
     loadError.value = "部分网络数据暂时无法加载，请检查服务状态后重试。";
   loading.value = false;
@@ -271,279 +293,262 @@ onMounted(loadOverview);
 <style scoped>
 .network-overview {
   min-width: 0;
+  display: grid;
+  gap: 14px;
 }
 .overview-notice {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
-  margin-bottom: 16px;
+  padding: 10px 14px;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
+  border-radius: 12px;
   background: var(--c-surface);
 }
-.bento {
+.stat-strip {
   display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  grid-auto-rows: minmax(150px, auto);
-  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
-.cell {
-  position: relative;
-  min-width: 0;
-  padding: 20px;
+.stat-card {
+  display: grid;
+  gap: 1px;
+  padding: 12px 14px;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
+  border-radius: 14px;
+  background: var(--c-surface);
+}
+.stat-card span {
+  color: var(--c-muted);
+  font-size: 11.5px;
+}
+.stat-card strong {
+  font: 600 28px/1.25 var(--font-ui);
+  letter-spacing: -0.03em;
+}
+.stat-card strong.stat-ok {
+  color: var(--c-ok);
+}
+.stat-card small {
+  overflow: hidden;
+  color: var(--c-subtle);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
+  gap: 14px;
+  align-items: start;
+}
+.dash-panel {
+  min-width: 0;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
   background: var(--c-surface);
   box-shadow: var(--shadow-panel), var(--edge-highlight);
-  overflow: hidden;
 }
-.cell-hero {
-  grid-column: span 5;
-  grid-row: span 2;
-  display: flex;
-  flex-direction: column;
-  padding: 24px;
-  background:
-    radial-gradient(
-      90% 70% at 100% 0%,
-      color-mix(in srgb, var(--c-signal) 26%, transparent),
-      transparent 65%
-    ),
-    radial-gradient(
-      60% 60% at 0% 100%,
-      color-mix(in srgb, var(--c-data) 16%, transparent),
-      transparent 70%
-    ),
-    var(--c-surface);
+.dash-map {
+  min-height: 380px;
 }
-.cell-hero :deep(.ui-stat--hero .ui-stat__number) {
-  font: 600 clamp(72px, 7.4vw, 112px) / 0.9 var(--font-ui);
-  letter-spacing: -0.06em;
+.dash-map :deep(.map-stage),
+.dash-map :deep(.world-map) {
+  min-height: 260px;
 }
-.hero-caption {
-  margin-top: 10px;
-  color: var(--c-muted);
-  font-size: 14px;
+.dash-map :deep(.map-selector),
+.dash-map :deep(.map-location) {
+  display: none;
 }
-.hero-health {
-  margin-top: auto;
-  padding-top: 20px;
-}
-.cell-link {
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: var(--c-ink);
-  transition:
-    translate var(--duration-medium) var(--ease-spring),
-    transform var(--duration-slow) var(--ease-out),
-    border-color var(--duration-fast);
-}
-.cell-link:hover {
-  translate: 0 -3px;
-  border-color: color-mix(in srgb, var(--c-focus) 60%, var(--c-line));
-}
-.cell-subs {
-  grid-column: span 3;
-}
-.cell-score {
-  grid-column: span 4;
-  flex-direction: row;
-  align-items: flex-end;
-  justify-content: flex-start;
-  gap: 18px;
-}
-.cell-icon {
-  display: grid;
-  place-items: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--c-signal);
-  color: var(--c-on-signal);
-}
-.cell-icon svg {
-  width: 20px;
-  height: 20px;
-}
-.cell-arrow {
-  position: absolute;
-  top: 18px;
-  right: 18px;
-  width: 18px;
-  height: 18px;
-  color: var(--c-muted);
-  transition: transform var(--duration-medium) var(--ease-spring);
-}
-.cell-link:hover .cell-arrow {
-  color: var(--c-ink);
-  transform: translate(3px, -3px);
-}
-.score-ring {
-  width: 92px;
-  height: 92px;
-  flex: 0 0 auto;
-}
-.score-ring svg {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-.ring-track,
-.ring-value {
-  fill: none;
-  stroke-width: 10;
-}
-.ring-track {
-  stroke: var(--c-surface-2);
-}
-.ring-value {
-  stroke: var(--c-signal);
-  stroke-linecap: round;
-  stroke-dasharray: 326.7;
-  stroke-dashoffset: calc(326.7 * (1 - var(--score)));
-  transition: stroke-dashoffset 1.2s var(--ease-out);
-}
-.cell-traffic {
-  grid-column: span 7;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--c-surface-2) 70%, transparent),
-      transparent 60%
-    ),
-    var(--c-surface);
-}
-.cell-head {
+.dash-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 14px;
+  padding: 0 0 12px;
 }
-.cell-head h2 {
-  font-size: 15px;
+.dash-head h2 {
+  margin: 0;
+  font-size: 14px;
   font-weight: 600;
 }
-.cell-head p {
-  margin-top: 2px;
+.dash-head p {
+  margin: 2px 0 0;
   color: var(--c-muted);
-  font-size: 13px;
+  font-size: 11.5px;
 }
-.cell-head strong {
-  color: var(--c-ink);
-  font-weight: 500;
+.side-stack {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.side-panel {
+  padding: 14px 16px;
+}
+.side-panel .dash-head {
+  padding-bottom: 8px;
+}
+.dash-map {
+  min-height: 340px;
 }
 .expiry-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: 10px 20px;
+  gap: 6px;
 }
 .expiry-list li {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
-  min-width: 0;
-  padding-bottom: 8px;
+  padding: 5px 0;
   border-bottom: 1px solid var(--c-line);
+}
+.expiry-list li:last-child {
+  border-bottom: 0;
 }
 .expiry-name {
   overflow: hidden;
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cell-map {
-  grid-column: span 8;
+.expiry-days {
+  flex: none;
+  color: var(--c-muted);
+  font-size: 11.5px;
 }
-.cell-regions {
-  grid-column: span 4;
+.expiry-days.is-soon {
+  color: var(--c-warn);
 }
 .region-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 .region-list li {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 12px;
+  gap: 5px 10px;
 }
 .region-name {
-  font-size: 14px;
+  font-size: 12.5px;
 }
 .region-count {
   color: var(--c-muted);
-  font: 13px var(--font-mono);
+  font-size: 11.5px;
 }
 .region-bar {
   grid-column: 1 / -1;
-  height: 6px;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--c-surface-2);
 }
 .region-bar i {
   display: block;
   height: 100%;
-  border-radius: var(--radius-pill);
+  border-radius: inherit;
   background: linear-gradient(90deg, var(--c-signal), var(--c-data));
   transform-origin: left;
   transition: transform var(--duration-slow) var(--ease-out);
 }
+.nodes-panel {
+  overflow: hidden;
+}
+.nodes-head {
+  padding: 14px 16px 10px;
+}
+.node-loading {
+  padding: 12px 16px;
+}
+.node-empty {
+  padding: 4px 16px 16px;
+}
+.node-table {
+  display: grid;
+}
+.node-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-ok);
+}
+.node-dot.is-bad {
+  border-radius: 0;
+  background: var(--c-bad);
+  transform: rotate(45deg);
+}
+.node-row {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1.6fr) minmax(0, 1fr) 70px 76px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--c-line);
+  color: var(--c-ink);
+  text-decoration: none;
+  transition: background var(--duration-fast);
+}
+.node-row:hover {
+  background: var(--c-surface-2);
+}
+.node-main {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+.node-main strong {
+  overflow: hidden;
+  font-size: 12.5px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-main small {
+  overflow: hidden;
+  color: var(--c-muted);
+  font-size: 10.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-country,
+.node-probes {
+  overflow: hidden;
+  color: var(--c-muted);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.node-valid {
+  color: var(--c-ok);
+  font-size: 11.5px;
+  text-align: right;
+}
+.node-valid.is-bad {
+  color: var(--c-bad);
+}
 @media (max-width: 1199px) {
-  .cell-hero {
-    grid-column: span 12;
-    grid-row: auto;
+  .dashboard-grid {
+    grid-template-columns: 1fr;
   }
-  .cell-subs {
-    grid-column: span 5;
-  }
-  .cell-score {
-    grid-column: span 7;
-  }
-  .cell-traffic,
-  .cell-map,
-  .cell-regions {
-    grid-column: span 12;
+  .side-stack {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @media (max-width: 767px) {
-  .bento {
-    grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: auto;
-    gap: 10px;
+  .stat-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .cell-subs {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 14px;
+  .side-stack {
+    grid-template-columns: 1fr;
   }
-  .score-ring {
-    width: 64px;
-    height: 64px;
+  .node-row {
+    grid-template-columns: 10px minmax(0, 1fr) 68px;
   }
-  .cell-hero,
-  .cell-subs,
-  .cell-score,
-  .cell-traffic,
-  .cell-map,
-  .cell-regions {
-    grid-column: auto;
-  }
-  .cell {
-    padding: 16px;
-  }
-  .overview-notice {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ring-value,
-  .cell-link {
-    transition: none;
+  .node-country,
+  .node-probes {
+    display: none;
   }
 }
 </style>
