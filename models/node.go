@@ -30,7 +30,7 @@ type Node struct {
 	PausedUntil *time.Time `json:"pausedUntil"`
 	PauseNote   string     `gorm:"size:120" json:"pauseNote"`
 	// ForceDeliver 为 true 时即使检测无效也照常下发；只覆盖健康检测，
-	// 不覆盖手动暂停、服务器额度与上游到期。
+	// 不覆盖手动暂停与服务器额度。
 	ForceDeliver bool        `gorm:"not null;default:false" json:"forceDeliver"`
 	GroupNodes   []GroupNode `gorm:"many2many:group_node_nodes"` // 反向关联字段
 }

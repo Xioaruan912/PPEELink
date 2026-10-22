@@ -820,7 +820,7 @@ onBeforeUnmount(() => {
                 <p>
                   连续
                   <strong>{{ failureThreshold }}</strong>
-                  次连接失败后，节点会从订阅与合集里暂不下发，恢复后自动回来。关闭后检测结果只作展示，所有节点都会下发。
+                  次连接失败后，节点会从订阅里暂不下发，恢复后自动回来。关闭后检测结果只作展示，所有节点都会下发。
                 </p>
                 <div class="detect-facts">
                   <span

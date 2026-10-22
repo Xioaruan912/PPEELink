@@ -198,7 +198,7 @@ function leaveBar(element: Element, done: () => void) {
             size="page"
             v-if="!overviewList.length"
             title="建立你的连接"
-            description="粘贴节点链接，或在订阅里填写上游订阅链接。"
+            description="粘贴节点链接，或从订阅里导入节点。"
             ><template #action
               ><UiButton @click="handleAddNode">添加节点</UiButton></template
             ></EmptyState

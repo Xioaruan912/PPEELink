@@ -3,9 +3,7 @@ import type { RouteRecordRaw } from "vue-router";
 import { translateRouteTitle } from "@/utils/i18n";
 import IconHouse from "~icons/ph/house-simple";
 import IconLink from "~icons/ph/link-simple";
-import IconStack from "~icons/ph/stack";
 import IconNodes from "~icons/ph/graph";
-import IconDevices from "~icons/ph/devices";
 import IconGauge from "~icons/ph/gauge";
 import IconFiles from "~icons/ph/files";
 import IconSliders from "~icons/ph/sliders-horizontal";
@@ -31,13 +29,11 @@ const META: Record<string, { icon: Component; hint?: string }> = {
   "/dashboard": { icon: IconHouse },
   "/subcription": { icon: IconSubs },
   "/subcription/subs": { icon: IconLink, hint: "生成与分发订阅链接" },
-  "/subcription/collections": { icon: IconStack, hint: "多份订阅合成一个链接" },
   "/subcription/nodes": { icon: IconNodes, hint: "分组、编辑与检测节点" },
   "/subcription/servers": {
     icon: IconServer,
     hint: "在自己的服务器上运行 xray-core",
   },
-  "/subcription/clients": { icon: IconDevices, hint: "各平台客户端下载" },
   "/test": { icon: IconFlask },
   "/test/index": { icon: IconGauge, hint: "解锁检测与国内可达性" },
   "/template": { icon: IconCode },

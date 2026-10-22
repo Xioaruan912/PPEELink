@@ -33,14 +33,10 @@ func InitSqlite() {
 		sqlDB.SetMaxIdleConns(4)
 		sqlDB.SetConnMaxLifetime(time.Hour)
 	}
-	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{}, &ClientVersion{},
-		&NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &Collection{}, &ProxyServer{}, &ProxyInbound{}, &ProxyTraffic{}, &ProxyAccount{})
+	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{},
+		&NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &ProxyServer{}, &ProxyInbound{}, &ProxyTraffic{}, &ProxyAccount{})
 	if err != nil {
 		log.Println("数据表迁移失败:", err)
-	}
-	// 机场模块已并入订阅的上游来源
-	if db.Migrator().HasTable("airports") {
-		_ = db.Migrator().DropTable("airports")
 	}
 	_ = RecoverInterruptedTasks()
 	if err := EnsureDefaultEgressTargets(); err != nil {

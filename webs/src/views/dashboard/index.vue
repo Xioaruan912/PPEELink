@@ -32,7 +32,7 @@
           {{
             summary.total
               ? `分布在 ${countries.length} 个地区`
-              : "添加节点或上游订阅后显示网络规模"
+              : "添加节点后显示网络规模"
           }}
         </p>
         <div class="hero-health">
@@ -83,35 +83,34 @@
       <section
         v-reveal
         class="cell cell-traffic"
-        aria-label="上游流量"
+        aria-label="订阅到期"
         data-enter
       >
         <header class="cell-head">
           <div>
-            <h2>上游流量</h2>
-            <p>
-              剩余
-              <strong class="mono">{{
-                traffic.reported ? formatBytes(traffic.remaining) : "未知"
-              }}</strong>
-            </p>
+            <h2>订阅到期</h2>
+            <p>{{ expiring.length }} 个订阅已设置到期时间</p>
           </div>
           <UiButton variant="ghost" @click="router.push('/subcription/subs')"
             >全部订阅</UiButton
           >
         </header>
         <UiSkeleton v-if="loading" :lines="2" height="40px" />
-        <ul v-else-if="upstreams.length" class="upstream-traffic">
-          <li v-for="sub in upstreams.slice(0, 4)" :key="sub.ID">
-            <span class="upstream-name">{{ sub.Name }}</span>
-            <TrafficMeter :traffic="sourceTrafficOf(sub)" />
+        <ul v-else-if="expiring.length" class="expiry-list">
+          <li v-for="sub in expiring" :key="sub.ID">
+            <span class="expiry-name">{{ sub.Name }}</span>
+            <span
+              class="expiry-days mono"
+              :class="{ 'is-soon': daysLeft(sub.ExpiresAt) <= 7 }"
+              >{{ expiryLabel(sub.ExpiresAt) }}</span
+            >
           </li>
         </ul>
         <EmptyState
           v-else
           size="inline"
-          title="还没有上游订阅"
-          description="在订阅里填写上游订阅链接后，这里显示流量与到期。"
+          title="还没有到期时间"
+          description="在订阅详情里设置过期时间后，这里显示最近的续期提醒。"
         />
       </section>
 
@@ -165,12 +164,6 @@ import { computed, ref, onMounted } from "vue";
 import { getSubTotal, getNodeMap } from "@/api/total";
 import { getNodeQualitySummary } from "@/api/subcription/node";
 import { getSubs } from "@/api/subcription/subs";
-import TrafficMeter from "@/components/share/TrafficMeter.vue";
-import {
-  formatBytes,
-  sourceTrafficOf,
-  type SourceTraffic,
-} from "@/utils/traffic";
 import { Refresh, TopRight } from "@element-plus/icons-vue";
 import IconLink from "~icons/ph/link-simple";
 import IconArrow from "~icons/ph/arrow-up-right";
@@ -197,19 +190,29 @@ const summary = ref({
 const mapPoints = ref<
   { lat: number; lng: number; name: string; country: string }[]
 >([]);
-type Upstream = SourceTraffic & {
-  ID: number;
-  Name: string;
-  SourceURLs?: string;
-};
-const upstreams = ref<Upstream[]>([]);
-const traffic = computed(() => {
-  const reports = upstreams.value.map(sourceTrafficOf).filter((t) => !!t);
-  return {
-    reported: reports.length > 0,
-    remaining: reports.reduce((sum, t) => sum + t!.remaining, 0),
-  };
-});
+type SubSummary = { ID: number; Name: string; ExpiresAt: string | null };
+const subs = ref<SubSummary[]>([]);
+const expiring = computed(() =>
+  subs.value
+    .filter((sub) => !!sub.ExpiresAt)
+    .sort(
+      (a, b) =>
+        new Date(a.ExpiresAt || 0).getTime() -
+        new Date(b.ExpiresAt || 0).getTime()
+    )
+    .slice(0, 4)
+);
+function daysLeft(value: string | null) {
+  if (!value) return Number.POSITIVE_INFINITY;
+  return Math.ceil((new Date(value).getTime() - Date.now()) / 86400000);
+}
+function expiryLabel(value: string | null) {
+  const days = daysLeft(value);
+  if (!Number.isFinite(days)) return "";
+  if (days < 0) return "已过期";
+  if (days === 0) return "今天到期";
+  return `${days} 天后`;
+}
 const validRatio = computed(() =>
   summary.value.total ? summary.value.valid / summary.value.total : 0
 );
@@ -250,13 +253,11 @@ async function loadOverview() {
     getNodeMap(),
     getSubs(),
   ]);
-  const [subs, quality, map, subList] = results;
+  const [subsCount, quality, map, subList] = results;
   if (subList.status === "fulfilled")
-    upstreams.value = (
-      Array.isArray(subList.value.data) ? subList.value.data : []
-    ).filter((s: Upstream) => !!s.SourceURLs?.trim());
-  if (subs.status === "fulfilled")
-    subTotal.value = Number(subs.value.data) || 0;
+    subs.value = Array.isArray(subList.value.data) ? subList.value.data : [];
+  if (subsCount.status === "fulfilled")
+    subTotal.value = Number(subsCount.value.data) || 0;
   if (quality.status === "fulfilled")
     summary.value = { ...summary.value, ...quality.value.data };
   if (map.status === "fulfilled")
@@ -435,17 +436,21 @@ onMounted(loadOverview);
   color: var(--c-ink);
   font-weight: 500;
 }
-.upstream-traffic {
+.expiry-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 16px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px 20px;
 }
-.upstream-traffic li {
-  display: grid;
-  gap: 6px;
+.expiry-list li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
   min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--c-line);
 }
-.upstream-name {
+.expiry-name {
   overflow: hidden;
   font-size: 14px;
   font-weight: 500;

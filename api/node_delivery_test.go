@@ -54,18 +54,6 @@ func TestPausedNodeIsNotDeliveredUntilResumeDate(t *testing.T) {
 	}
 }
 
-func TestExhaustedUpstreamNodesAreNotDelivered(t *testing.T) {
-	sub, group, _ := deliveryFixture(t)
-	now := time.Now()
-	upstream := models.Subcription{Name: group.Name, SourceURLs: "https://example.com/sub",
-		SourceUpload: 60, SourceDownload: 40, SourceTotal: 100, SourceTrafficAt: &now}
-	models.DB.Create(&upstream)
-	names, excluded := deliveredNames(t, sub)
-	if len(names) != 0 || len(excluded) != 2 || excluded[0].Reason != "上游订阅流量已用完" {
-		t.Fatalf("nodes of an exhausted upstream must be held back: %v %+v", names, excluded)
-	}
-}
-
 func TestHealthDownExcludedButNeverEmptiesSubscription(t *testing.T) {
 	sub, _, nodes := deliveryFixture(t)
 	models.DB.Create(&models.NodeHealthEvent{NodeID: nodes[0].ID, Type: "down", CreatedAt: time.Now()})

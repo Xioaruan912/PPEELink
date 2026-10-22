@@ -52,15 +52,6 @@ func StartCronTasks() {
 		return
 	}
 
-	_, err = c.AddFunc("0 15 * * * *", func() {
-		defer utils.RecoverPanic("cron-sub-source")
-		api.SyncDueSubscriptionSources()
-	})
-	if err != nil {
-		log.Println("[Cron] 添加上游订阅同步任务失败:", err)
-		return
-	}
-
 	_, err = c.AddFunc("0 0 9 * * *", func() {
 		defer utils.RecoverPanic("cron-sub-alerts")
 		api.CheckSubscriptionAlerts()
@@ -79,5 +70,5 @@ func StartCronTasks() {
 			log.Println("[RuleCenter] 启动同步失败，保留现有缓存:", err)
 		}
 	}()
-	log.Println("[Cron] 规则同步、上游订阅同步与节点每10分钟 TCP 质量检测已启动")
+	log.Println("[Cron] 规则同步与节点每10分钟 TCP 质量检测已启动")
 }

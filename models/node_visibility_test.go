@@ -32,7 +32,7 @@ func TestNodeGroupingAndGlobalVisibility(t *testing.T) {
 		t.Fatalf("new node must have default group, got %#v", loaded.GroupNodes)
 	}
 
-	group := GroupNode{Name: "机场 A"}
+	group := GroupNode{Name: "节点组 A"}
 	if err := db.Create(&group).Error; err != nil {
 		t.Fatal(err)
 	}

@@ -72,18 +72,6 @@ func GetMenus(c *gin.Context) {
 					},
 				},
 				{
-					Path:      "collections",
-					Component: "subcription/collections",
-					Name:      "Collections",
-					Meta: Meta{
-						Title:     "多订阅合集",
-						Icon:      "table",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
-				},
-				{
 					Path:      "nodes",
 					Component: "subcription/nodes",
 					Name:      "Nodes",
@@ -100,18 +88,6 @@ func GetMenus(c *gin.Context) {
 					Component: "subcription/servers",
 					Name:      "ProxyServers",
 					Meta:      Meta{Title: "自建节点", Icon: "monitor", Roles: []string{"ADMIN"}, KeepAlive: true},
-				},
-				{
-					Path:      "clients",
-					Component: "subcription/clients",
-					Name:      "Clients",
-					Meta: Meta{
-						Title:     "clientdownload",
-						Icon:      "download",
-						Hidden:    false,
-						Roles:     []string{"ADMIN"},
-						KeepAlive: true,
-					},
 				},
 			},
 		},

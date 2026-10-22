@@ -8,11 +8,6 @@ import {
   EmptyState,
 } from "@/ui";
 import { ref } from "vue";
-import IconSync from "~icons/ph/arrows-clockwise";
-import { formatDateTime } from "@/utils/date";
-import { sourceTrafficOf } from "@/utils/traffic";
-import { syncSubSource } from "@/api/subcription/subs";
-import TrafficMeter from "@/components/share/TrafficMeter.vue";
 import { countryFlag } from "@/utils/flag";
 import { useSubscriptions } from "./useSubscriptions";
 const {
@@ -26,8 +21,6 @@ const {
   detailSection,
   previewError,
   openDrawer,
-  getsubs,
-  tableData,
   parseConfig,
   validLabel,
   expireClear,
@@ -35,22 +28,6 @@ const {
   expireSaving,
   saveExpire,
 } = useSubscriptions();
-// 立即刷新上游，完成后重新加载列表与当前抽屉
-const syncing = ref(false);
-async function syncNow() {
-  const sub = drawerSub.value;
-  if (!sub || syncing.value) return;
-  syncing.value = true;
-  try {
-    const res: any = await syncSubSource(sub.ID);
-    ElMessage.success(res?.msg || "已同步");
-  } finally {
-    syncing.value = false;
-    await getsubs();
-    const fresh = tableData.value.find((s) => s.ID === sub.ID);
-    if (fresh) await openDrawer(fresh);
-  }
-}
 const sections = [
   { label: "节点预览", value: "nodes" },
   { label: "模板配置", value: "config" },
@@ -68,32 +45,6 @@ const sections = [
         :options="sections"
         label="订阅详情分区"
       />
-      <section
-        v-if="detailSection === 'nodes' && drawerSub.SourceURLs"
-        class="upstream-box"
-        aria-label="上游订阅"
-      >
-        <div class="upstream-head">
-          <div>
-            <strong>上游订阅</strong>
-            <small
-              >{{
-                drawerSub.lastSyncAt
-                  ? `上次同步 ${formatDateTime(drawerSub.lastSyncAt)}`
-                  : "尚未同步"
-              }}
-              · 每 6 小时自动刷新</small
-            >
-          </div>
-          <UiButton :icon="IconSync" :loading="syncing" @click="syncNow"
-            >立即同步</UiButton
-          >
-        </div>
-        <p v-if="drawerSub.lastSyncError" class="upstream-error">
-          最近一次失败，正在使用上次的节点：{{ drawerSub.lastSyncError }}
-        </p>
-        <TrafficMeter :traffic="sourceTrafficOf(drawerSub)" />
-      </section>
       <section v-if="detailSection === 'nodes'" class="form-section">
         <h3>
           包含节点 <span class="mono">{{ previewNodesList.length }}</span>
@@ -212,29 +163,6 @@ const sections = [
 </template>
 <style scoped src="./forms.scss"></style>
 <style scoped>
-.upstream-box {
-  display: grid;
-  gap: 10px;
-  margin: 16px 0 4px;
-  padding: 14px 16px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
-  background: var(--c-surface-2);
-}
-.upstream-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.upstream-head strong {
-  display: block;
-  font-size: 14px;
-}
-.upstream-head small {
-  color: var(--c-muted);
-  font-size: 12px;
-}
 .excluded-box {
   display: grid;
   gap: 6px;
@@ -259,14 +187,5 @@ const sections = [
 .excluded-box small {
   color: var(--c-warn-ink);
   text-align: right;
-}
-.upstream-error {
-  margin: 0;
-  padding: 8px 10px;
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--c-warn) 12%, transparent);
-  color: var(--c-warn-ink);
-  font-size: 12px;
-  overflow-wrap: anywhere;
 }
 </style>

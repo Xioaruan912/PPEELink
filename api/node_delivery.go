@@ -10,17 +10,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 暂不下发：下面几种情况下节点不会出现在订阅、合集里，条件解除后自动恢复。
+// 暂不下发：下面几种情况下节点不会出现在订阅里，条件解除后自动恢复。
 //   - 手动暂停到某个日期（例如节点本月流量用完）；
 //   - 自建服务器本月流量超出上限，到重置日恢复；
-//   - 上游订阅流量用完或已到期，下次同步拿到新额度后恢复；
 //   - 面板连续多次检测无效（健康事件为 down），检测恢复后自动下发。
 
 const (
-	blockPaused   = "paused"
-	blockServer   = "server-quota"
-	blockUpstream = "upstream"
-	blockHealth   = "health"
+	blockPaused = "paused"
+	blockServer = "server-quota"
+	blockHealth = "health"
 )
 
 // deliveryBlock 节点暂不下发的原因。Until 为预计恢复时间，未知时为空。
@@ -62,27 +60,6 @@ func undeliverableNodes(now time.Time) map[int]deliveryBlock {
 		}
 	}
 
-	var upstreams []models.Subcription
-	models.DB.Select("id", "name", "source_upload", "source_download", "source_total", "source_expire").
-		Where("source_urls IS NOT NULL AND TRIM(source_urls) <> ''").Find(&upstreams)
-	for _, u := range upstreams {
-		reason := ""
-		var until *time.Time
-		switch {
-		case u.SourceExpire != nil && now.After(*u.SourceExpire):
-			reason = "上游订阅已到期"
-		case u.SourceTotal > 0 && u.SourceUpload+u.SourceDownload >= u.SourceTotal:
-			reason = "上游订阅流量已用完"
-			until = u.SourceExpire
-		}
-		if reason == "" {
-			continue
-		}
-		for _, id := range groupNodeIDs(u.Name) {
-			add(id, deliveryBlock{Kind: blockUpstream, Reason: reason, Until: until})
-		}
-	}
-
 	// 自动判定关闭时，检测结果只作展示，不再拦住下发。
 	setting := currentAlertSetting()
 	if setting.AutoBlockInvalid {
@@ -113,7 +90,7 @@ type nodeForceDeliverRequest struct {
 }
 
 // NodeForceDeliver 设置节点是否忽略“检测无效”照常下发。
-// 只覆盖健康检测，手动暂停、服务器额度、上游到期仍然生效。
+// 只覆盖健康检测，手动暂停与服务器额度限制仍然生效。
 // POST /api/v1/nodes/deliver
 func NodeForceDeliver(c *gin.Context) {
 	var req nodeForceDeliverRequest
