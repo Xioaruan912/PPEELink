@@ -225,6 +225,10 @@ func Run(port int) {
 	if err := api.SyncSelfHostedNodes(); err != nil {
 		log.Printf("[主程序] 同步自建节点失败: %v", err)
 	}
+	// 同一台机器同时存在独立监控和 agent 监控时，保留独立监控并合并指标。
+	if err := api.MergeDuplicateMonitors(); err != nil {
+		log.Printf("[主程序] 合并重复监控失败: %v", err)
+	}
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步
