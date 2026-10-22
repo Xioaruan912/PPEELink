@@ -1211,7 +1211,7 @@ onBeforeUnmount(() => {
 
             <UiPanel
               title="检测策略怎么用"
-              description="节点默认只看面板，可以在节点页改策略。"
+              description="普通节点默认只看面板；自建节点默认任一视角通过，可在节点页修改。"
             >
               <ul class="tips">
                 <li>

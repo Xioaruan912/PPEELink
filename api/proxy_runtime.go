@@ -156,11 +156,23 @@ func applyAgentMonitor(tx *gorm.DB, server models.ProxyServer, report xraycore.R
 	err := tx.Where("proxy_server_id = ?", server.ID).First(&monitor).Error
 	if err == gorm.ErrRecordNotFound {
 		serverID := server.ID
-		monitor = models.Monitor{
-			Name: server.Name, Group: "自建节点", ProxyServerID: &serverID, Enabled: true,
+		// 同一台机器可能已有用户手动接入的独立监控（SSH 地址与服务器公网地址一致）。
+		// 直接复用它，避免 agent 监控和独立监控各出现一张卡片。
+		if strings.TrimSpace(server.PublicHost) != "" {
+			err = tx.Where("proxy_server_id IS NULL AND ssh_host <> '' AND LOWER(ssh_host) = ?", strings.ToLower(strings.TrimSpace(server.PublicHost))).
+				Order("id asc").First(&monitor).Error
 		}
-		if err := tx.Create(&monitor).Error; err != nil {
-			return err
+		if err == gorm.ErrRecordNotFound || err != nil || monitor.ID == 0 {
+			monitor = models.Monitor{
+				Name: server.Name, Group: "自建节点", ProxyServerID: &serverID, Enabled: true,
+			}
+			if err := tx.Create(&monitor).Error; err != nil {
+				return err
+			}
+		} else {
+			if err := tx.Model(&monitor).Updates(map[string]any{"proxy_server_id": serverID, "enabled": true}).Error; err != nil {
+				return err
+			}
 		}
 	} else if err != nil {
 		return err
