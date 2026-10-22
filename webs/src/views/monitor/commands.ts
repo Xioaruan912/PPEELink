@@ -8,7 +8,7 @@ export interface QuickCommand {
 
 const base = "https://raw.githubusercontent.com/Xioaruan912/Xcript/main";
 
-/** 常用 VPS 脚本，全部来自 Xioaruan912/Xcript。交互式脚本在 WebSSH 里直接运行。 */
+/** 常用 VPS 脚本，全部来自 Xioaruan912/Xcript。交互式脚本在 Agent 终端 里直接运行。 */
 export const quickCommands: QuickCommand[] = [
   {
     name: "清理缓存与日志",
