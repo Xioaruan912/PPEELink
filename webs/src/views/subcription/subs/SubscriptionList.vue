@@ -57,14 +57,17 @@ const expired = (value: string | null) =>
 <template>
   <section :aria-busy="loading">
     <div class="subs-summary" data-enter>
-      <div><span>订阅总数</span><strong>{{ tableData.length }}</strong></div>
+      <div>
+        <span>订阅总数</span>
+        <strong>{{ loading || loadError ? "—" : tableData.length }}</strong>
+      </div>
       <div>
         <span>有效</span>
-        <strong class="ok">{{ tableData.length - expiredCount }}</strong>
+        <strong class="ok">{{ loading || loadError ? "—" : tableData.length - expiredCount }}</strong>
       </div>
       <div>
         <span>已过期</span>
-        <strong :class="{ bad: expiredCount }">{{ expiredCount }}</strong>
+        <strong :class="{ bad: expiredCount }">{{ loading || loadError ? "—" : expiredCount }}</strong>
       </div>
     </div>
     <UiPanel

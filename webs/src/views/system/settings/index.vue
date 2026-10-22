@@ -930,7 +930,6 @@ onBeforeUnmount(() => {
           <div v-if="tab === 'detect'" key="detect" class="section-stack">
             <section class="detect-hero">
               <div class="detect-copy">
-                <span class="kicker">NODE HEALTH</span>
                 <h2>自动判定无效节点</h2>
                 <p>
                   连续
@@ -1882,6 +1881,10 @@ onBeforeUnmount(() => {
   text-align: left;
   transition: background var(--duration-fast), color var(--duration-fast);
 }
+.rail-item:focus-visible {
+  outline: 2px solid var(--c-signal);
+  outline-offset: -2px;
+}
 .rail-item:hover {
   background: var(--c-surface-2);
   color: var(--c-ink);
@@ -1968,45 +1971,50 @@ onBeforeUnmount(() => {
 .settings-main {
   min-width: 0;
 }
+.settings-main :deep(.empty-state--section) {
+  padding-top: 14px;
+  padding-bottom: 14px;
+}
+.settings-main :deep(.ui-panel.is-flush .empty-state--section) {
+  padding-right: 16px;
+  padding-left: 16px;
+}
+@media (min-width: 768px) {
+  .settings-main :deep(.ui-panel__header) {
+    padding: 12px 14px;
+  }
+  .settings-main :deep(.ui-panel:not(.is-flush) .ui-panel__body) {
+    padding: 14px;
+  }
+}
 .section-stack {
   display: grid;
-  gap: 16px;
+  gap: 12px;
 }
 .split {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(280px, 0.85fr);
-  gap: 16px;
+  gap: 12px;
   align-items: start;
 }
 .two-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
 }
 .detect-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 24px;
-  padding: 22px;
+  gap: 16px;
+  padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
-  background:
-    radial-gradient(
-      120% 140% at 100% 0%,
-      color-mix(in srgb, var(--c-signal) 12%, transparent),
-      transparent 55%
-    ),
-    var(--c-surface);
+  background: var(--c-surface);
   box-shadow: var(--shadow-panel), var(--edge-highlight);
 }
-.kicker {
-  color: var(--c-muted);
-  font: 500 10.5px/1 var(--font-mono);
-  letter-spacing: 0.14em;
-}
 .detect-copy h2 {
-  margin: 8px 0 6px;
-  font-size: 22px;
+  margin: 0 0 6px;
+  font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -2023,8 +2031,8 @@ onBeforeUnmount(() => {
 .detect-facts {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 18px;
-  margin-top: 14px;
+  gap: 6px 16px;
+  margin-top: 10px;
   color: var(--c-muted);
   font-size: 12px;
 }
@@ -2047,7 +2055,7 @@ onBeforeUnmount(() => {
 }
 .detect-control {
   display: grid;
-  min-width: 120px;
+  min-width: 88px;
   align-content: start;
   justify-items: end;
   gap: 6px;
@@ -2245,8 +2253,8 @@ onBeforeUnmount(() => {
 .mini-stats {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 16px 0 0;
+  gap: 10px;
+  margin: 12px 0 0;
   padding: 12px 0 0;
   border-top: 1px solid var(--c-line);
 }
@@ -2256,7 +2264,7 @@ onBeforeUnmount(() => {
 }
 .mini-stats dd {
   margin: 2px 0 0;
-  font: 600 20px/1.2 var(--font-mono);
+  font: 600 18px/1.3 var(--font-mono);
 }
 .mini-stats dd.small {
   color: var(--c-muted);
@@ -2323,7 +2331,7 @@ onBeforeUnmount(() => {
 .steps {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  gap: 12px;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -2332,12 +2340,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--c-line);
-  border-radius: 14px;
-  background: var(--c-surface-2);
+  padding: 10px 0;
+  border-top: 1px solid var(--c-line);
 }
 .step-no {
+  padding-top: 3px;
   color: var(--c-signal-text);
   font: 600 12px/1 var(--font-mono);
 }
@@ -2354,6 +2361,17 @@ onBeforeUnmount(() => {
 .data-table {
   display: grid;
   min-width: 0;
+  overflow-x: auto;
+}
+.token-table .table-head,
+.token-table .table-row,
+.audit-table .table-head,
+.audit-table .table-row {
+  min-width: 700px;
+}
+.links-table .table-head,
+.links-table .table-row {
+  min-width: 580px;
 }
 .table-head,
 .table-row {
@@ -2532,29 +2550,29 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 18px;
-  min-height: 176px;
-  padding: 22px 20px;
+  gap: 12px;
+  min-height: 120px;
+  padding: 16px;
 }
 .empty-visual {
   display: grid;
   place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--c-signal) 20%, var(--c-surface-2));
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--c-surface-2);
   color: var(--c-signal-text);
 }
 .empty-visual svg {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
 }
 .empty-copy {
   min-width: 0;
 }
 .empty-copy h3 {
   margin: 0 0 4px;
-  font: 500 17px/1.35 var(--font-ui);
+  font: 500 16px/1.4 var(--font-ui);
 }
 .empty-copy p {
   max-width: 62ch;
@@ -2726,19 +2744,11 @@ onBeforeUnmount(() => {
 }
 .pane-enter-active,
 .pane-leave-active {
-  transition:
-    opacity var(--duration-medium) var(--ease-out),
-    transform var(--duration-medium) var(--ease-out),
-    filter var(--duration-medium) var(--ease-out);
+  transition: opacity var(--duration-fast) var(--ease-out);
 }
-.pane-enter-from {
-  opacity: 0;
-  transform: translateY(12px);
-  filter: blur(6px);
-}
+.pane-enter-from,
 .pane-leave-to {
   opacity: 0;
-  transform: translateY(-5px);
 }
 .fade-enter-active,
 .fade-leave-active {
@@ -2747,6 +2757,14 @@ onBeforeUnmount(() => {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pane-enter-active,
+  .pane-leave-active,
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: none;
+  }
 }
 @media (max-width: 1180px) {
   .token-table .table-head,
@@ -2765,7 +2783,7 @@ onBeforeUnmount(() => {
     text-align: left;
   }
 }
-@media (max-width: 1180px) {
+@media (max-width: 1450px) {
   .split {
     grid-template-columns: 1fr;
   }
@@ -2806,8 +2824,8 @@ onBeforeUnmount(() => {
   }
   .detect-hero {
     grid-template-columns: 1fr;
-    gap: 16px;
-    padding: 18px;
+    gap: 12px;
+    padding: 14px;
   }
   .detect-control {
     grid-auto-columns: auto;
@@ -2821,7 +2839,7 @@ onBeforeUnmount(() => {
   .empty-row {
     grid-template-columns: auto minmax(0, 1fr);
     min-height: 0;
-    padding: 18px 0;
+    padding: 14px;
   }
   .empty-actions {
     grid-column: 1 / -1;
@@ -2829,6 +2847,11 @@ onBeforeUnmount(() => {
   }
   .table-head {
     display: none;
+  }
+  .token-table .table-row,
+  .audit-table .table-row,
+  .links-table .table-row {
+    min-width: 0;
   }
   .token-table .table-row {
     grid-template-columns: minmax(0, 1fr) auto auto;

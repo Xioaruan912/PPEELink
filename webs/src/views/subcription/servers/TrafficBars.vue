@@ -23,7 +23,12 @@ const sum = computed(() => days.value.reduce((s, d) => s + d.total, 0));
 </script>
 <template>
   <div class="traffic-bars">
+    <div v-if="!sum" class="traffic-empty" role="status">
+      <strong>最近 30 天暂无流量</strong>
+      <p>服务器回报流量后，这里会显示每日用量。</p>
+    </div>
     <div
+      v-else
       class="bars"
       role="img"
       :aria-label="`最近 30 天共 ${formatBytes(sum)}`"
@@ -40,7 +45,7 @@ const sum = computed(() => days.value.reduce((s, d) => s + d.total, 0));
         ></span>
       </el-tooltip>
     </div>
-    <div class="axis">
+    <div v-if="sum" class="axis">
       <span>{{ days[0].day.slice(5) }}</span>
       <span
         >30 天合计 <b class="mono">{{ formatBytes(sum) }}</b></span
@@ -50,6 +55,18 @@ const sum = computed(() => days.value.reduce((s, d) => s + d.total, 0));
   </div>
 </template>
 <style scoped>
+.traffic-empty {
+  padding: 8px 0;
+}
+.traffic-empty strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+.traffic-empty p {
+  margin: 4px 0 0;
+  color: var(--c-muted);
+  font-size: 13px;
+}
 .bars {
   display: grid;
   grid-template-columns: repeat(30, minmax(0, 1fr));
