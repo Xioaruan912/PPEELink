@@ -592,10 +592,6 @@ const usageRatio = (a: ProxyAccount) =>
             v-model="serverForm.publicHost"
             placeholder="客户端连接节点时使用的 IP 或域名"
           />
-          <p class="field-hint">
-            这是节点对外暴露的代理地址，不是面板地址；不要填写
-            proxy.722225.xyz，除非代理确实使用该域名。
-          </p>
         </el-form-item>
         <el-form-item label="月流量上限（GB，0 为不限）">
           <div class="quota-fields">
@@ -625,10 +621,6 @@ const usageRatio = (a: ProxyAccount) =>
             <span>复用现有 agent 上报 CPU、内存、磁盘与网络，无需再装监控服务。</span>
           </div>
         </el-form-item>
-        <p class="dialog-hint">
-          保存后会给出一条安装命令，在远程服务器上以 root
-          执行即可。agent 主动连回面板，无需开放额外端口或提供 SSH 密码。
-        </p>
       </el-form>
       <template #footer>
         <UiButton @click="serverDialog = false">取消</UiButton>

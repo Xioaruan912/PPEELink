@@ -19,20 +19,21 @@ const (
 
 // ProxyServer 一台运行 xray-core 的服务器。
 type ProxyServer struct {
-	ID           uint       `gorm:"primaryKey" json:"id"`
-	Name         string     `gorm:"size:80;not null" json:"name"`
-	Kind         string     `gorm:"size:16;not null" json:"kind"`
-	PublicHost   string     `gorm:"size:255" json:"publicHost"` // 客户端连接用的域名或 IP
-	Enabled      bool       `gorm:"not null;default:true" json:"enabled"`
-	AgentToken   string     `gorm:"size:64;index" json:"-"` // sha256(明文)，明文只在创建时返回一次
-	XrayVer      string     `gorm:"size:40" json:"xrayVersion"`
-	AgentVersion string     `gorm:"size:40" json:"agentVersion"`
-	Arch         string     `gorm:"size:20" json:"arch"`
-	Running      bool       `json:"running"`
-	LastError    string     `gorm:"type:text" json:"lastError"`
-	LastSeenAt   *time.Time `json:"lastSeenAt"`
-	AppliedRev   string     `gorm:"size:64" json:"appliedRev"`              // agent 已应用的配置摘要
-	Removing     bool       `gorm:"not null;default:false" json:"removing"` // 已在面板删除，等待 agent 卸载后回报
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	Name          string     `gorm:"size:80;not null" json:"name"`
+	Kind          string     `gorm:"size:16;not null" json:"kind"`
+	PublicHost    string     `gorm:"size:255" json:"publicHost"` // 客户端连接用的域名或 IP
+	Enabled       bool       `gorm:"not null;default:true" json:"enabled"`
+	AgentToken    string     `gorm:"size:64;index" json:"-"` // sha256(明文)，明文只在创建时返回一次
+	XrayVer       string     `gorm:"size:40" json:"xrayVersion"`
+	AgentVersion  string     `gorm:"size:40" json:"agentVersion"`
+	AgentRevision int        `gorm:"not null;default:0" json:"agentRevision"`
+	Arch          string     `gorm:"size:20" json:"arch"`
+	Running       bool       `json:"running"`
+	LastError     string     `gorm:"type:text" json:"lastError"`
+	LastSeenAt    *time.Time `json:"lastSeenAt"`
+	AppliedRev    string     `gorm:"size:64" json:"appliedRev"`              // agent 已应用的配置摘要
+	Removing      bool       `gorm:"not null;default:false" json:"removing"` // 已在面板删除，等待 agent 卸载后回报
 	// MonitorEnabled 开启后复用同一个 agent 上报服务器指标，不再单独装监控服务
 	MonitorEnabled bool `gorm:"not null;default:false" json:"monitorEnabled"`
 	// AgentUpdateRequested 面板已请求 agent 自更新，agent 回报新版本摘要后清除。

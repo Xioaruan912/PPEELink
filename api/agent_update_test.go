@@ -30,4 +30,14 @@ func TestAgentUpdateSpecAndAcknowledgement(t *testing.T) {
 	if server.AgentUpdateRequested {
 		t.Fatal("matching agent hash must clear update request")
 	}
+	if server.AgentRevision != 1 {
+		t.Fatalf("successful update must increment revision, got %d", server.AgentRevision)
+	}
+	if err := ApplyServerReport(server, xraycore.Report{AgentHash: xraycore.ExecutableHash()}); err != nil {
+		t.Fatal(err)
+	}
+	models.DB.First(&server, server.ID)
+	if server.AgentRevision != 1 {
+		t.Fatalf("ordinary reports must not increment revision, got %d", server.AgentRevision)
+	}
 }
