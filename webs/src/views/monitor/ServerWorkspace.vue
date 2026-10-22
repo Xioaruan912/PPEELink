@@ -34,18 +34,18 @@ onBeforeUnmount(() => { window.removeEventListener("online", connectionChanged);
 
 <template>
  <main class="workspace">
-  <PageHeader title="服务器工作区" description="复用 Monitor SSH 配置，管理远程文件和 Docker 容器。"><template #actions><RouterLink to="/monitor/index" class="back-link">返回服务器监控 / SSH 设置</RouterLink></template></PageHeader>
-  <UiPanel title="连接服务器" description="仅管理员可操作。文件和容器操作使用 SSH 权限，不依赖探针在线状态。">
+  <PageHeader title="服务器工作区" description="通过自建服务器 agent 管理文件和 Docker 容器，不保存 SSH 凭据。"><template #actions><RouterLink to="/monitor/index" class="back-link">返回服务器监控</RouterLink></template></PageHeader>
+  <UiPanel title="连接服务器" description="仅管理员可操作。文件和容器操作由 agent 本地执行，不需要 SSH 地址或密码。">
    <UiSkeleton v-if="phase === 'loading'" :lines="2" aria-label="正在加载服务器" />
    <div v-else-if="phase === 'error'" role="alert" class="state"><p>{{ error }}</p><UiButton :disabled="offline" @click="load">重试加载</UiButton></div>
-   <div v-else-if="!items.length" class="state"><h3>还没有服务器</h3><p>先在服务器监控中添加服务器并保存 SSH 配置，即可使用文件和 Docker 管理。</p><RouterLink to="/monitor/index">添加服务器并配置 SSH</RouterLink></div>
-   <template v-else><div class="server-line"><label for="workspace-server">服务器</label><select id="workspace-server" :value="id || ''" @change="chooseServer"><option disabled value="">选择服务器</option><option v-for="item in items" :key="item.id" :value="item.id">{{ item.name }}{{ item.sshConfigured ? '' : ' · 未配置 SSH' }}</option></select><span v-if="selected" class="connection">{{ selected.sshUser || 'SSH' }}@{{ selected.sshHost || '未设置' }}:{{ selected.sshPort || 22 }} · {{ selected.online ? '探针在线' : '探针离线（SSH 可独立连接）' }}</span><UiButton :disabled="offline" @click="load">刷新服务器</UiButton></div>
+   <div v-else-if="!items.length" class="state"><h3>还没有服务器</h3><p>先在服务器监控中接入自建服务器 agent，即可使用文件和 Docker 管理。</p><RouterLink to="/monitor/index">前往服务器监控</RouterLink></div>
+   <template v-else><div class="server-line"><label for="workspace-server">服务器</label><select id="workspace-server" :value="id || ''" @change="chooseServer"><option disabled value="">选择服务器</option><option v-for="item in items" :key="item.id" :value="item.id">{{ item.name }}</option></select><span v-if="selected" class="connection">{{ selected.proxyServerId ? '已关联自建服务器 agent' : '未关联 agent' }} · {{ selected.online ? '在线' : '离线' }}</span><UiButton :disabled="offline" @click="load">刷新服务器</UiButton></div>
     <p v-if="!selected" class="state" role="status">未找到所选服务器。请选择上方服务器，或返回监控页面确认服务器仍存在。</p>
-    <div v-else-if="!selected.sshConfigured" class="state" role="status"><h3>需要先配置 SSH</h3><p>在服务器监控中打开此服务器的 SSH 设置，保存主机、用户和密码后返回刷新。</p><RouterLink to="/monitor/index">前往 SSH 设置</RouterLink></div>
+    <div v-else-if="!selected.proxyServerId" class="state" role="status"><h3>未关联 agent</h3><p>该监控是独立监控，没有自建服务器 agent；文件和 Docker 操作需要通过 agent 通道。</p><RouterLink to="/monitor/index">返回服务器监控</RouterLink></div>
    </template>
   </UiPanel>
-  <template v-if="selected?.sshConfigured">
-   <nav class="tabs" aria-label="工作区功能"><UiButton :variant="tab === 'files' ? 'primary' : 'secondary'" :aria-current="tab === 'files' ? 'page' : undefined" @click="chooseTab('files')">SFTP 文件管理</UiButton><UiButton :variant="tab === 'docker' ? 'primary' : 'secondary'" :aria-current="tab === 'docker' ? 'page' : undefined" @click="chooseTab('docker')">Docker 管理</UiButton></nav>
+  <template v-if="selected?.proxyServerId">
+   <nav class="tabs" aria-label="工作区功能"><UiButton :variant="tab === 'files' ? 'primary' : 'secondary'" :aria-current="tab === 'files' ? 'page' : undefined" @click="chooseTab('files')">文件管理</UiButton><UiButton :variant="tab === 'docker' ? 'primary' : 'secondary'" :aria-current="tab === 'docker' ? 'page' : undefined" @click="chooseTab('docker')">Docker 管理</UiButton></nav>
    <ServerFiles v-if="visitedFiles" v-show="tab === 'files'" :key="`files-${id}`" ref="files" :id="id" :offline="offline" />
    <ServerDocker v-if="visitedDocker" v-show="tab === 'docker'" :key="`docker-${id}`" :id="id" :offline="offline" />
   </template>

@@ -115,8 +115,8 @@ func MonitorSSHTicket(c *gin.Context) {
 		c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
 		return
 	}
-	if !monitorSSHConfigured(monitor) {
-		c.JSON(400, gin.H{"code": "40000", "msg": "还没有配置 SSH"})
+	if monitor.ProxyServerID == nil || agentConnForServer(*monitor.ProxyServerID) == nil {
+		c.JSON(409, gin.H{"code": "40900", "msg": "agent 未连接，请等待心跳恢复后重试"})
 		return
 	}
 	raw := make([]byte, 24)

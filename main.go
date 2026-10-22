@@ -229,6 +229,10 @@ func Run(port int) {
 	if err := api.MergeDuplicateMonitors(); err != nil {
 		log.Printf("[主程序] 合并重复监控失败: %v", err)
 	}
+	// 旧版本保存的 SSH 凭据不再使用，统一清除；终端和运维全部走 agent。
+	_ = models.DB.Model(&models.Monitor{}).
+		Where("ssh_password_enc <> '' OR ssh_host <> '' OR ssh_user <> ''").
+		Updates(map[string]any{"ssh_host": "", "ssh_port": 22, "ssh_user": "", "ssh_password_enc": ""}).Error
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步
@@ -259,6 +263,7 @@ func runAgent(args []string) {
 	agentClient := &http.Client{Timeout: 20 * time.Second}
 	go runAgentTraceLoop(ctx, agentClient, *panel, *token)
 	go runAgentCheckLoop(ctx, agentClient, *panel, *token)
+	go runAgentTerminal(ctx, *panel, *token)
 	if xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token}, runner, *interval) {
 		log.Printf("[agent] 服务器已在面板删除，xray 已卸载，正在移除 agent")
 		removeAgent()
