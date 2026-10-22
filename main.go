@@ -85,7 +85,7 @@ func main() {
 	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
 		time.Local = loc
 	}
-	version = "2.1"
+	version = "2.2"
 	// agent 模式运行在远程服务器上，不需要面板的配置与数据库
 	if len(os.Args) > 1 && os.Args[1] == "agent" {
 		runAgent(os.Args[2:])
@@ -105,7 +105,7 @@ func main() {
 	var port = config.Port        // 读取端口号
 	// 获取版本号
 	var Isversion bool
-	version = "2.1"
+	version = "2.2"
 	flag.BoolVar(&Isversion, "version", false, "显示版本号")
 	flag.Parse()
 	if Isversion {
