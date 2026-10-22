@@ -31,6 +31,7 @@ export interface ProxyServer {
   trafficLimit: number;
   resetDay: number;
   monitorEnabled: boolean;
+  agentUpdateRequested: boolean;
   /** 本计费周期流量；over 为 true 时 xray 已停止、节点暂不下发，resetAt 恢复 */
   quota: { used: number; limit: number; over: boolean; resetAt: string };
   inbounds: ProxyInbound[];
@@ -105,6 +106,12 @@ export const resetServerToken = (id: number) =>
     params: { id },
   });
 /** 删除服务器；force 跳过等待 agent 卸载。返回 data.pending（等待卸载）或 data.uninstall（需手动执行的卸载命令）。 */
+export const requestAgentUpdate = (id: number, cancel = false) =>
+  request<{ requested: boolean }>({
+    url: "/api/v1/proxy/servers/update-agent",
+    method: "post",
+    params: cancel ? { id, cancel: 1 } : { id },
+  });
 export const deleteProxyServer = (id: number, force = false) =>
   request({
     url: "/api/v1/proxy/servers/delete",

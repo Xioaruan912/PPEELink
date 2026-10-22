@@ -52,7 +52,27 @@ func NetworkTraceSources(c *gin.Context) {
 		}
 		items = append(items, gin.H{"id": p.ID, "name": p.Name, "region": p.Region, "supported": fresh, "tool": cap.Tool, "available": fresh && cap.Tool != "", "reason": reason, "lastSeenAt": p.LastSeenAt})
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"panelTool": tracecore.AvailableTool(), "probes": items}, "msg": "追踪来源"})
+	var agents []models.ProxyServer
+	models.DB.Where("kind = ? AND enabled = ?", models.ServerKindAgent, true).Order("id").Find(&agents)
+	var agentCaps []models.TraceAgentCapability
+	models.DB.Find(&agentCaps)
+	agentCapMap := map[uint]models.TraceAgentCapability{}
+	for _, cap := range agentCaps {
+		agentCapMap[cap.ServerID] = cap
+	}
+	agentItems := make([]gin.H, 0, len(agents))
+	for _, server := range agents {
+		cap, exists := agentCapMap[server.ID]
+		fresh := exists && now.Sub(cap.SeenAt) < 2*time.Minute
+		reason := ""
+		if !fresh {
+			reason = "agent 尚未上报追踪能力；请升级 agent 后重试"
+		} else if cap.Tool == "" {
+			reason = "服务器未安装 traceroute 或 tracepath"
+		}
+		agentItems = append(agentItems, gin.H{"id": server.ID, "name": server.Name, "supported": fresh, "tool": cap.Tool, "available": fresh && cap.Tool != "", "reason": reason, "lastSeenAt": server.LastSeenAt})
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"panelTool": tracecore.AvailableTool(), "probes": items, "agents": agentItems}, "msg": "追踪来源"})
 }
 
 func NetworkTraceCreate(c *gin.Context) {
@@ -61,6 +81,7 @@ func NetworkTraceCreate(c *gin.Context) {
 		Target       string `json:"target"`
 		IncludePanel bool   `json:"includePanel"`
 		ProbeIDs     []uint `json:"probeIds"`
+		AgentIDs     []uint `json:"agentIds"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": "请求格式无效"})
@@ -79,8 +100,16 @@ func NetworkTraceCreate(c *gin.Context) {
 			ids = append(ids, id)
 		}
 	}
-	if len(ids) > 8 || (!req.IncludePanel && len(ids) == 0) {
-		c.JSON(400, gin.H{"code": "40000", "msg": "请选择来源，最多 8 个远程探针"})
+	agentIDs := make([]uint, 0)
+	seenAgents := map[uint]bool{}
+	for _, id := range req.AgentIDs {
+		if id > 0 && !seenAgents[id] {
+			seenAgents[id] = true
+			agentIDs = append(agentIDs, id)
+		}
+	}
+	if len(ids)+len(agentIDs) > 8 || (!req.IncludePanel && len(ids)+len(agentIDs) == 0) {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请选择来源，最多 8 个远程来源"})
 		return
 	}
 	traceCreateMu.Lock()
@@ -99,9 +128,16 @@ func NetworkTraceCreate(c *gin.Context) {
 			return
 		}
 	}
+	var agents []models.ProxyServer
+	if len(agentIDs) > 0 {
+		if err := models.DB.Where("id IN ? AND kind = ? AND enabled = ?", agentIDs, models.ServerKindAgent, true).Find(&agents).Error; err != nil || len(agents) != len(agentIDs) {
+			c.JSON(400, gin.H{"code": "40000", "msg": "部分自建服务器不存在或未启用"})
+			return
+		}
+	}
 	now := time.Now()
 	run := models.NetworkTraceRun{Target: target, CreatedAt: now}
-	views := make([]models.NetworkTraceView, 0, len(ids)+1)
+	views := make([]models.NetworkTraceView, 0, len(ids)+len(agents)+1)
 	if req.IncludePanel {
 		v := models.NetworkTraceView{SourceName: "面板服务器", Status: "queued", CreatedAt: now}
 		if tracecore.AvailableTool() == "" {
@@ -121,6 +157,20 @@ func NetworkTraceCreate(c *gin.Context) {
 		} else if cap.Tool == "" {
 			v.Status = "unsupported"
 			v.Error = "探针未安装 traceroute 或 tracepath"
+			v.FinishedAt = &now
+		}
+		views = append(views, v)
+	}
+	for _, agent := range agents {
+		v := models.NetworkTraceView{AgentServerID: agent.ID, SourceName: agent.Name, Status: "queued", CreatedAt: now}
+		var cap models.TraceAgentCapability
+		if models.DB.First(&cap, "server_id = ?", agent.ID).Error != nil || now.Sub(cap.SeenAt) > 2*time.Minute {
+			v.Status = "unsupported"
+			v.Error = "agent 未提供追踪能力；请先使用面板更新 agent"
+			v.FinishedAt = &now
+		} else if cap.Tool == "" {
+			v.Status = "unsupported"
+			v.Error = "服务器未安装 traceroute 或 tracepath"
 			v.FinishedAt = &now
 		}
 		views = append(views, v)
@@ -148,7 +198,7 @@ func NetworkTraceCreate(c *gin.Context) {
 		return
 	}
 	for _, v := range views {
-		if v.ProbeID == 0 && v.Status == "queued" {
+		if v.ProbeID == 0 && v.AgentServerID == 0 && v.Status == "queued" {
 			go runPanelTrace(v.ID, target)
 		}
 	}
@@ -299,6 +349,78 @@ func ProbeTraceReport(c *gin.Context) {
 	}
 	if tx.RowsAffected != 1 {
 		c.JSON(409, gin.H{"code": "40900", "msg": "任务不属于此探针、已取消或已结束"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": "已保存"})
+}
+
+// AgentTraceJobs 由共享 agent 拉取绑定的追踪任务；与 TCP 检测任务完全分离。
+func AgentTraceJobs(c *gin.Context) {
+	server, ok := agentServer(c)
+	if !ok {
+		return
+	}
+	tool := c.Query("tool")
+	if tool != "traceroute" && tool != "tracepath" {
+		tool = ""
+	}
+	cap := models.TraceAgentCapability{ServerID: server.ID, SeenAt: time.Now(), Tool: tool}
+	if err := models.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}}, DoUpdates: clause.AssignmentColumns([]string{"seen_at", "tool"})}).Create(&cap).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "记录能力失败"})
+		return
+	}
+	models.DB.Model(server).Update("last_seen_at", time.Now())
+	expireNetworkTraces()
+	var views []models.NetworkTraceView
+	if tool != "" {
+		models.DB.Where("agent_server_id = ? AND status = ?", server.ID, "queued").Order("id").Limit(1).Find(&views)
+	}
+	jobs := make([]gin.H, 0, 1)
+	for _, v := range views {
+		var run models.NetworkTraceRun
+		if models.DB.First(&run, v.RunID).Error != nil {
+			continue
+		}
+		now := time.Now()
+		tx := models.DB.Model(&models.NetworkTraceView{}).Where("id = ? AND agent_server_id = ? AND status = ?", v.ID, server.ID, "queued").Updates(map[string]any{"status": "running", "started_at": now})
+		if tx.Error == nil && tx.RowsAffected == 1 {
+			jobs = append(jobs, gin.H{"id": v.ID, "target": run.Target})
+		}
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": jobs, "msg": "路由追踪任务"})
+}
+
+func AgentTraceReport(c *gin.Context) {
+	server, ok := agentServer(c)
+	if !ok {
+		return
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64*1024)
+	var req struct {
+		ID     uint   `json:"id"`
+		Tool   string `json:"tool"`
+		Output string `json:"output"`
+		Error  string `json:"error"`
+	}
+	if c.ShouldBindJSON(&req) != nil || req.ID == 0 || len(req.Output) > tracecore.MaxOutput || len(req.Error) > 512 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "回报内容过大或格式无效"})
+		return
+	}
+	if req.Tool != "traceroute" && req.Tool != "tracepath" {
+		req.Tool = ""
+	}
+	status := "completed"
+	if strings.TrimSpace(req.Error) != "" {
+		status = "failed"
+	}
+	now := time.Now()
+	tx := models.DB.Model(&models.NetworkTraceView{}).Where("id = ? AND agent_server_id = ? AND status = ?", req.ID, server.ID, "running").Updates(map[string]any{"status": status, "tool": req.Tool, "output": strings.ToValidUTF8(req.Output, "�"), "error": req.Error, "finished_at": now})
+	if tx.Error != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "保存回报失败"})
+		return
+	}
+	if tx.RowsAffected != 1 {
+		c.JSON(409, gin.H{"code": "40900", "msg": "任务不属于此服务器、已取消或已结束"})
 		return
 	}
 	c.JSON(200, gin.H{"code": "00000", "msg": "已保存"})

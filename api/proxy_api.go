@@ -172,6 +172,30 @@ const agentUninstallCommand = "systemctl disable --now ppeelink-agent ppeelink-x
 	"rm -rf /etc/systemd/system/ppeelink-agent.service /etc/systemd/system/ppeelink-xray.service " +
 	"/etc/ppeelink-agent /var/lib/ppeelink-agent /usr/local/bin/ppeelink-agent; systemctl daemon-reload"
 
+// ProxyServerUpdateAgent 面板主动请求 agent 自更新；cancel=1 可撤销尚未执行的请求。
+func ProxyServerUpdateAgent(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Query("id"))
+	var server models.ProxyServer
+	if err := models.DB.First(&server, id).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
+		return
+	}
+	if server.Kind != models.ServerKindAgent {
+		c.JSON(400, gin.H{"code": "40000", "msg": "只有远程 agent 服务器支持主动更新"})
+		return
+	}
+	requested := c.Query("cancel") != "1"
+	if err := models.DB.Model(&server).Update("agent_update_requested", requested).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "更新请求保存失败"})
+		return
+	}
+	msg := "已下发更新请求，agent 下次拉取配置时自动替换并重启"
+	if !requested {
+		msg = "已撤销更新请求"
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"requested": requested}, "msg": msg})
+}
+
 // ProxyServerDelete 删除服务器并清理机器上的 xray。
 //   - 面板服务器：立即停止并卸载本机 xray。
 //   - 远程服务器：标记为卸载中，agent 下一轮拉取时卸载 xray 和自身，回报后删除记录。

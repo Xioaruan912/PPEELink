@@ -55,6 +55,10 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		BlockPrivate: true, BlockBitTorrent: true,
 		Monitor: &xraycore.MonitorSpec{Enabled: server.MonitorEnabled, IntervalSeconds: 60},
 	}
+	if server.Kind == models.ServerKindAgent {
+		spec.AgentUpdate = server.AgentUpdateRequested
+		spec.AgentHash = xraycore.ExecutableHash()
+	}
 	// 本月流量超出上限：停止 xray，到重置日后下一轮拉取时自动恢复
 	if server.TrafficLimit > 0 && serverQuota(server, time.Now()).Over {
 		spec.Enabled = false
@@ -113,10 +117,14 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 	now := time.Now()
 	day := now.Format("2006-01-02")
 	return models.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&models.ProxyServer{}).Where("id = ?", server.ID).Updates(map[string]any{
+		updates := map[string]any{
 			"running": report.Running, "last_error": report.Error, "last_seen_at": now,
 			"xray_ver": report.XrayVersion, "arch": report.Arch, "applied_rev": report.Rev,
-		}).Error; err != nil {
+		}
+		if server.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == xraycore.ExecutableHash() {
+			updates["agent_update_requested"] = false
+		}
+		if err := tx.Model(&models.ProxyServer{}).Where("id = ?", server.ID).Updates(updates).Error; err != nil {
 			return err
 		}
 		for email, c := range report.Traffic {

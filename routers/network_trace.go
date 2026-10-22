@@ -14,4 +14,6 @@ func NetworkTraces(r *gin.Engine) {
 	g.POST("/cancel", api.NetworkTraceCancel)
 	r.GET("/api/v1/probe/trace/jobs", api.ProbeTraceJobs)
 	r.POST("/api/v1/probe/trace/report", api.ProbeTraceReport)
+	r.GET("/api/v1/agent/trace/jobs", api.AgentTraceJobs)
+	r.POST("/api/v1/agent/trace/report", api.AgentTraceReport)
 }

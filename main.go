@@ -255,6 +255,7 @@ func runAgent(args []string) {
 	defer stop()
 	runner := xraycore.NewRunner(*dir, "ppeelink-xray")
 	log.Printf("[agent] 已启动，面板 %s，每 %s 同步一次", *panel, *interval)
+	go runAgentTraceLoop(ctx, &http.Client{Timeout: 20 * time.Second}, *panel, *token)
 	if xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token}, runner, *interval) {
 		log.Printf("[agent] 服务器已在面板删除，xray 已卸载，正在移除 agent")
 		removeAgent()
