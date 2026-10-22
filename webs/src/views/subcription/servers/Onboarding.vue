@@ -6,12 +6,11 @@ import IconDevices from "~icons/ph/devices";
 import IconArrow from "~icons/ph/arrow-right";
 import IconShield from "~icons/ph/shield-check";
 
-/** 还没有服务器时的引导：拓扑示意 + 三步说明 + 直接选择服务器类型。 */
-defineProps<{ hasLocal?: boolean }>();
-const emit = defineEmits<{ add: [kind: "local" | "agent"] }>();
+/** 还没有服务器时的引导：拓扑示意 + 三步说明 + 添加远程服务器。 */
+const emit = defineEmits<{ add: [] }>();
 
 const steps = [
-  { title: "接入服务器", text: "用面板这台机器，或在其他 VPS 装 agent" },
+  { title: "接入服务器", text: "在 VPS 上运行一行 agent 安装命令" },
   { title: "添加入站", text: "Reality Vision 或 XHTTP，端口自动分配" },
   { title: "给账户开通", text: "订阅里自动出现节点，按配额统计流量" },
 ];
@@ -44,24 +43,11 @@ const steps = [
     </div>
 
     <div class="choices">
-      <button
-        type="button"
-        class="choice is-primary"
-        :disabled="hasLocal"
-        @click="emit('add', 'local')"
-      >
-        <IconServer class="c-icon" />
-        <span
-          ><strong>面板服务器</strong
-          ><small>xray 装在运行面板的这台机器上</small></span
-        >
-        <IconArrow class="c-go" />
-      </button>
-      <button type="button" class="choice" @click="emit('add', 'agent')">
+      <button type="button" class="choice is-primary" @click="emit('add')">
         <IconCloud class="c-icon" />
         <span
-          ><strong>远程服务器</strong
-          ><small>在其他 VPS 上一行命令装 agent</small></span
+          ><strong>添加远程服务器</strong
+          ><small>在 VPS 上一行命令安装 agent</small></span
         >
         <IconArrow class="c-go" />
       </button>

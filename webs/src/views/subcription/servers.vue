@@ -6,10 +6,8 @@ import {
   onMounted,
   reactive,
   ref,
-  watch,
 } from "vue";
 import IconPlus from "~icons/ph/plus";
-import IconServer from "~icons/ph/hard-drives";
 import IconCloud from "~icons/ph/cloud-arrow-up";
 import IconTerminal from "~icons/ph/terminal-window";
 import IconPencil from "~icons/ph/pencil-simple";
@@ -38,7 +36,6 @@ import {
   UiButton,
   UiDialog,
   UiPanel,
-  UiSegmented,
   UiSkeleton,
   UiTag,
 } from "@/ui";
@@ -146,7 +143,7 @@ const serverDialog = ref(false);
 const serverForm = reactive({
   id: 0,
   name: "",
-  kind: "agent" as "local" | "agent",
+  kind: "agent" as "agent",
   publicHost: "",
   enabled: true,
   trafficLimitGb: 0,
@@ -156,27 +153,17 @@ const serverForm = reactive({
 const GB = 1024 ** 3;
 const savingServer = ref(false);
 const install = ref<{ name: string; command: string } | null>(null);
-// 从引导卡片选过类型、或面板服务器已添加过时，对话框不再重复询问类型
-const kindLocked = ref(false);
-const hasLocal = computed(() => servers.value.some((x) => x.kind === "local"));
 const serverDialogTitle = computed(() =>
-  serverForm.id
-    ? "编辑服务器"
-    : !kindLocked.value
-      ? "添加服务器"
-      : serverForm.kind === "local"
-        ? "添加面板服务器"
-        : "添加远程服务器"
+  serverForm.id ? "编辑服务器" : "添加远程服务器"
 );
-function openServer(s?: ProxyServer, kind?: "local" | "agent") {
-  kindLocked.value = !!kind || hasLocal.value;
+function openServer(s?: ProxyServer) {
   Object.assign(
     serverForm,
     s
       ? {
           id: s.id,
           name: s.name,
-          kind: s.kind,
+          kind: "agent" as const,
           publicHost: s.publicHost,
           enabled: s.enabled,
           trafficLimitGb: Math.round((s.trafficLimit / GB) * 100) / 100,
@@ -186,12 +173,8 @@ function openServer(s?: ProxyServer, kind?: "local" | "agent") {
       : {
           id: 0,
           name: "",
-          kind: kind || (hasLocal.value ? "agent" : "local"),
-          // 面板服务器的连接地址通常就是当前访问面板的域名
-          publicHost:
-            (kind || (hasLocal.value ? "agent" : "local")) === "local"
-              ? window.location.hostname
-              : "",
+          kind: "agent" as const,
+          publicHost: "",
           enabled: true,
           trafficLimitGb: 0,
           resetDay: 1,
@@ -200,13 +183,6 @@ function openServer(s?: ProxyServer, kind?: "local" | "agent") {
   );
   serverDialog.value = true;
 }
-watch(
-  () => serverForm.kind,
-  (kind) => {
-    if (kind === "local" && !serverForm.id && !serverForm.publicHost)
-      serverForm.publicHost = window.location.hostname;
-  }
-);
 async function submitServer() {
   savingServer.value = true;
   try {
@@ -276,8 +252,6 @@ async function showInstall(s: ProxyServer) {
 const uninstall = ref<{ name: string; command: string } | null>(null);
 function removeHint(s: ProxyServer) {
   const common = "入站与「自建」分组中对应的节点会一起删除。";
-  if (s.kind === "local")
-    return `将停止并卸载面板服务器上的 xray（systemd 服务、程序与配置）。${common}`;
   if (s.lastSeenAt)
     return `agent 会在一分钟内卸载 xray 和它自己，完成后记录自动移除。${common}`;
   return `这台服务器从未连上面板，将直接删除记录；如果已经执行过安装命令，删除后按提示在服务器上手动卸载。${common}`;
@@ -379,10 +353,7 @@ const usageRatio = (a: ProxyAccount) =>
       ></EmptyState
     >
     <UiSkeleton v-else-if="loading" :lines="3" height="140px" />
-    <Onboarding
-      v-else-if="!servers.length"
-      @add="openServer(undefined, $event)"
-    />
+    <Onboarding v-else-if="!servers.length" @add="openServer()" />
     <template v-else>
       <section class="telemetry" data-enter aria-label="概览">
         <div class="tm">
@@ -428,7 +399,7 @@ const usageRatio = (a: ProxyAccount) =>
         >
           <header class="card-head">
             <span class="kind-icon" :class="`tone-${status(s).tone}`"
-              ><component :is="s.kind === 'local' ? IconServer : IconCloud"
+              ><IconCloud
             /></span>
             <div class="card-title">
               <h2>{{ s.name }}</h2>
@@ -453,8 +424,10 @@ const usageRatio = (a: ProxyAccount) =>
           </div>
           <dl class="meta">
             <div>
-              <dt>类型</dt>
-              <dd>{{ s.kind === "local" ? "面板服务器" : "远程服务器" }}</dd>
+              <dt>Agent</dt>
+              <dd class="mono" :title="s.agentVersion || '尚未上报版本'">
+                {{ s.agentVersion || "未上报" }}
+              </dd>
             </div>
             <div>
               <dt>xray</dt>
@@ -611,28 +584,18 @@ const usageRatio = (a: ProxyAccount) =>
 
     <UiDialog v-model="serverDialog" :title="serverDialogTitle" width="480px">
       <el-form label-position="top" @submit.prevent="submitServer">
-        <el-form-item v-if="!serverForm.id && !kindLocked" label="类型">
-          <UiSegmented
-            v-model="serverForm.kind"
-            label="服务器类型"
-            :options="[
-              {
-                label: '面板服务器',
-                value: 'local',
-                disabled: servers.some((x) => x.kind === 'local'),
-              },
-              { label: '远程服务器', value: 'agent' },
-            ]"
-          />
-        </el-form-item>
         <el-form-item label="名称"
           ><el-input v-model="serverForm.name" placeholder="例如 东京 1"
         /></el-form-item>
-        <el-form-item label="客户端连接地址（域名或 IP）">
+        <el-form-item label="代理 IP / 域名">
           <el-input
             v-model="serverForm.publicHost"
-            placeholder="例如 216.23.84.93"
+            placeholder="客户端连接节点时使用的 IP 或域名"
           />
+          <p class="field-hint">
+            这是节点对外暴露的代理地址，不是面板地址；不要填写
+            proxy.722225.xyz，除非代理确实使用该域名。
+          </p>
         </el-form-item>
         <el-form-item label="月流量上限（GB，0 为不限）">
           <div class="quota-fields">
@@ -663,11 +626,8 @@ const usageRatio = (a: ProxyAccount) =>
           </div>
         </el-form-item>
         <p class="dialog-hint">
-          {{
-            serverForm.kind === "local"
-              ? "xray 装在运行面板的这台机器上：面板下载官方 xray-core（校验 SHA-256 后运行），并以 systemd 服务托管，面板重启不影响连接。"
-              : "保存后会给出一条安装命令，在远程服务器上以 root 执行即可。agent 主动连回面板，无需开放额外端口或提供 SSH 密码。"
-          }}
+          保存后会给出一条安装命令，在远程服务器上以 root
+          执行即可。agent 主动连回面板，无需开放额外端口或提供 SSH 密码。
         </p>
       </el-form>
       <template #footer>

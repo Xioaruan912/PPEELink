@@ -22,6 +22,7 @@ export interface ProxyServer {
   publicHost: string;
   enabled: boolean;
   xrayVersion: string;
+  agentVersion: string;
   arch: string;
   running: boolean;
   lastError: string;

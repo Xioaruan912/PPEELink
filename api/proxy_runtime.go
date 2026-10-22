@@ -119,7 +119,7 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 	return models.DB.Transaction(func(tx *gorm.DB) error {
 		updates := map[string]any{
 			"running": report.Running, "last_error": report.Error, "last_seen_at": now,
-			"xray_ver": report.XrayVersion, "arch": report.Arch, "applied_rev": report.Rev,
+			"xray_ver": report.XrayVersion, "agent_version": report.AgentVersion, "arch": report.Arch, "applied_rev": report.Rev,
 		}
 		if server.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == xraycore.ExecutableHash() {
 			updates["agent_update_requested"] = false
