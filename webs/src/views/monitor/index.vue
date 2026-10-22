@@ -13,6 +13,7 @@ import {
   UiTag,
 } from "@/ui";
 import IconChartLine from "~icons/ph/chart-line";
+import IconCheckCircle from "~icons/ph/check-circle";
 import MetricChart from "@/components/monitor/MetricChart.vue";
 import MonitorTerminal from "./MonitorTerminal.vue";
 import SshSettingsDialog from "./SshSettingsDialog.vue";
@@ -429,15 +430,36 @@ async function resetToken(item: MonitorItem | null) {
 
     <UiDialog
       v-model="addVisible"
-      :title="created ? `${created.name} 已就绪` : '添加服务器监控'"
-      width="720px"
+      :title="created ? '监控已创建' : '添加服务器监控'"
+      width="680px"
     >
       <template v-if="created">
-        <p class="dialog-note">
-          在服务器上以 root 执行下面这一行命令。令牌只显示这一次，重置后旧命令会失效。
-        </p>
-        <pre class="code-block install-code">{{ created.install }}</pre>
-        <UiButton @click="copy(created.install)">复制安装命令</UiButton>
+        <div class="install-success">
+          <div class="install-head">
+            <span class="success-icon"><IconCheckCircle /></span>
+            <div class="install-title">
+              <strong>{{ created.name }}</strong>
+              <small>已创建，等待服务器首次上报</small>
+            </div>
+          </div>
+          <div class="install-steps">
+            <div><span>1</span>使用 root 登录服务器</div>
+            <div><span>2</span>执行下面的安装命令</div>
+          </div>
+          <div class="command-box">
+            <code>{{ created.install }}</code>
+            <button
+              type="button"
+              class="copy-chip"
+              @click="copy(created.install)"
+            >
+              复制
+            </button>
+          </div>
+          <p class="install-hint">
+            令牌只显示这一次。重置令牌后旧命令会失效；安装完成后约一分钟出现第一份数据。
+          </p>
+        </div>
       </template>
       <el-form v-else label-position="top" @submit.prevent="submitAdd">
         <p class="dialog-note">
@@ -773,10 +795,98 @@ async function resetToken(item: MonitorItem | null) {
   width: 20px;
   height: 20px;
 }
-.install-code {
-  max-height: 300px;
-  overflow: auto;
+.install-success {
+  display: grid;
+  gap: 14px;
+}
+.install-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.success-icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-ok) 16%, var(--c-surface-2));
+  color: var(--c-ok);
+}
+.success-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.install-title {
+  display: grid;
+  gap: 2px;
+}
+.install-title strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+.install-title small {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+.install-steps {
+  display: grid;
+  gap: 6px;
+  color: var(--c-muted);
+  font-size: 12.5px;
+}
+.install-steps > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.install-steps span {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font-size: 10px;
+}
+.command-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-surface-2);
+}
+.command-box code {
+  min-width: 0;
+  flex: 1;
+  color: var(--c-ink);
+  font: 12px/1.75 var(--font-mono);
+  overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+.copy-chip {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+.copy-chip:hover {
+  border-color: var(--c-focus);
+}
+.install-hint {
+  margin: 0;
+  color: var(--c-subtle);
+  font-size: 11px;
+  line-height: 1.7;
 }
 .detail-loading {
   padding: 4px 0;
