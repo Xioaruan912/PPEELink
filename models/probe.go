@@ -23,14 +23,15 @@ type Probe struct {
 // ProbeResult 探针一次 TCP 检测结果。
 type ProbeResult struct {
 	gorm.Model
-	ProbeID   uint      `gorm:"index:idx_probe_node_time,priority:1;not null" json:"probeId"`
-	NodeID    int       `gorm:"index:idx_probe_node_time,priority:2;not null" json:"nodeId"`
-	Kind      string    `gorm:"size:16;not null" json:"kind"`
-	Success   bool      `gorm:"not null" json:"success"`
-	RTT       int       `json:"rtt"`
-	Error     string    `gorm:"size:255" json:"error"`
-	IPVersion int       `json:"ipVersion"`
-	CheckedAt time.Time `gorm:"index;not null" json:"checkedAt"`
+	ProbeID       uint      `gorm:"index:idx_probe_node_time,priority:1;not null" json:"probeId"`
+	AgentServerID uint      `gorm:"index" json:"agentServerId"`
+	NodeID        int       `gorm:"index:idx_probe_node_time,priority:2;not null" json:"nodeId"`
+	Kind          string    `gorm:"size:16;not null" json:"kind"`
+	Success       bool      `gorm:"not null" json:"success"`
+	RTT           int       `json:"rtt"`
+	Error         string    `gorm:"size:255" json:"error"`
+	IPVersion     int       `json:"ipVersion"`
+	CheckedAt     time.Time `gorm:"index;not null" json:"checkedAt"`
 }
 
 // HashProbeToken 用独立前缀哈希探针令牌，避免和 agent / API Token 混用。
@@ -57,6 +58,16 @@ func RecordProbeResults(probeID uint, results []ProbeResult, now time.Time) erro
 	}
 	return DB.Model(&Probe{}).Where("id = ?", probeID).
 		Updates(map[string]any{"last_seen_at": now}).Error
+}
+
+// RecordAgentCheckResults 保存自建服务器 agent 的节点检测结果。
+func RecordAgentCheckResults(serverID uint, results []ProbeResult, now time.Time) error {
+	if len(results) > 0 {
+		if err := DB.CreateInBatches(results, 100).Error; err != nil {
+			return err
+		}
+	}
+	return DB.Model(&ProxyServer{}).Where("id = ?", serverID).Update("last_seen_at", now).Error
 }
 
 func CleanupProbeResults(before time.Time) error {

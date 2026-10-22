@@ -6,14 +6,14 @@ import { PageHeader, UiButton, UiPanel, EmptyState, UiSkeleton } from '@/ui';
 import { getTraceSources,getTraceHistory,getTraceDetail,createTrace,cancelTrace,type TraceSources,type TraceRun,type TraceDetail,type TraceView } from '@/api/network/trace';
 import { formatDateTime } from '@/utils/date';
 const router=useRouter();
-const target=ref('');const includePanel=ref(true);const probeIds=ref<number[]>([]);const agentIds=ref<number[]>([]);
+const target=ref('');const includePanel=ref(true);const agentIds=ref<number[]>([]);
 const sources=ref<TraceSources>({panelTool:'',probes:[],agents:[]});const history=ref<TraceRun[]>([]);
 const detail=ref<TraceDetail|null>(null);const selectedId=ref<number>();
 const loading=ref(true),starting=ref(false),cancelling=ref(false),detailLoading=ref(false);
 const sourceError=ref(''),detailError=ref(''),historyError=ref('');
 let visible=true;let timer:ReturnType<typeof setTimeout>|undefined;let detailSequence=0;
 const running=computed(()=>detail.value?.views.some(v=>v.status==='queued'||v.status==='running')||false);
-const remoteCount=computed(()=>probeIds.value.length+agentIds.value.length);
+const remoteCount=computed(()=>agentIds.value.length);
 const canStart=computed(()=>!loading.value&&!sourceError.value&&!starting.value&&!running.value&&target.value.trim().length>0&&(includePanel.value||remoteCount.value>0));
 const statusText:Record<TraceView['status'],string>={queued:'等待来源执行',running:'追踪中',completed:'追踪结束',failed:'执行失败',timeout:'等待超时',cancelled:'已取消',unsupported:'来源未就绪'};
 function clearTimer(){if(timer)clearTimeout(timer);timer=undefined}
@@ -21,7 +21,7 @@ function schedule(){clearTimer();if(visible&&running.value)timer=setTimeout(()=>
 async function loadSources(){
  loading.value=true;sourceError.value='';historyError.value='';
  const [s,h]=await Promise.allSettled([getTraceSources(),getTraceHistory()]);
- if(s.status==='fulfilled'){sources.value=s.value.data;probeIds.value=probeIds.value.filter(id=>sources.value.probes.some(p=>p.id===id&&p.available));agentIds.value=agentIds.value.filter(id=>sources.value.agents.some(a=>a.id===id&&a.available));if(!sources.value.panelTool)includePanel.value=false}else sourceError.value='无法读取追踪来源，请检查连接后重试。';
+ if(s.status==='fulfilled'){sources.value=s.value.data;agentIds.value=agentIds.value.filter(id=>sources.value.agents.some(a=>a.id===id&&a.available));if(!sources.value.panelTool)includePanel.value=false}else sourceError.value='无法读取追踪来源，请检查连接后重试。';
  if(h.status==='fulfilled')history.value=h.value.data||[];else historyError.value='历史记录暂时无法加载。';
  loading.value=false;
 }
@@ -35,7 +35,7 @@ async function loadDetail(showLoading=true){
 async function chooseRun(id:number|undefined){clearTimer();detailSequence++;selectedId.value=id;detail.value=null;if(id)await loadDetail()}
 async function start(){
  if(!canStart.value)return;starting.value=true;detailError.value='';
- try{const res=await createTrace({target:target.value.trim(),includePanel:includePanel.value,probeIds:probeIds.value,agentIds:agentIds.value});history.value=[res.data,...history.value].slice(0,30);await chooseRun(res.data.id)}
+ try{const res=await createTrace({target:target.value.trim(),includePanel:includePanel.value,probeIds:[],agentIds:agentIds.value});history.value=[res.data,...history.value].slice(0,30);await chooseRun(res.data.id)}
  catch{detailError.value='无法创建追踪，请检查目标与来源后重试。'}finally{starting.value=false}
 }
 async function cancel(){if(!selectedId.value)return;cancelling.value=true;try{await cancelTrace(selectedId.value);await loadDetail(false)}catch{detailError.value='取消失败，请重试。'}finally{cancelling.value=false}}
@@ -59,8 +59,7 @@ onActivated(()=>{visible=true;schedule()});onDeactivated(()=>{visible=false;clea
       <div v-else class="sources">
        <label class="source-row"><input v-model="includePanel" type="checkbox" :disabled="!sources.panelTool" /><span><strong>面板服务器</strong><small>{{sources.panelTool||'未安装 traceroute / tracepath'}}</small></span></label>
        <template v-if="sources.agents.length"><p class="source-group">自建服务器 agent</p><label v-for="agent in sources.agents" :key="`agent-${agent.id}`" class="source-row"><input v-model="agentIds" :value="agent.id" type="checkbox" :disabled="!agent.available || (remoteCount>=8&&!agentIds.includes(agent.id))" /><span><strong>{{agent.name}}</strong><small>{{agent.available?agent.tool:agent.reason}}</small></span></label></template>
-       <template v-if="sources.probes.length"><p class="source-group">检测探针</p><label v-for="probe in sources.probes" :key="probe.id" class="source-row"><input v-model="probeIds" :value="probe.id" type="checkbox" :disabled="!probe.available || (remoteCount>=8&&!probeIds.includes(probe.id))" /><span><strong>{{probe.name}}<em v-if="probe.region">{{probe.region}}</em></strong><small>{{probe.available?probe.tool:probe.reason}}</small></span></label></template>
-       <p v-if="!sources.probes.length&&!sources.agents.length" class="muted">尚未接入远程来源。可以先使用面板来源。</p>
+       <p v-if="!sources.agents.length" class="muted">尚未接入自建服务器 agent。可以先使用面板来源。</p>
       </div>
       <p class="help">来源缺少工具时，请安装系统软件包 <code>traceroute</code>。旧版 agent/探针需先更新；新版每 5 秒轮询追踪任务。</p>
       <UiButton variant="ghost" type="button" @click="router.push('/system/settings')">管理检测探针</UiButton>

@@ -71,13 +71,13 @@ func InvalidateOverview() {
 	oCache.mu.Unlock()
 }
 
-// probeResultTTL 探针结果有效期：5 分钟一报，允许漏掉一轮。
+// probeResultTTL 检测结果有效期：agent 每 5 分钟回报，允许漏掉一轮。
 const probeResultTTL = 12 * time.Minute
 
-// applyProbeResults 按节点检测策略合并面板与探针结果。
+// applyProbeResults 按节点检测策略合并面板与自建服务器 agent 结果。
 func applyProbeResults(items []NodeOverviewItem) {
-	probes, err := models.GetProbes(true)
-	if err != nil || len(probes) == 0 {
+	var agents []models.ProxyServer
+	if err := models.DB.Where("kind = ? AND enabled = ?", models.ServerKindAgent, true).Order("id").Find(&agents).Error; err != nil || len(agents) == 0 {
 		return
 	}
 	ids := make([]int, 0, len(items))
@@ -87,18 +87,22 @@ func applyProbeResults(items []NodeOverviewItem) {
 	if len(ids) == 0 {
 		return
 	}
+	agentIDs := make([]uint, 0, len(agents))
+	for _, agent := range agents {
+		agentIDs = append(agentIDs, agent.ID)
+	}
 	var rows []models.ProbeResult
-	models.DB.Where("node_id IN ? AND checked_at >= ?", ids, time.Now().Add(-probeResultTTL)).
+	models.DB.Where("agent_server_id IN ? AND node_id IN ? AND checked_at >= ?", agentIDs, ids, time.Now().Add(-probeResultTTL)).
 		Order("id desc").Find(&rows)
 	latest := make(map[int]map[uint]models.ProbeResult, len(ids))
 	for _, row := range rows {
-		byProbe, ok := latest[row.NodeID]
+		byAgent, ok := latest[row.NodeID]
 		if !ok {
-			byProbe = map[uint]models.ProbeResult{}
-			latest[row.NodeID] = byProbe
+			byAgent = map[uint]models.ProbeResult{}
+			latest[row.NodeID] = byAgent
 		}
-		if _, exists := byProbe[row.ProbeID]; !exists {
-			byProbe[row.ProbeID] = row
+		if _, exists := byAgent[row.AgentServerID]; !exists {
+			byAgent[row.AgentServerID] = row
 		}
 	}
 
@@ -109,11 +113,11 @@ func applyProbeResults(items []NodeOverviewItem) {
 		if policy == "" {
 			policy = "panel"
 		}
-		statuses := make([]ProbeStatus, 0, len(probes))
+		statuses := make([]ProbeStatus, 0, len(agents))
 		allOK, anyOK, bestRTT := true, false, 0
-		for _, probe := range probes {
-			status := ProbeStatus{ID: probe.ID, Name: probe.Name, Region: probe.Region}
-			if row, ok := latest[item.ID][probe.ID]; ok {
+		for _, agent := range agents {
+			status := ProbeStatus{ID: agent.ID, Name: agent.Name}
+			if row, ok := latest[item.ID][agent.ID]; ok {
 				status.Success = row.Success
 				status.RTT = row.RTT
 				status.Error = row.Error

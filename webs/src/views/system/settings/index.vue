@@ -18,7 +18,6 @@ import IconDownloadSimple from "~icons/ph/download-simple";
 import IconUploadSimple from "~icons/ph/upload-simple";
 import IconArrowSquareOut from "~icons/ph/arrow-square-out";
 import IconSliders from "~icons/ph/sliders-horizontal";
-import IconBroadcast from "~icons/ph/broadcast";
 import {
   createApiToken,
   deleteShortLink,
@@ -52,12 +51,6 @@ import {
 } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import SecretLink from "@/views/subcription/subs/SecretLink.vue";
-import {
-  addProbe,
-  deleteProbe,
-  getProbes,
-  type Probe,
-} from "@/api/subcription/probe";
 import { formatDateTime } from "@/utils/date";
 
 defineOptions({ name: "SystemSettings" });
@@ -105,12 +98,6 @@ const sections = [
     label: "节点检测",
     hint: "自动判定与例外",
     icon: IconPulse,
-  },
-  {
-    value: "probes",
-    label: "检测探针",
-    hint: "多网络视角",
-    icon: IconBroadcast,
   },
   {
     value: "backup",
@@ -324,100 +311,6 @@ async function clearException(node: NodeOverviewLite) {
     clearingExceptionId.value = null;
   }
 }
-
-// ---- 检测探针 -------------------------------------------------------------
-const probesState = reactive({
-  phase: "idle" as Phase,
-  error: "",
-  items: [] as Probe[],
-});
-const probeDialog = ref(false);
-const probeForm = reactive({ name: "", region: "" });
-const probeError = ref("");
-const addingProbe = ref(false);
-const newProbe = ref<{
-  name: string;
-  token: string;
-  install: string;
-} | null>(null);
-const deletingProbeId = ref<number | null>(null);
-
-async function loadProbes(force = false) {
-  if (!force && probesState.phase === "ready") return;
-  probesState.phase = "loading";
-  probesState.error = "";
-  try {
-    const { data } = await getProbes();
-    probesState.items = data || [];
-    probesState.phase = "ready";
-  } catch (error: any) {
-    probesState.phase = "error";
-    probesState.error = error?.message || "读取探针失败";
-  } finally {
-    lastRefreshed.value = new Date();
-  }
-}
-
-function openProbeDialog() {
-  probeForm.name = "";
-  probeForm.region = "";
-  probeError.value = "";
-  newProbe.value = null;
-  probeDialog.value = true;
-}
-
-async function submitProbe() {
-  if (!online.value || addingProbe.value) return;
-  if (!probeForm.name.trim()) {
-    probeError.value = "请填写探针名称。";
-    return;
-  }
-  addingProbe.value = true;
-  probeError.value = "";
-  try {
-    const { data } = await addProbe({
-      name: probeForm.name.trim(),
-      region: probeForm.region.trim(),
-    });
-    newProbe.value = {
-      name: probeForm.name.trim(),
-      token: data?.token || "",
-      install: data?.install || "",
-    };
-    await loadProbes(true);
-  } catch (error: any) {
-    probeError.value = error?.message || "创建探针失败，请稍后重试。";
-  } finally {
-    addingProbe.value = false;
-  }
-}
-
-async function removeProbe(probe: Probe) {
-  if (!online.value || deletingProbeId.value) return;
-  try {
-    await ElMessageBox.confirm(
-      `删除探针「${probe.name}」？它的检测结果会一起删除。`,
-      "删除探针",
-      { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }
-    );
-  } catch {
-    return;
-  }
-  deletingProbeId.value = probe.id;
-  try {
-    await deleteProbe(probe.id);
-    ElMessage.success("探针已删除");
-    await loadProbes(true);
-  } catch {
-    ElMessage.error("删除失败，请稍后重试");
-  } finally {
-    deletingProbeId.value = null;
-  }
-}
-
-watch(probeDialog, (open) => {
-  if (!open) newProbe.value = null;
-});
 
 // ---- 备份 ---------------------------------------------------------------
 const summaryState = reactive({
@@ -801,12 +694,6 @@ function metaFor(value: SectionValue) {
     if (detection.phase !== "ready") return "·";
     return autoBlockInvalid.value ? "自动" : "手动";
   }
-  if (value === "probes") {
-    if (probesState.phase !== "ready") return "·";
-    return `${probesState.items.filter((probe) => probe.online).length}/${
-      probesState.items.length
-    }`;
-  }
   if (value === "backup") {
     return summary.value ? `${summary.value.templates ?? 0} 模板` : "·";
   }
@@ -823,8 +710,6 @@ function loadSection(value: SectionValue, force = false): Promise<void> {
   switch (value) {
     case "detect":
       return loadDetection(force);
-    case "probes":
-      return loadProbes(force);
     case "backup":
       return loadBackup(force);
     case "tokens":
@@ -1126,106 +1011,6 @@ onBeforeUnmount(() => {
                   <time class="mono">{{ formatDateTime(event.createdAt) }}</time>
                 </li>
               </ol>
-            </UiPanel>
-          </div>
-
-          <!-- 检测探针 -->
-          <div v-else-if="tab === 'probes'" key="probes" class="section-stack">
-            <UiPanel
-              title="检测探针"
-              :count="probesState.items.length"
-              description="在另一个网络里运行探针，节点有效性可以按多视角判断。"
-              flush
-            >
-              <template #actions>
-                <UiButton
-                  variant="primary"
-                  :icon="IconPlus"
-                  :disabled="!online"
-                  @click="openProbeDialog"
-                  >添加探针</UiButton
-                >
-              </template>
-              <UiSkeleton
-                v-if="probesState.phase === 'loading'"
-                class="panel-pad"
-                :lines="3"
-                height="48px"
-              />
-              <div
-                v-else-if="probesState.phase === 'error'"
-                class="state-error panel-pad"
-                role="alert"
-              >
-                <IconWarning />
-                <p>{{ probesState.error }}</p>
-                <UiButton @click="loadProbes(true)">重试</UiButton>
-              </div>
-              <EmptyState
-                v-else-if="!probesState.items.length"
-                size="section"
-                title="还没有检测探针"
-                description="装一台不同网络的探针，节点检测就不再只依赖面板所在网络。"
-              >
-                <template #icon>
-                  <span class="empty-icon"><IconBroadcast /></span>
-                </template>
-                <template #action>
-                  <UiButton :icon="IconPlus" @click="openProbeDialog"
-                    >添加第一台探针</UiButton
-                  >
-                </template>
-              </EmptyState>
-              <div v-else class="probe-list">
-                <div
-                  v-for="probe in probesState.items"
-                  :key="probe.id"
-                  class="probe-row"
-                >
-                  <span
-                    class="probe-dot"
-                    :class="probe.online ? 'is-ok' : 'is-off'"
-                  ></span>
-                  <div class="probe-main">
-                    <strong>{{ probe.name }}</strong>
-                    <small
-                      >{{ probe.region || "未标注地区" }} ·
-                      {{
-                        probe.lastSeenAt
-                          ? `最近连接 ${formatDateTime(probe.lastSeenAt)}`
-                          : "从未连接"
-                      }}</small
-                    >
-                  </div>
-                  <UiTag :tone="probe.online ? 'ok' : 'neutral'">{{
-                    probe.online ? "在线" : "离线"
-                  }}</UiTag>
-                  <RowIconButton
-                    :icon="IconTrash"
-                    :label="`删除探针 ${probe.name}`"
-                    @click="removeProbe(probe)"
-                  />
-                </div>
-              </div>
-            </UiPanel>
-
-            <UiPanel
-              title="检测策略怎么用"
-              description="普通节点默认只看面板；自建节点默认任一视角通过，可在节点页修改。"
-            >
-              <ul class="tips">
-                <li>
-                  部署在另一个网络里的探针，能发现面板看不到的 IPv6-only
-                  或跨网节点。
-                </li>
-                <li>
-                  节点菜单里的“检测策略…”可以选任一探针、全部探针或手动有效。
-                </li>
-                <li>
-                  探针每 5 分钟拉取一次节点列表并回报 TCP 结果，结果超过 12
-                  分钟视为过期。
-                </li>
-              </ul>
             </UiPanel>
           </div>
 
@@ -1674,52 +1459,6 @@ onBeforeUnmount(() => {
       </main>
     </div>
 
-    <UiDialog
-      v-model="probeDialog"
-      :title="newProbe ? '探针已创建' : '添加检测探针'"
-      width="640px"
-    >
-      <template v-if="newProbe">
-        <p class="dialog-note">
-          在探针服务器上以 root 执行下面的命令。令牌只显示这一次。
-        </p>
-        <pre class="code-block probe-install">{{ newProbe.install }}</pre>
-        <UiButton @click="copyText(newProbe.install, '安装命令已复制')"
-          >复制安装命令</UiButton
-        >
-      </template>
-      <el-form v-else label-position="top" @submit.prevent="submitProbe">
-        <el-form-item label="名称" required>
-          <el-input
-            v-model="probeForm.name"
-            maxlength="40"
-            placeholder="例如 NoSLa_JP"
-          />
-        </el-form-item>
-        <el-form-item label="地区">
-          <el-input
-            v-model="probeForm.region"
-            maxlength="20"
-            placeholder="例如 JP"
-          />
-        </el-form-item>
-        <p v-if="probeError" class="field-error" role="alert">
-          {{ probeError }}
-        </p>
-      </el-form>
-      <template #footer>
-        <UiButton @click="probeDialog = false">{{
-          newProbe ? "完成" : "取消"
-        }}</UiButton>
-        <UiButton
-          v-if="!newProbe"
-          variant="primary"
-          :loading="addingProbe"
-          @click="submitProbe"
-          >创建</UiButton
-        >
-      </template>
-    </UiDialog>
 
     <UiDialog v-model="exceptionDialog" title="选择例外节点" width="560px">
       <p class="dialog-note exception-note">

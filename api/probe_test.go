@@ -9,15 +9,15 @@ import (
 
 func TestApplyProbeResultsPolicies(t *testing.T) {
 	setupTestDB(t)
-	if err := models.DB.AutoMigrate(&models.Probe{}, &models.ProbeResult{}); err != nil {
+	if err := models.DB.AutoMigrate(&models.ProxyServer{}, &models.ProbeResult{}); err != nil {
 		t.Fatal(err)
 	}
-	probe := models.Probe{Name: "JP", Region: "JP", TokenHash: "x", Enabled: true}
-	if err := models.DB.Create(&probe).Error; err != nil {
+	agent := models.ProxyServer{Name: "JP", Kind: models.ServerKindAgent, Enabled: true}
+	if err := models.DB.Create(&agent).Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := models.DB.Create(&models.ProbeResult{
-		ProbeID: probe.ID, NodeID: 1, Kind: "tcp", Success: true, RTT: 42, CheckedAt: time.Now(),
+		AgentServerID: agent.ID, NodeID: 1, Kind: "tcp", Success: true, RTT: 42, CheckedAt: time.Now(),
 	}).Error; err != nil {
 		t.Fatal(err)
 	}

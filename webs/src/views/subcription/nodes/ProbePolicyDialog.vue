@@ -19,12 +19,12 @@ const options = [
   {
     value: "any",
     label: "任一视角通过",
-    hint: "面板或任意一个探针连上即有效，适合 IPv6-only 或跨网络节点。",
+    hint: "面板或任意一个自建服务器 agent 连上即有效，适合 IPv6-only 或跨网络节点。",
   },
   {
     value: "all",
     label: "所有视角通过",
-    hint: "面板和所有在线探针都通过才算有效，最严格。",
+    hint: "面板和所有在线 agent 都通过才算有效，最严格。",
   },
   {
     value: "manual",
@@ -36,7 +36,8 @@ const options = [
 <template>
   <UiDialog v-model="probePolicyDialog" title="检测策略" width="540px">
     <p class="policy-intro">
-      节点「{{ probePolicyNode?.name }}」用哪个视角判断有效性。探针需要在系统设置的“检测探针”里安装。
+      节点「{{ probePolicyNode?.name }}」用哪个视角判断有效性。每台自建服务器 agent
+      会自动参与检测，结果可在监控页查看。
     </p>
     <div class="policy-options" role="radiogroup" aria-label="节点检测策略">
       <label
