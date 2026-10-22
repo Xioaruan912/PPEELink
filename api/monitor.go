@@ -96,19 +96,18 @@ func MonitorList(c *gin.Context) {
 			item["latest"] = latest
 		}
 		if m.ProxyServerID != nil {
-			var check struct {
-				Total     int64
-				Success   int64
-				CheckedAt *time.Time
-			}
-			models.DB.Model(&models.ProbeResult{}).
-				Select("COUNT(*) AS total, COALESCE(SUM(CASE WHEN success THEN 1 ELSE 0 END), 0) AS success, MAX(checked_at) AS checked_at").
-				Where("agent_server_id = ? AND checked_at >= ?", *m.ProxyServerID, now.Add(-probeResultTTL)).
-				Scan(&check)
-			if check.Total > 0 {
+			var last models.ProbeResult
+			if err := models.DB.Where("agent_server_id = ? AND checked_at >= ?", *m.ProxyServerID, now.Add(-probeResultTTL)).
+				Order("checked_at desc").First(&last).Error; err == nil {
+				var total, success int64
+				models.DB.Model(&models.ProbeResult{}).
+					Where("agent_server_id = ? AND checked_at = ?", *m.ProxyServerID, last.CheckedAt).
+					Count(&total)
+				models.DB.Model(&models.ProbeResult{}).
+					Where("agent_server_id = ? AND checked_at = ? AND success = ?", *m.ProxyServerID, last.CheckedAt, true).
+					Count(&success)
 				item["check"] = gin.H{
-					"total": check.Total, "success": check.Success,
-					"checkedAt": check.CheckedAt,
+					"total": total, "success": success, "checkedAt": last.CheckedAt,
 				}
 			}
 		}
