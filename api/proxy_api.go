@@ -188,7 +188,6 @@ func ProxyServerDelete(c *gin.Context) {
 	// 先停用让同步清空节点
 	models.DB.Model(&s).Update("enabled", false)
 	_ = SyncSelfHostedNodes()
-	models.DB.Where("name = ?", selfHostedGroupPrefix+s.Name).Delete(&models.GroupNode{})
 
 	if s.Kind == models.ServerKindAgent && !force && s.LastSeenAt != nil {
 		models.DB.Model(&s).Update("removing", true)

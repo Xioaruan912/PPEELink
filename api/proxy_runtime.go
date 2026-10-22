@@ -319,7 +319,10 @@ func serverNodes(s models.ProxyServer, acc models.ProxyAccount) []models.Node {
 	nodes := make([]models.Node, 0, len(inbounds))
 	for _, in := range inbounds {
 		name := inboundName(s, in)
-		nodes = append(nodes, models.Node{Name: name, Link: InboundLink(s, in, acc, name)})
+		nodes = append(nodes, models.Node{
+			Name: name, Link: InboundLink(s, in, acc, name),
+			ProbePolicy: "any", Source: selfHostedSource,
+		})
 	}
 	return nodes
 }
@@ -339,11 +342,12 @@ func AccountNodes(acc models.ProxyAccount) []models.Node {
 	return nodes
 }
 
-const selfHostedGroupPrefix = "自建·"
-
-// SyncSelfHostedNodes 用第一个开通了自建节点的管理员账户生成节点，放进“自建·服务器名”分组，
-// 这样已有订阅可以像引用普通分组一样引用自建节点。
+// SyncSelfHostedNodes 用第一个开通了自建节点的管理员账户生成节点，统一放进「自建」分组。
+// 旧版本的「自建·服务器名」会先迁移并合并，已有订阅引用不会丢失。
 func SyncSelfHostedNodes() error {
+	if err := migrateSelfHostedGroups(); err != nil {
+		return err
+	}
 	var admins []models.User
 	models.DB.Where("(role = ? OR role = '' OR role IS NULL) AND disabled = ?", models.RoleAdmin, false).Order("id asc").Find(&admins)
 	var owner *models.ProxyAccount
@@ -356,56 +360,106 @@ func SyncSelfHostedNodes() error {
 	}
 	var servers []models.ProxyServer
 	models.DB.Find(&servers)
-	return models.DB.Transaction(func(tx *gorm.DB) error {
+	want := make([]models.Node, 0)
+	if owner != nil {
 		for _, s := range servers {
-			groupName := selfHostedGroupPrefix + s.Name
-			var gn models.GroupNode
-			tx.Preload("Nodes").Where("name = ?", groupName).First(&gn)
-			want := []models.Node{}
-			if owner != nil && s.Enabled && s.PublicHost != "" {
-				want = serverNodes(s, *owner)
+			if s.Enabled && s.PublicHost != "" {
+				want = append(want, serverNodes(s, *owner)...)
 			}
-			if gn.ID == 0 {
-				if len(want) == 0 {
-					continue
+		}
+	}
+	if err := models.DB.Transaction(func(tx *gorm.DB) error {
+		var group models.GroupNode
+		err := tx.Preload("Nodes").Where("name = ?", selfHostedGroupName).First(&group).Error
+		if err == gorm.ErrRecordNotFound {
+			if len(want) == 0 {
+				return nil
+			}
+			group = models.GroupNode{Name: selfHostedGroupName}
+			if err := tx.Create(&group).Error; err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		if err := backfillManagedSources(tx); err != nil {
+			return err
+		}
+		if err := tx.Preload("Nodes").First(&group, group.ID).Error; err != nil {
+			return err
+		}
+		byName := map[string]models.Node{}
+		for _, n := range group.Nodes {
+			byName[n.Name] = n
+		}
+		wanted := map[string]bool{}
+		for _, n := range want {
+			if wanted[n.Name] {
+				continue
+			}
+			wanted[n.Name] = true
+			if old, ok := byName[n.Name]; ok {
+				updates := map[string]any{"source": selfHostedSource}
+				if old.Link != n.Link {
+					updates["link"] = n.Link
 				}
-				gn = models.GroupNode{Name: groupName}
-				if err := tx.Create(&gn).Error; err != nil {
+				if old.ProbePolicy == "" || old.ProbePolicy == "panel" {
+					updates["probe_policy"] = "any"
+				}
+				if err := tx.Model(&models.Node{}).Where("id = ?", old.ID).Updates(updates).Error; err != nil {
 					return err
 				}
+				continue
 			}
-			existing := map[string]models.Node{}
-			for _, n := range gn.Nodes {
-				existing[n.Name] = n
-			}
-			keep := map[uint]bool{}
-			for _, n := range want {
-				if old, ok := existing[n.Name]; ok {
-					keep[uint(old.ID)] = true
-					if old.Link != n.Link {
-						tx.Model(&models.Node{}).Where("id = ?", old.ID).Update("link", n.Link)
-					}
-					continue
+			var existing models.Node
+			if err := tx.Where("name = ?", n.Name).First(&existing).Error; err == nil {
+				updates := map[string]any{"source": selfHostedSource}
+				if existing.Link != n.Link {
+					updates["link"] = n.Link
 				}
-				fresh := n
-				if err := tx.Create(&fresh).Error; err != nil {
+				if existing.ProbePolicy == "" || existing.ProbePolicy == "panel" {
+					updates["probe_policy"] = "any"
+				}
+				if err := tx.Model(&models.Node{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 					return err
 				}
-				if err := tx.Model(&fresh).Association("GroupNodes").Append(&gn); err != nil {
+				if err := tx.Model(&group).Association("Nodes").Append(&existing); err != nil {
 					return err
 				}
-				keep[uint(fresh.ID)] = true
+				continue
 			}
-			for _, n := range gn.Nodes {
-				if !keep[uint(n.ID)] {
-					tx.Exec("DELETE FROM group_node_nodes WHERE node_id = ?", n.ID)
-					tx.Exec("DELETE FROM subcription_nodes WHERE node_id = ?", n.ID)
-					tx.Delete(&models.Node{}, n.ID)
-				}
+			fresh := n
+			fresh.Source = selfHostedSource
+			if fresh.ProbePolicy == "" || fresh.ProbePolicy == "panel" {
+				fresh.ProbePolicy = "any"
+			}
+			if err := tx.Create(&fresh).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&fresh).Association("GroupNodes").Append(&group); err != nil {
+				return err
+			}
+		}
+		for _, n := range group.Nodes {
+			if n.Source != selfHostedSource || wanted[n.Name] {
+				continue
+			}
+			if err := tx.Exec("DELETE FROM group_node_nodes WHERE node_id = ?", n.ID).Error; err != nil {
+				return err
+			}
+			if err := tx.Exec("DELETE FROM subcription_nodes WHERE node_id = ?", n.ID).Error; err != nil {
+				return err
+			}
+			if err := tx.Unscoped().Delete(&models.Node{}, n.ID).Error; err != nil {
+				return err
 			}
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+	InvalidateOverview()
+	return nil
 }
 
 // serverQuotaState 自建服务器本计费周期的流量使用情况。

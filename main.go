@@ -221,6 +221,10 @@ func Run(port int) {
 	routers.MonitorOperations(r) // SSH 文件与 Docker 管理
 	routers.NetworkTopology(r)   // 真实关联网络拓扑
 	routers.NetworkTraces(r)     // 多地路由追踪
+	// 启动时合并旧的自建分组并同步单个「自建」分组。
+	if err := api.SyncSelfHostedNodes(); err != nil {
+		log.Printf("[主程序] 同步自建节点失败: %v", err)
+	}
 	// 启动后台定时测活任务 (Cron)
 	StartCronTasks()
 	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步
