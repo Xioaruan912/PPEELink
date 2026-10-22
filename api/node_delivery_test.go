@@ -75,9 +75,10 @@ func TestServerQuotaHoldsNodesAndStopsXray(t *testing.T) {
 	server := models.ProxyServer{Name: "JP", Kind: models.ServerKindAgent, PublicHost: "jp.example.com", Enabled: true,
 		TrafficLimit: 1000, ResetDay: 1}
 	models.DB.Create(&server)
-	selfGroup := models.GroupNode{Name: selfHostedGroupPrefix + "JP"}
-	models.DB.Create(&selfGroup)
-	_ = models.DB.Model(&nodes[1]).Association("GroupNodes").Append(&selfGroup)
+	models.DB.Create(&models.ProxyInbound{ServerID: server.ID, Remark: "B", Template: "vless-reality-vision", Port: 443, Enabled: true})
+	nodes[1].Name = "JP B"
+	nodes[1].Source = selfHostedSource
+	models.DB.Model(&nodes[1]).Updates(map[string]any{"name": "JP B", "source": selfHostedSource})
 	today := time.Now().Format("2006-01-02")
 	models.DB.Create(&models.ProxyTraffic{Day: today, UserID: 1, ServerID: server.ID, Up: 400, Down: 700})
 	spec, err := BuildServerSpec(server)

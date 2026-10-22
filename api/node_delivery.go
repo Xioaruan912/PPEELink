@@ -55,7 +55,7 @@ func undeliverableNodes(now time.Time) map[int]deliveryBlock {
 			continue
 		}
 		until := q.ResetAt
-		for _, id := range groupNodeIDs(selfHostedGroupPrefix + s.Name) {
+		for _, id := range serverNodeIDs(s) {
 			add(id, deliveryBlock{Kind: blockServer, Reason: "自建服务器本月流量已用完", Until: &until})
 		}
 	}
@@ -115,12 +115,22 @@ func NodeForceDeliver(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "msg": msg})
 }
 
-func groupNodeIDs(groupName string) []int {
+// serverNodeIDs 找出某台自建服务器当前生成的节点。单一「自建」分组里不能再用
+// 分组名区分服务器，因此用服务器入站对应的节点名 + 自动节点标记精确匹配。
+func serverNodeIDs(server models.ProxyServer) []int {
+	var inbounds []models.ProxyInbound
+	models.DB.Where("server_id = ?", server.ID).Find(&inbounds)
+	names := make([]string, 0, len(inbounds))
+	for _, in := range inbounds {
+		names = append(names, inboundName(server, in))
+	}
+	if len(names) == 0 {
+		return nil
+	}
 	var ids []int
-	models.DB.Table("group_node_nodes").
-		Joins("JOIN group_nodes ON group_nodes.id = group_node_nodes.group_node_id").
-		Where("group_nodes.name = ? AND group_nodes.deleted_at IS NULL", groupName).
-		Pluck("group_node_nodes.node_id", &ids)
+	models.DB.Model(&models.Node{}).
+		Where("name IN ? AND source = ?", names, selfHostedSource).
+		Pluck("id", &ids)
 	return ids
 }
 
