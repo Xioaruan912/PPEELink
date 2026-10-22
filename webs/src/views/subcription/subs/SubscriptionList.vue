@@ -4,7 +4,6 @@ import {
   UiButton,
   UiPanel,
   UiSegmented,
-  UiStat,
   UiSkeleton,
   EmptyState,
   StatusDot,
@@ -57,19 +56,16 @@ const expired = (value: string | null) =>
 </script>
 <template>
   <section :aria-busy="loading">
-    <div class="stat-tiles" data-enter>
-      <UiStat size="large" label="订阅总数" :value="tableData.length" />
-      <UiStat
-        size="large"
-        label="有效订阅"
-        state="ok"
-        :value="tableData.length - expiredCount"
-      /><UiStat
-        size="large"
-        label="已过期"
-        :state="expiredCount ? 'bad' : 'default'"
-        :value="expiredCount"
-      />
+    <div class="subs-summary" data-enter>
+      <div><span>订阅总数</span><strong>{{ tableData.length }}</strong></div>
+      <div>
+        <span>有效</span>
+        <strong class="ok">{{ tableData.length - expiredCount }}</strong>
+      </div>
+      <div>
+        <span>已过期</span>
+        <strong :class="{ bad: expiredCount }">{{ expiredCount }}</strong>
+      </div>
     </div>
     <UiPanel
       title="订阅列表"
@@ -105,7 +101,7 @@ const expired = (value: string | null) =>
       <div v-else ref="root">
         <EmptyState
           v-if="!tableData.length"
-          size="page"
+          size="section"
           title="连接你的设备"
           description="新建订阅，选择节点并生成配置。"
           ><template #action
