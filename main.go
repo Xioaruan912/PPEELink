@@ -81,6 +81,10 @@ func Templateinit() {
 }
 
 func main() {
+	// 面板按北京时间计算每日流量、月度重置和日志时间，避免服务器使用 UTC 时跨日错位。
+	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
+		time.Local = loc
+	}
 	// agent 模式运行在远程服务器上，不需要面板的配置与数据库
 	if len(os.Args) > 1 && os.Args[1] == "agent" {
 		runAgent(os.Args[2:])

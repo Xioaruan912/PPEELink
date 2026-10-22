@@ -149,29 +149,35 @@ func applyProbeResults(items []NodeOverviewItem) {
 	}
 }
 
-// NodeOverview 返回所有节点概览：国家（名称优先，GeoIP 兜底）+ 有效性 + 分组。
-// GET /api/v1/nodes/overview?refresh=1 立即重新检测
-func NodeOverview(c *gin.Context) {
+// overviewItems 返回概览，优先使用 5 分钟缓存；refresh 强制重新检测。
+func overviewItems(refresh bool) ([]NodeOverviewItem, error) {
 	oCache.mu.Lock()
-	if c.Query("refresh") != "1" && oCache.data != nil && time.Now().Before(oCache.expires) {
+	if !refresh && oCache.data != nil && time.Now().Before(oCache.expires) {
 		data := oCache.data
 		oCache.mu.Unlock()
-		c.JSON(200, gin.H{"code": "00000", "data": withBlocks(data), "msg": "节点概览（缓存）"})
-		return
+		return data, nil
 	}
 	oCache.mu.Unlock()
 
 	items, err := CollectNodeQuality()
 	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "获取节点列表失败"})
-		return
+		return nil, err
 	}
-
 	oCache.mu.Lock()
 	oCache.data = items
 	oCache.expires = time.Now().Add(5 * time.Minute)
 	oCache.mu.Unlock()
+	return items, nil
+}
 
+// NodeOverview 返回所有节点概览：国家（名称优先，GeoIP 兜底）+ 有效性 + 分组。
+// GET /api/v1/nodes/overview?refresh=1 立即重新检测
+func NodeOverview(c *gin.Context) {
+	items, err := overviewItems(c.Query("refresh") == "1")
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "获取节点列表失败"})
+		return
+	}
 	c.JSON(200, gin.H{"code": "00000", "data": withBlocks(items), "msg": "节点概览"})
 }
 
@@ -260,25 +266,14 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 
 // NodeQualitySummary 首页用：有效与无效节点数（按最近一次检测）。
 func NodeQualitySummary(c *gin.Context) {
-	stats, err := models.GetNodeQualityStats(time.Now().Add(-24 * time.Hour))
+	items, err := overviewItems(false)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点状态失败"})
 		return
 	}
-	// 只统计当前可见的节点（已删除或隐藏的节点在 24 小时内仍有检测记录）
-	nodes, err := models.GetNodeList()
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点失败"})
-		return
-	}
-	total, valid := 0, 0
-	for _, n := range nodes {
-		stat, ok := stats[n.ID]
-		if !ok {
-			continue
-		}
-		total++
-		if stat.LastRtt >= 0 {
+	total, valid := len(items), 0
+	for _, item := range items {
+		if item.Valid {
 			valid++
 		}
 	}
