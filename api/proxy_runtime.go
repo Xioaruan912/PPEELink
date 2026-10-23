@@ -53,7 +53,8 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 	spec := xraycore.Spec{
 		Version: xraycore.DefaultVersion, Enabled: server.Enabled, APIPort: xrayAPIPort,
 		BlockPrivate: true, BlockBitTorrent: true,
-		Monitor: &xraycore.MonitorSpec{Enabled: server.MonitorEnabled, IntervalSeconds: 60},
+		Monitor:        &xraycore.MonitorSpec{Enabled: server.MonitorEnabled, IntervalSeconds: 60},
+		WebsiteTraffic: &xraycore.WebsiteTrafficSpec{Enabled: server.WebsiteTrafficEnabled, BucketSeconds: 3600},
 	}
 	if server.Kind == models.ServerKindAgent {
 		spec.AgentUpdate = server.AgentUpdateRequested
@@ -128,6 +129,9 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 		if err := tx.Model(&models.ProxyServer{}).Where("id = ?", server.ID).Updates(updates).Error; err != nil {
 			return err
 		}
+		if err := applyWebsiteTraffic(tx, server.ID, report, now); err != nil {
+			return err
+		}
 		for email, c := range report.Traffic {
 			if id, ok := userIDFromEmail(email); ok {
 				if err := models.AddProxyTraffic(tx, day, id, server.ID, c.Up, c.Down); err != nil {
@@ -158,6 +162,14 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 // applyAgentMonitor 把同一个 agent 上报的服务器指标写入监控表。
 // 自建节点和服务器监控共用一条 agent 连接，不再额外安装监控服务。
 func applyAgentMonitor(tx *gorm.DB, server models.ProxyServer, report xraycore.Report, now time.Time) error {
+	// Management liveness is independent of the optional metrics feature.
+	heartbeat := map[string]any{"last_seen_at": now, "version": report.AgentVersion, "arch": report.Arch, "enabled": server.MonitorEnabled}
+	if report.AgentHash != "" {
+		heartbeat["agent_hash"] = report.AgentHash
+	}
+	if err := tx.Model(&models.Monitor{}).Where("proxy_server_id = ?", server.ID).Updates(heartbeat).Error; err != nil {
+		return err
+	}
 	if report.Monitor == nil || !server.MonitorEnabled {
 		return nil
 	}

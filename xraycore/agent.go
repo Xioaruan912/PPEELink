@@ -3,7 +3,10 @@ package xraycore
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -33,11 +36,49 @@ type Updater interface {
 // 回报失败时把流量累计到下一轮，避免面板短暂不可达造成漏计。
 // 面板要求卸载时，卸载 xray 并回报成功后返回 true。
 func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Duration) bool {
+	if interval <= 0 {
+		interval = time.Minute
+	}
 	pending := map[string]Counter{}
+	websiteBatchID, pendingWebsites, spoolLoadErr := loadWebsiteBatch(runner.Dir)
+	ackWebsites := func() {
+		if len(pendingWebsites) > 0 {
+			if err := clearWebsiteBatch(runner.Dir); err != nil {
+				// Replaying an acknowledged on-disk batch is safe: the panel
+				// retains its receipt. Never change its ID on restore.
+				log.Printf("[agent] 清理已确认网站批次失败: %v", err)
+			}
+		}
+		pendingWebsites, websiteBatchID = nil, ""
+	}
+	collectWebsites := func() error {
+		if spoolLoadErr != nil {
+			return fmt.Errorf("恢复网站流量批次失败: %w", spoolLoadErr)
+		}
+		// Never add newly drained counters to a batch which may already have
+		// committed remotely. Retries must retain both ID and exact payload.
+		if len(pendingWebsites) == 0 {
+			var id [16]byte
+			if _, err := rand.Read(id[:]); err != nil {
+				return fmt.Errorf("创建网站流量批次失败: %w", err)
+			}
+			pendingWebsites = runner.CollectWebsiteTraffic()
+			if len(pendingWebsites) > 0 {
+				websiteBatchID = hex.EncodeToString(id[:])
+			}
+		}
+		if len(pendingWebsites) > 0 {
+			return saveWebsiteBatch(runner.Dir, websiteBatchID, pendingWebsites)
+		}
+		return nil
+	}
 	collector := monitorcore.NewCollector()
 	var lastMonitor time.Time
 	tick := func() bool {
-		report := Report{Arch: runtime.GOARCH, AgentVersion: AgentVersion, Traffic: map[string]Counter{}, Online: map[string]int{}}
+		if ctx.Err() != nil {
+			return false
+		}
+		report := Report{Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
 		if err == nil && spec.Uninstall {
 			// 先收最后一轮流量，再卸载
@@ -48,6 +89,29 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 				p.Down += c.Down
 				pending[email] = p
 			}
+			// Stop forwarding before draining final counters. Do not delete the
+			// spool directory until every batch has a confirmed panel receipt.
+			if err := runner.Apply(ctx, Spec{Enabled: false}); err != nil {
+				report.Error = "卸载前停止代理失败: " + err.Error()
+				_ = src.Report(ctx, report)
+				return false
+			}
+			for {
+				if err := collectWebsites(); err != nil {
+					report.Error = err.Error()
+					_ = src.Report(ctx, report)
+					return false
+				}
+				if len(pendingWebsites) == 0 {
+					break
+				}
+				report.WebsiteTraffic, report.WebsiteBatchID = pendingWebsites, websiteBatchID
+				if err := src.Report(ctx, report); err != nil {
+					return false
+				}
+				ackWebsites()
+			}
+			report.WebsiteTraffic, report.WebsiteBatchID = nil, ""
 			if err := runner.Uninstall(); err != nil {
 				log.Printf("[xray] 卸载失败: %v", err)
 				report.Error = "卸载失败: " + err.Error()
@@ -64,16 +128,33 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		if err != nil {
 			report.Error = "获取配置失败: " + err.Error()
 		} else {
-			report.AgentHash = ExecutableHash()
 			if spec.AgentUpdate && spec.AgentHash != "" && report.AgentHash != spec.AgentHash {
 				if updater, ok := src.(Updater); ok {
-					if updateErr := updater.Update(ctx, spec.AgentHash); updateErr != nil {
+					// Persist/flush queued website data before replacing this process.
+					flushErr := collectWebsites()
+					if flushErr == nil && len(pendingWebsites) > 0 {
+						report.WebsiteTraffic, report.WebsiteBatchID = pendingWebsites, websiteBatchID
+						report.Rev = runner.Rev()
+						report.Running, _ = runner.Status()
+						flushErr = src.Report(ctx, report)
+						if flushErr == nil {
+							ackWebsites()
+						}
+						report.WebsiteTraffic, report.WebsiteBatchID = nil, ""
+					}
+					if flushErr != nil {
+						report.Error = "agent 更新前网站流量补报失败: " + flushErr.Error()
+					} else if updateErr := updater.Update(ctx, spec.AgentHash); updateErr != nil {
 						report.Error = "agent 自更新失败: " + updateErr.Error()
 					}
 				}
 			}
 			if applyErr := runner.Apply(ctx, spec); applyErr != nil {
-				report.Error = applyErr.Error()
+				if report.Error != "" {
+					report.Error = errors.Join(errors.New(report.Error), applyErr).Error()
+				} else {
+					report.Error = applyErr.Error()
+				}
 			}
 		}
 		if spec.Monitor != nil && spec.Monitor.Enabled {
@@ -97,12 +178,20 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 			p.Down += c.Down
 			pending[email] = p
 		}
+		if err := collectWebsites(); err != nil {
+			if report.Error != "" {
+				report.Error += "; "
+			}
+			report.Error += "网站流量持久化失败: " + err.Error()
+		}
+		report.WebsiteTraffic, report.WebsiteBatchID = pendingWebsites, websiteBatchID
 		report.Traffic = pending
 		report.Online = online
 		report.Rev = runner.Rev()
-		report.Running, _ = runner.Status()
-		if _, msg := runner.Status(); report.Error == "" {
-			report.Error = msg
+		var runtimeError string
+		report.Running, runtimeError = runner.Status()
+		if report.Error == "" {
+			report.Error = runtimeError
 		}
 		report.XrayVersion = InstalledVersion(runner.Dir)
 		if err := src.Report(ctx, report); err != nil {
@@ -110,6 +199,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 			return false
 		}
 		pending = map[string]Counter{}
+		ackWebsites()
 		return false
 	}
 	if tick() {

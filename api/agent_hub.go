@@ -69,10 +69,18 @@ func newAgentConn(serverID uint, conn *websocket.Conn) *agentConn {
 }
 
 func (ac *agentConn) writeLoop() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
 	for {
 		select {
 		case raw := <-ac.send:
+			_ = ac.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 			if err := ac.conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+				ac.shutdown()
+				return
+			}
+		case <-ticker.C:
+			if err := ac.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)); err != nil {
 				ac.shutdown()
 				return
 			}
@@ -100,6 +108,8 @@ func (ac *agentConn) sendMessage(msg agentWireMessage) bool {
 
 func (ac *agentConn) readLoop() {
 	defer ac.shutdown()
+	_ = ac.conn.SetReadDeadline(time.Now().Add(90 * time.Second))
+	ac.conn.SetPongHandler(func(string) error { return ac.conn.SetReadDeadline(time.Now().Add(90 * time.Second)) })
 	for {
 		_, raw, err := ac.conn.ReadMessage()
 		if err != nil {
@@ -236,11 +246,14 @@ func AgentWebSocket(c *gin.Context) {
 	}
 	ac := newAgentConn(server.ID, conn)
 	agentConnMu.Lock()
-	if old := agentConns[server.ID]; old != nil {
-		old.shutdown()
-	}
+	old := agentConns[server.ID]
 	agentConns[server.ID] = ac
 	agentConnMu.Unlock()
+	// shutdown also locks the registry. Publish the replacement first, then
+	// close the old connection outside the lock; its cleanup cannot remove ac.
+	if old != nil {
+		old.shutdown()
+	}
 	go ac.writeLoop()
 	ac.readLoop()
 }

@@ -15,11 +15,10 @@ import (
 	"ppeelink/xraycore"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // ---- 服务器 ----------------------------------------------------------------
-
-const agentVersionBase = "2.2"
 
 type serverView struct {
 	models.ProxyServer
@@ -29,6 +28,9 @@ type serverView struct {
 	TodayDown int64                 `json:"todayDown"`
 	Users     int                   `json:"users"`
 	Quota     serverQuotaState      `json:"quota"`
+	// AgentHash 是统一 Agent 实际运行程序的上报摘要，前端据此显示真实版本，
+	// 不再依赖已废弃的语义化版本号。
+	AgentHash string `json:"agentHash"`
 }
 
 // ProxyServerList 服务器、入站与今日流量。agent 超过 3 分钟没回报视为离线。
@@ -42,9 +44,6 @@ func ProxyServerList(c *gin.Context) {
 	views := make([]serverView, 0, len(servers))
 	for _, s := range servers {
 		v := serverView{ProxyServer: s, Inbounds: []models.ProxyInbound{}}
-		if s.Kind == models.ServerKindAgent {
-			v.AgentVersion = fmt.Sprintf("%s.%d", agentVersionBase, s.AgentRevision)
-		}
 		models.DB.Where("server_id = ?", s.ID).Order("id asc").Find(&v.Inbounds)
 		v.Online = s.LastSeenAt != nil && time.Since(*s.LastSeenAt) < 3*time.Minute
 		var sum struct{ Up, Down int64 }
@@ -55,6 +54,10 @@ func ProxyServerList(c *gin.Context) {
 		models.DB.Model(&models.ProxyTraffic{}).Where("day = ? AND server_id = ?", day, s.ID).Distinct("user_id").Count(&users)
 		v.Users = int(users)
 		v.Quota = serverQuota(s, time.Now())
+		var monitor models.Monitor
+		if err := models.DB.Select("agent_hash").Where("proxy_server_id = ?", s.ID).First(&monitor).Error; err == nil {
+			v.AgentHash = monitor.AgentHash
+		}
 		views = append(views, v)
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": views, "msg": "自建服务器"})
@@ -67,9 +70,10 @@ type serverSaveRequest struct {
 	PublicHost string `json:"publicHost"`
 	Enabled    bool   `json:"enabled"`
 	// 月流量上限（GB，0 不限）与每月重置日（1-28）
-	TrafficLimitGB float64 `json:"trafficLimitGb"`
-	ResetDay       int     `json:"resetDay"`
-	MonitorEnabled bool    `json:"monitorEnabled"`
+	TrafficLimitGB        float64 `json:"trafficLimitGb"`
+	ResetDay              int     `json:"resetDay"`
+	MonitorEnabled        bool    `json:"monitorEnabled"`
+	WebsiteTrafficEnabled bool    `json:"websiteTrafficEnabled"`
 }
 
 func validHost(host string) bool {
@@ -113,11 +117,25 @@ func ProxyServerSave(c *gin.Context) {
 	}
 	limit := int64(req.TrafficLimitGB * (1 << 30))
 	if req.ID != 0 {
-		res := models.DB.Model(&models.ProxyServer{}).Where("id = ? AND removing = ?", req.ID, false).
-			Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled,
-				"traffic_limit": limit, "reset_day": req.ResetDay, "monitor_enabled": req.MonitorEnabled})
-		if res.Error != nil || res.RowsAffected == 0 {
-			c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
+		err := models.DB.Transaction(func(tx *gorm.DB) error {
+			res := tx.Model(&models.ProxyServer{}).Where("id = ? AND removing = ?", req.ID, false).
+				Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled,
+					"traffic_limit": limit, "reset_day": req.ResetDay, "monitor_enabled": req.MonitorEnabled,
+					"website_traffic_enabled": req.WebsiteTrafficEnabled})
+			if res.Error != nil {
+				return res.Error
+			}
+			if res.RowsAffected == 0 {
+				return gorm.ErrRecordNotFound
+			}
+			return tx.Model(&models.Monitor{}).Where("proxy_server_id = ?", req.ID).Update("enabled", req.MonitorEnabled).Error
+		})
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
+			} else {
+				c.JSON(500, gin.H{"code": "50000", "msg": "保存服务器配置失败"})
+			}
 			return
 		}
 		NotifyProxyChanged()
@@ -132,7 +150,8 @@ func ProxyServerSave(c *gin.Context) {
 		return
 	}
 	server := models.ProxyServer{Name: req.Name, Kind: req.Kind, PublicHost: req.PublicHost, Enabled: true,
-		TrafficLimit: limit, ResetDay: req.ResetDay, MonitorEnabled: req.MonitorEnabled}
+		TrafficLimit: limit, ResetDay: req.ResetDay, MonitorEnabled: req.MonitorEnabled,
+		WebsiteTrafficEnabled: req.WebsiteTrafficEnabled}
 	token := ""
 	if req.Kind == models.ServerKindAgent {
 		token = models.RandomHex(24)
@@ -154,9 +173,7 @@ func ProxyServerSave(c *gin.Context) {
 func ProxyServerResetToken(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Query("id"))
 	token := models.RandomHex(24)
-	res := models.DB.Model(&models.ProxyServer{}).Where("id = ? AND kind = ?", id, models.ServerKindAgent).
-		Update("agent_token", models.HashAgentToken(token))
-	if res.Error != nil || res.RowsAffected == 0 {
+	if err := resetServerAgentToken(uint(id), models.HashAgentToken(token)); err != nil {
 		c.JSON(404, gin.H{"code": "40400", "msg": "agent 服务器不存在"})
 		return
 	}
@@ -453,6 +470,9 @@ func agentServer(c *gin.Context) (*models.ProxyServer, bool) {
 	}
 	var s models.ProxyServer
 	if err := models.DB.Where("agent_token = ? AND kind = ?", models.HashAgentToken(token), models.ServerKindAgent).First(&s).Error; err != nil {
+		if monitorServer, monitorErr := monitorAgent(token); monitorErr == nil {
+			return monitorServer, true
+		}
 		c.JSON(401, gin.H{"code": "40100", "msg": "agent 令牌无效"})
 		return nil, false
 	}
@@ -500,43 +520,7 @@ func AgentInstallScript(c *gin.Context) {
 	}
 	token := strings.TrimSpace(strings.TrimPrefix(c.GetHeader("Authorization"), "Agent "))
 	panel := baseURL(c)
-	script := fmt.Sprintf(`#!/bin/sh
-set -eu
-PANEL='%s'
-TOKEN='%s'
-[ "$(id -u)" = 0 ] || { echo "请用 root 运行"; exit 1; }
-command -v systemctl >/dev/null || { echo "需要 systemd"; exit 1; }
-case "$(uname -m)" in
-  x86_64|amd64) ARCH=amd64 ;;
-  aarch64|arm64) ARCH=arm64 ;;
-  *) echo "不支持的架构: $(uname -m)"; exit 1 ;;
-esac
-curl -fsSL -H "Authorization: Agent $TOKEN" "$PANEL/agent/binary?arch=$ARCH" -o /usr/local/bin/ppeelink-agent.new
-chmod 755 /usr/local/bin/ppeelink-agent.new
-mv /usr/local/bin/ppeelink-agent.new /usr/local/bin/ppeelink-agent
-mkdir -p /etc/ppeelink-agent /var/lib/ppeelink-agent
-umask 077
-printf 'PPEELINK_AGENT_TOKEN=%%s\n' "$TOKEN" > /etc/ppeelink-agent/env
-cat > /etc/systemd/system/ppeelink-agent.service <<UNIT
-[Unit]
-Description=PPEELink agent
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-EnvironmentFile=/etc/ppeelink-agent/env
-ExecStart=/usr/local/bin/ppeelink-agent agent -panel $PANEL -dir /var/lib/ppeelink-agent
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-systemctl daemon-reload
-systemctl enable ppeelink-agent >/dev/null 2>&1
-systemctl restart ppeelink-agent
-echo "PPEELink agent 已安装并启动，一分钟内会出现在面板中。"
-`, panel, token)
+	script := agentInstallScript(panel, token, "agent")
 	c.Data(200, "text/x-shellscript; charset=utf-8", []byte(script))
 }
 

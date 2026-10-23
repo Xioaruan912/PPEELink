@@ -9,23 +9,26 @@ import (
 // Monitor 是一台被独立监控的服务器，和节点探针是两套不同的东西：
 // 节点探针检查节点端口能不能连上，Monitor 检查服务器本身是否健康。
 type Monitor struct {
-	ID             uint       `gorm:"primaryKey" json:"id"`
-	Name           string     `gorm:"size:80;not null" json:"name"`
-	Group          string     `gorm:"size:40" json:"group"`
-	Note           string     `gorm:"size:255" json:"note"`
-	ProxyServerID  *uint      `gorm:"uniqueIndex" json:"proxyServerId,omitempty"`
-	SSHHost        string     `gorm:"size:255" json:"sshHost"`
-	SSHPort        int        `gorm:"not null;default:22" json:"sshPort"`
-	SSHUser        string     `gorm:"size:80" json:"sshUser"`
-	SSHPasswordEnc string     `gorm:"type:text" json:"-"`
-	TokenHash      string     `gorm:"size:64;index;not null" json:"-"`
-	Enabled        bool       `gorm:"not null;default:true" json:"enabled"`
-	Hidden         bool       `gorm:"not null;default:false" json:"hidden"`
-	OS             string     `gorm:"size:40" json:"os"`
-	Arch           string     `gorm:"size:20" json:"arch"`
-	Version        string     `gorm:"size:32" json:"version"`
-	LastSeenAt     *time.Time `json:"lastSeenAt"`
-	CreatedAt      time.Time  `json:"createdAt"`
+	ID                   uint       `gorm:"primaryKey" json:"id"`
+	Name                 string     `gorm:"size:80;not null" json:"name"`
+	Group                string     `gorm:"size:40" json:"group"`
+	Note                 string     `gorm:"size:255" json:"note"`
+	ProxyServerID        *uint      `gorm:"uniqueIndex" json:"proxyServerId,omitempty"`
+	SSHHost              string     `gorm:"size:255" json:"sshHost"`
+	SSHPort              int        `gorm:"not null;default:22" json:"sshPort"`
+	SSHUser              string     `gorm:"size:80" json:"sshUser"`
+	SSHPasswordEnc       string     `gorm:"type:text" json:"-"`
+	TokenHash            string     `gorm:"size:64;index;not null" json:"-"`
+	Enabled              bool       `gorm:"not null;default:true" json:"enabled"`
+	Hidden               bool       `gorm:"not null;default:false" json:"hidden"`
+	OS                   string     `gorm:"size:40" json:"os"`
+	Arch                 string     `gorm:"size:20" json:"arch"`
+	Version              string     `gorm:"size:32" json:"version"`
+	AgentHash            string     `gorm:"size:64" json:"agentHash"`
+	AgentUpdateRequested bool       `gorm:"not null;default:false" json:"agentUpdateRequested"`
+	AgentUpdateError     string     `gorm:"type:text" json:"agentUpdateError"`
+	LastSeenAt           *time.Time `json:"lastSeenAt"`
+	CreatedAt            time.Time  `json:"createdAt"`
 }
 
 // MonitorMetric 是一次服务器指标上报。原始数据保留 7 天，页面查询时降采样。

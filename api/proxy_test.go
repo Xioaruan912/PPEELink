@@ -20,7 +20,7 @@ import (
 func setupProxyDB(t *testing.T) (models.ProxyServer, models.ProxyInbound) {
 	t.Helper()
 	setupTestDB(t)
-	if err := models.DB.AutoMigrate(&models.ProxyServer{}, &models.ProxyInbound{}, &models.ProxyTraffic{}, &models.ProxyAccount{}); err != nil {
+	if err := models.DB.AutoMigrate(&models.ProxyServer{}, &models.ProxyInbound{}, &models.ProxyTraffic{}, &models.ProxyAccount{}, &models.Monitor{}, &models.MonitorMetric{}); err != nil {
 		t.Fatal(err)
 	}
 	priv, pub, _ := xraycore.GenerateRealityKeys()

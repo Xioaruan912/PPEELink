@@ -1,15 +1,7 @@
-/** Display absolute timestamps in the viewer's local timezone, without locale-dependent punctuation. */
-export function formatDateTime(
-  value: string | number | Date | null | undefined
-): string {
-  if (value === null || value === undefined || value === "") return "";
-  // Go's log timestamps without an offset are local wall times. Use ISO separators for Safari.
-  const input =
-    typeof value === "string"
-      ? value.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2})/, "$1T$2")
-      : value;
-  const date = new Date(input);
-  if (!Number.isFinite(date.getTime())) return "";
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
+/**
+ * 绝对时间统一按东八区（UTC+8）显示，不跟浏览器时区漂移，
+ * 便于和服务器日志、每日分桶对齐。
+ *
+ * 保留这个入口，历史调用方无需改动。
+ */
+export { formatDateTime } from "./datetime";

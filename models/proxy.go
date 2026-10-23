@@ -36,6 +36,8 @@ type ProxyServer struct {
 	Removing      bool       `gorm:"not null;default:false" json:"removing"` // 已在面板删除，等待 agent 卸载后回报
 	// MonitorEnabled 开启后复用同一个 agent 上报服务器指标，不再单独装监控服务
 	MonitorEnabled bool `gorm:"not null;default:false" json:"monitorEnabled"`
+	// WebsiteTrafficEnabled 仅统计代理转发载荷，不采集整机网络或完整 URL。
+	WebsiteTrafficEnabled bool `gorm:"not null;default:false" json:"websiteTrafficEnabled"`
 	// AgentUpdateRequested 面板已请求 agent 自更新，agent 回报新版本摘要后清除。
 	AgentUpdateRequested bool `gorm:"not null;default:false" json:"agentUpdateRequested"`
 	// 月流量上限（字节，0 不限）与每月重置日：超出后停止 xray、节点暂不下发，到重置日自动恢复

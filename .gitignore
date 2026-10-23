@@ -38,3 +38,8 @@ webs/node_modules/
 coverage/
 *.log
 /xray/
+
+# Local operations state and production deployment records
+.dsh-progress/
+**/.dsh-ops-update-*.lock
+/docs/deployment-*.md

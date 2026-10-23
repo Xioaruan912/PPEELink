@@ -10,6 +10,16 @@ import (
 // BuildConfig 由 Spec 生成 xray 配置 JSON。
 // 统计按 email 计量（user>>>email>>>traffic>>>uplink/downlink），API 只监听回环地址。
 func BuildConfig(spec Spec) ([]byte, error) {
+	return BuildConfigWithWebsiteCollector(spec, nil)
+}
+
+// BuildConfigWithWebsiteCollector binds a running local collector to this config.
+// Website collection must never silently fall back to unmetered freedom output.
+func BuildConfigWithWebsiteCollector(spec Spec, collector *WebsiteCollector) ([]byte, error) {
+	websiteEnabled := spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled
+	if websiteEnabled && collector == nil {
+		return nil, fmt.Errorf("website collector is required")
+	}
 	if spec.APIPort <= 0 {
 		return nil, fmt.Errorf("API 端口无效")
 	}
@@ -34,6 +44,17 @@ func BuildConfig(spec Spec) ([]byte, error) {
 	if spec.BlockBitTorrent {
 		rules = append(rules, map[string]any{"protocol": []string{"bittorrent"}, "outboundTag": "block"})
 	}
+	outbounds := []any{
+		map[string]any{"tag": "direct", "protocol": "freedom"},
+		map[string]any{"tag": "block", "protocol": "blackhole"},
+	}
+	if websiteEnabled {
+		collected, collectedRules := collector.configOutbounds()
+		// A default blackhole is intentional: an unmatched inbound cannot escape
+		// through an unmetered freedom outbound while collection is enabled.
+		outbounds = append([]any{map[string]any{"tag": "direct", "protocol": "blackhole"}, map[string]any{"tag": "block", "protocol": "blackhole"}}, collected...)
+		rules = append(rules, collectedRules...)
+	}
 	config := map[string]any{
 		"log": map[string]any{"loglevel": "warning"},
 		"api": map[string]any{
@@ -46,12 +67,9 @@ func BuildConfig(spec Spec) ([]byte, error) {
 				"statsUserUplink": true, "statsUserDownlink": true, "statsUserOnline": true,
 			}},
 		},
-		"inbounds": inbounds,
-		"outbounds": []any{
-			map[string]any{"tag": "direct", "protocol": "freedom"},
-			map[string]any{"tag": "block", "protocol": "blackhole"},
-		},
-		"routing": map[string]any{"domainStrategy": "AsIs", "rules": rules},
+		"inbounds":  inbounds,
+		"outbounds": outbounds,
+		"routing":   map[string]any{"domainStrategy": "AsIs", "rules": rules},
 	}
 	return json.MarshalIndent(config, "", "  ")
 }

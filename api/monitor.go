@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ppeelink/models"
+	"ppeelink/xraycore"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,11 +22,13 @@ const (
 )
 
 type monitorReport struct {
-	Hostname string `json:"hostname"`
-	OS       string `json:"os"`
-	Arch     string `json:"arch"`
-	Version  string `json:"version"`
-	Metrics  struct {
+	Hostname    string `json:"hostname"`
+	OS          string `json:"os"`
+	Arch        string `json:"arch"`
+	Version     string `json:"version"`
+	AgentHash   string `json:"agentHash"`
+	UpdateError string `json:"updateError"`
+	Metrics     struct {
 		CPUPercent   float64 `json:"cpuPercent"`
 		MemUsed      uint64  `json:"memUsed"`
 		MemTotal     uint64  `json:"memTotal"`
@@ -50,12 +53,12 @@ type monitorReport struct {
 func currentMonitor(c *gin.Context) (*models.Monitor, bool) {
 	auth := strings.TrimSpace(c.GetHeader("Authorization"))
 	token := strings.TrimSpace(strings.TrimPrefix(auth, "Monitor "))
-	if token == "" {
+	if token == "" || token == auth {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 40100, "msg": "缺少监控令牌"})
 		return nil, false
 	}
 	var monitor models.Monitor
-	if err := models.DB.Where("token_hash = ? AND enabled = ?", models.HashMonitorToken(token), true).
+	if err := models.DB.Where("token_hash = ?", models.HashMonitorToken(token)).
 		First(&monitor).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"code": 40100, "msg": "监控令牌无效"})
 		return nil, false
@@ -80,6 +83,7 @@ func MonitorList(c *gin.Context) {
 		return
 	}
 	now := time.Now()
+	panelHash := xraycore.ExecutableHash()
 	items := make([]gin.H, 0, len(monitors))
 	online := 0
 	for _, m := range monitors {
@@ -89,13 +93,29 @@ func MonitorList(c *gin.Context) {
 			"id": m.ID, "name": m.Name, "group": m.Group, "note": m.Note,
 			"enabled": m.Enabled, "hidden": m.Hidden, "os": m.OS, "arch": m.Arch,
 			"version": m.Version, "lastSeenAt": m.LastSeenAt, "createdAt": m.CreatedAt,
-			"online": monitorOnline(m, now), "sshConfigured": monitorSSHConfigured(m),
+			"agentHash": m.AgentHash, "agentUpdateRequested": m.AgentUpdateRequested, "agentUpgradeable": true,
+			"agentUpdateError": m.AgentUpdateError, "agentUpdateAvailable": m.AgentHash != "" && m.AgentHash != panelHash,
+			"agentUpdateConfirmed": m.AgentHash != "" && m.AgentHash == panelHash,
+			"online":               monitorOnline(m, now), "sshConfigured": monitorSSHConfigured(m),
 			"proxyServerId": m.ProxyServerID, "linked": m.ProxyServerID != nil,
 		}
 		if hasLatest {
 			item["latest"] = latest
 		}
 		if m.ProxyServerID != nil {
+			var server models.ProxyServer
+			if models.DB.First(&server, *m.ProxyServerID).Error == nil {
+				item["version"] = server.AgentVersion
+				item["agentUpdateRequested"] = server.AgentUpdateRequested
+				item["agentUpdateError"] = ""
+				if strings.Contains(server.LastError, "agent 自更新失败") {
+					item["agentUpdateError"] = server.LastError
+				}
+				item["agentUpdateConfirmed"] = m.AgentHash != "" && m.AgentHash == panelHash && !server.AgentUpdateRequested
+				item["agentUpgradeable"] = server.Kind == models.ServerKindAgent
+				item["ownsAgent"] = server.Kind == models.ServerKindAgent && server.AgentToken == ""
+				item["removing"] = server.Removing
+			}
 			var last models.ProbeResult
 			if err := models.DB.Where("agent_server_id = ? AND checked_at >= ?", *m.ProxyServerID, now.Add(-probeResultTTL)).
 				Order("checked_at desc").First(&last).Error; err == nil {
@@ -157,6 +177,25 @@ func MonitorDelete(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "服务器 id 无效"})
 		return
 	}
+	var monitor models.Monitor
+	if err := models.DB.First(&monitor, req.ID).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
+		return
+	}
+	if monitor.ProxyServerID != nil {
+		var server models.ProxyServer
+		if models.DB.First(&server, *monitor.ProxyServerID).Error == nil && server.Kind == models.ServerKindAgent && server.AgentToken == "" {
+			// This monitor owns the agent credential. Keep it valid until the
+			// uninstall report is acknowledged, otherwise the service is orphaned.
+			if err := models.DB.Model(&server).Updates(map[string]any{"enabled": false, "removing": true}).Error; err != nil {
+				c.JSON(500, gin.H{"code": "50000", "msg": "卸载请求保存失败"})
+				return
+			}
+			NotifyProxyChanged()
+			c.JSON(200, gin.H{"code": "00000", "data": gin.H{"pending": true}, "msg": "等待 agent 卸载回报后删除"})
+			return
+		}
+	}
 	models.DB.Where("monitor_id = ?", req.ID).Delete(&models.MonitorMetric{})
 	if err := models.DB.Delete(&models.Monitor{}, req.ID).Error; err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "删除服务器失败"})
@@ -180,7 +219,7 @@ func MonitorResetToken(c *gin.Context) {
 		return
 	}
 	token := models.GenerateToken()
-	if err := models.DB.Model(&monitor).Update("token_hash", models.HashMonitorToken(token)).Error; err != nil {
+	if err := resetMonitorAgentToken(monitor, models.HashMonitorToken(token)); err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "重置失败"})
 		return
 	}
@@ -297,7 +336,8 @@ func MonitorConfig(c *gin.Context) {
 	models.DB.Model(monitor).Update("last_seen_at", now)
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"monitor":         gin.H{"id": monitor.ID, "name": monitor.Name},
-		"intervalSeconds": monitorInterval,
+		"intervalSeconds": monitorInterval, "enabled": monitor.Enabled,
+		"agentHash": xraycore.ExecutableHash(), "agentUpdate": monitor.AgentUpdateRequested,
 	}, "msg": "监控配置"})
 }
 
@@ -326,9 +366,11 @@ func MonitorReport(c *gin.Context) {
 		TCPConns: report.Metrics.TCPConns, UDPConns: report.Metrics.UDPConns,
 		ProcessCount: report.Metrics.ProcessCount,
 	}
-	if err := models.DB.Create(&metric).Error; err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "记录指标失败"})
-		return
+	if monitor.Enabled {
+		if err := models.DB.Create(&metric).Error; err != nil {
+			c.JSON(500, gin.H{"code": "50000", "msg": "记录指标失败"})
+			return
+		}
 	}
 	updates := map[string]any{
 		"last_seen_at": now,
@@ -336,7 +378,15 @@ func MonitorReport(c *gin.Context) {
 		"arch":         report.Arch,
 		"version":      report.Version,
 	}
-	models.DB.Model(monitor).Updates(updates)
+	updates["agent_hash"] = report.AgentHash
+	updates["agent_update_error"] = report.UpdateError
+	if monitor.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == xraycore.ExecutableHash() && report.UpdateError == "" {
+		updates["agent_update_requested"] = false
+	}
+	if err := models.DB.Model(monitor).Updates(updates).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "记录状态失败"})
+		return
+	}
 	c.JSON(200, gin.H{"code": "00000", "msg": "ok"})
 }
 
@@ -366,27 +416,7 @@ func MonitorInstallScript(c *gin.Context) {
 	auth := strings.TrimSpace(c.GetHeader("Authorization"))
 	token := strings.TrimSpace(strings.TrimPrefix(auth, "Monitor "))
 	panel := strings.TrimSuffix(baseURL(c), "/")
-	script := fmt.Sprintf(`#!/bin/sh
-set -eu
-curl -fsSL -H 'Authorization: Monitor %s' '%s/api/v1/monitor/binary' -o /usr/local/bin/ppeelink-monitor
-chmod +x /usr/local/bin/ppeelink-monitor
-cat >/etc/systemd/system/ppeelink-monitor.service <<'UNIT'
-[Unit]
-Description=PPEELink monitor
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/usr/local/bin/ppeelink-monitor monitor -panel '%s' -token '%s' -interval 60s
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-systemctl daemon-reload
-systemctl enable --now ppeelink-monitor
-`, token, panel, panel, token)
+	script := agentInstallScript(panel, token, "monitor")
 	c.Header("Content-Type", "text/x-shellscript; charset=utf-8")
 	c.String(200, script)
 }
