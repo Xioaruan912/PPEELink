@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { PageHeader } from "@/ui";
 import WebsiteTraffic from "@/views/subcription/servers/WebsiteTraffic.vue";
+defineOptions({ name: "MonitorWebsite" });
 </script>
 
 <template>
   <div class="monitor-website">
     <PageHeader
-      title="监控网站"
-      description="只读统计代理转发的域名与字节，不含设备整机流量；默认按东八区展示。"
+      title="网站流量"
+      description="查看流量主要去向，以及各网站在服务器上的使用情况。"
     />
     <WebsiteTraffic />
   </div>

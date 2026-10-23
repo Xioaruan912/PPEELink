@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, reactive, ref } from "vue";
+import { computed, onMounted, onBeforeUnmount, onActivated, onDeactivated, reactive, ref } from "vue";
 import { WebsiteTrafficState } from "@/api/proxy/websiteTraffic";
 import { UiPanel, UiSkeleton, UiButton } from "@/ui";
 import { formatBytes } from "@/utils/traffic";
@@ -31,7 +31,6 @@ const hiddenCount = computed(() =>
 const displayDate = (value: string) => formatDateTime(value) || "—";
 async function load() {
   if (disabledReason.value) return;
-  expanded.value = false;
   const window = recentHourWindow();
   await state.load({
     start: new Date(window.start).toISOString(),
@@ -40,16 +39,54 @@ async function load() {
     limit: 100,
   });
 }
+const share = (total: number) => state.data?.summary.total
+  ? Math.min(100, Math.max(0, total / state.data.summary.total * 100)) : 0;
+let active = false;
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+const REFRESH_MS = 60000;
+function stopRefresh() {
+  active = false;
+  clearTimeout(refreshTimer);
+}
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  if (!active || offline.value || document.visibilityState === "hidden") return;
+  refreshTimer = setTimeout(async () => {
+    if (!active || offline.value || document.visibilityState === "hidden") return;
+    await load();
+    scheduleRefresh();
+  }, REFRESH_MS);
+}
+function resumeRefresh() {
+  active = true;
+  scheduleRefresh();
+  refreshIfStale();
+}
+function refreshIfStale() {
+  if (active && !offline.value && document.visibilityState !== "hidden"
+    && (!state.updatedAt || Date.now() - Date.parse(state.updatedAt) >= REFRESH_MS)) void load();
+}
 function connectionChanged() {
   offline.value = !navigator.onLine;
+  refreshIfStale();
+  scheduleRefresh();
+}
+function visibilityChanged() {
+  refreshIfStale();
+  scheduleRefresh();
 }
 onMounted(() => {
   window.addEventListener("online", connectionChanged);
   window.addEventListener("offline", connectionChanged);
-  void load();
+  document.addEventListener("visibilitychange", visibilityChanged);
+  resumeRefresh();
 });
+onActivated(resumeRefresh);
+onDeactivated(stopRefresh);
 onBeforeUnmount(() => {
+  stopRefresh();
   state.cancel();
+  document.removeEventListener("visibilitychange", visibilityChanged);
   window.removeEventListener("online", connectionChanged);
   window.removeEventListener("offline", connectionChanged);
 });
@@ -57,16 +94,13 @@ onBeforeUnmount(() => {
 
 <template>
   <UiPanel
-    title="网站流量 · 仅代理转发"
-    description="只读 · 按节点与域名统计代理流量。"
+    title="网站流量排行"
+    description="最近 24 小时 · 全部节点 · 每分钟自动刷新"
   >
     <div class="website-traffic">
-      <p class="scope-note">
-        仅统计代理转发流量，开启采集后开始计量，不回填历史。
-      </p>
       <div class="overview-actions">
         <p class="scope-note">
-          最近 24 小时 · {{ DISPLAY_TIME_ZONE_LABEL }} · 全部节点
+          只读 · 仅代理转发 · {{ DISPLAY_TIME_ZONE_LABEL }}
         </p>
         <UiButton
           :disabled="Boolean(disabledReason)"
@@ -114,6 +148,10 @@ onBeforeUnmount(() => {
             {{ displayDate(state.data.end) }}
           </p>
           <dl class="summary">
+            <div class="summary-total">
+              <dt>总流量</dt>
+              <dd>{{ formatBytes(state.data.summary.total) }}</dd>
+            </div>
             <div>
               <dt>上传</dt>
               <dd>{{ formatBytes(state.data.summary.up) }}</dd>
@@ -121,10 +159,6 @@ onBeforeUnmount(() => {
             <div>
               <dt>下载</dt>
               <dd>{{ formatBytes(state.data.summary.down) }}</dd>
-            </div>
-            <div>
-              <dt>合计</dt>
-              <dd>{{ formatBytes(state.data.summary.total) }}</dd>
             </div>
           </dl>
           <div v-if="!state.data.items.length" class="empty" role="status">
@@ -139,11 +173,10 @@ onBeforeUnmount(() => {
               <thead>
                 <tr>
                   <th scope="col">排名</th>
-                  <th scope="col">服务器节点</th>
-                  <th scope="col">域名</th>
+                  <th scope="col">网站 / 服务器</th>
                   <th scope="col">上传</th>
                   <th scope="col">下载</th>
-                  <th scope="col">合计</th>
+                  <th scope="col">合计 / 占总流量</th>
                 </tr>
               </thead>
               <tbody>
@@ -152,22 +185,26 @@ onBeforeUnmount(() => {
                   :key="`${item.serverId}:${item.domain}`"
                 >
                   <td>{{ item.rank }}</td>
-                  <td>{{ item.serverName || `节点 #${item.serverId}` }}</td>
-                  <td>
-                    {{
+                  <td class="website-name">
+                    <strong>{{
                       item.domain === state.data.unknownDomain
                         ? "未知（IP / 无法识别）"
                         : item.domain
-                    }}
+                    }}</strong>
+                    <small>{{ item.serverName || `节点 #${item.serverId}` }}</small>
                   </td>
                   <td>{{ formatBytes(item.up) }}</td>
                   <td>{{ formatBytes(item.down) }}</td>
-                  <td>{{ formatBytes(item.total) }}</td>
+                  <td class="traffic-total">
+                    <strong>{{ formatBytes(item.total) }}</strong>
+                    <small>{{ share(item.total).toFixed(1) }}%</small>
+                    <span class="share-track" aria-hidden="true"><i :style="{ width: share(item.total) + '%' }"></i></span>
+                  </td>
                 </tr>
               </tbody>
             </table>
             <p v-if="hiddenCount" class="collapse-bar">
-              已收起 {{ hiddenCount }} 条
+              {{ expanded ? `已显示 ${state.data.items.length} 条` : `已收起 ${hiddenCount} 条` }}
               <UiButton
                 size="sm"
                 variant="ghost"
@@ -186,6 +223,7 @@ onBeforeUnmount(() => {
               >
             </p>
           </div>
+          <p class="scope-note footnote">最多展示流量最高的 100 个网站与服务器组合，占比按全部流量计算。仅统计代理转发流量，开启采集后开始计量，不回填历史；IP 直连或无法识别的域名归为未知。</p>
         </template>
       </div>
     </div>
@@ -193,6 +231,23 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.summary > div { padding: 12px 14px; border-radius: 10px; background: var(--c-surface-2); min-width: 0; }
+.summary-total dd { color: var(--c-signal); }
+.website-name { min-width: 160px; max-width: 420px; }
+.website-name strong { display: block; font-weight: 500; color: var(--c-ink); }
+.website-name small, .traffic-total small { display: block; margin-top: 3px; color: var(--c-muted); font-size: 11px; }
+.traffic-total { min-width: 120px; }
+.share-track { display: block; height: 3px; margin-top: 5px; border-radius: 3px; background: var(--c-surface-2); }
+.share-track i { display: block; height: 100%; border-radius: inherit; background: var(--c-signal); }
+.footnote { margin-top: 14px !important; font-size: 11px !important; }
+tbody tr:hover { background: var(--c-surface-2); }
+@media (max-width: 600px) {
+  .summary { gap: 6px !important; }
+  .summary > div { padding: 10px 8px; }
+  .summary dd { font-size: 17px !important; }
+  th, td { padding: 10px 8px !important; }
+}
+
 .collapse-bar {
   display: flex;
   flex-wrap: wrap;
@@ -228,9 +283,9 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 .summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 32px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
   margin: 16px 0;
 }
 .summary dt {
@@ -261,8 +316,10 @@ td {
 th {
   white-space: nowrap;
 }
-td:nth-child(n + 4) {
+th:nth-child(n + 3),
+td:nth-child(n + 3) {
   white-space: nowrap;
+  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 .empty {

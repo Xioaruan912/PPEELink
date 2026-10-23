@@ -11,7 +11,7 @@ import { renderToString } from "vue/server-renderer";
 
 const require = createRequire(import.meta.url);
 const browser = { onLine: true };
-function evaluate(source, imports) {
+function evaluate(source, imports, globals = {}) {
   const code = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -26,6 +26,7 @@ function evaluate(source, imports) {
     Intl,
     console,
     navigator: browser,
+    ...globals,
   });
   return exports;
 }
@@ -358,4 +359,82 @@ test("website overview has no filter controls or extra server-list request", asy
   assert.doesNotMatch(html, /筛选|排序|排行条数|清空节点/);
   assert.match(html, /刷新/);
   assert.doesNotMatch(source, /listProxyServers/);
+});
+
+test("cancel restores a loadable state and ignores the late response", async () => {
+  const state = new api.WebsiteTrafficState();
+  let finish;
+  const pending = state.load(query, () => new Promise(resolve => { finish = resolve; }));
+  state.cancel();
+  assert.equal(state.status, "idle");
+  await state.load(query, async () => ({ data: fixture }));
+  finish({ data: { ...fixture, items: [] } });
+  await pending;
+  assert.equal(state.data.items.length, 1);
+  assert.equal(state.status, "success");
+});
+
+test("traffic share uses all traffic, including entries outside the displayed ranking", async () => {
+  const html = await render({ status: "success", data: { ...fixture,
+    summary: { up: 120, down: 300, total: 420 } }, updatedAt: fixture.end });
+  assert.match(html, /10.0%/);
+  assert.match(html, /总流量/);
+  assert.match(html, /网站 \/ 服务器/);
+});
+
+test("refresh pauses when hidden, offline or deactivated and never overlaps", async () => {
+  const hooks = {};
+  const timers = new Map();
+  const events = {};
+  let timerId = 0, calls = 0, release;
+  let pending = new Promise(resolve => { release = resolve; });
+  const document = { visibilityState: "visible",
+    addEventListener: (name, fn) => { events[name] = fn; },
+    removeEventListener: name => { delete events[name]; } };
+  const fakeWindow = { addEventListener: (name, fn) => { events[name] = fn; },
+    removeEventListener: name => { delete events[name]; } };
+  const vue = require("vue");
+  let state;
+  const lifecycleComponent = evaluate(compiled.content, {
+    vue: { ...vue,
+      onMounted: fn => { hooks.mount = fn; },
+      onActivated: fn => { hooks.activate = fn; },
+      onDeactivated: fn => { hooks.deactivate = fn; },
+      onBeforeUnmount: fn => { hooks.unmount = fn; } },
+    "@/api/proxy/websiteTraffic": { WebsiteTrafficState: class extends api.WebsiteTrafficState {
+      constructor() { super(); state = this; }
+      async load() { calls++; this.status = "loading"; await pending;
+        this.status = "success"; this.updatedAt = new Date().toISOString(); }
+    } },
+    "@/ui": {}, "@/utils/traffic": { formatBytes: String }, "@/utils/datetime": datetime,
+  }, { window: fakeWindow, document,
+    setTimeout: fn => { const id = ++timerId; timers.set(id, fn); return id; },
+    clearTimeout: id => timers.delete(id) }).default;
+  lifecycleComponent.setup({}, { expose() {} });
+  hooks.mount();
+  hooks.activate();
+  assert.equal(calls, 1);
+  const tick = [...timers.values()][0]; timers.clear();
+  await tick();
+  assert.equal(calls, 1, "pending request must not overlap");
+  release(); await Promise.resolve(); await Promise.resolve();
+  document.visibilityState = "hidden"; events.visibilitychange();
+  assert.equal(timers.size, 0);
+  state.updatedAt = "";
+  document.visibilityState = "visible"; events.visibilitychange();
+  await Promise.resolve();
+  assert.equal(calls, 2);
+  browser.onLine = false; events.offline();
+  assert.equal(timers.size, 0);
+  browser.onLine = true; events.online();
+  assert.equal(timers.size, 1);
+  hooks.deactivate();
+  assert.equal(timers.size, 0);
+  events.visibilitychange();
+  assert.equal(timers.size, 0);
+  hooks.activate();
+  assert.equal(timers.size, 1);
+  hooks.unmount();
+  assert.equal(timers.size, 0);
+  assert.equal(Object.keys(events).length, 0);
 });
