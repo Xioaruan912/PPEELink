@@ -1,6 +1,6 @@
 <template>
   <div class="network-overview" :aria-busy="loading">
-    <PageHeader title="我的网络" :description="greeting">
+    <PageHeader title="网络总览" :description="greeting">
       <template #actions>
         <UiButton :icon="Refresh" :loading="loading" @click="loadOverview">
           {{ loading ? "同步中" : "刷新" }}
@@ -43,6 +43,18 @@
         <small>{{ summary.invalid }} 个节点无效</small>
       </div>
     </div>
+
+    <section class="task-hub" aria-label="常用功能">
+      <div class="task-hub-heading"><h2>常用功能</h2><p>从服务器接入到订阅分发，按任务进入。</p></div>
+      <div class="task-groups">
+        <section v-for="group in taskGroups" :key="group.path" class="task-group">
+          <h3><component :is="group.icon" aria-hidden="true" />{{ group.label }}</h3>
+          <RouterLink v-for="item in group.children" :key="item.path" :to="item.path">
+            <strong>{{ item.label }}</strong><small>{{ item.hint }}</small>
+          </RouterLink>
+        </section>
+      </div>
+    </section>
 
     <div class="dashboard-grid">
       <WorldMap
@@ -195,6 +207,11 @@ import {
 } from "@/ui";
 import WorldMap from "./components/WorldMap.vue";
 import HealthStrip from "./components/HealthStrip.vue";
+import { usePermissionStore } from "@/store";
+import { buildNavigation, organizeNavigation } from "@/layout/navigation";
+const permission = usePermissionStore();
+const taskGroups = computed(() => organizeNavigation(buildNavigation(permission.routes))
+  .filter(group => ["服务器", "订阅与节点", "配置与规则", "网络诊断"].includes(group.label)));
 const router = useRouter();
 defineOptions({ name: "Dashboard", inheritAttrs: false });
 const loading = ref(true),
@@ -263,7 +280,10 @@ const countries = computed(() => {
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 });
+let inFlight = false;
 async function loadOverview() {
+  if (inFlight) return;
+  inFlight = true;
   loading.value = true;
   loadError.value = "";
   const results = await Promise.allSettled([
@@ -287,10 +307,27 @@ async function loadOverview() {
   if (results.some((r) => r.status === "rejected"))
     loadError.value = "部分网络数据暂时无法加载，请检查服务状态后重试。";
   loading.value = false;
+  inFlight = false;
 }
 onMounted(loadOverview);
 </script>
 <style scoped>
+.task-hub { padding: 18px; border: 1px solid var(--c-line); border-radius: 14px; background: var(--c-surface); }
+.task-hub-heading { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.task-hub-heading h2 { margin: 0; font-size: 15px; }
+.task-hub-heading p { margin: 0; color: var(--c-muted); font-size: 12px; }
+.task-groups { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.task-group { min-width: 0; }
+.task-group h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; color: var(--c-muted); }
+.task-group h3 svg { width: 17px; height: 17px; }
+.task-group a { display: grid; gap: 3px; padding: 8px; margin: 0 -8px; border-radius: 8px; color: var(--c-ink); }
+.task-group a:hover { background: var(--c-surface-2); }
+.task-group a:focus-visible { outline: 2px solid var(--c-signal); outline-offset: 2px; }
+.task-group strong { font-size: 13px; font-weight: 500; }
+.task-group small { color: var(--c-muted); font-size: 11px; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .task-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .task-groups { grid-template-columns: 1fr; gap: 14px; } .task-group + .task-group { border-top: 1px solid var(--c-line); padding-top: 12px; } }
+
 .network-overview {
   min-width: 0;
   display: grid;

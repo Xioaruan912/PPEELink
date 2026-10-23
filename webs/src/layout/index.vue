@@ -94,6 +94,7 @@
             isDark ? "浅色主题" : "深色主题"
           }}</UiButton>
           <UiButton
+            v-if="isAdmin"
             @click="
               testVisible = true;
               sheetOpen = false;
@@ -106,6 +107,12 @@
       </nav>
     </Transition>
     <main id="ion-content" class="ion-content" tabindex="-1">
+      <nav v-if="!locked && activeGroup" class="section-nav" :aria-label="activeGroup.label">
+        <span class="section-label">{{ activeGroup.label }}</span>
+        <RouterLink v-for="item in activeGroup.children" :key="item.path" :to="item.path"
+          :aria-current="route.path === item.path ? 'page' : undefined"
+          :title="item.hint">{{ item.label }}</RouterLink>
+      </nav>
       <AppMain />
     </main>
     <CommandPalette v-model="commandVisible" :items="commands" />
@@ -132,7 +139,7 @@ import { CommandPalette, UiButton, type CommandItem } from "@/ui";
 import AppMain from "./components/AppMain/index.vue";
 import TopNav from "./components/TopNav.vue";
 import AccountMenu from "./components/AccountMenu.vue";
-import { buildNavigation, flattenNavigation } from "./navigation";
+import { buildNavigation, flattenNavigation, organizeNavigation } from "./navigation";
 const permission = usePermissionStore(),
   settings = useSettingsStore(),
   user = useUserStore(),
@@ -145,10 +152,13 @@ const isAdmin = computed(() => user.user.roles.includes("ADMIN"));
 const locked = computed(() => !!user.user.mustChangePassword);
 // 普通用户没有仪表盘，首页入口换成“我的订阅”
 const navigation = computed(() =>
-  buildNavigation(permission.routes).filter(
+  organizeNavigation(buildNavigation(permission.routes)).filter(
     (item) => isAdmin.value || item.path !== "/dashboard"
   )
 );
+const activeGroup = computed(() => navigation.value.find(group =>
+  group.children.length && group.children.some(item => item.path === route.path)
+));
 const isExternal = (path: string) => /^(https?:)?\/\//.test(path);
 const commandVisible = ref(false),
   sheetOpen = ref(false),
@@ -200,7 +210,7 @@ const commands = computed<CommandItem[]>(() => [
     }))
   ),
   { id: "theme", label: "切换主题", run: toggleTheme },
-  { id: "tasks", label: "查看测试任务", run: () => (testVisible.value = true) },
+  ...(isAdmin.value ? [{ id: "tasks", label: "查看测试任务", run: () => { testVisible.value = true; } }] : []),
   {
     id: "password",
     label: "修改密码",
@@ -247,6 +257,14 @@ onBeforeUnmount(() => {
 });
 </script>
 <style scoped>
+.section-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 22px; padding-bottom: 12px; border-bottom: 1px solid var(--c-line); }
+.section-label { color: var(--c-muted); font-size: 12px; margin-right: 12px; }
+.section-nav a { padding: 7px 12px; border-radius: 8px; color: var(--c-muted); font-size: 13px; }
+.section-nav a:hover, .section-nav a[aria-current="page"] { color: var(--c-ink); background: var(--c-surface-2); }
+.section-nav a[aria-current="page"] { font-weight: 600; box-shadow: inset 0 -2px var(--c-signal); }
+.section-nav a:focus-visible { outline: 2px solid var(--c-signal); outline-offset: 2px; }
+@media (max-width: 767px) { .section-label { width: 100%; } .section-nav { margin-bottom: 16px; gap: 4px; } }
+
 .public-error-content {
   min-height: 100dvh;
   max-width: 1440px;

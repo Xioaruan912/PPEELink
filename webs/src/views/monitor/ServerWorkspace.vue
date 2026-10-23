@@ -34,7 +34,7 @@ onBeforeUnmount(() => { window.removeEventListener("online", connectionChanged);
 
 <template>
  <main class="workspace">
-  <PageHeader title="服务器工作区" description="通过自建服务器 agent 管理文件和 Docker 容器，不保存 SSH 凭据。"><template #actions><RouterLink to="/monitor/index" class="back-link">返回服务器监控</RouterLink></template></PageHeader>
+  <PageHeader title="文件与容器" description="选择服务器，管理文件和 Docker 容器。"><template #actions><RouterLink to="/monitor/index" class="back-link">返回服务器监控</RouterLink></template></PageHeader>
   <UiPanel title="连接服务器" description="仅管理员可操作。文件和容器操作由 agent 本地执行，不需要 SSH 地址或密码。">
    <UiSkeleton v-if="phase === 'loading'" :lines="2" aria-label="正在加载服务器" />
    <div v-else-if="phase === 'error'" role="alert" class="state"><p>{{ error }}</p><UiButton :disabled="offline" @click="load">重试加载</UiButton></div>

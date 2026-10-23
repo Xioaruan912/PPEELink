@@ -66,7 +66,7 @@ func GetMenus(c *gin.Context) {
 					Name:      "MonitorWebsite",
 					Meta:      Meta{Title: "监控网站", Icon: "monitor", Roles: []string{"ADMIN"}, KeepAlive: true},
 				},
-				{Path: "workspace", Component: "monitor/ServerWorkspace", Name: "ServerWorkspace", Meta: Meta{Title: "服务器工作台", Roles: []string{"ADMIN"}, Hidden: true}},
+				{Path: "workspace", Component: "monitor/ServerWorkspace", Name: "ServerWorkspace", Meta: Meta{Title: "文件与容器", Roles: []string{"ADMIN"}}},
 			},
 		},
 		{

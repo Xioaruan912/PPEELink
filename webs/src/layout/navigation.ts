@@ -26,10 +26,11 @@ export interface NavigationItem {
   children: NavigationItem[];
 }
 // Per-route icon and one-line hint for menus; routes themselves come from the server.
-const META: Record<string, { icon: Component; hint?: string }> = {
-  "/dashboard": { icon: IconHouse },
-  "/monitor/index": { icon: IconChartLine, hint: "服务器指标与在线状态" },
-  "/monitor/workspace": { icon: IconServer, hint: "文件与 Docker 运维" },
+const META: Record<string, { icon: Component; hint?: string; label?: string }> = {
+  "/dashboard": { icon: IconHouse, label: "总览" },
+  "/monitor/index": { icon: IconChartLine, label: "监控与 Agent", hint: "运行指标、终端与 Agent 升级" },
+  "/monitor/website": { icon: IconChartLine, label: "网站流量", hint: "最近 24 小时的网站流量排行" },
+  "/monitor/workspace": { icon: IconServer, label: "文件与容器", hint: "文件与 Docker 运维" },
   "/network": { icon: IconNodes },
   "/network/traceroute": { icon: IconGauge, hint: "从面板与探针对比网络路径" },
   "/subcription": { icon: IconSubs },
@@ -73,7 +74,7 @@ export function buildNavigation(
     return [
       {
         path,
-        label: String(translateRouteTitle(route.meta.title)),
+        label: meta?.label || String(translateRouteTitle(route.meta.title)),
         icon: meta?.icon || IconCircle,
         hint: meta?.hint,
         children,
@@ -85,4 +86,32 @@ export function flattenNavigation(items: NavigationItem[]): NavigationItem[] {
   return items.flatMap((item) =>
     item.children.length ? flattenNavigation(item.children) : [item]
   );
+}
+
+// Presentation groups only consume permitted routes; URLs and route guards stay authoritative.
+const GROUPS = [
+  { label: "服务器", icon: IconServer, paths: ["/monitor/index", "/subcription/servers", "/monitor/workspace", "/monitor/website"] },
+  { label: "订阅与节点", icon: IconSubs, paths: ["/subcription/subs", "/subcription/nodes"] },
+  { label: "配置与规则", icon: IconCode, paths: ["/template/list", "/template/builder", "/template/rules"] },
+  { label: "网络诊断", icon: IconGauge, paths: ["/test/index", "/network/traceroute"] },
+  { label: "系统", icon: IconGear, paths: ["/system/users", "/system/settings"] },
+];
+export function organizeNavigation(items: NavigationItem[]): NavigationItem[] {
+  const leaves = flattenNavigation(items);
+  const used = new Set<string>();
+  const result: NavigationItem[] = [];
+  const home = leaves.find(item => item.path === "/dashboard");
+  if (home) { result.push(home); used.add(home.path); }
+  for (const group of GROUPS) {
+    const children = group.paths.flatMap(path => {
+      const item = leaves.find(leaf => leaf.path === path);
+      if (!item || used.has(path)) return [];
+      used.add(path);
+      return [item];
+    });
+    if (children.length) result.push({ path: children[0].path, label: group.label, icon: group.icon, children });
+  }
+  // Preserve future backend routes and ordinary users' subscription entry.
+  result.push(...leaves.filter(item => !used.has(item.path)));
+  return result;
 }
