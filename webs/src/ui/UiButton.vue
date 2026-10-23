@@ -112,4 +112,8 @@ withDefaults(
     transform: rotate(360deg);
   }
 }
+@media (max-width: 767px) {
+  .ui-button, .ui-button--sm { min-height: 44px; }
+  .ui-button--sm { padding: 8px 12px; }
+}
 </style>

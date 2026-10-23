@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -79,7 +80,7 @@ func TestReplaceExecutableRollsBackFailedRestart(t *testing.T) {
 	if err := os.WriteFile(exe, []byte("old"), 0751); err != nil {
 		t.Fatal(err)
 	}
-	err := replaceExecutable(exe, []byte("new"), func(path string) error {
+	err := replaceExecutable(exe, strings.NewReader("new"), updateTestHash("new"), func(path string) error {
 		raw, e := os.ReadFile(path)
 		if e != nil || string(raw) != "new" {
 			t.Fatalf("replacement not installed: %s %v", raw, e)
@@ -108,5 +109,75 @@ func BenchmarkExecutableHash(b *testing.B) {
 		if ExecutableHash() == "" {
 			b.Fatal("empty hash")
 		}
+	}
+}
+
+func updateTestHash(body string) string {
+	sum := sha256.Sum256([]byte(body))
+	return hex.EncodeToString(sum[:])
+}
+
+type failedUpdateReader struct{}
+
+func (failedUpdateReader) Read(p []byte) (int, error) { return 0, io.ErrUnexpectedEOF }
+
+type endlessUpdateReader struct{}
+
+func (endlessUpdateReader) Read(p []byte) (int, error) { clear(p); return len(p), nil }
+
+func TestReplaceExecutableRejectsIncompleteAndOversizedStreams(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		reader io.Reader
+		hash   string
+	}{
+		{"bad checksum", strings.NewReader("new"), updateTestHash("different")},
+		{"read error", io.MultiReader(strings.NewReader("partial"), failedUpdateReader{}), updateTestHash("partial")},
+		{"oversized", endlessUpdateReader{}, updateTestHash("new")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			exe := filepath.Join(t.TempDir(), "agent")
+			if err := os.WriteFile(exe, []byte("old"), 0751); err != nil {
+				t.Fatal(err)
+			}
+			restarted := false
+			err := replaceExecutable(exe, tt.reader, tt.hash, func(string) error { restarted = true; return nil })
+			if err == nil || restarted {
+				t.Fatalf("invalid update accepted: %v", err)
+			}
+			data, _ := os.ReadFile(exe)
+			if string(data) != "old" {
+				t.Fatal("old executable changed")
+			}
+			entries, _ := os.ReadDir(filepath.Dir(exe))
+			if len(entries) != 1 {
+				t.Fatalf("temporary files leaked: %v", entries)
+			}
+		})
+	}
+}
+
+func TestReplaceExecutableStreamsVerifiedImage(t *testing.T) {
+	exe := filepath.Join(t.TempDir(), "agent")
+	if err := os.WriteFile(exe, []byte("old"), 0751); err != nil {
+		t.Fatal(err)
+	}
+	err := replaceExecutable(exe, strings.NewReader("new"), updateTestHash("new"), func(path string) error {
+		data, e := os.ReadFile(path)
+		if e != nil || string(data) != "new" {
+			t.Fatalf("bad installed image: %s %v", data, e)
+		}
+		info, e := os.Stat(path)
+		if e != nil || info.Mode().Perm() != 0751 {
+			t.Fatal("mode not preserved")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, _ := os.ReadDir(filepath.Dir(exe))
+	if len(entries) != 1 {
+		t.Fatalf("temporary files leaked: %v", entries)
 	}
 }

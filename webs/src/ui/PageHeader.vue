@@ -78,5 +78,8 @@ h1 {
     flex-direction: column;
     gap: 12px;
   }
+  .page-header__actions { width: 100%; }
+  .page-header__actions :deep(button) { flex: 1 1 auto; }
+  .page-header__description { font-size: 13px; line-height: 1.6; }
 }
 </style>
