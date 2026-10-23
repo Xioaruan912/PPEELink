@@ -866,6 +866,7 @@ async function resetToken(item: MonitorItem | null) {
   padding: 14px;
 }
 .server-card {
+  min-width: 0;
   display: grid;
   align-content: start; /* 卡片被拉高时内容贴顶，避免中间出现大片空白 */
   gap: 6px;
@@ -883,6 +884,7 @@ async function resetToken(item: MonitorItem | null) {
   transform: translateY(-1px);
 }
 .server-head {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1187,12 +1189,21 @@ async function resetToken(item: MonitorItem | null) {
 }
 @media (max-width: 767px) {
   .summary-line {
-    flex-wrap: nowrap;
-    overflow-x: auto;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
   }
-  .summary-line > div {
-    flex: none;
+  .summary-line > div, .summary-line > div:first-child {
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    justify-content: space-between;
   }
+  .server-sub { white-space: normal; overflow-wrap: anywhere; }
+  .agent-status { gap: 6px; }
+  .agent-status :deep(button) { flex: 1 1 auto; }
+  .server-card { padding: 14px; }
   .detail-head {
     align-items: flex-start;
     flex-direction: column;
@@ -1204,7 +1215,8 @@ async function resetToken(item: MonitorItem | null) {
     grid-template-columns: 1fr;
   }
   .server-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px;
   }
 }
 </style>

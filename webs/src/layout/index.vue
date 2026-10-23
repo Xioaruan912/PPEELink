@@ -540,4 +540,14 @@ onBeforeUnmount(() => {
 :global(html.ion-sheet-lock) {
   overflow: hidden;
 }
+@media (max-width: 767px) {
+  .section-nav { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 8px; gap: 4px; }
+  .section-label { display: none; }
+  .section-nav a { flex: 0 0 auto; display: flex; align-items: center; min-height: 44px; padding: 8px 12px; }
+  .header-tools .tool-button, .header-tools .search-pill { width: 44px; height: 44px; }
+  .ion-content { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .sheet-link { min-height: 56px; }
+  .sheet-icon { flex-shrink: 0; }
+  .mobile-sheet { overscroll-behavior: contain; }
+}
 </style>

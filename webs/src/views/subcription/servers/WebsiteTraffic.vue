@@ -166,26 +166,27 @@ onBeforeUnmount(() => {
             <p>开启节点采集后开始计量。</p>
           </div>
           <div v-else class="table-scroll">
-            <table>
+            <table role="table">
               <caption class="sr-only">
                 代理转发网站流量排行（只读）
               </caption>
-              <thead>
-                <tr>
-                  <th scope="col">排名</th>
-                  <th scope="col">网站 / 服务器</th>
-                  <th scope="col">上传</th>
-                  <th scope="col">下载</th>
-                  <th scope="col">合计 / 占总流量</th>
+              <thead role="rowgroup">
+                <tr role="row">
+                  <th role="columnheader" scope="col">排名</th>
+                  <th role="columnheader" scope="col">网站 / 服务器</th>
+                  <th role="columnheader" scope="col">上传</th>
+                  <th role="columnheader" scope="col">下载</th>
+                  <th role="columnheader" scope="col">合计 / 占总流量</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody role="rowgroup">
                 <tr
+                  role="row"
                   v-for="item in visibleItems"
                   :key="`${item.serverId}:${item.domain}`"
                 >
-                  <td>{{ item.rank }}</td>
-                  <td class="website-name">
+                  <td role="cell" class="traffic-rank">{{ item.rank }}</td>
+                  <td role="cell" class="website-name">
                     <strong>{{
                       item.domain === state.data.unknownDomain
                         ? "未知（IP / 无法识别）"
@@ -193,9 +194,9 @@ onBeforeUnmount(() => {
                     }}</strong>
                     <small>{{ item.serverName || `节点 #${item.serverId}` }}</small>
                   </td>
-                  <td>{{ formatBytes(item.up) }}</td>
-                  <td>{{ formatBytes(item.down) }}</td>
-                  <td class="traffic-total">
+                  <td role="cell" class="traffic-upload" data-label="上传">{{ formatBytes(item.up) }}</td>
+                  <td role="cell" class="traffic-download" data-label="下载">{{ formatBytes(item.down) }}</td>
+                  <td role="cell" class="traffic-total" data-label="合计 / 占总流量">
                     <strong>{{ formatBytes(item.total) }}</strong>
                     <small>{{ share(item.total).toFixed(1) }}%</small>
                     <span class="share-track" aria-hidden="true"><i :style="{ width: share(item.total) + '%' }"></i></span>
@@ -332,5 +333,22 @@ td:nth-child(n + 3) {
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
+}
+@media (max-width: 600px) {
+  .table-scroll { overflow: visible; }
+  table, tbody { display: block; width: 100%; }
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  tbody { display: grid; gap: 10px; }
+  tbody tr { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; padding: 14px; border: 1px solid var(--c-line); border-radius: 12px; }
+  tbody td { padding: 0 !important; border: 0; min-width: 0; text-align: left; }
+  .traffic-rank { position: absolute; top: 15px; left: 12px; color: var(--c-muted); font-size: 11px; }
+  .website-name { grid-column: 1 / -1; min-width: 0; max-width: none; padding-left: 20px !important; }
+  .website-name strong { overflow-wrap: anywhere; }
+  td[data-label]::before { content: attr(data-label); display: block; margin-bottom: 3px; font-size: 11px; color: var(--c-muted); }
+  td.traffic-total { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: 1fr auto; align-items: baseline; }
+  .traffic-total::before, .share-track { grid-column: 1 / -1; }
+  .traffic-total small { margin: 0; }
+  .collapse-bar { justify-content: space-between; }
+  .result-meta { font-size: 11px; }
 }
 </style>

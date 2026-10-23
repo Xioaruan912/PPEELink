@@ -86,22 +86,21 @@ func UpdateExecutable(ctx context.Context, client *http.Client, url, authorizati
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("下载 agent 失败：HTTP %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 128<<20))
-	if err != nil {
-		return err
-	}
-	sum := sha256.Sum256(body)
-	if hex.EncodeToString(sum[:]) != expectedHash {
-		return fmt.Errorf("agent 校验值不匹配，已保留旧版本")
+	if resp.ContentLength > maxAgentBinaryBytes {
+		return fmt.Errorf("agent 下载超过 128 MiB，已保留旧版本")
 	}
 	exe, err := os.Executable()
 	if err != nil {
 		return err
 	}
-	return replaceExecutable(exe, body, execSelf)
+	return replaceExecutable(exe, resp.Body, expectedHash, execSelf)
 }
 
-func replaceExecutable(exe string, body []byte, restart func(string) error) error {
+const maxAgentBinaryBytes = 128 << 20
+
+// Stage and hash in one bounded-memory pass. Never rename an incomplete,
+// oversized or unverified download over the running executable.
+func replaceExecutable(exe string, body io.Reader, expectedHash string, restart func(string) error) error {
 	info, err := os.Stat(exe)
 	if err != nil {
 		return err
@@ -112,7 +111,15 @@ func replaceExecutable(exe string, body []byte, restart func(string) error) erro
 	}
 	tmp := file.Name()
 	defer os.Remove(tmp)
-	if _, err = file.Write(body); err == nil {
+	sum := sha256.New()
+	n, err := io.Copy(io.MultiWriter(file, sum), io.LimitReader(body, maxAgentBinaryBytes+1))
+	if err == nil && n > maxAgentBinaryBytes {
+		err = fmt.Errorf("agent 下载超过 128 MiB，已保留旧版本")
+	}
+	if err == nil && hex.EncodeToString(sum.Sum(nil)) != expectedHash {
+		err = fmt.Errorf("agent 校验值不匹配，已保留旧版本")
+	}
+	if err == nil {
 		err = file.Chmod(info.Mode().Perm())
 	}
 	if err == nil {
