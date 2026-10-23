@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -13,6 +14,10 @@ import (
 	"sync"
 	"time"
 )
+
+type agentCheckHTTPError int
+
+func (e agentCheckHTTPError) Error() string { return fmt.Sprintf("HTTP %d", int(e)) }
 
 type agentCheckNode struct {
 	ID   int    `json:"id"`
@@ -31,6 +36,8 @@ type agentCheckResult struct {
 }
 
 type agentCheckJobsResponse struct {
+	Code string `json:"code"`
+	Msg  string `json:"msg"`
 	Data struct {
 		Nodes           []agentCheckNode `json:"nodes"`
 		IntervalSeconds int              `json:"intervalSeconds"`
@@ -45,7 +52,7 @@ func runAgentCheckLoop(ctx context.Context, client *http.Client, panel, token st
 			return
 		default:
 		}
-		jobs, err := fetchAgentCheckJobs(client, panel, token)
+		jobs, err := fetchAgentCheckJobs(ctx, client, panel, token)
 		if err != nil {
 			log.Printf("[agent] 拉取节点检测任务失败: %v", err)
 			if !waitContext(ctx, 30*time.Second) {
@@ -55,8 +62,22 @@ func runAgentCheckLoop(ctx context.Context, client *http.Client, panel, token st
 		}
 		results := checkAgentNodes(ctx, jobs.Data.Nodes, 8, 3*time.Second)
 		if len(results) > 0 {
-			if err := reportAgentChecks(client, panel, token, results); err != nil {
-				log.Printf("[agent] 回报节点检测失败: %v", err)
+			for attempt := 0; attempt < 3 && ctx.Err() == nil; attempt++ {
+				if err := reportAgentChecks(ctx, client, panel, token, results); err == nil {
+					break
+				} else {
+					log.Printf("[agent] 回报节点检测失败: %v", err)
+					var status agentCheckHTTPError
+					if errors.As(err, &status) && status >= 400 && status < 500 && status != 429 {
+						break
+					}
+					if attempt == 2 {
+						break
+					}
+				}
+				if !waitContext(ctx, 30*time.Second) {
+					return
+				}
 			}
 		}
 		interval := 5 * time.Minute
@@ -80,8 +101,8 @@ func waitContext(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-func fetchAgentCheckJobs(client *http.Client, panel, token string) (*agentCheckJobsResponse, error) {
-	req, err := http.NewRequest(http.MethodGet, panel+"/api/v1/agent/checks/jobs", nil)
+func fetchAgentCheckJobs(ctx context.Context, client *http.Client, panel, token string) (*agentCheckJobsResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, panel+"/api/v1/agent/checks/jobs", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -92,43 +113,73 @@ func fetchAgentCheckJobs(client *http.Client, panel, token string) (*agentCheckJ
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d", resp.StatusCode)
+		return nil, agentCheckHTTPError(resp.StatusCode)
 	}
 	var out agentCheckJobsResponse
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
 		return nil, err
 	}
+	if out.Code != "00000" {
+		return nil, fmt.Errorf("节点任务失败: %s", out.Msg)
+	}
 	return &out, nil
 }
 
 func checkAgentNodes(ctx context.Context, nodes []agentCheckNode, concurrency int, timeout time.Duration) []agentCheckResult {
-	results := make([]agentCheckResult, len(nodes))
-	slots := make(chan struct{}, concurrency)
-	var wg sync.WaitGroup
-	for i, n := range nodes {
-		wg.Add(1)
-		go func(i int, n agentCheckNode) {
-			defer wg.Done()
-			select {
-			case slots <- struct{}{}:
-				defer func() { <-slots }()
-			case <-ctx.Done():
-				return
-			}
-			results[i] = checkAgentNode(n, timeout)
-		}(i, n)
+	if len(nodes) == 0 || ctx.Err() != nil {
+		return nil
 	}
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	if concurrency > len(nodes) {
+		concurrency = len(nodes)
+	}
+	// Bound goroutines as well as concurrent sockets. The old semaphore still
+	// allocated one waiting goroutine per node on large subscriptions.
+	results := make([]agentCheckResult, len(nodes))
+	completed := make([]bool, len(nodes))
+	jobs := make(chan int)
+	var wg sync.WaitGroup
+	for worker := 0; worker < concurrency; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				results[i] = checkAgentNode(ctx, nodes[i], timeout)
+				completed[i] = true
+			}
+		}()
+	}
+dispatch:
+	for i := range nodes {
+		select {
+		case <-ctx.Done():
+			break dispatch
+		case jobs <- i:
+		}
+	}
+	close(jobs)
 	wg.Wait()
-	return results
+	out := make([]agentCheckResult, 0, len(nodes))
+	for i, result := range results {
+		if completed[i] {
+			out = append(out, result)
+		}
+	}
+	return out
 }
 
-func checkAgentNode(n agentCheckNode, timeout time.Duration) agentCheckResult {
+func checkAgentNode(ctx context.Context, n agentCheckNode, timeout time.Duration) agentCheckResult {
 	result := agentCheckResult{
 		NodeID: n.ID, Kind: "tcp", Success: false, RTT: -1,
 		IPVersion: probeIPVersion(n.Host),
 	}
 	start := time.Now()
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(n.Host, strconv.Itoa(n.Port)), timeout)
+	conn, err := (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", net.JoinHostPort(n.Host, strconv.Itoa(n.Port)))
 	if err != nil {
 		result.Error = err.Error()
 		return result
@@ -143,14 +194,14 @@ func checkAgentNode(n agentCheckNode, timeout time.Duration) agentCheckResult {
 	return result
 }
 
-func reportAgentChecks(client *http.Client, panel, token string, results []agentCheckResult) error {
+func reportAgentChecks(ctx context.Context, client *http.Client, panel, token string, results []agentCheckResult) error {
 	body, err := json.Marshal(struct {
 		Results []agentCheckResult `json:"results"`
 	}{Results: results})
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPost, panel+"/api/v1/agent/checks/report", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, panel+"/api/v1/agent/checks/report", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -162,7 +213,17 @@ func reportAgentChecks(client *http.Client, panel, token string, results []agent
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d", resp.StatusCode)
+		return agentCheckHTTPError(resp.StatusCode)
+	}
+	var envelope struct {
+		Code string `json:"code"`
+		Msg  string `json:"msg"`
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&envelope); err != nil {
+		return err
+	}
+	if envelope.Code != "00000" {
+		return fmt.Errorf("节点检测回报失败: %s", envelope.Msg)
 	}
 	return nil
 }

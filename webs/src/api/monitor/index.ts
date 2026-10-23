@@ -34,6 +34,15 @@ export interface MonitorItem {
   os: string;
   arch: string;
   version: string;
+  /** Agent 上报的可执行文件校验值；有值时说明是统一 Agent，可据此显示真实摘要。 */
+  agentHash?: string;
+  agentUpdateRequested?: boolean;
+  agentUpdateError?: string;
+  agentUpdateAvailable?: boolean;
+  agentUpdateConfirmed?: boolean;
+  agentUpgradeable?: boolean;
+  ownsAgent?: boolean;
+  removing?: boolean;
   lastSeenAt?: string | null;
   createdAt: string;
   online: boolean;
@@ -87,8 +96,12 @@ export function addMonitor(data: {
   });
 }
 
+export function updateMonitorAgent(id: number, cancel = false) {
+  return request({ url: "/api/v1/monitors/update-agent", method: "post", data: { id, cancel } });
+}
+
 export function deleteMonitor(id: number) {
-  return request({
+  return request<{ pending?: boolean }>({
     url: "/api/v1/monitors/delete",
     method: "post",
     data: { id },

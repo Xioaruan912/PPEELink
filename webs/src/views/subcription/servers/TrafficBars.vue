@@ -2,21 +2,15 @@
 import { computed } from "vue";
 import type { DailyTraffic } from "@/api/proxy";
 import { formatBytes } from "@/utils/traffic";
+import { recentDayKeys } from "@/utils/datetime";
 
-/** 最近 30 天每日总流量柱状图（全部服务器合计），柱子依次升起。 */
+/** 最近 30 天每日总流量柱状图（全部服务器合计），日期轴固定按东八区生成。 */
 const props = defineProps<{ rows: DailyTraffic[] }>();
 const days = computed(() => {
   const totals = new Map<string, number>();
   for (const r of props.rows)
     totals.set(r.day, (totals.get(r.day) || 0) + r.up + r.down);
-  const out: { day: string; total: number }[] = [];
-  const now = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-    out.push({ day: key, total: totals.get(key) || 0 });
-  }
-  return out;
+  return recentDayKeys(30).map((day) => ({ day, total: totals.get(day) || 0 }));
 });
 const max = computed(() => Math.max(1, ...days.value.map((d) => d.total)));
 const sum = computed(() => days.value.reduce((s, d) => s + d.total, 0));

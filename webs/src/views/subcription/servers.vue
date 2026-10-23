@@ -149,6 +149,7 @@ const serverForm = reactive({
   trafficLimitGb: 0,
   resetDay: 1,
   monitorEnabled: false,
+  websiteTrafficEnabled: false,
 });
 const GB = 1024 ** 3;
 const savingServer = ref(false);
@@ -169,6 +170,7 @@ function openServer(s?: ProxyServer) {
           trafficLimitGb: Math.round((s.trafficLimit / GB) * 100) / 100,
           resetDay: s.resetDay || 1,
           monitorEnabled: s.monitorEnabled,
+          websiteTrafficEnabled: s.websiteTrafficEnabled ?? false,
         }
       : {
           id: 0,
@@ -179,6 +181,7 @@ function openServer(s?: ProxyServer) {
           trafficLimitGb: 0,
           resetDay: 1,
           monitorEnabled: false,
+          websiteTrafficEnabled: false,
         }
   );
   serverDialog.value = true;
@@ -208,8 +211,13 @@ async function toggleServer(s: ProxyServer) {
     trafficLimitGb: s.trafficLimit / GB,
     resetDay: s.resetDay || 1,
     monitorEnabled: s.monitorEnabled,
+    websiteTrafficEnabled: s.websiteTrafficEnabled ?? false,
   });
-  ElMessage.success(s.enabled ? "已停用，xray 将在一分钟内停止" : "已启用");
+  ElMessage.success(
+    s.enabled
+      ? "已保存停用配置，等待 Agent 应用；以运行状态 / 最近回报为准"
+      : "已保存启用配置，等待 Agent 应用；以运行状态 / 最近回报为准"
+  );
   await load(true);
 }
 async function updateAgent(s: ProxyServer) {
@@ -223,7 +231,11 @@ async function updateAgent(s: ProxyServer) {
     await ElMessageBox.confirm(
       `将请求 ${s.name} 的 agent 下载面板当前版本，校验后覆盖旧程序并自动重启。更新期间节点可能短暂重连。`,
       "更新 Agent",
-      { type: "warning", confirmButtonText: "下发更新", cancelButtonText: "取消" }
+      {
+        type: "warning",
+        confirmButtonText: "下发更新",
+        cancelButtonText: "取消",
+      }
     );
   } catch {
     return;
@@ -425,8 +437,15 @@ const usageRatio = (a: ProxyAccount) =>
           <dl class="meta">
             <div>
               <dt>Agent</dt>
-              <dd class="mono" :title="s.agentVersion || '尚未上报版本'">
-                {{ s.agentVersion || "未上报" }}
+              <dd
+                class="mono"
+                :title="
+                  s.agentHash
+                    ? `程序摘要 ${s.agentHash}`
+                    : s.agentVersion || '尚未上报版本'
+                "
+              >
+                {{ s.agentHash ? s.agentHash.slice(0, 8) : s.agentVersion || "未上报" }}
               </dd>
             </div>
             <div>
@@ -503,7 +522,11 @@ const usageRatio = (a: ProxyAccount) =>
                 v-if="s.kind === 'agent'"
                 :icon="IconRefresh"
                 :class="{ 'is-on': s.agentUpdateRequested }"
-                :label="s.agentUpdateRequested ? `撤销 ${s.name} 的 Agent 更新` : `更新 ${s.name} 的 Agent`"
+                :label="
+                  s.agentUpdateRequested
+                    ? `撤销 ${s.name} 的 Agent 更新`
+                    : `更新 ${s.name} 的 Agent`
+                "
                 @click="updateAgent(s)"
               />
               <RowIconButton
@@ -615,10 +638,26 @@ const usageRatio = (a: ProxyAccount) =>
             xray、节点暂不下发，到重置日自动恢复。
           </p>
         </el-form-item>
+        <el-form-item label="网站流量统计">
+          <div class="monitor-toggle">
+            <el-switch
+              v-model="serverForm.websiteTrafficEnabled"
+              aria-label="网站流量统计"
+            />
+            <span
+              >默认关闭以减少采集。升级 Agent
+              并开启后，仅采集代理转发的域名与载荷字节，不采集
+              URL；不回填历史。</span
+            >
+          </div>
+        </el-form-item>
         <el-form-item label="服务器监控">
           <div class="monitor-toggle">
             <el-switch v-model="serverForm.monitorEnabled" />
-            <span>复用现有 agent 上报 CPU、内存、磁盘与网络，无需再装监控服务。</span>
+            <span
+              >复用现有 agent 上报
+              CPU、内存、磁盘与网络，无需再装监控服务。</span
+            >
           </div>
         </el-form-item>
       </el-form>

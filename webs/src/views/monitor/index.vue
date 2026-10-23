@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import {
+  computed,
+  onMounted,
+  onBeforeUnmount,
+  onActivated,
+  onDeactivated,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import { useRouter } from "vue-router";
 import { Delete, Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -25,16 +34,20 @@ import {
   getMonitorDetail,
   getMonitors,
   resetMonitorToken,
+  updateMonitorAgent,
   type MonitorDetail,
   type MonitorItem,
 } from "@/api/monitor";
 
 defineOptions({ name: "MonitorPage" });
 const router = useRouter();
-function openWorkspace(tab: 'files' | 'docker') {
+function openWorkspace(tab: "files" | "docker") {
   const id = activeMonitor.value?.id;
   detailVisible.value = false;
-  void router.push({path:'/monitor/workspace',query:{...(id ? {id:String(id)} : {}),tab}});
+  void router.push({
+    path: "/monitor/workspace",
+    query: { ...(id ? { id: String(id) } : {}), tab },
+  });
 }
 
 const phase = ref<"loading" | "ready" | "error">("loading");
@@ -50,8 +63,11 @@ const avgCPU = computed(() => {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 });
 
-async function load() {
-  phase.value = "loading";
+let listLoading = false;
+async function load(silent = false) {
+  if (listLoading) return;
+  listLoading = true;
+  if (!silent) phase.value = "loading";
   error.value = "";
   try {
     const { data } = await getMonitors();
@@ -61,12 +77,61 @@ async function load() {
     summary.offline = data?.summary.offline || 0;
     phase.value = "ready";
   } catch (err: any) {
-    phase.value = "error";
-    error.value = err?.message || "读取监控数据失败";
+    if (!silent || !items.value.length) {
+      phase.value = "error";
+      error.value = err?.message || "读取监控数据失败";
+    }
+  } finally {
+    listLoading = false;
   }
 }
 
-onMounted(load);
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+let active = true;
+function stopRefresh() {
+  active = false;
+  clearTimeout(refreshTimer);
+}
+function scheduleRefresh() {
+  clearTimeout(refreshTimer);
+  if (!active) return;
+  refreshTimer = setTimeout(async () => {
+    if (document.visibilityState !== "hidden") await load(true);
+    scheduleRefresh();
+  }, 15000);
+}
+function resumeRefresh() {
+  active = true;
+  scheduleRefresh();
+}
+onMounted(() => {
+  void load();
+  resumeRefresh();
+});
+onActivated(resumeRefresh);
+onDeactivated(stopRefresh);
+onBeforeUnmount(stopRefresh);
+
+// Upgrade states: unknown (no hash yet), current, available, queued/offline,
+// failed/retry, sending, and local/read-only. Never report success on POST alone.
+const upgrading = ref<number | null>(null);
+async function upgrade(item: MonitorItem, cancel = false) {
+  if (upgrading.value !== null) return;
+  upgrading.value = item.id;
+  try {
+    await updateMonitorAgent(item.id, cancel);
+    ElMessage.success(
+      cancel
+        ? "已撤销尚未执行的升级请求"
+        : "已排队，等待客户端校验升级并回报；请稍后刷新状态"
+    );
+    await load();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "升级请求失败，请重试");
+  } finally {
+    upgrading.value = null;
+  }
+}
 
 const addVisible = ref(false);
 const adding = ref(false);
@@ -218,13 +283,29 @@ const diskSeries = computed(() => [
   },
 ]);
 const netSeries = computed(() => [
-  { name: "下行", data: rows.value.map((row) => row.netInSpeed), color: "#4fc3f7" },
-  { name: "上行", data: rows.value.map((row) => row.netOutSpeed), color: "#ffb74d" },
+  {
+    name: "下行",
+    data: rows.value.map((row) => row.netInSpeed),
+    color: "#4fc3f7",
+  },
+  {
+    name: "上行",
+    data: rows.value.map((row) => row.netOutSpeed),
+    color: "#ffb74d",
+  },
 ]);
 const loadSeries = computed(() => [
   { name: "1 分钟", data: rows.value.map((row) => row.load1) },
-  { name: "5 分钟", data: rows.value.map((row) => row.load5), color: "#4fc3f7" },
-  { name: "15 分钟", data: rows.value.map((row) => row.load15), color: "#ba68c8" },
+  {
+    name: "5 分钟",
+    data: rows.value.map((row) => row.load5),
+    color: "#4fc3f7",
+  },
+  {
+    name: "15 分钟",
+    data: rows.value.map((row) => row.load15),
+    color: "#ba68c8",
+  },
 ]);
 
 function formatUptime(seconds?: number) {
@@ -237,6 +318,12 @@ function formatUptime(seconds?: number) {
   return `${minutes} 分`;
 }
 
+/** 统一 Agent 没有语义化版本号，展示实际程序摘要，避免历史假版本误导。 */
+function agentLabel(item: MonitorItem) {
+  if (item.agentHash) return `程序 ${item.agentHash.slice(0, 8)}`;
+  return item.version ? `版本 ${item.version}` : "等待上报";
+}
+
 const currentPercent = (used?: number, total?: number) =>
   total ? percent(used, total).toFixed(1) : "0.0";
 
@@ -244,7 +331,9 @@ async function removeMonitor(item: MonitorItem | null) {
   if (!item) return;
   try {
     await ElMessageBox.confirm(
-      `删除监控「${item.name}」？历史指标会一起删除。`,
+      item.ownsAgent
+        ? `删除「${item.name}」将卸载其 Agent 和代理服务，并删除历史指标。离线时等待上线后执行。`
+        : `删除监控「${item.name}」？历史指标会一起删除。`,
       "删除服务器监控",
       { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }
     );
@@ -252,9 +341,13 @@ async function removeMonitor(item: MonitorItem | null) {
     return;
   }
   try {
-    await deleteMonitor(item.id);
+    const { data } = await deleteMonitor(item.id);
     if (activeMonitor.value?.id === item.id) closeDetail();
-    ElMessage.success("服务器监控已删除");
+    ElMessage.success(
+      data?.pending
+        ? "已排队卸载，等待 Agent 回报后自动删除"
+        : "服务器监控已删除"
+    );
     await load();
   } catch {
     ElMessage.error("删除失败，请稍后重试");
@@ -284,7 +377,7 @@ async function resetToken(item: MonitorItem | null) {
       description="独立查看服务器 CPU、内存、磁盘与网络，不依赖节点探针。"
     >
       <template #actions>
-        <UiButton :icon="Refresh" :loading="phase === 'loading'" @click="load"
+        <UiButton :icon="Refresh" :loading="phase === 'loading'" @click="load()"
           >刷新</UiButton
         >
         <UiButton variant="primary" :icon="Plus" @click="openAdd"
@@ -327,9 +420,13 @@ async function resetToken(item: MonitorItem | null) {
         :lines="4"
         height="64px"
       />
-      <div v-else-if="phase === 'error'" class="state-error panel-pad" role="alert">
+      <div
+        v-else-if="phase === 'error'"
+        class="state-error panel-pad"
+        role="alert"
+      >
         <span>{{ error }}</span>
-        <UiButton @click="load">重试</UiButton>
+        <UiButton @click="load()">重试</UiButton>
       </div>
       <EmptyState
         v-else-if="!items.length"
@@ -355,7 +452,10 @@ async function resetToken(item: MonitorItem | null) {
           @keydown.enter="openDetail(item)"
         >
           <header class="server-head">
-            <span class="status-dot" :class="item.online ? 'is-on' : 'is-off'"></span>
+            <span
+              class="status-dot"
+              :class="item.online ? 'is-on' : 'is-off'"
+            ></span>
             <strong>{{ item.name }}</strong>
             <UiTag :tone="item.online ? 'ok' : 'neutral'">{{
               item.online ? "在线" : "离线"
@@ -372,16 +472,77 @@ async function resetToken(item: MonitorItem | null) {
             </span>
           </p>
 
+          <div
+            class="agent-status"
+            aria-live="polite"
+            @click.stop
+            @keydown.enter.stop
+          >
+            <span>{{ agentLabel(item) }} · </span>
+            <span v-if="item.removing">待卸载，等待服务器回报</span>
+            <span
+              v-else-if="item.agentUpdateError"
+              :title="item.agentUpdateError"
+              >升级失败：{{ item.agentUpdateError }}</span
+            >
+            <span v-else-if="item.agentUpdateRequested">{{
+              item.online ? "待升级／等待结果回报" : "待升级，等待服务器上线"
+            }}</span>
+            <span v-else-if="item.agentUpdateConfirmed"
+              >版本已确认／升级成功</span
+            >
+            <span v-else>{{
+              item.agentUpdateAvailable ? "有可用升级" : "尚未确认版本校验值"
+            }}</span>
+            <UiButton
+              v-if="item.agentUpgradeable !== false"
+              size="sm"
+              variant="ghost"
+              :loading="upgrading === item.id"
+              :disabled="upgrading !== null || item.removing"
+              @click.stop="
+                upgrade(
+                  item,
+                  !!item.agentUpdateRequested && !item.agentUpdateError
+                )
+              "
+            >
+              {{
+                item.agentUpdateError
+                  ? "重试升级"
+                  : item.agentUpdateRequested
+                    ? "撤销升级"
+                    : "升级 Agent"
+              }}
+            </UiButton>
+            <span v-else>本机随面板升级</span>
+            <UiButton
+              v-if="item.proxyServerId"
+              size="sm"
+              variant="ghost"
+              @click.stop="router.push({ name: 'ProxyServers' })"
+              >代理配置</UiButton
+            >
+            <span v-if="item.ownsAgent"
+              >默认关闭代理，可在代理配置中启用，无需重装。</span
+            >
+          </div>
           <template v-if="item.latest">
             <div class="metric-line">
               <span>CPU</span>
               <b>{{ item.latest.cpuPercent.toFixed(1) }}%</b>
             </div>
-            <div class="bar"><i :style="{ width: `${Math.max(2, item.latest.cpuPercent)}%` }"></i></div>
+            <div class="bar">
+              <i
+                :style="{ width: `${Math.max(2, item.latest.cpuPercent)}%` }"
+              ></i>
+            </div>
             <div class="metric-line">
               <span>内存</span>
               <b
-                >{{ currentPercent(item.latest.memUsed, item.latest.memTotal) }}%</b
+                >{{
+                  currentPercent(item.latest.memUsed, item.latest.memTotal)
+                }}%</b
               >
             </div>
             <div class="bar">
@@ -394,7 +555,9 @@ async function resetToken(item: MonitorItem | null) {
             <div class="metric-line">
               <span>磁盘</span>
               <b
-                >{{ currentPercent(item.latest.diskUsed, item.latest.diskTotal) }}%</b
+                >{{
+                  currentPercent(item.latest.diskUsed, item.latest.diskTotal)
+                }}%</b
               >
             </div>
             <div class="bar">
@@ -462,7 +625,8 @@ async function resetToken(item: MonitorItem | null) {
       </template>
       <el-form v-else label-position="top" @submit.prevent="submitAdd">
         <p class="dialog-note">
-          如果这台机器已经装了自建节点 agent，不用在这里添加：到「自建节点」编辑服务器，打开「服务器监控」即可复用同一个
+          如果这台机器已经装了自建节点
+          agent，不用在这里添加：到「自建节点」编辑服务器，打开「服务器监控」即可复用同一个
           agent。
         </p>
         <el-form-item label="名称" required>
@@ -473,7 +637,11 @@ async function resetToken(item: MonitorItem | null) {
           />
         </el-form-item>
         <el-form-item label="分组">
-          <el-input v-model="form.group" maxlength="20" placeholder="例如 日本" />
+          <el-input
+            v-model="form.group"
+            maxlength="20"
+            placeholder="例如 日本"
+          />
         </el-form-item>
         <el-form-item label="备注">
           <el-input
@@ -539,9 +707,7 @@ async function resetToken(item: MonitorItem | null) {
               @click="loadDetail"
               >刷新</UiButton
             >
-            <UiButton
-              :icon="Refresh"
-              @click="resetToken(activeMonitor)"
+            <UiButton :icon="Refresh" @click="resetToken(activeMonitor)"
               >重置令牌</UiButton
             >
             <UiButton
@@ -560,28 +726,47 @@ async function resetToken(item: MonitorItem | null) {
           </div>
           <div>
             <span>内存</span>
-            <strong>{{ currentPercent(latest.memUsed, latest.memTotal) }}%</strong>
-            <small>{{ formatBytes(latest.memUsed) }} / {{ formatBytes(latest.memTotal) }}</small>
+            <strong
+              >{{ currentPercent(latest.memUsed, latest.memTotal) }}%</strong
+            >
+            <small
+              >{{ formatBytes(latest.memUsed) }} /
+              {{ formatBytes(latest.memTotal) }}</small
+            >
           </div>
           <div>
             <span>磁盘</span>
-            <strong>{{ currentPercent(latest.diskUsed, latest.diskTotal) }}%</strong>
-            <small>{{ formatBytes(latest.diskUsed) }} / {{ formatBytes(latest.diskTotal) }}</small>
+            <strong
+              >{{ currentPercent(latest.diskUsed, latest.diskTotal) }}%</strong
+            >
+            <small
+              >{{ formatBytes(latest.diskUsed) }} /
+              {{ formatBytes(latest.diskTotal) }}</small
+            >
           </div>
           <div>
             <span>负载</span>
             <strong>{{ latest.load1.toFixed(2) }}</strong>
-            <small>{{ latest.load5.toFixed(2) }} / {{ latest.load15.toFixed(2) }}</small>
+            <small
+              >{{ latest.load5.toFixed(2) }} /
+              {{ latest.load15.toFixed(2) }}</small
+            >
           </div>
           <div>
             <span>运行时间</span>
             <strong>{{ formatUptime(latest.uptime) }}</strong>
-            <small>{{ latest.processCount }} 进程 · {{ latest.tcpConns }} TCP</small>
+            <small
+              >{{ latest.processCount }} 进程 · {{ latest.tcpConns }} TCP</small
+            >
           </div>
         </div>
 
         <div class="range-row">
-          <UiSegmented v-model="range" label="时间范围" :options="rangeOptions" />
+          <UiSegmented
+            v-model="range"
+            label="时间范围"
+            :options="rangeOptions"
+          />
         </div>
 
         <div v-if="!rows.length" class="chart-empty">
@@ -674,14 +859,15 @@ async function resetToken(item: MonitorItem | null) {
   font-style: normal;
 }
 .server-grid {
-
   display: grid;
+  align-items: start; /* 卡片按自身内容高度，不被同行最高卡片拉出空白 */
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 12px;
   padding: 14px;
 }
 .server-card {
   display: grid;
+  align-content: start; /* 卡片被拉高时内容贴顶，避免中间出现大片空白 */
   gap: 6px;
   padding: 14px;
   border: 1px solid var(--c-line);
@@ -730,6 +916,19 @@ async function resetToken(item: MonitorItem | null) {
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.agent-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  min-width: 0;
+  color: var(--c-muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.agent-status > span {
+  overflow-wrap: anywhere;
 }
 .metric-line {
   display: flex;

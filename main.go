@@ -37,8 +37,9 @@ var embeddedFiles embed.FS
 //go:embed template
 var Template embed.FS
 
-// 版本号
-var version string
+// 版本号：发布构建用 -X main.version=<构建标识> 注入，
+// 未注入时保留 dev，绝不写死看似真实的假版本。
+var version = "dev"
 
 func Templateinit() {
 	// 设置template路径
@@ -85,7 +86,6 @@ func main() {
 	if loc, err := time.LoadLocation("Asia/Shanghai"); err == nil {
 		time.Local = loc
 	}
-	version = "2.2"
 	// agent 模式运行在远程服务器上，不需要面板的配置与数据库
 	if len(os.Args) > 1 && os.Args[1] == "agent" {
 		runAgent(os.Args[2:])
@@ -105,7 +105,6 @@ func main() {
 	var port = config.Port        // 读取端口号
 	// 获取版本号
 	var Isversion bool
-	version = "2.2"
 	flag.BoolVar(&Isversion, "version", false, "显示版本号")
 	flag.Parse()
 	if Isversion {
@@ -219,7 +218,6 @@ func Run(port int) {
 	routers.Proxy(r)             // 自建节点与到期/用量告警
 	routers.Monitors(r)          // 服务器监控
 	routers.MonitorOperations(r) // SSH 文件与 Docker 管理
-	routers.NetworkTopology(r)   // 真实关联网络拓扑
 	routers.NetworkTraces(r)     // 多地路由追踪
 	// 启动时合并旧的自建分组并同步单个「自建」分组。
 	if err := api.SyncSelfHostedNodes(); err != nil {
@@ -264,7 +262,7 @@ func runAgent(args []string) {
 	go runAgentTraceLoop(ctx, agentClient, *panel, *token)
 	go runAgentCheckLoop(ctx, agentClient, *panel, *token)
 	go runAgentTerminal(ctx, *panel, *token)
-	if xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token}, runner, *interval) {
+	if xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token, Client: agentClient}, runner, *interval) {
 		log.Printf("[agent] 服务器已在面板删除，xray 已卸载，正在移除 agent")
 		removeAgent()
 		return
@@ -274,15 +272,19 @@ func runAgent(args []string) {
 
 // removeAgent 删除安装脚本创建的 agent 文件与 systemd 服务。最后一步停止服务会结束本进程。
 func removeAgent() {
-	_ = os.RemoveAll("/etc/ppeelink-agent")
-	if exe, err := os.Executable(); err == nil && filepath.Base(exe) == "ppeelink-agent" {
+	service := "ppeelink-agent"
+	if len(os.Args) > 1 && os.Args[1] == "monitor" {
+		service = "ppeelink-monitor"
+	}
+	_ = os.RemoveAll("/etc/" + service)
+	if exe, err := os.Executable(); err == nil && filepath.Base(exe) == service {
 		_ = os.Remove(exe)
 	}
 	if os.Getenv("INVOCATION_ID") == "" {
 		return // 不是由 systemd 启动的，没有服务需要清理
 	}
-	_ = exec.Command("systemctl", "disable", "ppeelink-agent").Run()
-	_ = os.Remove("/etc/systemd/system/ppeelink-agent.service")
+	_ = exec.Command("systemctl", "disable", service).Run()
+	_ = os.Remove("/etc/systemd/system/" + service + ".service")
 	_ = exec.Command("systemctl", "daemon-reload").Run()
-	_ = exec.Command("systemctl", "stop", "--no-block", "ppeelink-agent").Run()
+	_ = exec.Command("systemctl", "stop", "--no-block", service).Run()
 }

@@ -23,6 +23,8 @@ export interface ProxyServer {
   enabled: boolean;
   xrayVersion: string;
   agentVersion: string;
+  /** 统一 Agent 上报的程序摘要（有值时以它为准，语义化版本号已废弃）。 */
+  agentHash?: string;
   arch: string;
   running: boolean;
   lastError: string;
@@ -32,6 +34,7 @@ export interface ProxyServer {
   trafficLimit: number;
   resetDay: number;
   monitorEnabled: boolean;
+  websiteTrafficEnabled?: boolean;
   agentUpdateRequested: boolean;
   /** 本计费周期流量；over 为 true 时 xray 已停止、节点暂不下发，resetAt 恢复 */
   quota: { used: number; limit: number; over: boolean; resetAt: string };
@@ -94,6 +97,7 @@ export const saveProxyServer = (data: {
   trafficLimitGb?: number;
   resetDay?: number;
   monitorEnabled?: boolean;
+  websiteTrafficEnabled?: boolean;
 }) =>
   request<{ id: number; token?: string; install?: string }>({
     url: "/api/v1/proxy/servers/save",

@@ -72,12 +72,17 @@ func runAgentTerminal(ctx context.Context, panel, token string) {
 }
 
 func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stopClose := context.AfterFunc(ctx, func() { _ = conn.Close() })
+	defer stopClose()
 	var writeMu sync.Mutex
 	var sessionsMu sync.Mutex
 	sessions := map[string]*agentPTY{}
 	write := func(msg agentTermMessage) error {
 		writeMu.Lock()
 		defer writeMu.Unlock()
+		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		return conn.WriteJSON(msg)
 	}
 	defer func() {
@@ -113,25 +118,32 @@ func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
 			sessions[msg.ID] = session
 			sessionsMu.Unlock()
 			go func(id string, s *agentPTY) {
+				defer s.file.Close()
 				buf := make([]byte, 32*1024)
 				for {
 					n, err := s.file.Read(buf)
 					if n > 0 {
 						if write(agentTermMessage{Type: "term.output", ID: id, Data: base64.StdEncoding.EncodeToString(buf[:n])}) != nil {
-							return
+							_ = s.cmd.Process.Kill()
+							break
 						}
 					}
 					if err != nil {
 						break
 					}
 				}
+				// Reap the shell before reporting exit. Without Wait every
+				// session leaks a zombie and reports a fabricated zero code.
+				_ = s.cmd.Wait()
 				code := 0
 				if s.cmd.ProcessState != nil {
 					code = s.cmd.ProcessState.ExitCode()
 				}
 				_ = write(agentTermMessage{Type: "term.exit", ID: id, Code: code})
 				sessionsMu.Lock()
-				delete(sessions, id)
+				if sessions[id] == s {
+					delete(sessions, id)
+				}
 				sessionsMu.Unlock()
 			}(msg.ID, session)
 		case "term.input":

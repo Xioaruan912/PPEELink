@@ -60,14 +60,19 @@ func GetMenus(c *gin.Context) {
 					Name:      "Monitor",
 					Meta:      Meta{Title: "monitor", Icon: "monitor", Roles: []string{"ADMIN"}, KeepAlive: true},
 				},
+				{
+					Path:      "website",
+					Component: "monitor/website",
+					Name:      "MonitorWebsite",
+					Meta:      Meta{Title: "监控网站", Icon: "monitor", Roles: []string{"ADMIN"}, KeepAlive: true},
+				},
 				{Path: "workspace", Component: "monitor/ServerWorkspace", Name: "ServerWorkspace", Meta: Meta{Title: "服务器工作台", Roles: []string{"ADMIN"}, Hidden: true}},
 			},
 		},
 		{
-			Path: "/network", Component: "Layout", Redirect: "/network/topology", Name: "network",
+			Path: "/network", Component: "Layout", Redirect: "/network/traceroute", Name: "network",
 			Meta: Meta{Title: "网络工具", Icon: "monitor", Roles: []string{"ADMIN"}},
 			Children: []Child{
-				{Path: "topology", Component: "network/Topology", Name: "NetworkTopology", Meta: Meta{Title: "网络拓扑", Roles: []string{"ADMIN"}, KeepAlive: true}},
 				{Path: "traceroute", Component: "network/Traceroute", Name: "NetworkTraceroute", Meta: Meta{Title: "多地路由追踪", Roles: []string{"ADMIN"}, KeepAlive: true}},
 			},
 		},

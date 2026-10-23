@@ -2,7 +2,7 @@
   <button
     v-magnetic="variant === 'primary'"
     :type="type"
-    :class="['ui-button', `ui-button--${variant}`]"
+    :class="['ui-button', `ui-button--${variant}`, `ui-button--${size}`]"
     :disabled="disabled || loading"
     :aria-busy="loading || undefined"
   >
@@ -24,11 +24,12 @@ withDefaults(
   defineProps<{
     variant?: "primary" | "secondary" | "ghost" | "danger";
     type?: "button" | "submit" | "reset";
+    size?: "sm" | "md";
     disabled?: boolean;
     loading?: boolean;
     icon?: Component;
   }>(),
-  { variant: "secondary", type: "button" }
+  { variant: "secondary", type: "button", size: "md" }
 );
 </script>
 <style scoped>
@@ -48,6 +49,12 @@ withDefaults(
   transition:
     background var(--duration-fast),
     transform var(--duration-fast) var(--ease-out);
+}
+.ui-button--sm {
+  min-height: 28px;
+  padding: 4px 9px;
+  gap: 5px;
+  font-size: 12px;
 }
 .ui-button:hover {
   background: var(--c-surface-2);

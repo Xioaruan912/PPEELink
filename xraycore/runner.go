@@ -17,17 +17,19 @@ import (
 // Runner 管理一台机器上的 xray 进程。有 systemd 且以 root 运行时托管为独立服务
 // （面板或 agent 重启不会断开用户连接），否则作为子进程运行。
 type Runner struct {
-	Dir      string
-	Unit     string // systemd 服务名
-	mu       sync.Mutex
-	systemd  bool
-	cmd      *exec.Cmd
-	exited   chan struct{}
-	rev      string
-	apiPort  int
-	lastErr  string
-	stderr   *tailBuffer
-	stopping bool
+	Dir          string
+	Unit         string // systemd 服务名
+	mu           sync.Mutex
+	systemd      bool
+	cmd          *exec.Cmd
+	exited       chan struct{}
+	rev          string
+	apiPort      int
+	lastErr      string
+	stderr       *tailBuffer
+	stopping     bool
+	website      *WebsiteCollector
+	websiteStats *websiteCounters
 }
 
 func NewRunner(dir, unit string) *Runner {
@@ -54,17 +56,41 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 	rev := spec.Rev()
 	if !spec.Enabled || len(spec.Inbounds) == 0 {
 		r.stopLocked()
-		r.rev, r.lastErr = rev, ""
+		r.stopWebsiteLocked()
+		if r.runningLocked() {
+			r.lastErr = "xray did not stop"
+			return fmt.Errorf("%s", r.lastErr)
+		}
+		r.rev, r.apiPort, r.lastErr = rev, 0, ""
 		return nil
 	}
-	if rev == r.rev && r.runningLocked() {
+	wantsWebsite := spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled
+	if rev == r.rev && r.runningLocked() && (!wantsWebsite || r.website != nil) {
 		return nil
 	}
 	if _, err := EnsureXray(ctx, r.Dir, spec.Version); err != nil {
 		r.lastErr = err.Error()
 		return err
 	}
-	cfg, err := BuildConfig(spec)
+	var nextWebsite *WebsiteCollector
+	if spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled {
+		if r.websiteStats == nil {
+			r.websiteStats = newWebsiteCounters()
+		}
+		var err error
+		nextWebsite, err = newWebsiteCollector(spec, r.websiteStats)
+		if err != nil {
+			r.lastErr = err.Error()
+			return err
+		}
+	}
+	committed := false
+	defer func() {
+		if !committed && nextWebsite != nil {
+			_ = nextWebsite.Close()
+		}
+	}()
+	cfg, err := BuildConfigWithWebsiteCollector(spec, nextWebsite)
 	if err != nil {
 		r.lastErr = err.Error()
 		return err
@@ -85,6 +111,9 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 		r.lastErr = err.Error()
 		return err
 	}
+	r.stopWebsiteLocked()
+	r.website = nextWebsite
+	committed = true
 	r.rev, r.apiPort, r.lastErr = rev, spec.APIPort, ""
 	return nil
 }
@@ -194,13 +223,35 @@ func (r *Runner) stopLocked() {
 	r.cmd, r.exited = nil, nil
 }
 
-// Stop 停止 xray（agent 退出时调用；systemd 模式下保持服务运行）。
+// Stop stops the agent-owned relay as well as Xray. Without a relay, systemd
+// mode retains its historical keep-running behavior; with collection enabled,
+// Xray must stop too because its authenticated egress endpoint is agent-owned.
 func (r *Runner) Stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if !r.systemd {
+	if !r.systemd || r.website != nil {
 		r.stopLocked()
 	}
+	r.stopWebsiteLocked()
+}
+
+func (r *Runner) stopWebsiteLocked() {
+	if r.website != nil {
+		_ = r.website.Close()
+		r.website = nil
+	}
+}
+
+// CollectWebsiteTraffic drains successfully forwarded payload counters, even
+// after disable/Stop/Uninstall. The caller owns retry/persistence of the batch.
+// This does not perform Xray API calls and does not include agent/monitor traffic.
+func (r *Runner) CollectWebsiteTraffic() []WebsiteTrafficBucket {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.websiteStats == nil {
+		return nil
+	}
+	return r.websiteStats.drain()
 }
 
 // Uninstall 停止 xray 并删除 systemd 服务、二进制与配置目录。
@@ -208,6 +259,10 @@ func (r *Runner) Uninstall() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.stopLocked()
+	r.stopWebsiteLocked()
+	if r.runningLocked() {
+		return fmt.Errorf("xray did not stop; refusing uninstall")
+	}
 	if r.systemd {
 		_ = exec.Command("systemctl", "disable", "--now", r.Unit).Run()
 		path := "/etc/systemd/system/" + r.Unit + ".service"

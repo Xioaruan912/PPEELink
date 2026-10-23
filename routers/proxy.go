@@ -21,6 +21,7 @@ func Proxy(r *gin.Engine) {
 		g.GET("/accounts", api.ProxyAccountList)
 		g.POST("/accounts/save", api.ProxyAccountSave)
 		g.GET("/traffic", api.ProxyTrafficDaily)
+		g.GET("/website-traffic", api.ProxyWebsiteTraffic)
 	}
 	r.GET("/api/v1/my/self-hosted", api.MySelfHosted)
 	r.GET("/api/v1/agent/spec", api.AgentSpec)
