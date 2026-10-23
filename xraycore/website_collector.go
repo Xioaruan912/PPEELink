@@ -4,6 +4,7 @@ package xraycore
 // is the only source of website attribution. IP literals (including sniffed TLS
 // connections whose original destination is an IP) are deliberately unknown.
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -12,6 +13,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"net/netip"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,17 +84,19 @@ func (s *websiteCounters) add(k websiteKey, n int, up bool) {
 }
 func (s *websiteCounters) drain() []WebsiteTrafficBucket {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make([]WebsiteTrafficBucket, 0, len(s.records))
-	for k, c := range s.records {
+	records := s.records
+	// Detach the snapshot under the lock; aggregation and sorting do not block relays.
+	s.records = make(map[websiteKey]Counter)
+	s.domains = make(map[websiteKey]int)
+	s.mu.Unlock()
+	out := make([]WebsiteTrafficBucket, 0, len(records))
+	for k, c := range records {
 		if c.Up != 0 || c.Down != 0 {
 			out = append(out, WebsiteTrafficBucket{BucketStart: k.bucket, InboundTag: k.tag, Domain: k.domain, Up: c.Up, Down: c.Down})
 		}
 	}
 	// An in-flight write may commit into the next drain; its original time bucket
 	// remains intact. Overshoot is bounded by the capped concurrent sessions.
-	s.records = make(map[websiteKey]Counter)
-	s.domains = make(map[websiteKey]int)
 	sort.Slice(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if a.BucketStart != b.BucketStart {
@@ -366,13 +370,29 @@ func (c *WebsiteCollector) resolve(ctx context.Context, host string, port int) (
 	}
 	return out, nil
 }
+
+var websiteDeniedPrefixes = func() []netip.Prefix {
+	ranges := []string{"100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32", "64:ff9b::/96", "64:ff9b:1::/48", "2002::/16"}
+	prefixes := make([]netip.Prefix, 0, len(ranges))
+	for _, value := range ranges {
+		prefixes = append(prefixes, netip.MustParsePrefix(value))
+	}
+	return prefixes
+}()
+
+var websiteCopyBuffers = sync.Pool{New: func() any { return new([32 * 1024]byte) }}
+
 func websitePrivateIP(ip net.IP) bool {
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() {
 		return true
 	}
-	for _, cidr := range []string{"100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32", "64:ff9b::/96", "64:ff9b:1::/48", "2002::/16"} {
-		_, n, _ := net.ParseCIDR(cidr)
-		if n.Contains(ip) {
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return true
+	}
+	addr = addr.Unmap()
+	for _, prefix := range websiteDeniedPrefixes {
+		if prefix.Contains(addr) {
 			return true
 		}
 	}
@@ -426,7 +446,9 @@ func (c *WebsiteCollector) tcp(client net.Conn, tag, host string, port int) {
 	<-done
 }
 func (c *WebsiteCollector) copy(dst, src net.Conn, tag, domain string, up bool) {
-	buf := make([]byte, 32*1024)
+	buffer := websiteCopyBuffers.Get().(*[32 * 1024]byte)
+	defer websiteCopyBuffers.Put(buffer)
+	buf := buffer[:]
 	for {
 		_ = src.SetReadDeadline(time.Now().Add(websiteIdleTimeout))
 		n, err := src.Read(buf)
@@ -510,7 +532,7 @@ func (c *WebsiteCollector) udp(control net.Conn, tag, requestedHost string, requ
 		if n < 4 || buf[0] != 0 || buf[1] != 0 || buf[2] != 0 {
 			continue
 		}
-		reader := strings.NewReader(string(buf[4:n]))
+		reader := bytes.NewReader(buf[4:n])
 		host, port, err := readWebsiteAddress(reader, buf[3])
 		if err != nil {
 			continue

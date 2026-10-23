@@ -97,5 +97,6 @@ export class WebsiteTrafficState {
 
   cancel() {
     this.generation++;
+    if (this.status === "loading") this.status = this.data ? "success" : "idle";
   }
 }
