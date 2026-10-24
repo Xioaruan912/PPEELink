@@ -103,3 +103,7 @@ onBeforeUnmount(stop);
 @media(prefers-reduced-motion: reduce) { .server-module { transition: none; } }
 :global(html[data-motion="reduced"]) .server-module { transition: none; transform: none; }
 </style>
+
+<style scoped>
+.server-heading{background:var(--c-surface);box-shadow:none;border-radius:16px}.server-heading::before{display:none}.server-emblem{background:var(--c-surface-2);box-shadow:none;border:1px solid var(--c-line);color:var(--c-muted)}.server-modules{background:var(--c-canvas)}.server-module{border-radius:9px}.server-module.is-active{background:var(--c-surface);color:var(--c-signal-text);box-shadow:0 1px 4px #0000000d}.server-module-icon{background:transparent}.server-module.is-active:hover{background:var(--c-surface)}
+</style>

@@ -114,3 +114,11 @@
   .server-experience .server-grid .server-card { animation: none; transition: none; }
 }
 html[data-motion="reduced"] .server-experience .server-grid .server-card { animation: none; transition: none; transform: none; }
+
+// Neutral surfaces keep the accent on actions and selected navigation.
+.server-experience { --server-border: var(--c-line); }
+.server-experience .ui-panel { box-shadow: none; border-radius: 14px; }
+.server-experience .summary-line > div:first-child,
+.server-experience .telemetry > .tm:first-child { background: var(--c-surface-2); }
+.server-experience .server-grid .server-card { background: var(--c-surface); box-shadow: none; border-radius: 14px; }
+.server-experience .server-grid .server-card::before { display: none; }
