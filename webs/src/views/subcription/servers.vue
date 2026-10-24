@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ServerHeader from "@/components/servers/ServerHeader.vue";
 import {
   computed,
   nextTick,
@@ -32,7 +33,6 @@ import {
 } from "@/api/proxy";
 import {
   EmptyState,
-  PageHeader,
   UiButton,
   UiDialog,
   UiPanel,
@@ -40,7 +40,6 @@ import {
   UiTag,
 } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
-import { useStagger } from "@/motion";
 import SecretLink from "./subs/SecretLink.vue";
 import InboundDrawer from "./servers/InboundDrawer.vue";
 import AccountDrawer from "./servers/AccountDrawer.vue";
@@ -56,7 +55,6 @@ const traffic = ref<DailyTraffic[]>([]);
 const loading = ref(true);
 const loadError = ref("");
 const root = ref<HTMLElement>();
-const stagger = useStagger();
 
 async function load(quiet = false) {
   if (!quiet) loading.value = true;
@@ -76,7 +74,6 @@ async function load(quiet = false) {
     if (!quiet) {
       loading.value = false;
       await nextTick();
-      if (root.value) stagger(root.value.querySelectorAll(".server-card"));
     }
   }
 }
@@ -343,8 +340,8 @@ const usageRatio = (a: ProxyAccount) =>
   a.trafficLimit ? Math.min(a.trafficUsed / a.trafficLimit, 1) : 0;
 </script>
 <template>
-  <div class="servers-page">
-    <PageHeader
+  <div class="servers-page server-experience">
+    <ServerHeader section="proxy"
       title="自建节点"
       description="在自己的服务器上运行 xray-core，按账户发放节点、统计流量。"
     >
@@ -353,7 +350,7 @@ const usageRatio = (a: ProxyAccount) =>
           >添加服务器</UiButton
         >
       </template>
-    </PageHeader>
+    </ServerHeader>
 
     <EmptyState
       v-if="loadError"
@@ -404,8 +401,9 @@ const usageRatio = (a: ProxyAccount) =>
       </section>
       <div ref="root" class="server-grid">
         <article
-          v-for="s in servers"
+          v-for="(s, index) in servers"
           :key="s.id"
+          :style="{ '--server-index': index }"
           class="cell server-card"
           :class="{ 'is-off': !s.enabled }"
         >

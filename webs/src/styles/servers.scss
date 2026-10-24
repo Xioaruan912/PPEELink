@@ -1,0 +1,116 @@
+// Sky control room. Shared surface language for the four server routes.
+.server-experience {
+  --server-border: color-mix(in srgb, var(--c-signal) 34%, var(--c-line));
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+.server-experience .ui-panel {
+  border-color: var(--server-border);
+  border-radius: 22px;
+  background: var(--c-surface);
+  box-shadow: 0 14px 36px -30px var(--c-focus), var(--edge-highlight);
+}
+.server-experience .ui-panel .ui-panel__header { padding: 18px 20px; }
+.server-experience .ui-panel .ui-panel__heading h2 { font-size: 16px; letter-spacing: -.025em; }
+.server-experience .ui-panel .ui-panel__description { font-size: 12px; }
+.server-experience .summary-line,
+.server-experience .telemetry {
+  display: grid;
+  grid-template-columns: 1.35fr repeat(3, minmax(0, 1fr));
+  gap: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--server-border);
+  border-radius: 20px;
+  background: var(--c-surface);
+}
+.server-experience .summary-line > div,
+.server-experience .telemetry > .tm {
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  padding: 18px 22px;
+  border: 0;
+  border-left: 1px solid var(--c-line);
+  min-width: 0;
+}
+.server-experience .summary-line > div:first-child,
+.server-experience .telemetry > .tm:first-child {
+  border-left: 0;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--c-signal) 24%, var(--c-surface)), var(--c-surface-2));
+}
+.server-experience .summary-line strong,
+.server-experience .telemetry .tm-value {
+  font: 600 28px/1.2 var(--font-mono);
+  letter-spacing: -.05em;
+}
+.server-experience .summary-line span,
+.server-experience .telemetry .tm-label { color: var(--c-muted); font-size: 12px; }
+.server-experience .server-grid { gap: 14px; }
+.server-experience .server-grid .server-card {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--server-border);
+  border-radius: 20px;
+  background: linear-gradient(155deg, var(--c-surface) 50%, color-mix(in srgb, var(--c-signal) 7%, var(--c-surface)));
+  box-shadow: 0 10px 26px -24px var(--c-focus);
+  transition: transform .4s var(--ease-spring), box-shadow .3s, border-color .3s;
+}
+.server-experience .server-grid .server-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 16px; right: 16px; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--c-signal), transparent);
+  pointer-events: none;
+}
+.server-experience .server-grid .server-head,
+.server-experience .server-grid .card-head { padding-bottom: 8px; border-bottom: 1px solid var(--c-line); margin-bottom: 6px; }
+.server-experience .server-grid .server-head strong,
+.server-experience .server-grid .card-title h2 { font-size: 15px; font-weight: 600; }
+.server-experience .server-grid .bar { height: 5px; background: var(--c-surface-2); }
+.server-experience .server-grid .bar i { background: linear-gradient(90deg, var(--c-signal), var(--c-data)); }
+.server-experience .server-grid .agent-status { padding: 10px 0 0; margin-top: 5px; border-top: 1px solid var(--c-line); }
+.server-experience .server-grid .metric-line b { font-family: var(--font-mono); }
+.server-experience .server-grid .kind-icon { border-radius: 14px; background: var(--c-surface-2); color: var(--c-signal-text); }
+.server-experience .website-traffic .summary { margin: 16px 0 20px; gap: 1px; border: 1px solid var(--server-border); border-radius: 16px; overflow: hidden; background: var(--c-line); }
+.server-experience .website-traffic .summary > div { border-radius: 0; padding: 18px 20px; background: var(--c-surface); }
+.server-experience .website-traffic .summary > div:first-child { background: var(--c-surface-2); }
+.server-experience .website-traffic .summary dd { font: 600 26px/1.2 var(--font-mono); letter-spacing: -.04em; color: var(--c-ink); }
+.server-experience .website-traffic .summary-total dd { color: var(--c-signal-text); }
+.server-experience .website-traffic th { color: var(--c-muted); font-size: 11px; background: var(--c-surface-2); }
+.server-experience .website-traffic td { padding-top: 14px; padding-bottom: 14px; }
+.server-experience .website-traffic .share-track i { background: linear-gradient(90deg, var(--c-signal), var(--c-data)); }
+.server-experience .tabs { padding: 5px; border: 1px solid var(--c-line); border-radius: 16px; background: var(--c-surface); width: fit-content; max-width: 100%; }
+.server-experience .tabs button { border-radius: 11px; }
+@media (prefers-reduced-motion: no-preference) {
+  .server-experience .server-grid .server-card {
+    animation: server-arrive .7s var(--ease-out) backwards;
+    animation-delay: calc(min(var(--server-index, 0), 7) * 65ms);
+  }
+  @keyframes server-arrive { from { opacity: 0; transform: translateY(24px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .server-experience .server-grid .server-card:hover { transform: translateY(-5px); border-color: var(--c-signal-text); box-shadow: 0 18px 32px -24px var(--c-focus); }
+}
+@media (max-width: 767px) {
+  .server-experience { gap: 12px; }
+  .server-experience .summary-line, .server-experience .telemetry { grid-template-columns: repeat(2, minmax(0, 1fr)); border-radius: 16px; }
+  .server-experience .summary-line > div, .server-experience .telemetry > .tm { padding: 13px 15px; gap: 5px; }
+  .server-experience .summary-line > div:nth-child(3), .server-experience .telemetry > .tm:nth-child(3) { border-left: 0; border-top: 1px solid var(--c-line); }
+  .server-experience .summary-line > div:nth-child(4), .server-experience .telemetry > .tm:nth-child(4) { border-top: 1px solid var(--c-line); }
+  .server-experience .summary-line strong, .server-experience .telemetry .tm-value { font-size: 24px; }
+  .server-experience .ui-panel .ui-panel__header { padding: 14px; }
+  .server-experience .server-grid .server-card { border-radius: 16px; }
+  .server-experience .website-traffic .summary > div { padding: 12px 9px; }
+  .server-experience .website-traffic .summary dd { font-size: 18px; }
+  .server-experience .website-traffic tbody tr { background: var(--c-surface); border-color: var(--server-border); box-shadow: 0 6px 20px -18px var(--c-focus); }
+  .server-experience .website-traffic td { padding: 0; }
+  .server-experience .tabs { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .server-experience .server-grid .server-card { animation: none; transition: none; }
+}
+html[data-motion="reduced"] .server-experience .server-grid .server-card { animation: none; transition: none; transform: none; }

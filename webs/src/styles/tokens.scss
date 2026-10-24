@@ -1,20 +1,19 @@
 :root {
-  // "Ion" palette: cool zinc neutrals, one lime accent. Text on the accent
-  // fill is always --c-on-signal; accent-coloured text uses --c-signal-text.
-  --c-canvas: #f3f4f6;
-  --c-surface: #fcfcfd;
-  --c-surface-2: #eceef1;
-  --c-line: #dcdfe4;
-  --c-ink: #101216;
-  --c-muted: #596070;
-  --c-signal: #c2ec2c;
-  --c-signal-text: #4b6600;
-  --c-focus: #4b6600;
-  --c-data: #2f6bff;
+  // Sky palette: pale blue surfaces, clear blue actions, readable ink.
+  --c-canvas: #edf6fc;
+  --c-surface: #fafdff;
+  --c-surface-2: #e1effa;
+  --c-line: #c8dfef;
+  --c-ink: #102d43;
+  --c-muted: #526f83;
+  --c-signal: #73c9f4;
+  --c-signal-text: #096b9c;
+  --c-focus: #096b9c;
+  --c-data: #0284c7;
   --c-ok: #14915c;
   --c-warn: #c27a06;
   --c-bad: #d63a3f;
-  --c-glow: rgb(194 236 44 / 0.18);
+  --c-glow: rgb(56 189 248 / 0.24);
 
   --font-display:
     "Twemoji Country Flags", "Geist", "PingFang SC", "HarmonyOS Sans SC",
@@ -35,27 +34,27 @@
   --radius-overlay: 20px;
   --shadow-panel:
     0 1px 2px rgb(16 18 22 / 0.04), 0 8px 24px -16px rgb(16 18 22 / 0.18);
-  --shadow-overlay: 0 32px 64px -24px rgb(16 18 22 / 0.32);
+  --shadow-overlay: 0 32px 64px -24px rgb(18 76 116 / 0.28);
   --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
-  --c-on-signal: #0d0f12;
+  --c-on-signal: #07314b;
   --z-dock: 30;
   --z-tools: 40;
 }
 html.dark {
-  --c-canvas: #0b0c0e;
-  --c-surface: #131418;
-  --c-surface-2: #1b1d22;
-  --c-line: #262930;
-  --c-ink: #eceef2;
-  --c-muted: #8d93a0;
-  --c-signal: #c8f03a;
-  --c-signal-text: #d2f55c;
-  --c-focus: #c8f03a;
-  --c-data: #6f9bff;
+  --c-canvas: #091925;
+  --c-surface: #102636;
+  --c-surface-2: #183347;
+  --c-line: #28485d;
+  --c-ink: #e8f5fd;
+  --c-muted: #9bb7ca;
+  --c-signal: #73c9f4;
+  --c-signal-text: #9bdcff;
+  --c-focus: #73c9f4;
+  --c-data: #62c7fb;
   --c-ok: #3fd18f;
   --c-warn: #f4b13d;
   --c-bad: #ff6467;
-  --c-glow: rgb(200 240 58 / 0.14);
+  --c-glow: rgb(56 189 248 / 0.18);
   --shadow-panel: 0 1px 0 rgb(0 0 0 / 0.4), 0 12px 32px -20px rgb(0 0 0 / 0.7);
   --shadow-overlay: 0 40px 80px -24px rgb(0 0 0 / 0.75);
   --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
