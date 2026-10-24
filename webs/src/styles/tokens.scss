@@ -1,19 +1,19 @@
 :root {
-  // Sky palette: pale blue surfaces, clear blue actions, readable ink.
-  --c-canvas: #edf6fc;
-  --c-surface: #fafdff;
-  --c-surface-2: #e1effa;
-  --c-line: #c8dfef;
-  --c-ink: #102d43;
-  --c-muted: #526f83;
-  --c-signal: #73c9f4;
-  --c-signal-text: #096b9c;
-  --c-focus: #096b9c;
-  --c-data: #0284c7;
+  // Neutral surfaces with restrained blue accents.
+  --c-canvas: #f5f5f6;
+  --c-surface: #ffffff;
+  --c-surface-2: #f0f1f3;
+  --c-line: #e1e3e7;
+  --c-ink: #202329;
+  --c-muted: #686e78;
+  --c-signal: #2563eb;
+  --c-signal-text: #245bd6;
+  --c-focus: #245bd6;
+  --c-data: #3574e8;
   --c-ok: #14915c;
   --c-warn: #c27a06;
   --c-bad: #d63a3f;
-  --c-glow: rgb(56 189 248 / 0.24);
+  --c-glow: rgb(37 99 235 / 0.12);
 
   --font-display:
     "Twemoji Country Flags", "Geist", "PingFang SC", "HarmonyOS Sans SC",
@@ -36,25 +36,25 @@
     0 1px 2px rgb(16 18 22 / 0.04), 0 8px 24px -16px rgb(16 18 22 / 0.18);
   --shadow-overlay: 0 32px 64px -24px rgb(18 76 116 / 0.28);
   --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
-  --c-on-signal: #07314b;
+  --c-on-signal: #ffffff;
   --z-dock: 30;
   --z-tools: 40;
 }
 html.dark {
-  --c-canvas: #091925;
-  --c-surface: #102636;
-  --c-surface-2: #183347;
-  --c-line: #28485d;
-  --c-ink: #e8f5fd;
-  --c-muted: #9bb7ca;
-  --c-signal: #73c9f4;
-  --c-signal-text: #9bdcff;
-  --c-focus: #73c9f4;
-  --c-data: #62c7fb;
+  --c-canvas: #141518;
+  --c-surface: #1c1e22;
+  --c-surface-2: #25282e;
+  --c-line: #343840;
+  --c-ink: #eceef2;
+  --c-muted: #a0a6b0;
+  --c-signal: #2563eb;
+  --c-signal-text: #8caeff;
+  --c-focus: #2563eb;
+  --c-data: #8caeff;
   --c-ok: #3fd18f;
   --c-warn: #f4b13d;
   --c-bad: #ff6467;
-  --c-glow: rgb(56 189 248 / 0.18);
+  --c-glow: rgb(37 99 235 / 0.12);
   --shadow-panel: 0 1px 0 rgb(0 0 0 / 0.4), 0 12px 32px -20px rgb(0 0 0 / 0.7);
   --shadow-overlay: 0 40px 80px -24px rgb(0 0 0 / 0.75);
   --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);

@@ -2,7 +2,7 @@
 import ServerHeader from "@/components/servers/ServerHeader.vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
-import { UiButton, UiPanel, UiSkeleton } from "@/ui";
+import { UiButton, UiSkeleton } from "@/ui";
 import { getMonitors, type MonitorItem } from "@/api/monitor";
 import ServerFiles from "./ServerFiles.vue";
 import ServerDocker from "./ServerDocker.vue";
@@ -36,23 +36,25 @@ onBeforeUnmount(() => { window.removeEventListener("online", connectionChanged);
 <template>
  <main class="workspace server-experience">
   <ServerHeader section="workspace" title="文件与容器" description="选择服务器，管理文件和 Docker 容器。"><template #actions><RouterLink to="/monitor/index" class="back-link">返回服务器监控</RouterLink></template></ServerHeader>
-  <UiPanel title="连接服务器" description="仅管理员可操作。文件和容器操作由 agent 本地执行，不需要 SSH 地址或密码。">
+  <section class="connection-bar" aria-label="连接服务器">
    <UiSkeleton v-if="phase === 'loading'" :lines="2" aria-label="正在加载服务器" />
    <div v-else-if="phase === 'error'" role="alert" class="state"><p>{{ error }}</p><UiButton :disabled="offline" @click="load">重试加载</UiButton></div>
    <div v-else-if="!items.length" class="state"><h3>还没有服务器</h3><p>先在服务器监控中接入自建服务器 agent，即可使用文件和 Docker 管理。</p><RouterLink to="/monitor/index">前往服务器监控</RouterLink></div>
-   <template v-else><div class="server-line"><label for="workspace-server">服务器</label><select id="workspace-server" :value="id || ''" @change="chooseServer"><option disabled value="">选择服务器</option><option v-for="item in items" :key="item.id" :value="item.id">{{ item.name }}</option></select><span v-if="selected" class="connection">{{ selected.proxyServerId ? '已关联自建服务器 agent' : '未关联 agent' }} · {{ selected.online ? '在线' : '离线' }}</span><UiButton :disabled="offline" @click="load">刷新服务器</UiButton></div>
+   <template v-else><div class="server-line"><label for="workspace-server">服务器</label><select id="workspace-server" :value="id || ''" @change="chooseServer"><option disabled value="">选择服务器</option><option v-for="item in items" :key="item.id" :value="item.id">{{ item.name }}</option></select><span v-if="selected" class="connection">{{ selected.online ? '● 在线' : '○ 离线' }} · {{ selected.proxyServerId ? 'Agent 已关联' : '未关联 Agent' }}</span><UiButton :disabled="offline" @click="load">刷新服务器</UiButton></div>
     <p v-if="!selected" class="state" role="status">未找到所选服务器。请选择上方服务器，或返回监控页面确认服务器仍存在。</p>
     <div v-else-if="!selected.proxyServerId" class="state" role="status"><h3>未关联 agent</h3><p>该监控是独立监控，没有自建服务器 agent；文件和 Docker 操作需要通过 agent 通道。</p><RouterLink to="/monitor/index">返回服务器监控</RouterLink></div>
    </template>
-  </UiPanel>
+  </section>
   <template v-if="selected?.proxyServerId">
-   <nav class="tabs" aria-label="工作区功能"><UiButton :variant="tab === 'files' ? 'primary' : 'secondary'" :aria-current="tab === 'files' ? 'page' : undefined" @click="chooseTab('files')">文件管理</UiButton><UiButton :variant="tab === 'docker' ? 'primary' : 'secondary'" :aria-current="tab === 'docker' ? 'page' : undefined" @click="chooseTab('docker')">Docker 管理</UiButton></nav>
-   <ServerFiles v-if="visitedFiles" v-show="tab === 'files'" :key="`files-${id}`" ref="files" :id="id" :offline="offline" />
-   <ServerDocker v-if="visitedDocker" v-show="tab === 'docker'" :key="`docker-${id}`" :id="id" :offline="offline" />
+   <nav class="workspace-tabs" aria-label="工作区功能"><UiButton :variant="tab === 'files' ? 'primary' : 'secondary'" :aria-current="tab === 'files' ? 'page' : undefined" @click="chooseTab('files')">文件管理</UiButton><UiButton :variant="tab === 'docker' ? 'primary' : 'secondary'" :aria-current="tab === 'docker' ? 'page' : undefined" @click="chooseTab('docker')">Docker 容器</UiButton></nav>
+   <div v-if="visitedFiles" v-show="tab === 'files'" class="workspace-pane"><ServerFiles :key="`files-${id}`" ref="files" :id="id" :offline="offline" /></div>
+   <div v-if="visitedDocker" v-show="tab === 'docker'" class="workspace-pane"><ServerDocker :key="`docker-${id}`" :id="id" :offline="offline" /></div>
   </template>
  </main>
 </template>
 
 <style scoped>
+.workspace-pane{min-width:0}.connection-bar{padding:16px 20px;background:var(--c-surface);border:1px solid var(--c-line);border-radius:12px}.workspace-tabs{display:flex;gap:6px;border-bottom:1px solid var(--c-line);padding-bottom:12px}.workspace-tabs :deep(button){border-radius:8px;min-width:110px}.workspace :deep(.server-heading-main){padding:18px 22px}.workspace :deep(.server-heading h1){font-size:26px}.workspace :deep(.server-emblem){display:none}.workspace :deep(.server-heading-actions){display:none}
+
 .workspace{display:grid;gap:18px}.workspace :deep(.page-header){margin-bottom:0}.server-line{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.server-line label{font-weight:600;font-size:13px}select{padding:9px 12px;border:1px solid var(--c-line);border-radius:8px;background:var(--c-surface);color:var(--c-ink);font:inherit;min-width:200px;max-width:100%}select:focus-visible{outline:2px solid var(--c-signal);outline-offset:2px}.connection{font-size:12px;color:var(--c-muted);overflow-wrap:anywhere;flex:1}.state{padding:18px 0;color:var(--c-muted);line-height:1.7}.state h3{margin:0;color:var(--c-ink);font-size:15px}.state p{margin:8px 0}.tabs{display:flex;gap:8px;flex-wrap:wrap}.back-link{font-size:13px;color:var(--c-ink)}@media(max-width:600px){.server-line select{width:100%}.server-line .connection{flex-basis:100%}.tabs :deep(button){flex:1}.workspace{gap:12px}}
 </style>
