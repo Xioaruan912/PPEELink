@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, nextTick, watch } from "vue";
+import { ref, computed } from "vue";
 import { Plus, Refresh } from "@element-plus/icons-vue";
-import { PageHeader, UiButton, UiPanel, UiSkeleton, EmptyState } from "@/ui";
+import SubscriptionHeader from "@/components/subscriptions/SubscriptionHeader.vue";
+import { UiButton, UiPanel, UiSkeleton, EmptyState } from "@/ui";
 import IconPulse from "~icons/ph/pulse";
-import { useStagger, useMotion } from "@/motion";
+import { useMotion } from "@/motion";
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue";
 import NodeTcpDialog from "@/components/NodeTcpDialog.vue";
 import { provideNodes } from "./nodes/useNodes";
@@ -46,14 +47,13 @@ const {
   openTool,
 } = provideNodes();
 const root = ref<HTMLElement>();
-const stagger = useStagger();
 const { reduced, animate } = useMotion();
-watch(loading, async () => {
-  if (!loading.value) {
-    await nextTick();
-    if (root.value) stagger(root.value.querySelectorAll(".node-row"));
-  }
-});
+const validCount = computed(
+  () => overviewList.value.filter((node) => node.valid).length
+);
+const blockedCount = computed(
+  () => overviewList.value.filter((node) => node.blocked).length
+);
 function enterBar(element: Element, done: () => void) {
   if (reduced.value) {
     done();
@@ -88,7 +88,10 @@ function leaveBar(element: Element, done: () => void) {
 </script>
 <template>
   <div class="nodes-workbench">
-    <PageHeader title="节点" description="按分组管理连接，检查链路与可用性。"
+    <SubscriptionHeader
+      section="nodes"
+      title="节点管理"
+      description="按分组整理连接，检查可用性并控制订阅下发。"
       ><template #actions
         ><UiButton :icon="Refresh" :loading="loading" @click="loadAll"
           >刷新</UiButton
@@ -97,9 +100,27 @@ function leaveBar(element: Element, done: () => void) {
         ><UiButton variant="primary" :icon="Plus" @click="handleAddNode"
           >添加节点</UiButton
         ></template
-      ></PageHeader
+      ></SubscriptionHeader
     >
-    <div class="workbench-grid" data-enter>
+    <div class="node-overview" aria-label="节点概览">
+      <div>
+        <span>全部节点</span
+        ><strong>{{ loading || loadError ? "—" : overviewList.length }}</strong>
+      </div>
+      <div>
+        <span>检测有效</span
+        ><strong>{{ loading || loadError ? "—" : validCount }}</strong>
+      </div>
+      <div>
+        <span>暂不下发</span
+        ><strong>{{ loading || loadError ? "—" : blockedCount }}</strong>
+      </div>
+      <div>
+        <span>分组</span
+        ><strong>{{ loading || loadError ? "—" : groupTree.length }}</strong>
+      </div>
+    </div>
+    <div class="workbench-grid">
       <UiPanel class="group-sidebar" title="分组" :count="groupTree.length"
         ><template #actions
           ><UiButton variant="ghost" @click="openGroupManager()"
@@ -144,7 +165,7 @@ function leaveBar(element: Element, done: () => void) {
         class="node-main"
         title="节点列表"
         :count="filteredNodes.length"
-        description="名称可点开编辑；状态为面板服务器能否连上节点。"
+        description="点击节点名称编辑，勾选后可批量管理。"
         :aria-busy="loading"
       >
         <div class="node-toolbar">
@@ -236,21 +257,33 @@ function leaveBar(element: Element, done: () => void) {
         <div class="bulk-bar" role="region" aria-label="已选节点批量操作">
           <span class="mono" role="status">已选 {{ selectedCount }}</span
           ><UiButton variant="ghost" @click="clearSelection">取消选择</UiButton
-          ><UiButton @click="copySelected">复制选中</UiButton
-          ><UiButton :disabled="busy" @click="openTool('rename')">改名</UiButton
-          ><UiButton :disabled="busy" @click="openTool('flags')">开关</UiButton
-          ><UiButton :disabled="busy" @click="openTool('chain')">中转</UiButton
-          ><UiButton
-            v-if="activeGroup !== '全部'"
-            :disabled="busy"
-            @click="bulk('unbind')"
-            >移出分组</UiButton
-          ><UiButton :disabled="busy" @click="openPause(selectedNodes)"
-            >暂停下发</UiButton
-          ><UiButton :disabled="busy" @click="bulk('hide')">隐藏选中</UiButton
-          ><UiButton variant="danger" :disabled="busy" @click="bulk('delete')"
-            >删除选中</UiButton
-          >
+          ><UiButton @click="copySelected">复制选中</UiButton>
+          <details class="bulk-more">
+            <summary>更多操作</summary>
+            <div class="bulk-more-actions">
+              <UiButton :disabled="busy" @click="openTool('rename')"
+                >改名</UiButton
+              ><UiButton :disabled="busy" @click="openTool('flags')"
+                >开关</UiButton
+              ><UiButton :disabled="busy" @click="openTool('chain')"
+                >中转</UiButton
+              ><UiButton
+                v-if="activeGroup !== '全部'"
+                :disabled="busy"
+                @click="bulk('unbind')"
+                >移出分组</UiButton
+              ><UiButton :disabled="busy" @click="openPause(selectedNodes)"
+                >暂停下发</UiButton
+              ><UiButton :disabled="busy" @click="bulk('hide')"
+                >隐藏选中</UiButton
+              ><UiButton
+                variant="danger"
+                :disabled="busy"
+                @click="bulk('delete')"
+                >删除选中</UiButton
+              >
+            </div>
+          </details>
         </div>
       </div></Transition
     >
@@ -279,7 +312,7 @@ function leaveBar(element: Element, done: () => void) {
 }
 .workbench-grid {
   display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
+  grid-template-columns: 208px minmax(0, 1fr);
   gap: 12px;
   align-items: start;
 }
@@ -379,7 +412,7 @@ function leaveBar(element: Element, done: () => void) {
   padding: 10px 0;
   border-bottom: 1px solid var(--c-line);
   color: var(--c-muted);
-  font: 400 13px/1.4 var(--font-mono);
+  font: 400 12px/1.4 var(--font-ui);
 }
 .actions-heading {
   text-align: right;
@@ -505,6 +538,144 @@ function leaveBar(element: Element, done: () => void) {
   .nodes-enter-active,
   .nodes-leave-active {
     transition: none;
+  }
+}
+</style>
+
+<style scoped>
+.node-overview {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 18px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-surface);
+}
+.node-overview > div {
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-right: 1px solid var(--c-line);
+}
+.node-overview > div:last-child {
+  border-right: 0;
+}
+.node-overview span {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.node-overview strong {
+  font: 500 24px var(--font-mono);
+}
+.workbench-grid :deep(.ui-panel) {
+  box-shadow: none;
+  border-radius: 12px;
+}
+.group-sidebar {
+  background: var(--c-canvas);
+}
+.group-navigation button {
+  min-height: 40px;
+}
+.node-toolbar {
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.55fr);
+}
+.node-list {
+  position: relative;
+}
+.bulk-more {
+  position: static;
+}
+.bulk-more summary {
+  cursor: pointer;
+  font-size: 13px;
+  padding: 10px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  list-style: none;
+}
+.bulk-more summary:focus-visible {
+  outline: 2px solid var(--c-focus);
+}
+.bulk-more[open] summary {
+  color: var(--c-signal-text);
+}
+.bulk-more-actions {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  right: 0;
+  width: 300px;
+  max-width: calc(100vw - 48px);
+  padding: 12px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  box-shadow: var(--shadow-panel);
+  max-height: 50vh;
+  overflow: auto;
+}
+.bulk-bar {
+  position: relative;
+  border-radius: 12px;
+  padding: 10px 14px;
+  gap: 8px;
+  box-shadow: var(--shadow-panel);
+}
+@media (max-width: 767px) {
+  .node-overview {
+    grid-template-columns: 1fr 1fr;
+  }
+  .node-overview > div {
+    padding: 12px;
+  }
+  .node-overview > div:nth-child(2) {
+    border-right: 0;
+  }
+  .node-overview > div:nth-child(n + 3) {
+    border-top: 1px solid var(--c-line);
+  }
+  .node-overview strong {
+    font-size: 22px;
+  }
+  .node-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .group-navigation {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    max-height: none;
+    padding-bottom: 4px;
+  }
+  .group-navigation button {
+    flex-shrink: 0;
+    min-height: 44px;
+    max-width: 210px;
+  }
+  .workbench-grid {
+    gap: 12px;
+  }
+  .bulk-anchor {
+    left: 12px;
+    right: 12px;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+  }
+  .bulk-bar {
+    gap: 6px;
+    padding: 8px;
+  }
+  .bulk-bar :deep(button),
+  .bulk-more summary {
+    min-height: 44px;
+    font-size: 12px;
+    padding: 8px;
+  }
+  .nodes-workbench {
+    padding-bottom: 115px;
   }
 }
 </style>

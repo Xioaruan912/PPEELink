@@ -170,9 +170,7 @@ const {
               >检测策略…</el-dropdown-item
             >
             <el-dropdown-item command="deliver">{{
-              node.forceDeliver
-                ? "恢复按检测结果下发"
-                : "始终下发（忽略检测）"
+              node.forceDeliver ? "恢复按检测结果下发" : "始终下发（忽略检测）"
             }}</el-dropdown-item>
             <el-dropdown-item
               v-if="node.blocked?.kind === 'paused'"
@@ -372,6 +370,82 @@ const {
   }
   .row-actions {
     justify-self: end;
+  }
+}
+</style>
+
+<style scoped>
+.node-row {
+  padding: 14px 0;
+  min-height: 84px;
+}
+.node-name {
+  gap: 3px;
+}
+.node-name button {
+  font-weight: 500;
+}
+.node-name button:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
+}
+.membership {
+  font-size: 11px;
+}
+.row-protocol {
+  font-size: 11px;
+}
+.is-selected {
+  box-shadow: inset 3px 0 var(--c-signal-text);
+}
+@media (max-width: 767px) {
+  .node-row {
+    padding: 16px 12px;
+    border: 1px solid var(--c-line);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    background: var(--c-surface);
+    gap: 14px 10px;
+  }
+  .node-identity {
+    align-items: flex-start;
+  }
+  .node-name button,
+  .host,
+  .membership {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+  .node-name button {
+    font-size: 15px;
+  }
+  .membership {
+    line-height: 1.7;
+  }
+  .host {
+    font-size: 11px;
+  }
+  .row-protocol {
+    font-size: 12px;
+  }
+  .row-actions :deep(button) {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .row-visibility :deep(.el-switch) {
+    min-height: 44px;
+  }
+  .row-visibility .mobile-label,
+  .row-protocol .mobile-label {
+    font-size: 12px;
+  }
+  .node-identity :deep(.el-checkbox) {
+    min-height: 32px;
+  }
+  .node-row.is-selected {
+    border-color: var(--c-signal-text);
+    background: var(--c-selected);
   }
 }
 </style>

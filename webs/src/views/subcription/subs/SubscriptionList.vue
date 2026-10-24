@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick } from "vue";
+import { ref } from "vue";
 import {
   UiButton,
   UiPanel,
@@ -8,9 +8,9 @@ import {
   EmptyState,
   StatusDot,
 } from "@/ui";
-import { useMotion, useStagger } from "@/motion";
+import { useMotion } from "@/motion";
 import { useSubscriptions } from "./useSubscriptions";
-import { Grid, Share, View, MoreFilled } from "@element-plus/icons-vue";
+import { Grid, Share, MoreFilled } from "@element-plus/icons-vue";
 import CopyLinkButton from "./CopyLinkButton.vue";
 import RowIconButton from "@/ui/RowIconButton.vue";
 const {
@@ -35,17 +35,6 @@ const {
 } = useSubscriptions();
 const root = ref<HTMLElement>();
 const { reduced } = useMotion();
-const stagger = useStagger();
-watch(
-  () => loading.value,
-  async (value) => {
-    if (!value) {
-      await nextTick();
-      if (root.value) stagger(root.value.querySelectorAll(".subscription-row"));
-    }
-  },
-  { immediate: true }
-);
 const filters = [
   { label: "全部", value: "all" },
   { label: "有效", value: "active" },
@@ -63,17 +52,21 @@ const expired = (value: string | null) =>
       </div>
       <div>
         <span>有效</span>
-        <strong class="ok">{{ loading || loadError ? "—" : tableData.length - expiredCount }}</strong>
+        <strong class="ok">{{
+          loading || loadError ? "—" : tableData.length - expiredCount
+        }}</strong>
       </div>
       <div>
         <span>已过期</span>
-        <strong :class="{ bad: expiredCount }">{{ loading || loadError ? "—" : expiredCount }}</strong>
+        <strong :class="{ bad: expiredCount }">{{
+          loading || loadError ? "—" : expiredCount
+        }}</strong>
       </div>
     </div>
     <UiPanel
       title="订阅列表"
       :count="filteredSubs.length"
-      description="按客户端复制链接或扫码导入，点名称查看详情。"
+      description="先选择客户端，再复制链接或扫码导入。"
       flush
       data-enter
       ><template #actions
@@ -126,10 +119,6 @@ const expired = (value: string | null) =>
             ></template
           ></EmptyState
         >
-        <div v-if="filteredSubs.length" class="list-heading" aria-hidden="true">
-          <span>名称 / 状态</span><span>节点数</span><span>过期时间</span
-          ><span class="actions-heading">操作</span>
-        </div>
         <TransitionGroup
           tag="div"
           :name="reduced ? '' : 'subscription'"
@@ -139,6 +128,7 @@ const expired = (value: string | null) =>
             v-for="sub in filteredSubs"
             :key="sub.ID"
             class="subscription-row"
+            :aria-label="sub.Name"
           >
             <button
               class="name-button"
@@ -153,7 +143,7 @@ const expired = (value: string | null) =>
               /></span>
             </button>
             <div class="row-value">
-              <span class="mobile-label">节点数</span
+              <span class="mobile-label">包含节点</span
               ><span class="mono">{{
                 nodeCounts[sub.ID] ?? `${sub.Nodes.length} 固定`
               }}</span>
@@ -164,6 +154,15 @@ const expired = (value: string | null) =>
                 sub.ExpiresAt ? fmtTime(sub.ExpiresAt) : "永不过期"
               }}</time>
             </div>
+            <p class="source-summary">
+              {{
+                sub.GroupRefs?.length
+                  ? `${sub.GroupRefs.length} 个动态分组`
+                  : "固定节点来源"
+              }}<span v-if="sub.GroupRefs?.length && sub.Nodes.length">
+                · {{ sub.Nodes.length }} 个固定节点</span
+              >
+            </p>
             <div class="row-actions">
               <CopyLinkButton
                 :model-value="activeClient[sub.ID] || 'auto'"
@@ -181,11 +180,6 @@ const expired = (value: string | null) =>
                 :icon="Share"
                 :label="`分享 ${sub.Name}`"
                 @click="openImport(sub)"
-              />
-              <RowIconButton
-                :icon="View"
-                :label="`${sub.Name} 详情`"
-                @click="openDrawer(sub)"
               />
               <el-dropdown
                 trigger="click"
