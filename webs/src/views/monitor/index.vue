@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import ServerHeader from "@/components/servers/ServerHeader.vue";
 import {
   computed,
   onMounted,
@@ -14,7 +15,6 @@ import { Delete, Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   EmptyState,
-  PageHeader,
   UiButton,
   UiDialog,
   UiPanel,
@@ -371,9 +371,9 @@ async function resetToken(item: MonitorItem | null) {
 }
 </script>
 <template>
-  <div class="monitor-page">
-    <PageHeader
-      title="监控"
+  <div class="monitor-page server-experience">
+    <ServerHeader section="monitor"
+      title="监控与 Agent"
       description="独立查看服务器 CPU、内存、磁盘与网络，不依赖节点探针。"
     >
       <template #actions>
@@ -384,7 +384,7 @@ async function resetToken(item: MonitorItem | null) {
           >添加服务器</UiButton
         >
       </template>
-    </PageHeader>
+    </ServerHeader>
 
     <div class="summary-line">
       <div>
@@ -411,9 +411,6 @@ async function resetToken(item: MonitorItem | null) {
       description="点击卡片查看历史曲线与实时指标。"
       flush
     >
-      <template #actions>
-        <UiButton :icon="Plus" @click="openAdd">添加</UiButton>
-      </template>
       <UiSkeleton
         v-if="phase === 'loading'"
         class="panel-pad"
@@ -443,8 +440,9 @@ async function resetToken(item: MonitorItem | null) {
       </EmptyState>
       <div v-else class="server-grid">
         <article
-          v-for="item in items"
+          v-for="(item, index) in items"
           :key="item.id"
+          :style="{ '--server-index': index }"
           class="server-card"
           role="button"
           tabindex="0"
@@ -472,6 +470,53 @@ async function resetToken(item: MonitorItem | null) {
             </span>
           </p>
 
+          <template v-if="item.latest">
+            <div class="metric-line">
+              <span>CPU</span>
+              <b>{{ item.latest.cpuPercent.toFixed(1) }}%</b>
+            </div>
+            <div class="bar">
+              <i
+                :style="{ width: `${Math.max(2, item.latest.cpuPercent)}%` }"
+              ></i>
+            </div>
+            <div class="metric-line">
+              <span>内存</span>
+              <b
+                >{{
+                  currentPercent(item.latest.memUsed, item.latest.memTotal)
+                }}%</b
+              >
+            </div>
+            <div class="bar">
+              <i
+                :style="{
+                  width: `${Math.max(2, percent(item.latest.memUsed, item.latest.memTotal))}%`,
+                }"
+              ></i>
+            </div>
+            <div class="metric-line">
+              <span>磁盘</span>
+              <b
+                >{{
+                  currentPercent(item.latest.diskUsed, item.latest.diskTotal)
+                }}%</b
+              >
+            </div>
+            <div class="bar">
+              <i
+                :style="{
+                  width: `${Math.max(2, percent(item.latest.diskUsed, item.latest.diskTotal))}%`,
+                }"
+              ></i>
+            </div>
+            <footer class="server-foot">
+              <span>↓ {{ formatBytes(item.latest.netInSpeed) }}/s</span>
+              <span>↑ {{ formatBytes(item.latest.netOutSpeed) }}/s</span>
+              <span>{{ formatUptime(item.latest.uptime) }}</span>
+            </footer>
+          </template>
+          <p v-else class="server-empty">等待服务器首次上报…</p>
           <div
             class="agent-status"
             aria-live="polite"
@@ -527,53 +572,6 @@ async function resetToken(item: MonitorItem | null) {
               >默认关闭代理，可在代理配置中启用，无需重装。</span
             >
           </div>
-          <template v-if="item.latest">
-            <div class="metric-line">
-              <span>CPU</span>
-              <b>{{ item.latest.cpuPercent.toFixed(1) }}%</b>
-            </div>
-            <div class="bar">
-              <i
-                :style="{ width: `${Math.max(2, item.latest.cpuPercent)}%` }"
-              ></i>
-            </div>
-            <div class="metric-line">
-              <span>内存</span>
-              <b
-                >{{
-                  currentPercent(item.latest.memUsed, item.latest.memTotal)
-                }}%</b
-              >
-            </div>
-            <div class="bar">
-              <i
-                :style="{
-                  width: `${Math.max(2, percent(item.latest.memUsed, item.latest.memTotal))}%`,
-                }"
-              ></i>
-            </div>
-            <div class="metric-line">
-              <span>磁盘</span>
-              <b
-                >{{
-                  currentPercent(item.latest.diskUsed, item.latest.diskTotal)
-                }}%</b
-              >
-            </div>
-            <div class="bar">
-              <i
-                :style="{
-                  width: `${Math.max(2, percent(item.latest.diskUsed, item.latest.diskTotal))}%`,
-                }"
-              ></i>
-            </div>
-            <footer class="server-foot">
-              <span>↓ {{ formatBytes(item.latest.netInSpeed) }}/s</span>
-              <span>↑ {{ formatBytes(item.latest.netOutSpeed) }}/s</span>
-              <span>{{ formatUptime(item.latest.uptime) }}</span>
-            </footer>
-          </template>
-          <p v-else class="server-empty">等待服务器首次上报…</p>
           <p v-if="item.check" class="check-line">
             节点检测
             <b :class="{ bad: item.check.success < item.check.total }"

@@ -59,7 +59,7 @@ function createTerminal() {
     theme: {
       background: "#0f140f",
       foreground: "#d8e2ce",
-      cursor: "#9ccc3c",
+      cursor: "#73c9f4",
       selectionBackground: "rgba(156, 204, 60, 0.28)",
       black: "#1b211a",
       red: "#e06c75",
@@ -292,7 +292,7 @@ async function runCommand(command: QuickCommand) {
   background: #6b7563;
 }
 .terminal-bar .dot.is-on {
-  background: #9ccc3c;
+  background: #73c9f4;
   box-shadow: 0 0 0 3px rgba(156, 204, 60, 0.18);
 }
 .terminal-bar .spacer {
@@ -310,7 +310,7 @@ async function runCommand(command: QuickCommand) {
   font-size: 11px;
 }
 .terminal-note a {
-  color: #9ccc3c;
+  color: #73c9f4;
 }
 .command-pane {
   display: flex;

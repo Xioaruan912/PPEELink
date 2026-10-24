@@ -107,7 +107,7 @@
       </nav>
     </Transition>
     <main id="ion-content" class="ion-content" tabindex="-1">
-      <nav v-if="!locked && activeGroup" class="section-nav" :aria-label="activeGroup.label">
+      <nav v-if="!locked && activeGroup && activeGroup.label !== '服务器'" class="section-nav" :aria-label="activeGroup.label">
         <span class="section-label">{{ activeGroup.label }}</span>
         <RouterLink v-for="item in activeGroup.children" :key="item.path" :to="item.path"
           :aria-current="route.path === item.path ? 'page' : undefined"

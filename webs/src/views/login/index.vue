@@ -202,7 +202,7 @@ onMounted(() => {
   height: 60%;
   right: -10%;
   top: -15%;
-  background: #c8f03a;
+  background: #73c9f4;
   opacity: 0.55;
   animation: drift-a 18s ease-in-out infinite alternate;
 }
@@ -264,7 +264,7 @@ onMounted(() => {
 }
 .login-statement em {
   font-style: normal;
-  color: #c8f03a;
+  color: #73c9f4;
 }
 .login-statement p {
   max-width: 32ch;
