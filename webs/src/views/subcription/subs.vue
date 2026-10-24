@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Plus } from "@element-plus/icons-vue";
-import { PageHeader, UiButton } from "@/ui";
+import SubscriptionHeader from "@/components/subscriptions/SubscriptionHeader.vue";
+import { UiButton } from "@/ui";
 import { provideSubscriptions } from "./subs/useSubscriptions";
 import SubscriptionList from "./subs/SubscriptionList.vue";
 import EditorDrawer from "./subs/EditorDrawer.vue";
@@ -12,12 +13,15 @@ const { handleAddSub } = provideSubscriptions();
 </script>
 <template>
   <div class="subscriptions-page">
-    <PageHeader title="订阅" description="一份订阅，适配所有主流客户端。"
+    <SubscriptionHeader
+      section="subscriptions"
+      title="订阅管理"
+      description="管理节点来源，为设备生成对应客户端的订阅链接。"
       ><template #actions
         ><UiButton variant="primary" :icon="Plus" @click="handleAddSub"
           >新建订阅</UiButton
         ></template
-      ></PageHeader
+      ></SubscriptionHeader
     >
     <SubscriptionList />
     <EditorDrawer /><DetailDrawer /><ShareDialogs /><ConfirmDialog />
