@@ -4,6 +4,7 @@ import IconShuffle from "~icons/ph/shuffle";
 import IconCheck from "~icons/ph/seal-check";
 import {
   checkRealityTarget,
+  getProxyEgressOptions,
   saveProxyInbound,
   type ProxyInbound,
   type TargetCheck,
@@ -25,22 +26,52 @@ const targets = [
 const randomPort = () => 20000 + Math.floor(Math.random() * 30000);
 const blank = () => ({
   id: 0,
+  egressNodeId: 0,
   remark: "Reality",
   template: "vless-reality-vision" as ProxyInbound["template"],
   port: randomPort(),
   target: "www.apple.com:443",
+  tlsCertFile: "",
+  tlsKeyFile: "",
   sni: "www.apple.com",
   path: "",
   enabled: true,
   regenerateKey: false,
 });
 const form = reactive(blank());
+watch(
+  () => form.template,
+  (template) => {
+    if (template === "hysteria2" && props.inbound?.template !== "hysteria2") {
+      if (form.sni === "www.apple.com") form.sni = "";
+      if (form.remark === "Reality") form.remark = "Hysteria2";
+    }
+  }
+);
 const saving = ref(false);
+const exitOptions = ref<{ id: number; name: string }[]>([]);
+const exitError = ref("");
+let exitRequest = 0;
+async function loadExitOptions() {
+  const request = ++exitRequest;
+  exitError.value = "";
+  try {
+    const response = await getProxyEgressOptions();
+    if (request === exitRequest && visible.value)
+      exitOptions.value = response.data;
+  } catch {
+    if (request === exitRequest) exitError.value = "出口节点加载失败";
+  }
+}
 const error = ref("");
 const check = ref<TargetCheck | null>(null);
 const checking = ref(false);
 watch(visible, (open) => {
-  if (!open) return;
+  if (!open) {
+    exitRequest++;
+    return;
+  }
+  loadExitOptions();
   error.value = "";
   check.value = null;
   Object.assign(
@@ -93,15 +124,18 @@ async function save() {
           v-model="form.template"
           label="协议模板"
           :options="[
-            { label: 'VLESS Reality Vision', value: 'vless-reality-vision' },
-            { label: 'VLESS XHTTP Reality', value: 'vless-xhttp-reality' },
+            { label: 'Reality Vision', value: 'vless-reality-vision' },
+            { label: 'XHTTP Reality', value: 'vless-xhttp-reality' },
+            { label: 'Hysteria2', value: 'hysteria2' },
           ]"
         />
         <p class="hint">
           {{
-            form.template === "vless-reality-vision"
-              ? "兼容性最好，Clash Meta、Shadowrocket、sing-box 等主流客户端都支持。"
-              : "XHTTP 可走 CDN 与多路复用，需要较新的客户端（Xray 内核 / mihomo 新版）。"
+            form.template === "hysteria2"
+              ? "使用 UDP 与 TLS 证书；支持 Hysteria2 的客户端可导入。证书文件须已存在于目标服务器。"
+              : form.template === "vless-reality-vision"
+                ? "兼容性最好，Clash Meta、Shadowrocket、sing-box 等主流客户端都支持。"
+                : "XHTTP 可走 CDN 与多路复用，需要较新的客户端（Xray 内核 / mihomo 新版）。"
           }}
         </p>
       </el-form-item>
@@ -126,7 +160,10 @@ async function save() {
           </div>
         </el-form-item>
       </div>
-      <el-form-item label="伪装目标（Reality target）">
+      <el-form-item
+        v-if="form.template !== 'hysteria2'"
+        label="伪装目标（Reality target）"
+      >
         <el-input
           v-model="form.target"
           placeholder="www.apple.com:443"
@@ -148,11 +185,15 @@ async function save() {
       <el-form-item label="SNI（客户端握手用的域名）">
         <el-input
           v-model="form.sni"
-          placeholder="默认与伪装目标相同"
+          :placeholder="
+            form.template === 'hysteria2'
+              ? '证书对应域名，如 proxy.example.com'
+              : '默认与伪装目标相同'
+          "
           @input="check = null"
         />
       </el-form-item>
-      <div class="check-row">
+      <div v-if="form.template !== 'hysteria2'" class="check-row">
         <UiButton :icon="IconCheck" :loading="checking" @click="runCheck"
           >检测伪装目标</UiButton
         >
@@ -166,7 +207,7 @@ async function save() {
           </span>
         </Transition>
       </div>
-      <p class="hint">
+      <p v-if="form.template !== 'hysteria2'" class="hint">
         检测在面板所在机器上进行；同一站点在不同地区表现可能不同，保存后若节点不通，换一个目标再试。
       </p>
       <el-form-item
@@ -175,9 +216,40 @@ async function save() {
       >
         <el-input v-model="form.path" placeholder="留空自动生成随机路径" />
       </el-form-item>
+      <template v-if="form.template === 'hysteria2'">
+        <el-form-item label="证书文件路径" required
+          ><el-input
+            v-model="form.tlsCertFile"
+            placeholder="/etc/ssl/proxy/fullchain.pem"
+        /></el-form-item>
+        <el-form-item label="私钥文件路径" required
+          ><el-input
+            v-model="form.tlsKeyFile"
+            placeholder="/etc/ssl/proxy/privkey.pem"
+        /></el-form-item>
+        <p class="hint">
+          SNI 填写证书对应域名。请先放行所选 UDP 端口；证书内容不会上传到面板。
+        </p>
+      </template>
+      <el-form-item label="服务端出口">
+        <el-select v-model="form.egressNodeId" filterable style="width: 100%"
+          ><el-option :value="0" label="当前服务器直接访问" /><el-option
+            v-for="item in exitOptions"
+            :key="item.id"
+            :value="item.id"
+            :label="item.name"
+        /></el-select>
+        <p class="hint">
+          选择节点后，此入口的 TCP / UDP 流量都经由该落地。首版支持 VLESS
+          Reality TCP / XHTTP；出口失效时不会改为直连。保存前需升级 Agent。
+        </p>
+        <p v-if="exitError" class="error">
+          {{ exitError }} <UiButton @click="loadExitOptions">重试</UiButton>
+        </p>
+      </el-form-item>
       <div class="switches">
         <label><el-switch v-model="form.enabled" /> 启用</label>
-        <label v-if="form.id"
+        <label v-if="form.id && form.template !== 'hysteria2'"
           ><el-switch v-model="form.regenerateKey" />
           重新生成密钥（所有客户端需更新订阅）</label
         >

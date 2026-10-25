@@ -120,6 +120,7 @@ type websiteIdentity struct{ tag, password string }
 // acknowledged by its reporting endpoint (and persist them if crash durability
 // is required). Domain attribution is exact requested host, not eTLD+1.
 type WebsiteCollector struct {
+	egress       map[string]*egressBridge
 	listener     net.Listener
 	identities   map[string]websiteIdentity
 	stats        *websiteCounters
@@ -166,6 +167,23 @@ func newWebsiteCollector(spec Spec, stats *websiteCounters) (*WebsiteCollector, 
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &WebsiteCollector{listener: ln, identities: identities, stats: stats, seconds: seconds, blockPrivate: spec.BlockPrivate, ctx: ctx, cancel: cancel, connections: make(map[io.Closer]struct{}), sessions: make(chan struct{}, websiteMaxSessions), udpSockets: make(chan struct{}, 1024)}
+	c.egress = make(map[string]*egressBridge)
+	for _, in := range spec.Inbounds {
+		if in.Egress != nil {
+			if err := in.Egress.Validate(); err != nil {
+				ln.Close()
+				cancel()
+				return nil, err
+			}
+			b, err := newEgressBridge()
+			if err != nil {
+				ln.Close()
+				cancel()
+				return nil, err
+			}
+			c.egress[in.Tag] = b
+		}
+	}
 	c.wg.Add(1)
 	go c.accept()
 	return c, nil
@@ -398,7 +416,7 @@ func websitePrivateIP(ip net.IP) bool {
 	}
 	return false
 }
-func (c *WebsiteCollector) dial(network, host string, port int) (net.Conn, error) {
+func (c *WebsiteCollector) dialFor(tag, network, host string, port int) (net.Conn, error) {
 	ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
 	defer cancel()
 	addrs, err := c.resolve(ctx, host, port)
@@ -407,7 +425,13 @@ func (c *WebsiteCollector) dial(network, host string, port int) (net.Conn, error
 	}
 	var last error
 	for _, addr := range addrs {
-		conn, err := (&net.Dialer{}).DialContext(ctx, network, addr)
+		var conn net.Conn
+		var err error
+		if bridge := c.egress[tag]; bridge != nil {
+			conn, err = bridge.dial(ctx, network, addr)
+		} else {
+			conn, err = (&net.Dialer{}).DialContext(ctx, network, addr)
+		}
 		if err == nil {
 			return conn, nil
 		}
@@ -416,7 +440,7 @@ func (c *WebsiteCollector) dial(network, host string, port int) (net.Conn, error
 	return nil, last
 }
 func (c *WebsiteCollector) tcp(client net.Conn, tag, host string, port int) {
-	remote, err := c.dial("tcp", host, port)
+	remote, err := c.dialFor(tag, "tcp", host, port)
 	if err != nil {
 		_ = websiteReply(client, 2, nil)
 		return
@@ -563,7 +587,7 @@ func (c *WebsiteCollector) udp(control net.Conn, tag, requestedHost string, requ
 			default:
 				continue
 			}
-			remote, err := c.dial("udp", host, port)
+			remote, err := c.dialFor(tag, "udp", host, port)
 			if err != nil {
 				<-c.udpSockets
 				continue
@@ -648,4 +672,8 @@ func (c *WebsiteCollector) configOutbounds() ([]any, []any) {
 		rules = append(rules, map[string]any{"inboundTag": []string{id.tag}, "outboundTag": tag})
 	}
 	return out, rules
+}
+
+func (c *WebsiteCollector) dial(network, host string, port int) (net.Conn, error) {
+	return c.dialFor("", network, host, port)
 }

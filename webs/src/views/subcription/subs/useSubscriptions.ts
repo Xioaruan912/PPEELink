@@ -52,7 +52,13 @@ interface GroupRef {
   Name: string;
   NodeCount: number;
 }
+export interface AppRule {
+  platform: "desktop" | "android";
+  app: string;
+  target: string;
+}
 interface Config {
+  appRules?: AppRule[];
   clash: string;
   surge: string;
   loon: string;
@@ -94,9 +100,11 @@ export function createSubscriptions() {
   const loonMode = ref("1");
   const SubTitle = ref("");
   const Subname = ref("");
-  const oldSubname = ref("");  const dialogVisible = ref(false);
+  const oldSubname = ref("");
+  const dialogVisible = ref(false);
   const NodesList = ref<Node[]>([]);
   const value1 = ref<string[]>([]);
+  const appRules = ref<AppRule[]>([]);
   const allGroups = ref<GroupRef[]>([]);
   const selectedGroups = ref<number[]>([]);
   const openedNodeGroups = ref<string[]>([]);
@@ -520,6 +528,7 @@ export function createSubscriptions() {
         udp: udpOn.value,
         cert: certOn.value,
         proxyProvider: providerOn.value,
+        appRules: appRules.value,
       });
       const groupStr = selectedGroups.value.join(",");
       if (SubTitle.value === "添加订阅") {
@@ -557,6 +566,7 @@ export function createSubscriptions() {
     udpOn.value = false;
     certOn.value = false;
     providerOn.value = false;
+    appRules.value = [];
     Clash.value = "./template/clash.yaml";
     Surge.value = "./template/surge.conf";
     Loon.value = "./template/loon.conf";
@@ -580,6 +590,7 @@ export function createSubscriptions() {
         udp: !!c.udp,
         cert: !!c.cert,
         proxyProvider: !!c.proxyProvider,
+        appRules: Array.isArray(c.appRules) ? c.appRules : [],
       };
     } catch {
       return { clash: "", surge: "", loon: "", udp: false, cert: false };
@@ -595,6 +606,7 @@ export function createSubscriptions() {
     udpOn.value = !!config.udp;
     certOn.value = !!config.cert;
     providerOn.value = !!config.proxyProvider;
+    appRules.value = (config.appRules || []).map((rule) => ({ ...rule }));
     Clash.value = config.clash;
     Surge.value = config.surge;
     Loon.value = config.loon;
@@ -899,6 +911,7 @@ export function createSubscriptions() {
     editorSection,
     addSubs: withFeedback(addSubs),
     handleAddSub,
+    appRules,
     parseConfig,
     handleEdit,
     removeNode,

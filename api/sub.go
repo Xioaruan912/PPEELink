@@ -3,7 +3,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"ppeelink/node"
 
 	"strconv"
 	"strings"
@@ -130,6 +132,15 @@ func SubPreviewNodes(c *gin.Context) {
 func SubAdd(c *gin.Context) {
 	name := c.PostForm("name")
 	configs := c.PostForm("config")
+	var appConfig node.SqlConfig
+	if err := json.Unmarshal([]byte(configs), &appConfig); configs != "" && err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "订阅配置格式无效"})
+		return
+	}
+	if err := node.ValidateAppRules(appConfig.AppRules); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
+	}
 	nodes := c.PostForm("nodes")
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
@@ -203,6 +214,15 @@ func SubUpdate(c *gin.Context) {
 	NewName := c.PostForm("name")
 	OldName := c.PostForm("oldname")
 	configs := c.PostForm("config")
+	var appConfig node.SqlConfig
+	if err := json.Unmarshal([]byte(configs), &appConfig); configs != "" && err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "订阅配置格式无效"})
+		return
+	}
+	if err := node.ValidateAppRules(appConfig.AppRules); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
+	}
 	nodes := c.PostForm("nodes")
 	groups := c.PostForm("groups")
 	pipeline := c.PostForm("pipeline")
