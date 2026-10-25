@@ -30,7 +30,7 @@ Files: subscription SqlConfig, client rendering and subscription editor; focused
 - [x] Run focused tests and review diff.
 ## Integration
 - [x] Full Go tests, frontend typecheck/build/tests.
-- [ ] Release and verify production assets/API after final build.
+- [x] Release and verify production assets/API after final build.
 
 ## Implementation and verification notes (2026-10-25)
 - Application rules live in subscription configuration so both Mihomo and sing-box outputs share the same ordered rules. Supported desktop processes and Android packages; iOS is explicitly excluded.
@@ -40,3 +40,5 @@ Files: subscription SqlConfig, client rendering and subscription editor; focused
 - Browser fixture rendered actual components. Desktop HY2 certificate form checked. At 390px iframe width, app rules use one column and body scrollWidth equals clientWidth; moving a rule changes order. Mobile screenshot API timed out, so this portion used DOM geometry and accessibility evidence.
 - Requested helper agents could not run due quota. Implementation and final diff review were completed by the primary agent; no independent review is claimed.
 - Production listeners and routing remain unchanged until configured by the administrator. Hysteria requires valid TLS certificate/key paths on the target host and reachable UDP port.
+
+Release completed: 2026.10.25-0857509; all five Agents upgraded and capability reports verified. Four enabled proxies running. HTTPS assets, schema and egress-options API verified.
