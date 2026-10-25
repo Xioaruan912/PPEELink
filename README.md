@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="webs/src/assets/logo.png" width="150" height="150" alt="PPEELink Logo" />
+  <img src="webs/src/assets/logo.svg" width="150" height="150" alt="PPEELink Logo" />
   <h1>PPEELink</h1>
   <p><strong>代理订阅管理、规则调试、节点质量分析与安全发布平台</strong></p>
   <p>不只是生成订阅，而是在发布前告诉你：配置会怎么走、节点能不能用、目标客户端是否兼容，以及这次修改是否值得上线。</p>
@@ -306,7 +306,7 @@ PPEELink 使用 `with_utls` 与 `with_quic` 编译标签，以支持 Reality、H
 
 ```bash
 curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
-  https://raw.githubusercontent.com/Xioaruan912/SubL/main/install.sh | sudo bash
+  https://raw.githubusercontent.com/Xioaruan912/PPEELink/main/install.sh | sudo bash
 ```
 
 需要：

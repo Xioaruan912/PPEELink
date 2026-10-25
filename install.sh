@@ -2,7 +2,7 @@
 set -e
 
 # 仓库信息（二开仓库）
-REPO="Xioaruan912/SubL"
+REPO="Xioaruan912/PPEELink"
 REPO_URL="https://github.com/${REPO}.git"
 REPO_RAW="https://raw.githubusercontent.com/${REPO}/main"
 

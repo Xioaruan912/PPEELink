@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="webs/src/assets/logo.png" width="150" height="150" alt="PPEELink Logo" />
+  <img src="webs/src/assets/logo.svg" width="150" height="150" alt="PPEELink Logo" />
   <h1>PPEELink</h1>
   <p><strong>Proxy subscription management, routing diagnostics, node quality analytics, and safe publishing.</strong></p>
   <p>PPEELink does more than generate subscriptions: it explains how traffic will route, verifies whether nodes really work, checks client compatibility, and decides whether a configuration is safe to publish.</p>
@@ -189,7 +189,7 @@ PPEELink is built with `with_utls` and `with_quic` for Reality, Hysteria2, TUIC,
 
 ```bash
 curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" \
-  https://raw.githubusercontent.com/Xioaruan912/SubL/main/install.sh | sudo bash
+  https://raw.githubusercontent.com/Xioaruan912/PPEELink/main/install.sh | sudo bash
 ```
 
 Requirements:
