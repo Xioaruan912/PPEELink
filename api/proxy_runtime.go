@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"ppeelink/models"
@@ -77,6 +78,9 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		users = append(users, xraycore.UserSpec{Email: a.Email(), UUID: a.UUID})
 	}
 	for _, in := range inbounds {
+		if in.TLSMode == "auto" && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 2 {
+			return spec, fmt.Errorf("请先升级 Agent 以支持自动证书")
+		}
 		if (in.EgressNodeID > 0 || in.Template == xraycore.TemplateHysteria2) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 1 {
 			return spec, fmt.Errorf("请先升级此服务器 Agent 以支持新增代理功能")
 		}
@@ -85,7 +89,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 			return spec, err
 		}
 		spec.Inbounds = append(spec.Inbounds, xraycore.InboundSpec{
-			Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
+			TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
 			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Users: users, TLSCertFile: in.TLSCertFile, TLSKeyFile: in.TLSKeyFile,
 		})
 	}
@@ -120,11 +124,19 @@ func resetDueAccounts(tx *gorm.DB, now time.Time) {
 	}
 }
 
+var pendingCertificateNodeSync atomic.Bool
+
 // ApplyServerReport 记录服务器回报：运行状态、流量增量、在线 IP，并执行设备数限制。
 func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error {
 	now := time.Now()
 	day := now.Format("2006-01-02")
-	return models.DB.Transaction(func(tx *gorm.DB) error {
+	certChanged := false
+	err := models.DB.Transaction(func(tx *gorm.DB) error {
+		var certErr error
+		certChanged, certErr = applyCertificateReports(tx, server.ID, report)
+		if certErr != nil {
+			return certErr
+		}
 		updates := map[string]any{
 			"proxy_features": report.ProxyFeatures, "running": report.Running, "last_error": report.Error, "last_seen_at": now,
 			"xray_ver": report.XrayVersion, "agent_version": report.AgentVersion, "arch": report.Arch, "applied_rev": report.Rev,
@@ -164,6 +176,20 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if certChanged {
+		pendingCertificateNodeSync.Store(true)
+	}
+	if pendingCertificateNodeSync.Swap(false) {
+		// Traffic is already committed; never make the Agent replay its deltas.
+		if err := SyncSelfHostedNodes(); err != nil {
+			pendingCertificateNodeSync.Store(true)
+			log.Printf("[xray] 同步自动证书节点失败: %v", err)
+		}
+	}
+	return nil
 }
 
 // applyAgentMonitor 把同一个 agent 上报的服务器指标写入监控表。
@@ -333,7 +359,16 @@ func NotifyProxyChanged() {
 // InboundLink 账户在某入站上的 VLESS 分享链接。
 func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.ProxyAccount, name string) string {
 	if in.Template == xraycore.TemplateHysteria2 {
-		return node.EncodeHY2URL(node.HY2{Name: name, Password: acc.UUID, Host: server.PublicHost, Port: in.Port, Sni: in.SNI})
+		hy := node.HY2{Name: name, Password: acc.UUID, Host: server.PublicHost, Port: in.Port, Sni: in.SNI}
+		if in.TLSMode == "auto" {
+			if in.TLSCertificate == "" || in.TLSFingerprint == "" {
+				return ""
+			}
+			hy.PinSHA256 = in.TLSFingerprint
+			hy.Certificate = in.TLSCertificate
+			hy.Insecure = 1
+		}
+		return node.EncodeHY2URL(hy)
 	}
 
 	q := node.VLESSQuery{
@@ -363,8 +398,12 @@ func serverNodes(s models.ProxyServer, acc models.ProxyAccount) []models.Node {
 	nodes := make([]models.Node, 0, len(inbounds))
 	for _, in := range inbounds {
 		name := inboundName(s, in)
+		link := InboundLink(s, in, acc, name)
+		if link == "" {
+			continue
+		}
 		nodes = append(nodes, models.Node{
-			Name: name, Link: InboundLink(s, in, acc, name),
+			Name: name, Link: link,
 			ProbePolicy: "any", Source: selfHostedSource,
 		})
 	}

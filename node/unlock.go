@@ -381,14 +381,12 @@ func buildOutboundConfig(link string) (string, string, error) {
 		if err != nil {
 			return "", "", err
 		}
-		tls := fmt.Sprintf(`, "tls": {"enabled": true, "server_name": %q, "insecure": true}`, hy2.Sni)
-		return fmt.Sprintf(`{
-  "type": "hysteria2",
-  "tag": "proxy",
-  "server": %q,
-  "server_port": %d,
-  "password": %q%s
-}`, hy2.Host, hy2.Port, hy2.Password, tls), hy2.Name, nil
+		tlsConfig, err := hy2TLS(hy2)
+		if err != nil {
+			return "", "", err
+		}
+		out, err := json.Marshal(map[string]any{"type": "hysteria2", "tag": "proxy", "server": hy2.Host, "server_port": hy2.Port, "password": hy2.Password, "tls": tlsConfig})
+		return string(out), hy2.Name, err
 	case "tuic":
 		tuic, err := DecodeTuicURL(link)
 		if err != nil {

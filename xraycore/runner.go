@@ -17,6 +17,7 @@ import (
 // Runner 管理一台机器上的 xray 进程。有 systemd 且以 root 运行时托管为独立服务
 // （面板或 agent 重启不会断开用户连接），否则作为子进程运行。
 type Runner struct {
+	certificates map[string]string
 	Dir          string
 	Unit         string // systemd 服务名
 	mu           sync.Mutex
@@ -72,6 +73,12 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 		r.lastErr = err.Error()
 		return err
 	}
+	prepared, certificates, err := prepareAutoTLS(r.Dir, spec)
+	if err != nil {
+		r.lastErr = err.Error()
+		return err
+	}
+	spec = prepared
 	var nextWebsite *WebsiteCollector
 	if spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled {
 		if r.websiteStats == nil {
@@ -113,6 +120,7 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 	}
 	r.stopWebsiteLocked()
 	r.website = nextWebsite
+	r.certificates = certificates
 	committed = true
 	r.rev, r.apiPort, r.lastErr = rev, spec.APIPort, ""
 	return nil

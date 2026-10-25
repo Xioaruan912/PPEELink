@@ -1,14 +1,18 @@
 package node
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net"
 	"net/url"
+	"ppeelink/certpin"
 	"strconv"
 	"strings"
 )
 
 type HY2 struct {
+	PinSHA256    string
+	Certificate  string
 	Password     string
 	Host         string
 	Port         int
@@ -55,6 +59,10 @@ func EncodeHY2URL(hy2 HY2) string {
 	q := u.Query()
 	q.Set("insecure", strconv.Itoa(hy2.Insecure))
 	q.Set("sni", hy2.Sni)
+	q.Set("pinSHA256", hy2.PinSHA256)
+	if hy2.Certificate != "" {
+		q.Set("subl-cert", base64.RawURLEncoding.EncodeToString([]byte(hy2.Certificate)))
+	}
 	q.Set("alpn", strings.Join(hy2.ALPN, ","))
 	q.Set("obfs", hy2.Obfs)
 	q.Set("obfs-password", hy2.ObfsPassword)
@@ -82,6 +90,27 @@ func DecodeHY2URL(s string) (HY2, error) {
 	}
 	if u.Scheme != "hy2" && u.Scheme != "hysteria2" {
 		return HY2{}, fmt.Errorf("非hy2协议: %s", s)
+	}
+	pin := u.Query().Get("pinSHA256")
+	var certificate string
+	if pin != "" {
+		pin, err = certpin.Normalize(pin)
+		if err != nil {
+			return HY2{}, err
+		}
+	}
+	if encoded := u.Query().Get("subl-cert"); encoded != "" {
+		if len(encoded) > 12000 {
+			return HY2{}, fmt.Errorf("公有证书过大")
+		}
+		raw, e := base64.RawURLEncoding.DecodeString(encoded)
+		if e != nil {
+			return HY2{}, fmt.Errorf("公有证书编码无效")
+		}
+		certificate = string(raw)
+		if e = certpin.Validate(certificate, pin, u.Query().Get("sni")); e != nil {
+			return HY2{}, e
+		}
 	}
 	password := u.User.Username()
 	server := u.Hostname()
@@ -118,6 +147,7 @@ func DecodeHY2URL(s string) (HY2, error) {
 		fmt.Println("name:", name)
 	}
 	return HY2{
+		PinSHA256: pin, Certificate: certificate,
 		Password:     password,
 		Host:         server,
 		Port:         port,

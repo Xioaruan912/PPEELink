@@ -132,6 +132,10 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 				log.Println(err)
 				continue
 			}
+			if h.PinSHA256 != "" {
+				continue
+			} // Unsupported pinning must never become insecure output.
+
 			p := fmt.Sprintf("%s = Hysteria2,%s,%d,\"%s\",udp=%t",
 				h.Name, h.Host, h.Port, h.Password, udp)
 			if h.Sni != "" {

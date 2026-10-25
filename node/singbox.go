@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"ppeelink/certpin"
 	"strings"
 )
 
@@ -139,7 +140,11 @@ func singboxOutbound(link string) (map[string]interface{}, string, error) {
 
 	case HY2:
 		m := map[string]interface{}{"type": "hysteria2", "server": v.Host, "server_port": v.Port, "password": v.Password}
-		m["tls"] = sbTLS(v.Sni, true, "")
+		tlsConfig, err := hy2TLS(v)
+		if err != nil {
+			return nil, "", err
+		}
+		m["tls"] = tlsConfig
 		if v.Obfs != "" {
 			m["obfs"] = map[string]interface{}{"type": "salamander", "password": v.ObfsPassword}
 		}
@@ -208,4 +213,19 @@ func defaultNonEmpty(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+func hy2TLS(v HY2) (map[string]interface{}, error) {
+	t := sbTLS(v.Sni, v.Insecure != 0, "")
+	if v.PinSHA256 != "" {
+		if v.Certificate == "" {
+			return nil, fmt.Errorf("此 HY2 节点只有证书指纹，当前 sing-box 输出需要公有证书")
+		}
+		if err := certpin.Validate(v.Certificate, v.PinSHA256, v.Sni); err != nil {
+			return nil, err
+		}
+		t["insecure"] = false
+		t["certificate"] = []string{v.Certificate}
+	}
+	return t, nil
 }

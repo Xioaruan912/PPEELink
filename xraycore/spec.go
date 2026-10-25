@@ -65,6 +65,7 @@ type MonitorSpec struct {
 }
 
 type InboundSpec struct {
+	TLSAutoID   string      `json:"tlsAutoId,omitempty"`
 	Egress      *EgressSpec `json:"egress,omitempty"`
 	TLSCertFile string      `json:"tlsCertFile,omitempty"`
 	TLSKeyFile  string      `json:"tlsKeyFile,omitempty"`
@@ -102,6 +103,7 @@ type Counter struct {
 
 // Report 服务器回报给面板的运行状态。Traffic 为自上次回报以来的增量。
 type Report struct {
+	Certificates   map[string]string      `json:"certificates,omitempty"`
 	ProxyFeatures  int                    `json:"proxyFeatures"`
 	Rev            string                 `json:"rev"`
 	XrayVersion    string                 `json:"xrayVersion"`

@@ -170,6 +170,7 @@ func clashProxyLink(typ, name, server string, port int, p map[string]interface{}
 
 	case "hysteria2", "hy2":
 		hy2 := HY2{
+			PinSHA256:    stringVal(p, "fingerprint"),
 			Password:     stringVal(p, "password"),
 			Host:         server,
 			Port:         port,

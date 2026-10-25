@@ -31,6 +31,7 @@ const blank = () => ({
   template: "vless-reality-vision" as ProxyInbound["template"],
   port: randomPort(),
   target: "www.apple.com:443",
+  tlsMode: "auto" as "auto" | "manual",
   tlsCertFile: "",
   tlsKeyFile: "",
   sni: "www.apple.com",
@@ -77,7 +78,13 @@ watch(visible, (open) => {
   Object.assign(
     form,
     blank(),
-    props.inbound ? { ...props.inbound, regenerateKey: false } : {}
+    props.inbound
+      ? {
+          ...props.inbound,
+          tlsMode: props.inbound.tlsMode === "auto" ? "auto" : "manual",
+          regenerateKey: false,
+        }
+      : {}
   );
 });
 function pickTarget(host: string) {
@@ -99,6 +106,7 @@ async function save() {
   try {
     await saveProxyInbound({
       ...form,
+      tlsMode: form.template === "hysteria2" ? form.tlsMode : "manual",
       id: form.id || undefined,
       serverId: props.serverId,
     });
@@ -132,7 +140,7 @@ async function save() {
         <p class="hint">
           {{
             form.template === "hysteria2"
-              ? "使用 UDP 与 TLS 证书；支持 Hysteria2 的客户端可导入。证书文件须已存在于目标服务器。"
+              ? "使用 UDP 传输，可自动生成证书，或选择已有域名证书。"
               : form.template === "vless-reality-vision"
                 ? "兼容性最好，Clash Meta、Shadowrocket、sing-box 等主流客户端都支持。"
                 : "XHTTP 可走 CDN 与多路复用，需要较新的客户端（Xray 内核 / mihomo 新版）。"
@@ -182,7 +190,52 @@ async function save() {
           </button>
         </div>
       </el-form-item>
-      <el-form-item label="SNI（客户端握手用的域名）">
+      <el-form-item v-if="form.template === 'hysteria2'" label="部署方式">
+        <UiSegmented
+          v-model="form.tlsMode"
+          label="部署方式"
+          :options="[
+            { label: '无域名自动部署', value: 'auto' },
+            { label: '使用已有证书', value: 'manual' },
+          ]"
+        />
+      </el-form-item>
+      <div
+        v-if="form.template === 'hysteria2' && form.tlsMode === 'auto'"
+        class="auto-tls-info"
+      >
+        <strong>服务器 IP 直连，无需域名或 Cloudflare</strong>
+        <p class="hint">
+          Agent 自动生成并保管证书，订阅携带证书指纹。服务器连接地址需填写
+          IP，并放行所选 UDP 端口。
+        </p>
+        <p class="hint">
+          推荐 Mihomo / sing-box 完整配置。官方 HY2 分享链接需使用支持 pinSHA256
+          的客户端；Surge / Loon
+          格式不下发此节点，通用链接导入需确认客户端支持指纹校验。
+        </p>
+        <p
+          v-if="
+            props.inbound?.tlsMode === 'auto' && props.inbound?.tlsFingerprint
+          "
+          class="certificate-state"
+        >
+          证书已就绪 · SHA-256<br /><code>{{
+            props.inbound.tlsFingerprint
+          }}</code>
+        </p>
+        <p v-else class="hint">
+          {{
+            form.id
+              ? "等待 Agent 部署并回传证书，完成后自动加入订阅。"
+              : "点击部署后自动加入订阅，无需填写证书路径。"
+          }}
+        </p>
+      </div>
+      <el-form-item
+        v-if="form.template !== 'hysteria2' || form.tlsMode === 'manual'"
+        label="SNI（客户端握手用的域名）"
+      >
         <el-input
           v-model="form.sni"
           :placeholder="
@@ -216,7 +269,9 @@ async function save() {
       >
         <el-input v-model="form.path" placeholder="留空自动生成随机路径" />
       </el-form-item>
-      <template v-if="form.template === 'hysteria2'">
+      <template
+        v-if="form.template === 'hysteria2' && form.tlsMode === 'manual'"
+      >
         <el-form-item label="证书文件路径" required
           ><el-input
             v-model="form.tlsCertFile"
@@ -258,13 +313,32 @@ async function save() {
     </el-form>
     <template #footer>
       <UiButton @click="visible = false">取消</UiButton>
-      <UiButton variant="primary" :loading="saving" @click="save"
-        >保存</UiButton
-      >
+      <UiButton variant="primary" :loading="saving" @click="save">{{
+        form.template === "hysteria2" && form.tlsMode === "auto" && !form.id
+          ? "部署 HY2"
+          : "保存"
+      }}</UiButton>
     </template>
   </UiDrawer>
 </template>
 <style scoped>
+.auto-tls-info {
+  padding: 14px;
+  margin-bottom: 18px;
+  background: var(--c-surface-2);
+  border-radius: 12px;
+}
+.auto-tls-info strong {
+  font-size: 14px;
+}
+.certificate-state {
+  font-size: 12px;
+  margin-top: 10px;
+}
+.certificate-state code {
+  word-break: break-all;
+  color: var(--c-muted);
+}
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
