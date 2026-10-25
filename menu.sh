@@ -1,6 +1,6 @@
 #!/bin/bash
 # 二开仓库
-REPO="Xioaruan912/SubL"
+REPO="Xioaruan912/PPEELink"
 REPO_URL="https://github.com/${REPO}.git"
 
 INSTALL_DIR="/usr/local/bin/ppeelink"
