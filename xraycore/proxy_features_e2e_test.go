@@ -280,3 +280,67 @@ func TestFeatureFixedEgressRealCore(t *testing.T) {
 		})
 	}
 }
+
+func TestFeatureAutoTLSRealCore(t *testing.T) {
+	if os.Getenv("XRAY_FEATURE_BINARY") == "" {
+		t.Skip("requires real core")
+	}
+	port := featurePort(t)
+	spec, reports, err := prepareAutoTLS(t.TempDir(), Spec{Enabled: true, APIPort: featurePort(t), Inbounds: []InboundSpec{{Tag: "auto-hy2", Template: TemplateHysteria2, Port: port, TLSAutoID: "0123456789abcdef0123456789abcdef", Users: []UserSpec{{Email: "u1", UUID: "auto-secret"}}}}})
+	if err != nil || len(reports) != 1 {
+		t.Fatalf("prepare: %v", err)
+	}
+	raw, err := BuildConfig(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg any
+	json.Unmarshal(raw, &cfg)
+	featureCore(t, cfg)
+	wrong, _, _, err := ensureAutoTLS(t.TempDir(), "abcdef0123456789abcdef0123456789")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, trust string
+		valid       bool
+	}{{"correct", spec.Inbounds[0].TLSCertFile, true}, {"wrong-certificate", wrong, false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			b, err := newEgressBridge()
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := map[string]any{"protocol": "hysteria", "settings": map[string]any{"version": 2, "address": "127.0.0.1", "port": port}, "streamSettings": map[string]any{"network": "hysteria", "security": "tls", "tlsSettings": map[string]any{"serverName": AutoTLSServerName, "certificates": []any{map[string]any{"certificateFile": tc.trust, "usage": "verify"}}}, "hysteriaSettings": map[string]any{"version": 2, "auth": "auto-secret"}}}
+			featureCore(t, map[string]any{"inbounds": []any{featureSocks(b)}, "outbounds": []any{out}})
+			if tc.valid {
+				featureEcho(t, b)
+				return
+			}
+			target, err := net.Listen("tcp4", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer target.Close()
+			accepted := make(chan bool, 1)
+			go func() {
+				c, e := target.Accept()
+				if e == nil {
+					c.Close()
+					accepted <- true
+				}
+			}()
+			c, err := b.dial(context.Background(), "tcp", target.Addr().String())
+			if err == nil {
+				defer c.Close()
+				c.SetDeadline(time.Now().Add(time.Second))
+				c.Write([]byte("must not forward"))
+				c.Read(make([]byte, 1))
+			}
+			select {
+			case <-accepted:
+				t.Fatal("incorrect certificate allowed traffic")
+			case <-time.After(150 * time.Millisecond):
+			}
+		})
+	}
+}

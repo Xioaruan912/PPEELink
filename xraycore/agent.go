@@ -78,7 +78,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		if ctx.Err() != nil {
 			return false
 		}
-		report := Report{ProxyFeatures: 1, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
+		report := Report{ProxyFeatures: 2, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
 		if err == nil && spec.Uninstall {
 			// 先收最后一轮流量，再卸载
@@ -194,6 +194,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 			report.Error = runtimeError
 		}
 		report.XrayVersion = InstalledVersion(runner.Dir)
+		report.Certificates = runner.CertificateReports()
 		if err := src.Report(ctx, report); err != nil {
 			log.Printf("[xray] 回报失败（流量将在下一轮补报）: %v", err)
 			return false

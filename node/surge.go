@@ -108,6 +108,10 @@ func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 				log.Println(err)
 				continue
 			}
+			if hy2.PinSHA256 != "" {
+				continue
+			} // Unsupported pinning must never become insecure output.
+
 			proxy := map[string]interface{}{
 				"name":             hy2.Name,
 				"server":           hy2.Host,

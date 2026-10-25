@@ -133,7 +133,11 @@ function status(s: ProxyServer) {
     : { tone: "warn" as const, text: "未运行" };
 }
 const templateLabel = (t: string) =>
-  t === "vless-xhttp-reality" ? "XHTTP Reality" : "Reality Vision";
+  t === "hysteria2"
+    ? "Hysteria2"
+    : t === "vless-xhttp-reality"
+      ? "XHTTP Reality"
+      : "Reality Vision";
 
 // ---- 服务器编辑 ----
 const serverDialog = ref(false);
@@ -341,7 +345,8 @@ const usageRatio = (a: ProxyAccount) =>
 </script>
 <template>
   <div class="servers-page server-experience">
-    <ServerHeader section="proxy"
+    <ServerHeader
+      section="proxy"
       title="自建节点"
       description="在自己的服务器上运行 xray-core，按账户发放节点、统计流量。"
     >
@@ -443,7 +448,11 @@ const usageRatio = (a: ProxyAccount) =>
                     : s.agentVersion || '尚未上报版本'
                 "
               >
-                {{ s.agentHash ? s.agentHash.slice(0, 8) : s.agentVersion || "未上报" }}
+                {{
+                  s.agentHash
+                    ? s.agentHash.slice(0, 8)
+                    : s.agentVersion || "未上报"
+                }}
               </dd>
             </div>
             <div>
@@ -475,7 +484,16 @@ const usageRatio = (a: ProxyAccount) =>
               <span class="port mono">:{{ i.port }}</span>
               <span class="in-main">
                 <strong>{{ i.remark || templateLabel(i.template) }}</strong>
-                <small>{{ templateLabel(i.template) }} · {{ i.sni }}</small>
+                <small
+                  >{{ templateLabel(i.template) }} ·
+                  {{
+                    i.tlsMode === "auto"
+                      ? i.tlsFingerprint
+                        ? "无域名 · 证书已就绪"
+                        : "无域名 · 部署中"
+                      : i.sni
+                  }}</small
+                >
               </span>
               <el-switch
                 :model-value="i.enabled"

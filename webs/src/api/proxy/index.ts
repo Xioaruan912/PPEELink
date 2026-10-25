@@ -4,6 +4,8 @@ export type InboundTemplate =
   "vless-reality-vision" | "vless-xhttp-reality" | "hysteria2";
 
 export interface ProxyInbound {
+  tlsMode?: "auto" | "manual" | "";
+  tlsFingerprint?: string;
   egressNodeId?: number;
   tlsCertFile?: string;
   tlsKeyFile?: string;

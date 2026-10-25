@@ -13,6 +13,7 @@ import (
 )
 
 type Proxy struct {
+	Fingerprint        string                 `yaml:"fingerprint,omitempty"`
 	Name               string                 `yaml:"name,omitempty"`
 	Type               string                 `yaml:"type,omitempty"`
 	Server             string                 `yaml:"server,omitempty"`
@@ -358,6 +359,7 @@ func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlC
 				hy2.Name = fmt.Sprintf("%s:%d", hy2.Host, hy2.Port)
 			}
 			hyproxy2 := Proxy{
+				Fingerprint:      hy2.PinSHA256,
 				Name:             hy2.Name,
 				Type:             "hysteria2",
 				Server:           hy2.Host,
@@ -370,6 +372,11 @@ func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlC
 				Obfs_password:    hy2.ObfsPassword,
 				Udp:              udp,
 				Skip_cert_verify: cert,
+			}
+			if hy2.PinSHA256 != "" {
+				hyproxy2.Skip_cert_verify = false
+			} else if hy2.Insecure != 0 {
+				hyproxy2.Skip_cert_verify = true
 			}
 			proxys = append(proxys, hyproxy2)
 		case Scheme == "tuic":

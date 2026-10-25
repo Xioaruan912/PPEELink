@@ -260,6 +260,7 @@ func purgeProxyServer(s models.ProxyServer) {
 // ---- 入站 ------------------------------------------------------------------
 
 type inboundSaveRequest struct {
+	TLSMode       string `json:"tlsMode"`
 	EgressNodeID  int    `json:"egressNodeId"`
 	TLSCertFile   string `json:"tlsCertFile"`
 	TLSKeyFile    string `json:"tlsKeyFile"`
@@ -318,7 +319,34 @@ func ProxyInboundSave(c *gin.Context) {
 			return
 		}
 	}
-	if req.Template == xraycore.TemplateHysteria2 {
+	if req.TLSMode != "" && req.TLSMode != "manual" && req.TLSMode != "auto" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "证书模式无效"})
+		return
+	}
+	if req.TLSMode == "auto" {
+		if req.Template != xraycore.TemplateHysteria2 || net.ParseIP(strings.Trim(server.PublicHost, "[]")) == nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": "无域名部署需选择 Hysteria2，并将服务器连接地址填写为 IP"})
+			return
+		}
+		if server.Kind == models.ServerKindAgent && server.ProxyFeatures < 2 {
+			c.JSON(400, gin.H{"code": "40000", "msg": "请先升级 Agent 以支持自动证书"})
+			return
+		}
+		if in.TLSAutoID == "" || in.ServerID != req.ServerID {
+			in.TLSAutoID = models.RandomHex(16)
+			in.TLSCertificate = ""
+			in.TLSFingerprint = ""
+		}
+		req.SNI = xraycore.AutoTLSServerName
+		req.TLSCertFile = ""
+		req.TLSKeyFile = ""
+	} else {
+		in.TLSAutoID = ""
+		in.TLSCertificate = ""
+		in.TLSFingerprint = ""
+	}
+	in.TLSMode = req.TLSMode
+	if req.Template == xraycore.TemplateHysteria2 && req.TLSMode != "auto" {
 		if err := xraycore.ValidateHysteriaTLS(strings.TrimSpace(req.SNI), req.TLSCertFile, req.TLSKeyFile); err != nil {
 			c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
 			return
