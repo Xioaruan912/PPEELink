@@ -31,6 +31,10 @@ func BuildConfigWithWebsiteCollector(spec Spec, collector *WebsiteCollector) ([]
 		"settings": map[string]any{"address": "127.0.0.1"},
 	}}
 	for _, in := range spec.Inbounds {
+		// An empty Hysteria user list must never expose an unauthenticated listener.
+		if in.Template == TemplateHysteria2 && len(in.Users) == 0 {
+			continue
+		}
 		item, err := buildInbound(in)
 		if err != nil {
 			return nil, fmt.Errorf("入站 %s: %w", in.Tag, err)
@@ -55,6 +59,11 @@ func BuildConfigWithWebsiteCollector(spec Spec, collector *WebsiteCollector) ([]
 		outbounds = append([]any{map[string]any{"tag": "direct", "protocol": "blackhole"}, map[string]any{"tag": "block", "protocol": "blackhole"}}, collected...)
 		rules = append(rules, collectedRules...)
 	}
+	var routeErr error
+	inbounds, outbounds, rules, routeErr = appendEgressConfig(spec, collector, inbounds, outbounds, rules)
+	if routeErr != nil {
+		return nil, routeErr
+	}
 	config := map[string]any{
 		"log": map[string]any{"loglevel": "warning"},
 		"api": map[string]any{
@@ -75,6 +84,9 @@ func BuildConfigWithWebsiteCollector(spec Spec, collector *WebsiteCollector) ([]
 }
 
 func buildInbound(in InboundSpec) (map[string]any, error) {
+	if in.Template == TemplateHysteria2 {
+		return buildHysteriaInbound(in)
+	}
 	if in.Port <= 0 || in.Port > 65535 {
 		return nil, fmt.Errorf("端口无效")
 	}

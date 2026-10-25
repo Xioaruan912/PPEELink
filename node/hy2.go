@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -48,11 +49,15 @@ func EncodeHY2URL(hy2 HY2) string {
 	u := url.URL{
 		Scheme:   "hy2",
 		User:     url.User(hy2.Password),
-		Host:     fmt.Sprintf("%s:%d", hy2.Host, hy2.Port),
+		Host:     net.JoinHostPort(strings.Trim(hy2.Host, "[]"), strconv.Itoa(hy2.Port)),
 		Fragment: hy2.Name,
 	}
 	q := u.Query()
 	q.Set("insecure", strconv.Itoa(hy2.Insecure))
+	q.Set("sni", hy2.Sni)
+	q.Set("alpn", strings.Join(hy2.ALPN, ","))
+	q.Set("obfs", hy2.Obfs)
+	q.Set("obfs-password", hy2.ObfsPassword)
 	q.Set("peer", hy2.Peer)
 	q.Set("auth", hy2.Auth)
 	q.Set("upmbps", strconv.Itoa(hy2.UpMbps))

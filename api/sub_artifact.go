@@ -131,6 +131,13 @@ func buildSubscriptionOutput(sub models.Subcription, client, providerBase string
 	if recorder.Code >= 400 {
 		return nil, fmt.Errorf("订阅生成失败 HTTP %d", recorder.Code)
 	}
+	var appConfig node.SqlConfig
+	if err := json.Unmarshal([]byte(sub.Config), &appConfig); err != nil {
+		return nil, err
+	}
+	if client == "clash" || client == "singbox" {
+		return node.ApplyApplicationRules(client, body, appConfig)
+	}
 	return append([]byte(nil), body...), nil
 }
 
@@ -141,8 +148,19 @@ var clientFileExt = map[string]string{
 
 func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client string) {
 	client = strings.ToLower(client)
+	var appConfig node.SqlConfig
+	_ = json.Unmarshal([]byte(sub.Config), &appConfig)
+	if len(appConfig.AppRules) > 0 && client != "clash" && client != "singbox" && client != "clash-proxies" {
+		c.String(400, "此订阅包含应用规则，请使用 Mihomo 或 sing-box 完整配置")
+		return
+	}
+
 	body, err := buildSubscriptionOutput(sub, client, baseURL(c))
 	liveValid := err == nil && validateSubscriptionContent(client, body) == nil
+	if !liveValid && len(appConfig.AppRules) > 0 {
+		c.String(502, "应用规则生成失败，请检查目标节点是否仍在订阅中")
+		return
+	}
 	if liveValid {
 		rememberGoodArtifact(sub.ID, client, body)
 	} else if artifact, lkgErr := lastKnownGoodArtifact(sub.ID, client); lkgErr == nil && len(artifact.Content) > 0 {

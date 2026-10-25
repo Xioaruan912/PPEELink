@@ -17,6 +17,7 @@ const DefaultVersion = "v26.3.27"
 const (
 	TemplateRealityVision = "vless-reality-vision"
 	TemplateXHTTPReality  = "vless-xhttp-reality"
+	TemplateHysteria2     = "hysteria2"
 )
 
 // Spec 面板下发给一台服务器的完整期望状态。
@@ -64,15 +65,18 @@ type MonitorSpec struct {
 }
 
 type InboundSpec struct {
-	Tag        string     `json:"tag"`
-	Template   string     `json:"template"`
-	Port       int        `json:"port"`
-	Target     string     `json:"target"`
-	SNI        string     `json:"sni"`
-	PrivateKey string     `json:"privateKey"`
-	ShortID    string     `json:"shortId"`
-	Path       string     `json:"path"`
-	Users      []UserSpec `json:"users"`
+	Egress      *EgressSpec `json:"egress,omitempty"`
+	TLSCertFile string      `json:"tlsCertFile,omitempty"`
+	TLSKeyFile  string      `json:"tlsKeyFile,omitempty"`
+	Tag         string      `json:"tag"`
+	Template    string      `json:"template"`
+	Port        int         `json:"port"`
+	Target      string      `json:"target"`
+	SNI         string      `json:"sni"`
+	PrivateKey  string      `json:"privateKey"`
+	ShortID     string      `json:"shortId"`
+	Path        string      `json:"path"`
+	Users       []UserSpec  `json:"users"`
 }
 
 type UserSpec struct {
@@ -98,6 +102,7 @@ type Counter struct {
 
 // Report 服务器回报给面板的运行状态。Traffic 为自上次回报以来的增量。
 type Report struct {
+	ProxyFeatures  int                    `json:"proxyFeatures"`
 	Rev            string                 `json:"rev"`
 	XrayVersion    string                 `json:"xrayVersion"`
 	AgentVersion   string                 `json:"agentVersion,omitempty"`

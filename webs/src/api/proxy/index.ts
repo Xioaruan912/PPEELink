@@ -1,8 +1,12 @@
 import request from "@/utils/request";
 
-export type InboundTemplate = "vless-reality-vision" | "vless-xhttp-reality";
+export type InboundTemplate =
+  "vless-reality-vision" | "vless-xhttp-reality" | "hysteria2";
 
 export interface ProxyInbound {
+  egressNodeId?: number;
+  tlsCertFile?: string;
+  tlsKeyFile?: string;
   id: number;
   serverId: number;
   remark: string;
@@ -164,3 +168,9 @@ export const getProxyTraffic = (days = 30) =>
   });
 export const getMySelfHosted = () =>
   request<SelfHosted>({ url: "/api/v1/my/self-hosted", method: "get" });
+
+export const getProxyEgressOptions = () =>
+  request<any, { data: { id: number; name: string }[] }>({
+    url: "/api/v1/proxy/egress-options",
+    method: "get",
+  });

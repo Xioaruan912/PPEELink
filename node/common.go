@@ -15,11 +15,12 @@ import (
 var remoteFetchClient = utils.SafeHTTPClient(20 * time.Second)
 
 type SqlConfig struct {
-	Clash string `json:"clash"`
-	Surge string `json:"surge"`
-	Loon  string `json:"loon"`
-	Udp   bool   `json:"udp"`
-	Cert  bool   `json:"cert"`
+	AppRules []AppRule `json:"appRules,omitempty"`
+	Clash    string    `json:"clash"`
+	Surge    string    `json:"surge"`
+	Loon     string    `json:"loon"`
+	Udp      bool      `json:"udp"`
+	Cert     bool      `json:"cert"`
 	// ProxyProvider 为真时 Clash 配置通过 proxy-provider 引用节点列表
 	ProxyProvider bool `json:"proxyProvider,omitempty"`
 }

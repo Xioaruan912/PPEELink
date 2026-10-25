@@ -77,9 +77,16 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		users = append(users, xraycore.UserSpec{Email: a.Email(), UUID: a.UUID})
 	}
 	for _, in := range inbounds {
+		if (in.EgressNodeID > 0 || in.Template == xraycore.TemplateHysteria2) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 1 {
+			return spec, fmt.Errorf("请先升级此服务器 Agent 以支持新增代理功能")
+		}
+		egress, err := resolveInboundEgress(in, server)
+		if err != nil {
+			return spec, err
+		}
 		spec.Inbounds = append(spec.Inbounds, xraycore.InboundSpec{
-			Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
-			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Users: users,
+			Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
+			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Users: users, TLSCertFile: in.TLSCertFile, TLSKeyFile: in.TLSKeyFile,
 		})
 	}
 	return spec, nil
@@ -119,7 +126,7 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 	day := now.Format("2006-01-02")
 	return models.DB.Transaction(func(tx *gorm.DB) error {
 		updates := map[string]any{
-			"running": report.Running, "last_error": report.Error, "last_seen_at": now,
+			"proxy_features": report.ProxyFeatures, "running": report.Running, "last_error": report.Error, "last_seen_at": now,
 			"xray_ver": report.XrayVersion, "agent_version": report.AgentVersion, "arch": report.Arch, "applied_rev": report.Rev,
 		}
 		if server.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == xraycore.ExecutableHash() {
@@ -325,6 +332,10 @@ func NotifyProxyChanged() {
 
 // InboundLink 账户在某入站上的 VLESS 分享链接。
 func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.ProxyAccount, name string) string {
+	if in.Template == xraycore.TemplateHysteria2 {
+		return node.EncodeHY2URL(node.HY2{Name: name, Password: acc.UUID, Host: server.PublicHost, Port: in.Port, Sni: in.SNI})
+	}
+
 	q := node.VLESSQuery{
 		Security: "reality", Sni: strings.Split(in.SNI, ",")[0], Fp: "chrome",
 		Sid: in.ShortID, Pbk: in.PublicKey, Encryption: "none",

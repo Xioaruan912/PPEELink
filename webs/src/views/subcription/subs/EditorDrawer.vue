@@ -3,6 +3,7 @@ import { UiDrawer, UiButton, UiSegmented, EmptyState } from "@/ui";
 import { useSubscriptions } from "./useSubscriptions";
 import TemplateFields from "./TemplateFields.vue";
 import SourceFields from "./SourceFields.vue";
+import AppRuleFields from "./AppRuleFields.vue";
 import PipelineFields from "./PipelineFields.vue";
 const {
   dialogVisible,
@@ -19,6 +20,7 @@ const sections = [
   { label: "节点来源", value: "sources" },
   { label: "模板参数", value: "templates" },
   { label: "处理流水线", value: "pipeline" },
+  { label: "应用代理", value: "apps" },
 ];
 </script>
 <template>
@@ -50,6 +52,7 @@ const sections = [
       <SourceFields v-if="editorSection === 'sources'" />
       <TemplateFields v-if="editorSection === 'templates'" />
       <PipelineFields v-if="editorSection === 'pipeline'" />
+      <AppRuleFields v-if="editorSection === 'apps'" />
     </el-form>
     <template #footer
       ><UiButton :disabled="saving" @click="dialogVisible = false"

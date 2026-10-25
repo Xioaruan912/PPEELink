@@ -260,6 +260,9 @@ func purgeProxyServer(s models.ProxyServer) {
 // ---- 入站 ------------------------------------------------------------------
 
 type inboundSaveRequest struct {
+	EgressNodeID  int    `json:"egressNodeId"`
+	TLSCertFile   string `json:"tlsCertFile"`
+	TLSKeyFile    string `json:"tlsKeyFile"`
 	ID            uint   `json:"id"`
 	ServerID      uint   `json:"serverId"`
 	Remark        string `json:"remark"`
@@ -279,7 +282,7 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "参数错误"})
 		return
 	}
-	if req.Template != xraycore.TemplateRealityVision && req.Template != xraycore.TemplateXHTTPReality {
+	if req.Template != xraycore.TemplateRealityVision && req.Template != xraycore.TemplateXHTTPReality && req.Template != xraycore.TemplateHysteria2 {
 		c.JSON(400, gin.H{"code": "40000", "msg": "未知的入站模板"})
 		return
 	}
@@ -287,7 +290,7 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "端口需在 1024 到 65535 之间"})
 		return
 	}
-	if _, _, err := net.SplitHostPort(req.Target); err != nil {
+	if _, _, err := net.SplitHostPort(req.Target); err != nil && req.Template != xraycore.TemplateHysteria2 {
 		c.JSON(400, gin.H{"code": "40000", "msg": "伪装目标需为 域名:端口，如 www.apple.com:443"})
 		return
 	}
@@ -315,15 +318,35 @@ func ProxyInboundSave(c *gin.Context) {
 			return
 		}
 	}
+	if req.Template == xraycore.TemplateHysteria2 {
+		if err := xraycore.ValidateHysteriaTLS(strings.TrimSpace(req.SNI), req.TLSCertFile, req.TLSKeyFile); err != nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+			return
+		}
+	}
+	if req.EgressNodeID < 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "出口节点无效"})
+		return
+	}
+	if (req.EgressNodeID > 0 || req.Template == xraycore.TemplateHysteria2) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 1 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级此服务器 Agent，再配置新增代理功能"})
+		return
+	}
+	in.EgressNodeID = req.EgressNodeID
+	in.TLSCertFile, in.TLSKeyFile = req.TLSCertFile, req.TLSKeyFile
 	in.ServerID, in.Remark, in.Template, in.Port = req.ServerID, strings.TrimSpace(req.Remark), req.Template, req.Port
 	in.Target, in.SNI, in.Path, in.Enabled = req.Target, strings.TrimSpace(req.SNI), req.Path, req.Enabled
-	if in.PrivateKey == "" || req.RegenerateKey {
+	if in.Template != xraycore.TemplateHysteria2 && (in.PrivateKey == "" || req.RegenerateKey) {
 		priv, pub, err := xraycore.GenerateRealityKeys()
 		if err != nil {
 			c.JSON(500, gin.H{"code": "50000", "msg": "生成密钥失败"})
 			return
 		}
 		in.PrivateKey, in.PublicKey, in.ShortID = priv, pub, models.RandomHex(4)
+	}
+	if _, err := resolveInboundEgress(in, server); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
 	}
 	if err := models.DB.Save(&in).Error; err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "保存失败"})
