@@ -78,6 +78,9 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		users = append(users, xraycore.UserSpec{Email: a.Email(), UUID: a.UUID})
 	}
 	for _, in := range inbounds {
+		if needsCategoryCapability(in.DomainRoutes) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 4 {
+			return spec, fmt.Errorf("请先升级 Agent 以支持网站分类")
+		}
 		if len(in.DomainRoutes) > 0 && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 3 {
 			return spec, fmt.Errorf("请先升级 Agent 以支持网站分流")
 		}

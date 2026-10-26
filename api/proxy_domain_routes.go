@@ -15,12 +15,18 @@ func normalizeInboundDomainRoutes(rules []models.DomainRoute) ([]models.DomainRo
 	seen := map[string]bool{}
 	for i := range out {
 		r := &out[i]
-		d, e := xraycore.NormalizeRouteDomain(r.Domain)
+		var d string
+		var e error
+		if r.Match == "category" {
+			d, e = xraycore.NormalizeRouteCategory(r.Domain)
+		} else {
+			d, e = xraycore.NormalizeRouteDomain(r.Domain)
+		}
 		if e != nil {
 			return nil, fmt.Errorf("第 %d 条分流规则：%w", i+1, e)
 		}
 		r.Domain = d
-		if r.Match != "exact" && r.Match != "suffix" || r.EgressNodeID < 0 {
+		if r.Match != "exact" && r.Match != "suffix" && r.Match != "category" || r.EgressNodeID < 0 {
 			return nil, fmt.Errorf("第 %d 条分流规则参数无效", i+1)
 		}
 		key := r.Match + ":" + r.Domain
@@ -120,4 +126,13 @@ func resolveInboundRoutes(in models.ProxyInbound, server models.ProxyServer) (*x
 		routes = append(routes, xraycore.DomainRouteSpec{Domain: r.Domain, Match: r.Match, Egress: cache[r.EgressNodeID]})
 	}
 	return cache[in.EgressNodeID], routes, nil
+}
+
+func needsCategoryCapability(rules []models.DomainRoute) bool {
+	for _, rule := range rules {
+		if rule.Match == "category" {
+			return true
+		}
+	}
+	return false
 }

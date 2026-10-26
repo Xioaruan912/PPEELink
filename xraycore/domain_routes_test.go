@@ -58,3 +58,36 @@ func TestDomainRoutesConfigOrderingAndMetering(t *testing.T) {
 		}
 	}
 }
+
+func TestCategoryDomainRoutes(t *testing.T) {
+	if value, err := NormalizeRouteCategory(" GOOGLE "); err != nil || value != "google" {
+		t.Fatalf("normalization: %q %v", value, err)
+	}
+	for _, bad := range []string{"../../secret", "other", "google@ads", "geosite:google", ""} {
+		if _, err := NormalizeRouteCategory(bad); err == nil {
+			t.Fatalf("accepted %q", bad)
+		}
+	}
+	r := DomainRouteSpec{Match: "category", Domain: "google"}
+	p, err := r.domainPattern()
+	if err != nil || p != "geosite:google" {
+		t.Fatalf("category pattern %q %v", p, err)
+	}
+	s := websiteTestSpec()
+	s.Inbounds[0].DomainRoutes = []DomainRouteSpec{{Match: "exact", Domain: "google.com"}, r}
+	for _, metered := range []bool{false, true} {
+		var c *WebsiteCollector
+		s.WebsiteTraffic = nil
+		if metered {
+			s.WebsiteTraffic = &WebsiteTrafficSpec{Enabled: true}
+			c = websiteTestCollector(t, s)
+		}
+		raw, err := BuildConfigWithWebsiteCollector(s, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), "geosite:google") || strings.Index(string(raw), "full:google.com") > strings.Index(string(raw), "geosite:google") {
+			t.Fatal("category order changed")
+		}
+	}
+}

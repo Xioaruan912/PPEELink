@@ -5,7 +5,7 @@ export type InboundTemplate =
 
 export interface DomainRoute {
   domain: string;
-  match: "exact" | "suffix";
+  match: "exact" | "suffix" | "category";
   egressNodeId: number;
 }
 export interface ProxyInbound {

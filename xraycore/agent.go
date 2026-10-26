@@ -78,7 +78,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		if ctx.Err() != nil {
 			return false
 		}
-		report := Report{ProxyFeatures: 3, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
+		report := Report{ProxyFeatures: 4, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
 		if err == nil && spec.Uninstall {
 			// 先收最后一轮流量，再卸载
