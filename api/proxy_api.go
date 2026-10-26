@@ -365,6 +365,10 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级 Agent 以支持网站分流"})
 		return
 	}
+	if needsCategoryCapability(req.DomainRoutes) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 4 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级 Agent 以支持网站分类"})
+		return
+	}
 	domainRoutes, routeErr := normalizeInboundDomainRoutes(req.DomainRoutes)
 	if routeErr != nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": routeErr.Error()})

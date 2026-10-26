@@ -32,7 +32,24 @@ func NormalizeRouteDomain(value string) (string, error) {
 	}
 	return host, nil
 }
+
+var routeCategories = map[string]bool{"google": true, "youtube": true, "netflix": true, "openai": true, "telegram": true, "github": true, "microsoft": true, "apple": true, "cn": true, "geolocation-!cn": true}
+
+func NormalizeRouteCategory(value string) (string, error) {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if !routeCategories[value] {
+		return "", fmt.Errorf("网站分类不存在或不受支持")
+	}
+	return value, nil
+}
 func (r DomainRouteSpec) domainPattern() (string, error) {
+	if r.Match == "category" {
+		category, err := NormalizeRouteCategory(r.Domain)
+		if err != nil {
+			return "", err
+		}
+		return "geosite:" + category, nil
+	}
 	domain, err := NormalizeRouteDomain(r.Domain)
 	if err != nil {
 		return "", err

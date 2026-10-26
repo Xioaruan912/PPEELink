@@ -103,3 +103,22 @@ func TestDomainRouteSaveAndRemove(t *testing.T) {
 		t.Fatal("removed rules retained")
 	}
 }
+
+func TestCategoryRouteCapability(t *testing.T) {
+	server, in := setupProxyDB(t)
+	server.ProxyFeatures = 3
+	in.DomainRoutes = []models.DomainRoute{{Domain: " GOOGLE ", Match: "category"}}
+	normalized, err := normalizeInboundDomainRoutes(in.DomainRoutes)
+	if err != nil || normalized[0].Domain != "google" {
+		t.Fatalf("normalize %v", err)
+	}
+	in.DomainRoutes = normalized
+	models.DB.Save(&in)
+	if _, err = BuildServerSpec(server); err == nil {
+		t.Fatal("old Agent accepted category")
+	}
+	server.ProxyFeatures = 4
+	if spec, err := BuildServerSpec(server); err != nil || spec.Inbounds[0].DomainRoutes[0].Match != "category" {
+		t.Fatalf("category failed: %v", err)
+	}
+}

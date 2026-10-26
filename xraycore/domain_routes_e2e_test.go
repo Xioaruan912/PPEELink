@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -55,7 +56,13 @@ func domainTestDNS(t *testing.T) {
 		}
 	}()
 }
-func TestFeatureDomainRoutingRealCore(t *testing.T) {
+func TestFeatureDomainRoutingRealCore(t *testing.T)   { featureDomainRoutingRealCore(t, false) }
+func TestFeatureCategoryRoutingRealCore(t *testing.T) { featureDomainRoutingRealCore(t, true) }
+func featureDomainRoutingRealCore(t *testing.T, category bool) {
+	exactHost, matchedHost, ruleDomain, ruleMatch := "api.example.com", "x.example.com", "example.com", "suffix"
+	if category {
+		exactHost, matchedHost, ruleDomain, ruleMatch = "accounts.google.com", "www.google.com", "google", "category"
+	}
 	if os.Getenv("XRAY_FEATURE_BINARY") == "" {
 		t.Skip("requires real core")
 	}
@@ -96,7 +103,7 @@ func TestFeatureDomainRoutingRealCore(t *testing.T) {
 			}
 			s.Inbounds = s.Inbounds[:1]
 			s.Inbounds[0].Port = b.port
-			s.Inbounds[0].DomainRoutes = []DomainRouteSpec{{Domain: "api.example.com", Match: "exact"}, {Domain: "example.com", Match: "suffix", Egress: egress}, {Domain: "dead.example.net", Match: "exact", Egress: egress}}
+			s.Inbounds[0].DomainRoutes = []DomainRouteSpec{{Domain: exactHost, Match: "exact"}, {Domain: ruleDomain, Match: ruleMatch, Egress: egress}, {Domain: "dead.example.net", Match: "exact", Egress: egress}}
 			var collector *WebsiteCollector
 			if metered {
 				s.WebsiteTraffic = &WebsiteTrafficSpec{Enabled: true}
@@ -133,7 +140,7 @@ func TestFeatureDomainRoutingRealCore(t *testing.T) {
 			}
 			featureCore(t, cfg)
 			proxy, _ := url.Parse(fmt.Sprintf("socks5://%s:%s@127.0.0.1:%d", b.user, b.password, b.port))
-			for _, tc := range []struct{ host, want string }{{"api.example.com", "direct"}, {"x.example.com", "exit"}, {"badexample.com", "direct"}, {"unknown.example.net", "direct"}, {"dead.example.net", ""}} {
+			for _, tc := range []struct{ host, want string }{{exactHost, "direct"}, {matchedHost, "exit"}, {"badexample.com", "direct"}, {"unknown.example.net", "direct"}, {"dead.example.net", ""}} {
 				tr := &http.Transport{Proxy: http.ProxyURL(proxy), DisableKeepAlives: true}
 				client := http.Client{Transport: tr, Timeout: time.Second}
 				req, _ := http.NewRequest("GET", direct.URL, nil)
@@ -183,7 +190,7 @@ func TestFeatureDomainRoutingRealCore(t *testing.T) {
 				t.Fatal(err)
 			}
 			json.Unmarshal(raw, &cfg)
-			cfg["dns"] = map[string]any{"hosts": map[string]any{"api.example.com": "127.0.0.1", "x.example.com": "127.0.0.1"}}
+			cfg["dns"] = map[string]any{"hosts": map[string]any{exactHost: "127.0.0.1", matchedHost: "127.0.0.1"}}
 			for i, item := range cfg["inbounds"].([]any) {
 				m := item.(map[string]any)
 				if m["tag"] == "in-7" {
@@ -204,7 +211,7 @@ func TestFeatureDomainRoutingRealCore(t *testing.T) {
 				}
 			}
 			featureCore(t, cfg)
-			for _, tc := range []struct{ host, want string }{{"api.example.com", "Dping"}, {"x.example.com", "Eping"}} {
+			for _, tc := range []struct{ host, want string }{{exactHost, "Dping"}, {matchedHost, "Eping"}} {
 				c, err := ub.dial(context.Background(), "udp", net.JoinHostPort(tc.host, strconv.Itoa(directUDP.LocalAddr().(*net.UDPAddr).Port)))
 				if err != nil {
 					t.Fatal(err)
@@ -240,5 +247,37 @@ func TestFeatureDomainRoutingRealCore(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestFeatureCategoryMissingDataKeepsPreviousCore(t *testing.T) {
+	binary := os.Getenv("XRAY_FEATURE_BINARY")
+	if binary == "" {
+		t.Skip("requires real core")
+	}
+	dir := t.TempDir()
+	if err := os.Symlink(binary, filepath.Join(dir, "xray")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XRAY_LOCATION_ASSET", dir)
+	t.Setenv("PPEELINK_XRAY_SYSTEMD", "0")
+	private, _, err := GenerateRealityKeys()
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec := Spec{Version: DefaultVersion, Enabled: true, APIPort: featurePort(t), Inbounds: []InboundSpec{{Tag: "test", Template: TemplateRealityVision, Port: featurePort(t), Target: "www.example.com:443", SNI: "www.example.com", PrivateKey: private, ShortID: "a1b2", Users: []UserSpec{{Email: "u1", UUID: "11111111-1111-4111-8111-111111111111"}}}}}
+	runner := NewRunner(dir, "not-used")
+	defer runner.Stop()
+	if err = runner.Apply(context.Background(), spec); err != nil {
+		t.Fatal(err)
+	}
+	oldRev := runner.Rev()
+	spec.Inbounds[0].DomainRoutes = []DomainRouteSpec{{Match: "category", Domain: "google"}}
+	if err = runner.Apply(context.Background(), spec); err == nil {
+		t.Fatal("missing category data accepted")
+	}
+	running, _ := runner.Status()
+	if !running || runner.Rev() != oldRev {
+		t.Fatal("failed category config interrupted working core")
 	}
 }

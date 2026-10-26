@@ -13,6 +13,23 @@ const fallback = computed(() =>
       "已选出口（请确认节点仍可用）"
     : "当前服务器直接访问"
 );
+const categories = [
+  { value: "google", label: "Google" },
+  { value: "youtube", label: "YouTube" },
+  { value: "netflix", label: "Netflix" },
+  { value: "openai", label: "OpenAI" },
+  { value: "telegram", label: "Telegram" },
+  { value: "github", label: "GitHub" },
+  { value: "microsoft", label: "Microsoft" },
+  { value: "apple", label: "Apple" },
+  { value: "cn", label: "中国大陆常见网站（名单内）" },
+  { value: "geolocation-!cn", label: "非中国大陆常见网站（名单内）" },
+];
+function changeMatch(rule: DomainRoute) {
+  if (rule.match === "category") rule.domain = "google";
+  else if (categories.some((category) => category.value === rule.domain))
+    rule.domain = "";
+}
 function move(index: number, direction: number) {
   const next = index + direction;
   if (next < 0 || next >= rules.value.length) return;
@@ -59,19 +76,36 @@ function add() {
           >
         </div>
       </div>
-      <el-form-item label="网站域名"
-        ><el-input
-          v-model="rule.domain"
-          placeholder="example.com，不含 https:// 或路径"
-          maxlength="253"
-      /></el-form-item>
       <div class="rule-fields">
-        <el-form-item label="匹配范围"
-          ><el-select v-model="rule.match"
-            ><el-option value="suffix" label="此域名及所有子域名" /><el-option
-              value="exact"
-              label="仅此域名" /></el-select
-        ></el-form-item>
+        <el-form-item label="匹配范围">
+          <el-select v-model="rule.match" @change="changeMatch(rule)">
+            <el-option value="suffix" label="此域名及所有子域名" />
+            <el-option value="exact" label="仅此域名" />
+            <el-option value="category" label="网站分类" />
+          </el-select>
+        </el-form-item>
+        <el-form-item
+          :label="rule.match === 'category' ? '网站分类' : '网站域名'"
+        >
+          <el-select
+            v-if="rule.match === 'category'"
+            v-model="rule.domain"
+            filterable
+          >
+            <el-option
+              v-for="category in categories"
+              :key="category.value"
+              :value="category.value"
+              :label="category.label"
+            />
+          </el-select>
+          <el-input
+            v-else
+            v-model="rule.domain"
+            placeholder="example.com，不含 https:// 或路径"
+            maxlength="253"
+          />
+        </el-form-item>
         <el-form-item label="使用出口"
           ><el-select v-model="rule.egressNodeId" filterable
             ><el-option :value="0" label="当前服务器直接访问" /><el-option
@@ -97,7 +131,8 @@ function add() {
     </p>
     <p class="routes-help">
       在服务器上生效，无需修改客户端规则。仅能按连接中可识别的域名分流；纯 IP
-      或无法识别域名的连接沿用默认出口。需升级 Agent。
+      或无法识别域名的连接沿用默认出口。需升级
+      Agent。网站分类仅匹配名单内的域名；服务器内置数据更新后，名单范围可能改变；如分类缺失，服务器会保留原配置并报告错误。
     </p>
   </section>
 </template>
