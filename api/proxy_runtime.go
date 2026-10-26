@@ -78,18 +78,21 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		users = append(users, xraycore.UserSpec{Email: a.Email(), UUID: a.UUID})
 	}
 	for _, in := range inbounds {
+		if len(in.DomainRoutes) > 0 && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 3 {
+			return spec, fmt.Errorf("请先升级 Agent 以支持网站分流")
+		}
 		if in.TLSMode == "auto" && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 2 {
 			return spec, fmt.Errorf("请先升级 Agent 以支持自动证书")
 		}
 		if (in.EgressNodeID > 0 || in.Template == xraycore.TemplateHysteria2) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 1 {
 			return spec, fmt.Errorf("请先升级此服务器 Agent 以支持新增代理功能")
 		}
-		egress, err := resolveInboundEgress(in, server)
+		egress, domainRoutes, err := resolveInboundRoutes(in, server)
 		if err != nil {
 			return spec, err
 		}
 		spec.Inbounds = append(spec.Inbounds, xraycore.InboundSpec{
-			TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
+			DomainRoutes: domainRoutes, TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
 			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Users: users, TLSCertFile: in.TLSCertFile, TLSKeyFile: in.TLSKeyFile,
 		})
 	}

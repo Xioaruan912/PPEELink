@@ -48,26 +48,33 @@ type ProxyServer struct {
 }
 
 // ProxyInbound 服务器上的一个入站。
+type DomainRoute struct {
+	Domain       string `json:"domain"`
+	Match        string `json:"match"`
+	EgressNodeID int    `json:"egressNodeId"`
+}
+
 type ProxyInbound struct {
-	TLSMode        string `gorm:"size:16" json:"tlsMode"`
-	TLSAutoID      string `gorm:"size:32;index" json:"-"`
-	TLSCertificate string `gorm:"type:text" json:"-"`
-	TLSFingerprint string `gorm:"size:64" json:"tlsFingerprint"`
-	EgressNodeID   int    `json:"egressNodeId"`
-	TLSCertFile    string `gorm:"size:1024" json:"tlsCertFile"`
-	TLSKeyFile     string `gorm:"size:1024" json:"tlsKeyFile"`
-	ID             uint   `gorm:"primaryKey" json:"id"`
-	ServerID       uint   `gorm:"index;not null" json:"serverId"`
-	Remark         string `gorm:"size:80" json:"remark"`
-	Template       string `gorm:"size:40;not null" json:"template"` // vless-reality-vision / vless-xhttp-reality
-	Port           int    `gorm:"not null" json:"port"`
-	Target         string `gorm:"size:255" json:"target"` // Reality 伪装目标 host:port
-	SNI            string `gorm:"size:255" json:"sni"`
-	PrivateKey     string `gorm:"size:64" json:"-"`
-	PublicKey      string `gorm:"size:64" json:"publicKey"`
-	ShortID        string `gorm:"size:32" json:"shortId"`
-	Path           string `gorm:"size:120" json:"path"` // XHTTP 路径
-	Enabled        bool   `gorm:"not null;default:true" json:"enabled"`
+	DomainRoutes   []DomainRoute `gorm:"serializer:json;type:text" json:"domainRoutes,omitempty"`
+	TLSMode        string        `gorm:"size:16" json:"tlsMode"`
+	TLSAutoID      string        `gorm:"size:32;index" json:"-"`
+	TLSCertificate string        `gorm:"type:text" json:"-"`
+	TLSFingerprint string        `gorm:"size:64" json:"tlsFingerprint"`
+	EgressNodeID   int           `json:"egressNodeId"`
+	TLSCertFile    string        `gorm:"size:1024" json:"tlsCertFile"`
+	TLSKeyFile     string        `gorm:"size:1024" json:"tlsKeyFile"`
+	ID             uint          `gorm:"primaryKey" json:"id"`
+	ServerID       uint          `gorm:"index;not null" json:"serverId"`
+	Remark         string        `gorm:"size:80" json:"remark"`
+	Template       string        `gorm:"size:40;not null" json:"template"` // vless-reality-vision / vless-xhttp-reality
+	Port           int           `gorm:"not null" json:"port"`
+	Target         string        `gorm:"size:255" json:"target"` // Reality 伪装目标 host:port
+	SNI            string        `gorm:"size:255" json:"sni"`
+	PrivateKey     string        `gorm:"size:64" json:"-"`
+	PublicKey      string        `gorm:"size:64" json:"publicKey"`
+	ShortID        string        `gorm:"size:32" json:"shortId"`
+	Path           string        `gorm:"size:120" json:"path"` // XHTTP 路径
+	Enabled        bool          `gorm:"not null;default:true" json:"enabled"`
 }
 
 // ProxyTraffic 每日每账户每服务器的流量记录（字节）。

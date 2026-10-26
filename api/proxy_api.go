@@ -260,20 +260,21 @@ func purgeProxyServer(s models.ProxyServer) {
 // ---- 入站 ------------------------------------------------------------------
 
 type inboundSaveRequest struct {
-	TLSMode       string `json:"tlsMode"`
-	EgressNodeID  int    `json:"egressNodeId"`
-	TLSCertFile   string `json:"tlsCertFile"`
-	TLSKeyFile    string `json:"tlsKeyFile"`
-	ID            uint   `json:"id"`
-	ServerID      uint   `json:"serverId"`
-	Remark        string `json:"remark"`
-	Template      string `json:"template"`
-	Port          int    `json:"port"`
-	Target        string `json:"target"`
-	SNI           string `json:"sni"`
-	Path          string `json:"path"`
-	Enabled       bool   `json:"enabled"`
-	RegenerateKey bool   `json:"regenerateKey"`
+	DomainRoutes  []models.DomainRoute `json:"domainRoutes"`
+	TLSMode       string               `json:"tlsMode"`
+	EgressNodeID  int                  `json:"egressNodeId"`
+	TLSCertFile   string               `json:"tlsCertFile"`
+	TLSKeyFile    string               `json:"tlsKeyFile"`
+	ID            uint                 `json:"id"`
+	ServerID      uint                 `json:"serverId"`
+	Remark        string               `json:"remark"`
+	Template      string               `json:"template"`
+	Port          int                  `json:"port"`
+	Target        string               `json:"target"`
+	SNI           string               `json:"sni"`
+	Path          string               `json:"path"`
+	Enabled       bool                 `json:"enabled"`
+	RegenerateKey bool                 `json:"regenerateKey"`
 }
 
 // ProxyInboundSave 新建或修改入站；新建时自动生成 Reality 密钥与 shortId。
@@ -360,6 +361,16 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级此服务器 Agent，再配置新增代理功能"})
 		return
 	}
+	if len(req.DomainRoutes) > 0 && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 3 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级 Agent 以支持网站分流"})
+		return
+	}
+	domainRoutes, routeErr := normalizeInboundDomainRoutes(req.DomainRoutes)
+	if routeErr != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": routeErr.Error()})
+		return
+	}
+	in.DomainRoutes = domainRoutes
 	in.EgressNodeID = req.EgressNodeID
 	in.TLSCertFile, in.TLSKeyFile = req.TLSCertFile, req.TLSKeyFile
 	in.ServerID, in.Remark, in.Template, in.Port = req.ServerID, strings.TrimSpace(req.Remark), req.Template, req.Port

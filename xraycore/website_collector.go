@@ -120,6 +120,7 @@ type websiteIdentity struct{ tag, password string }
 // acknowledged by its reporting endpoint (and persist them if crash durability
 // is required). Domain attribution is exact requested host, not eTLD+1.
 type WebsiteCollector struct {
+	routes       map[string]websiteRoute
 	egress       map[string]*egressBridge
 	listener     net.Listener
 	identities   map[string]websiteIdentity
@@ -148,6 +149,11 @@ func newWebsiteCollector(spec Spec, stats *websiteCounters) (*WebsiteCollector, 
 	if seconds < 60 || seconds > 86400 || 86400%seconds != 0 {
 		return nil, errors.New("website bucketSeconds must divide 86400 and be between 60 and 86400")
 	}
+	expanded, routes, err := meteredRouteInbounds(spec.Inbounds)
+	if err != nil {
+		return nil, err
+	}
+	spec.Inbounds = expanded
 	identities := make(map[string]websiteIdentity)
 	tags := make(map[string]bool)
 	for i, in := range spec.Inbounds {
@@ -167,6 +173,7 @@ func newWebsiteCollector(spec Spec, stats *websiteCounters) (*WebsiteCollector, 
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &WebsiteCollector{listener: ln, identities: identities, stats: stats, seconds: seconds, blockPrivate: spec.BlockPrivate, ctx: ctx, cancel: cancel, connections: make(map[io.Closer]struct{}), sessions: make(chan struct{}, websiteMaxSessions), udpSockets: make(chan struct{}, 1024)}
+	c.routes = routes
 	c.egress = make(map[string]*egressBridge)
 	for _, in := range spec.Inbounds {
 		if in.Egress != nil {
@@ -477,7 +484,7 @@ func (c *WebsiteCollector) copy(dst, src net.Conn, tag, domain string, up bool) 
 		_ = src.SetReadDeadline(time.Now().Add(websiteIdleTimeout))
 		n, err := src.Read(buf)
 		if n > 0 {
-			k, e := c.stats.reserve(tag, domain, c.seconds)
+			k, e := c.stats.reserve(c.statsTag(tag), domain, c.seconds)
 			if e != nil {
 				_ = src.Close()
 				_ = dst.Close()
@@ -614,7 +621,7 @@ func (c *WebsiteCollector) udp(control net.Conn, tag, requestedHost string, requ
 					if err != nil {
 						return
 					}
-					k, err := c.stats.reserve(tag, domain, c.seconds)
+					k, err := c.stats.reserve(c.statsTag(tag), domain, c.seconds)
 					if err != nil {
 						return
 					}
@@ -631,7 +638,7 @@ func (c *WebsiteCollector) udp(control net.Conn, tag, requestedHost string, requ
 				}
 			}(entry.conn, domain, entry.done)
 		}
-		k, err := c.stats.reserve(tag, websiteDomain(host), c.seconds)
+		k, err := c.stats.reserve(c.statsTag(tag), websiteDomain(host), c.seconds)
 		if err != nil {
 			return
 		}
@@ -664,12 +671,17 @@ func (c *WebsiteCollector) configOutbounds() ([]any, []any) {
 	for user := range c.identities {
 		users = append(users, user)
 	}
-	sort.Strings(users)
+	sort.Slice(users, func(i, j int) bool { a, _ := strconv.Atoi(users[i]); b, _ := strconv.Atoi(users[j]); return a < b })
 	for _, user := range users {
 		id := c.identities[user]
 		tag := "website-" + user
 		out = append(out, map[string]any{"tag": tag, "protocol": "socks", "settings": map[string]any{"servers": []any{map[string]any{"address": "127.0.0.1", "port": port, "users": []any{map[string]any{"user": user, "pass": id.password}}}}}})
-		rules = append(rules, map[string]any{"inboundTag": []string{id.tag}, "outboundTag": tag})
+		rule := map[string]any{"inboundTag": []string{id.tag}, "outboundTag": tag}
+		if r, ok := c.routes[id.tag]; ok {
+			rule["inboundTag"] = []string{r.source}
+			rule["domain"] = []string{r.domain}
+		}
+		rules = append(rules, rule)
 	}
 	return out, rules
 }
