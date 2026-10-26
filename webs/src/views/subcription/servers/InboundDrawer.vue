@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from "vue";
+import DomainRouteFields from "./DomainRouteFields.vue";
 import IconShuffle from "~icons/ph/shuffle";
 import IconCheck from "~icons/ph/seal-check";
 import {
@@ -7,6 +8,7 @@ import {
   getProxyEgressOptions,
   saveProxyInbound,
   type ProxyInbound,
+  type DomainRoute,
   type TargetCheck,
 } from "@/api/proxy";
 import { UiButton, UiDrawer, UiSegmented } from "@/ui";
@@ -27,6 +29,7 @@ const randomPort = () => 20000 + Math.floor(Math.random() * 30000);
 const blank = () => ({
   id: 0,
   egressNodeId: 0,
+  domainRoutes: [] as DomainRoute[],
   remark: "Reality",
   template: "vless-reality-vision" as ProxyInbound["template"],
   port: randomPort(),
@@ -81,6 +84,9 @@ watch(visible, (open) => {
     props.inbound
       ? {
           ...props.inbound,
+          domainRoutes: (props.inbound.domainRoutes || []).map((rule) => ({
+            ...rule,
+          })),
           tlsMode: props.inbound.tlsMode === "auto" ? "auto" : "manual",
           regenerateKey: false,
         }
@@ -286,7 +292,7 @@ async function save() {
           SNI 填写证书对应域名。请先放行所选 UDP 端口；证书内容不会上传到面板。
         </p>
       </template>
-      <el-form-item label="服务端出口">
+      <el-form-item label="默认服务端出口">
         <el-select v-model="form.egressNodeId" filterable style="width: 100%"
           ><el-option :value="0" label="当前服务器直接访问" /><el-option
             v-for="item in exitOptions"
@@ -295,13 +301,18 @@ async function save() {
             :label="item.name"
         /></el-select>
         <p class="hint">
-          选择节点后，此入口的 TCP / UDP 流量都经由该落地。首版支持 VLESS
-          Reality TCP / XHTTP；出口失效时不会改为直连。保存前需升级 Agent。
+          未命中网站规则的 TCP / UDP 流量使用此出口。支持 VLESS Reality TCP /
+          XHTTP；出口失效时不会改为直连。保存前需升级 Agent。
         </p>
         <p v-if="exitError" class="error">
           {{ exitError }} <UiButton @click="loadExitOptions">重试</UiButton>
         </p>
       </el-form-item>
+      <DomainRouteFields
+        v-model="form.domainRoutes"
+        :exits="exitOptions"
+        :default-exit="form.egressNodeId"
+      />
       <div class="switches">
         <label><el-switch v-model="form.enabled" /> 启用</label>
         <label v-if="form.id && form.template !== 'hysteria2'"

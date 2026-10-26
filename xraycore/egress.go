@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 )
 
@@ -73,7 +74,26 @@ func (e EgressSpec) outbound(tag string) map[string]any {
 }
 func appendEgressConfig(spec Spec, collector *WebsiteCollector, inbounds, outbounds, rules []any) ([]any, []any, []any, error) {
 	metered := spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled
+	if metered {
+		expanded, _, err := meteredRouteInbounds(spec.Inbounds)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		spec.Inbounds = expanded
+	}
 	for _, in := range spec.Inbounds {
+		if err := validateDomainRoutes(in.DomainRoutes); err != nil {
+			return nil, nil, nil, err
+		}
+		for i, r := range in.DomainRoutes {
+			tag := "direct"
+			if r.Egress != nil {
+				tag = "route-exit-" + in.Tag + "-" + strconv.Itoa(i)
+				outbounds = append(outbounds, r.Egress.outbound(tag))
+			}
+			pattern, _ := r.domainPattern()
+			rules = append(rules, map[string]any{"inboundTag": []string{in.Tag}, "domain": []string{pattern}, "outboundTag": tag})
+		}
 		if in.Egress == nil {
 			continue
 		}

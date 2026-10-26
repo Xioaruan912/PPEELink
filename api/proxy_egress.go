@@ -46,61 +46,8 @@ func nodeEgress(n models.Node) (*xraycore.EgressSpec, error) {
 	return e, nil
 }
 func resolveInboundEgress(in models.ProxyInbound, server models.ProxyServer) (*xraycore.EgressSpec, error) {
-	if in.EgressNodeID == 0 {
-		return nil, nil
-	}
-	var servers []models.ProxyServer
-	var inbounds []models.ProxyInbound
-	if err := models.DB.Find(&servers).Error; err != nil {
-		return nil, err
-	}
-	if err := models.DB.Find(&inbounds).Error; err != nil {
-		return nil, err
-	}
-	byServer := map[uint]models.ProxyServer{}
-	for _, s := range servers {
-		byServer[s.ID] = s
-	}
-	for i := range inbounds {
-		if in.ID != 0 && inbounds[i].ID == in.ID {
-			inbounds[i] = in
-		}
-	}
-	if in.ID == 0 {
-		inbounds = append(inbounds, in)
-	}
-	seen := map[int]bool{}
-	var walk func(models.ProxyInbound, int) (*xraycore.EgressSpec, error)
-	walk = func(current models.ProxyInbound, depth int) (*xraycore.EgressSpec, error) {
-		if depth > 32 || seen[current.EgressNodeID] {
-			return nil, fmt.Errorf("出口链路存在循环或过长")
-		}
-		seen[current.EgressNodeID] = true
-		defer delete(seen, current.EgressNodeID)
-		var n models.Node
-		if err := models.DB.First(&n, current.EgressNodeID).Error; err != nil {
-			return nil, fmt.Errorf("出口节点不存在，请重新选择")
-		}
-		e, err := nodeEgress(n)
-		if err != nil {
-			return nil, err
-		}
-		for _, next := range inbounds {
-			host := byServer[next.ServerID].PublicHost
-			if strings.EqualFold(strings.Trim(host, "[]"), strings.Trim(e.Address, "[]")) && next.Port == e.Port {
-				if next.ServerID == server.ID {
-					return nil, fmt.Errorf("出口不能指回入口服务器")
-				}
-				if next.EgressNodeID != 0 {
-					if _, err := walk(next, depth+1); err != nil {
-						return nil, err
-					}
-				}
-			}
-		}
-		return e, nil
-	}
-	return walk(in, 0)
+	e, _, err := resolveInboundRoutes(in, server)
+	return e, err
 }
 func ProxyEgressOptions(c *gin.Context) {
 	var nodes []models.Node

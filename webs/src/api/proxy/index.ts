@@ -3,7 +3,13 @@ import request from "@/utils/request";
 export type InboundTemplate =
   "vless-reality-vision" | "vless-xhttp-reality" | "hysteria2";
 
+export interface DomainRoute {
+  domain: string;
+  match: "exact" | "suffix";
+  egressNodeId: number;
+}
 export interface ProxyInbound {
+  domainRoutes?: DomainRoute[];
   tlsMode?: "auto" | "manual" | "";
   tlsFingerprint?: string;
   egressNodeId?: number;

@@ -65,19 +65,20 @@ type MonitorSpec struct {
 }
 
 type InboundSpec struct {
-	TLSAutoID   string      `json:"tlsAutoId,omitempty"`
-	Egress      *EgressSpec `json:"egress,omitempty"`
-	TLSCertFile string      `json:"tlsCertFile,omitempty"`
-	TLSKeyFile  string      `json:"tlsKeyFile,omitempty"`
-	Tag         string      `json:"tag"`
-	Template    string      `json:"template"`
-	Port        int         `json:"port"`
-	Target      string      `json:"target"`
-	SNI         string      `json:"sni"`
-	PrivateKey  string      `json:"privateKey"`
-	ShortID     string      `json:"shortId"`
-	Path        string      `json:"path"`
-	Users       []UserSpec  `json:"users"`
+	DomainRoutes []DomainRouteSpec `json:"domainRoutes,omitempty"`
+	TLSAutoID    string            `json:"tlsAutoId,omitempty"`
+	Egress       *EgressSpec       `json:"egress,omitempty"`
+	TLSCertFile  string            `json:"tlsCertFile,omitempty"`
+	TLSKeyFile   string            `json:"tlsKeyFile,omitempty"`
+	Tag          string            `json:"tag"`
+	Template     string            `json:"template"`
+	Port         int               `json:"port"`
+	Target       string            `json:"target"`
+	SNI          string            `json:"sni"`
+	PrivateKey   string            `json:"privateKey"`
+	ShortID      string            `json:"shortId"`
+	Path         string            `json:"path"`
+	Users        []UserSpec        `json:"users"`
 }
 
 type UserSpec struct {
