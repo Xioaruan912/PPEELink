@@ -111,6 +111,10 @@ function diagnose(n: RelayNode) {
       保存后需更新客户端订阅。Clash / Mihomo、Surge 和 Loon 完整配置
       支持此中转设置；单个分享链接不携带中转关系。检测从面板网络出发。
     </p>
+    <p class="relay-note">
+      Loon
+      使用客户端中转时，请导入完整配置并在“中转线路”中选择。仅导入节点订阅会显示“链路底层（直连）”，这些底层节点本身没有启用中转。
+    </p>
     <UiDialog v-model="visible" title="设置中转" width="560px">
       <el-form label-position="top"
         ><el-form-item label="落地节点"
