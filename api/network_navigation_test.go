@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestNetworkMenuKeepsTracerouteWithoutTopology(t *testing.T) {
+func TestNetworkMenuIncludesPathsAndThroughput(t *testing.T) {
 	rec := jsonRequest(t, GetMenus, nil, nil)
 	if rec.Code != 200 {
 		t.Fatalf("menus status %d: %s", rec.Code, rec.Body.String())
@@ -24,7 +24,7 @@ func TestNetworkMenuKeepsTracerouteWithoutTopology(t *testing.T) {
 		if menu.Path != "/network" {
 			continue
 		}
-		if menu.Redirect != "/network/traceroute" || len(menu.Children) != 1 || menu.Children[0].Component != "network/Traceroute" {
+		if menu.Redirect != "/network/traceroute" || len(menu.Children) != 2 || menu.Children[0].Component != "network/Traceroute" || menu.Children[1].Component != "network/Throughput" {
 			t.Fatalf("network menu lost its surviving destination: %+v", menu)
 		}
 		return

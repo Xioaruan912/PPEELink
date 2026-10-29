@@ -17,6 +17,7 @@ import (
 type probeTraceJob struct {
 	ID     uint   `json:"id"`
 	Target string `json:"target"`
+	tracecore.Options
 }
 
 // Independent polling keeps interactive traces separate from scheduled TCP checks.
@@ -28,7 +29,7 @@ func runProbeTraceLoop(client *http.Client, panel, token string) {
 			continue
 		}
 		for _, job := range jobs {
-			result := tracecore.Run(context.Background(), job.Target)
+			result := tracecore.RunWithOptions(context.Background(), job.Target, job.Options)
 			if err := reportProbeTrace(client, panel, token, job.ID, result); err != nil {
 				log.Printf("[Probe] 路由追踪回报失败: %v", err)
 			}
@@ -37,7 +38,7 @@ func runProbeTraceLoop(client *http.Client, panel, token string) {
 	}
 }
 func fetchProbeTraceJobs(client *http.Client, panel, token string) ([]probeTraceJob, error) {
-	req, err := http.NewRequest("GET", panel+"/api/v1/probe/trace/jobs?tool="+url.QueryEscape(tracecore.AvailableTool()), nil)
+	req, err := http.NewRequest("GET", panel+"/api/v1/probe/trace/jobs?version=2&tool="+url.QueryEscape(tracecore.AvailableTool()), nil)
 	if err != nil {
 		return nil, err
 	}

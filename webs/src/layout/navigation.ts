@@ -47,7 +47,13 @@ const META: Record<string, { icon: Component; hint?: string; label?: string }> =
     "/network": { icon: IconNodes },
     "/network/traceroute": {
       icon: IconGauge,
-      hint: "从面板与探针对比网络路径",
+      label: "路径拓扑",
+      hint: "比较各台 VPS 到落地的逐跳路径",
+    },
+    "/network/throughput": {
+      icon: IconGauge,
+      label: "节点互测",
+      hint: "双向测速与同一落地的中转对比",
     },
     "/subcription": { icon: IconSubs },
     "/subcription/subs": { icon: IconLink, hint: "生成与分发订阅链接" },
@@ -139,7 +145,7 @@ const GROUPS = [
   {
     label: "网络诊断",
     icon: IconGauge,
-    paths: ["/test/index", "/network/traceroute", "/subcription/diagnostic"],
+    paths: ["/test/index", "/network/traceroute", "/network/throughput", "/subcription/diagnostic"],
   },
   {
     label: "系统",

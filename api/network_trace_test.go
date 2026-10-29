@@ -117,3 +117,58 @@ func TestNetworkTraceUnsupportedAndExpiry(t *testing.T) {
 		t.Fatal(old.Status)
 	}
 }
+
+func TestTraceOptionsRejectInvalidAndLegacyMismatch(t *testing.T) {
+	traceDB(t)
+	models.DB.Create(&models.Probe{Name: "old", TokenHash: models.HashProbeToken("old"), Enabled: true})
+	models.DB.Create(&models.TraceProbeCapability{ProbeID: 1, SeenAt: time.Now(), Tool: "traceroute"})
+	if w := traceRequest(NetworkTraceCreate, "POST", "/", `{"target":"2001:db8::1","protocol":"tcp","port":443,"family":"4","probeIds":[1]}`, ""); w.Code != 400 {
+		t.Fatalf("invalid family: %d %s", w.Code, w.Body.String())
+	}
+	w := traceRequest(NetworkTraceCreate, "POST", "/", `{"target":"example.com","protocol":"tcp","port":443,"family":"4","probeIds":[1]}`, "")
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	var view models.NetworkTraceView
+	models.DB.First(&view)
+	if view.Status != "unsupported" || !strings.Contains(view.Error, "升级") {
+		t.Fatalf("legacy mismatch was dispatched: %+v", view)
+	}
+}
+func TestTraceModernOptionsDispatchAndJSONDetail(t *testing.T) {
+	traceDB(t)
+	models.DB.Create(&models.Probe{Name: "new", TokenHash: models.HashProbeToken("new"), Enabled: true})
+	traceRequest(ProbeTraceJobs, "GET", "/?tool=nexttrace&version=2", "", "new")
+	w := traceRequest(NetworkTraceCreate, "POST", "/", `{"target":"example.com","protocol":"tcp","port":443,"family":"6","probeIds":[1]}`, "")
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	job := traceRequest(ProbeTraceJobs, "GET", "/?tool=nexttrace&version=2", "", "new")
+	for _, value := range []string{`"protocol":"tcp"`, `"port":443`, `"family":"6"`} {
+		if !strings.Contains(job.Body.String(), value) {
+			t.Fatalf("missing %s: %s", value, job.Body.String())
+		}
+	}
+	var view models.NetworkTraceView
+	models.DB.First(&view)
+	raw := `{"Hops":[[{"Success":true,"TTL":1,"Address":{"IP":"1.1.1.1"},"RTT":2000000,"Geo":{"asnumber":"13335"}}]]}`
+	body, _ := json.Marshal(map[string]any{"id": view.ID, "tool": "nexttrace", "output": raw})
+	if report := traceRequest(ProbeTraceReport, "POST", "/", string(body), "new"); report.Code != 200 {
+		t.Fatal(report.Body.String())
+	}
+	detail := traceRequest(NetworkTraceDetail, "GET", fmt.Sprintf("/?id=%d", view.RunID), "", "")
+	if !strings.Contains(detail.Body.String(), `"asn":"13335"`) {
+		t.Fatal(detail.Body.String())
+	}
+}
+
+func TestTraceUnsupportedCannotOverwriteCancellation(t *testing.T) {
+	traceDB(t)
+	view := models.NetworkTraceView{Status: "cancelled", Error: "keep"}
+	models.DB.Create(&view)
+	markTraceUnsupported(view.ID, "upgrade")
+	models.DB.First(&view, view.ID)
+	if view.Status != "cancelled" || view.Error != "keep" {
+		t.Fatalf("cancel overwritten: %+v", view)
+	}
+}

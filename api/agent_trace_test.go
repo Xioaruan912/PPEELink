@@ -89,3 +89,48 @@ func TestAgentTraceRequiresOwnServer(t *testing.T) {
 		t.Fatalf("other agent must not report: %d %s", w.Code, w.Body.String())
 	}
 }
+
+func TestAgentTracePrepareOwnershipAndCapabilityUpgrade(t *testing.T) {
+	setupTestDB(t)
+	models.DB.AutoMigrate(&models.ProxyServer{}, &models.NetworkTraceRun{}, &models.NetworkTraceView{}, &models.TraceAgentCapability{})
+	for _, token := range []string{"owner", "other"} {
+		models.DB.Create(&models.ProxyServer{Name: token, Kind: models.ServerKindAgent, Enabled: true, AgentToken: models.HashAgentToken(token)})
+	}
+	agentAPIRequest(t, AgentTraceJobs, "GET", "/?version=2&tool=traceroute", "", "owner")
+	w := traceRequest(NetworkTracePrepare, "POST", "/", `{"agentIds":[1]}`, "")
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	w, _ = agentAPIRequest(t, AgentTraceJobs, "GET", "/?version=2&tool=traceroute", "", "other")
+	if strings.Contains(w.Body.String(), `"action":"prepare"`) {
+		t.Fatal("prepare stolen")
+	}
+	w, payload := agentAPIRequest(t, AgentTraceJobs, "GET", "/?version=2&tool=traceroute", "", "owner")
+	data, _ := payload["data"].([]any)
+	if len(data) != 1 {
+		t.Fatal(w.Body.String())
+	}
+	job := data[0].(map[string]any)
+	nonce, _ := job["prepareId"].(string)
+	if job["action"] != "prepare" || len(nonce) != 32 {
+		t.Fatal(job)
+	}
+	body, _ := json.Marshal(map[string]any{"action": "prepare", "prepareId": nonce, "tool": "nexttrace"})
+	w, _ = agentAPIRequest(t, AgentTraceReport, "POST", "/", string(body), "other")
+	if w.Code != 409 {
+		t.Fatal("other agent accepted", w.Body.String())
+	}
+	w, _ = agentAPIRequest(t, AgentTraceReport, "POST", "/", string(body), "owner")
+	if w.Code != 200 {
+		t.Fatal(w.Body.String())
+	}
+	var cap models.TraceAgentCapability
+	models.DB.First(&cap, "server_id = ?", 1)
+	if cap.Tool != "nexttrace" || cap.PrepareFinishedAt == nil || cap.PrepareError != "" {
+		t.Fatalf("%+v", cap)
+	}
+	w, _ = agentAPIRequest(t, AgentTraceReport, "POST", "/", string(body), "owner")
+	if w.Code != 409 {
+		t.Fatal("replay accepted")
+	}
+}

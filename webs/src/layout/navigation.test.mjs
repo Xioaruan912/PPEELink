@@ -106,3 +106,8 @@ test("diagnostic belongs to network diagnosis and keeps its compatible URL", () 
   assert.equal(items[1].label, "网络诊断");
   assert.deepEqual(paths([items[1]]), ["/subcription/diagnostic"]);
 });
+
+test("path and throughput are both children of network diagnosis",()=>{
+ const items=organizeNavigation(buildNavigation([route('/network','network',[route('traceroute','路径拓扑'),route('throughput','节点互测')])]));
+ assert.deepEqual(paths([items.find(i=>i.label==='网络诊断')]),['/network/traceroute','/network/throughput']);
+});

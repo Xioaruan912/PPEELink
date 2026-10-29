@@ -73,7 +73,8 @@ func GetMenus(c *gin.Context) {
 			Path: "/network", Component: "Layout", Redirect: "/network/traceroute", Name: "network",
 			Meta: Meta{Title: "网络工具", Icon: "monitor", Roles: []string{"ADMIN"}},
 			Children: []Child{
-				{Path: "traceroute", Component: "network/Traceroute", Name: "NetworkTraceroute", Meta: Meta{Title: "多地路由追踪", Roles: []string{"ADMIN"}, KeepAlive: true}},
+				{Path: "traceroute", Component: "network/Traceroute", Name: "NetworkTraceroute", Meta: Meta{Title: "路径拓扑", Roles: []string{"ADMIN"}, KeepAlive: true}},
+				{Path: "throughput", Component: "network/Throughput", Name: "NetworkThroughput", Meta: Meta{Title: "节点互测", Roles: []string{"ADMIN"}, KeepAlive: true}},
 			},
 		},
 		// 订阅管理
