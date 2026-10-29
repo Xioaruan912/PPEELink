@@ -45,3 +45,10 @@ test("missing permissions omit features and unknown future routes remain accessi
   ]));
   assert.deepEqual(paths(items), ["/monitor/index", "/extra/one"]);
 });
+
+test("diagnostic stays inside subscriptions instead of becoming a top-level link", () => {
+ const items=organizeNavigation(buildNavigation([route("/subcription","订阅与节点",[route("subs","订阅列表"),route("nodes","节点列表"),route("diagnostic","节点一键诊断")])]));
+ assert.equal(items.length,1);
+ assert.equal(items[0].label,"订阅与节点");
+ assert.deepEqual(paths(items),["/subcription/subs","/subcription/nodes","/subcription/diagnostic"]);
+});
