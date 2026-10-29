@@ -114,6 +114,9 @@ func GetMenus(c *gin.Context) {
 					},
 				},
 				{
+					Path: "diagnostic", Component: "subcription/diagnostic", Name: "NodeDiagnostic", Meta: Meta{Title: "节点一键诊断", Icon: "monitor", Roles: []string{"ADMIN"}},
+				},
+				{
 					Path:      "servers",
 					Component: "subcription/servers",
 					Name:      "ProxyServers",
