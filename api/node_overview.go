@@ -25,12 +25,12 @@ type NodeOverviewItem struct {
 	CheckedAt      time.Time `json:"checkedAt"`
 	Groups         []string  `json:"groups"`
 	Multiplier     float64   `json:"multiplier"`
-	RelayID        int       `json:"relayId,omitempty"` // 链式代理的中转节点
 	UDP            bool      `json:"udp,omitempty"`
 	TFO            bool      `json:"tfo,omitempty"`
 	SkipCertVerify bool      `json:"skipCertVerify,omitempty"`
 	// ForceDeliver 为 true 时检测无效也照常下发
-	ForceDeliver bool `json:"forceDeliver,omitempty"`
+	ForceDeliver    bool `json:"forceDeliver,omitempty"`
+	DeliveryEnabled bool `json:"deliveryEnabled"`
 	// ProbePolicy 检测策略：panel / any / all / manual
 	ProbePolicy string `json:"probePolicy"`
 	// Probes 最近一次各探针结果
@@ -56,9 +56,10 @@ const qualityCheckConcurrency = 16
 
 // overview 缓存（5 分钟；节点变更时立即失效）
 type overviewCache struct {
-	mu      sync.Mutex
-	data    []NodeOverviewItem
-	expires time.Time
+	mu       sync.Mutex
+	data     []NodeOverviewItem
+	expires  time.Time
+	revision uint64
 }
 
 var oCache = &overviewCache{}
@@ -68,6 +69,7 @@ func InvalidateOverview() {
 	oCache.mu.Lock()
 	oCache.data = nil
 	oCache.expires = time.Time{}
+	oCache.revision++
 	oCache.mu.Unlock()
 }
 
@@ -173,6 +175,7 @@ func overviewItems(refresh bool) ([]NodeOverviewItem, error) {
 		oCache.mu.Unlock()
 		return data, nil
 	}
+	revision := oCache.revision
 	oCache.mu.Unlock()
 
 	items, err := CollectNodeQuality()
@@ -180,8 +183,12 @@ func overviewItems(refresh bool) ([]NodeOverviewItem, error) {
 		return nil, err
 	}
 	oCache.mu.Lock()
-	oCache.data = items
-	oCache.expires = time.Now().Add(5 * time.Minute)
+	// A node may have been published/hidden while the network checks ran.
+	// Do not restore an obsolete snapshot after its invalidation.
+	if oCache.revision == revision {
+		oCache.data = items
+		oCache.expires = time.Now().Add(5 * time.Minute)
+	}
 	oCache.mu.Unlock()
 	return items, nil
 }
@@ -200,8 +207,15 @@ func NodeOverview(c *gin.Context) {
 // withBlocks 复制概览并附上此刻的暂不下发原因（暂停、额度变化随时生效，不受缓存影响）。
 func withBlocks(items []NodeOverviewItem) []NodeOverviewItem {
 	blocks := undeliverableNodes(time.Now())
+	var disabled []int
+	models.DB.Model(&models.Node{}).Where("delivery_disabled = ?", true).Pluck("id", &disabled)
+	disabledIDs := make(map[int]bool, len(disabled))
+	for _, id := range disabled {
+		disabledIDs[id] = true
+	}
 	out := make([]NodeOverviewItem, len(items))
 	for i, item := range items {
+		item.DeliveryEnabled = !disabledIDs[item.ID]
 		if b, ok := blocks[item.ID]; ok {
 			b := b
 			item.Blocked = &b
@@ -238,7 +252,7 @@ func CollectNodeQuality() ([]NodeOverviewItem, error) {
 				Multiplier: node.ParseMultiplier(n.Name),
 			}
 			if f := decodeNodeFlags(n.Flags); !f.Empty() {
-				item.RelayID, item.UDP, item.TFO, item.SkipCertVerify = f.DialerProxyID, f.UDP, f.TFO, f.SkipCertVerify
+				item.UDP, item.TFO, item.SkipCertVerify = f.UDP, f.TFO, f.SkipCertVerify
 			}
 			item.ForceDeliver = n.ForceDeliver
 			item.ProbePolicy = n.ProbePolicy

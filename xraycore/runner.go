@@ -31,6 +31,7 @@ type Runner struct {
 	stopping     bool
 	website      *WebsiteCollector
 	websiteStats *websiteCounters
+	egressLookup egressLookup
 }
 
 func NewRunner(dir, unit string) *Runner {
@@ -67,8 +68,17 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 	}
 	wantsWebsite := spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled
 	if rev == r.rev && r.runningLocked() && (!wantsWebsite || r.website != nil) {
+		r.lastErr = ""
 		return nil
 	}
+	// Keep the desired revision above independent of DNS answers. A healthy,
+	// unchanged config never re-resolves/restarts on the periodic Agent tick.
+	resolved, err := prepareEgress(ctx, spec, r.egressLookup)
+	if err != nil {
+		r.lastErr = err.Error()
+		return err
+	}
+	spec = resolved
 	if _, err := EnsureXray(ctx, r.Dir, spec.Version); err != nil {
 		r.lastErr = err.Error()
 		return err

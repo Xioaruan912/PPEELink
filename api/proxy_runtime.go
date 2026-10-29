@@ -69,6 +69,11 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 	if err := models.DB.Where("server_id = ? AND enabled = ?", server.ID, true).Order("id asc").Find(&inbounds).Error; err != nil {
 		return spec, err
 	}
+	relaySpecs, relayErr := buildAgentRelaySpecs(server)
+	if relayErr != nil {
+		return spec, relayErr
+	}
+	spec.Relays = relaySpecs
 	accounts, err := activeAccounts(time.Now())
 	if err != nil {
 		return spec, err
@@ -90,8 +95,14 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		if (in.EgressNodeID > 0 || in.Template == xraycore.TemplateHysteria2) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 1 {
 			return spec, fmt.Errorf("请先升级此服务器 Agent 以支持新增代理功能")
 		}
+		if err := validateManagedForwardGraph(nil, &in); err != nil {
+			return spec, err
+		}
 		egress, domainRoutes, err := resolveInboundRoutes(in, server)
 		if err != nil {
+			return spec, err
+		}
+		if err := requireGatewayCapability(egress, domainRoutes, server); err != nil {
 			return spec, err
 		}
 		spec.Inbounds = append(spec.Inbounds, xraycore.InboundSpec{
@@ -154,6 +165,9 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 		if err := tx.Model(&models.ProxyServer{}).Where("id = ?", server.ID).Updates(updates).Error; err != nil {
 			return err
 		}
+		if err := applyAgentRelayReport(tx, server.ID, report.Relays, now); err != nil {
+			return err
+		}
 		if err := applyWebsiteTraffic(tx, server.ID, report, now); err != nil {
 			return err
 		}
@@ -184,6 +198,11 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 	})
 	if err != nil {
 		return err
+	}
+	if report.Relays != nil {
+		if e := SyncAgentRelayNodes(); e != nil {
+			log.Printf("[relay] 同步入口节点失败: %v", e)
+		}
 	}
 	if certChanged {
 		pendingCertificateNodeSync.Store(true)
@@ -355,6 +374,9 @@ func StartLocalProxy() {
 // 远程 agent 在下一轮（最长 60 秒）拉取时生效。
 func NotifyProxyChanged() {
 	StartLocalProxy()
+	if e := SyncAgentRelayNodes(); e != nil {
+		log.Printf("[relay] 同步入口节点失败: %v", e)
+	}
 	if err := SyncSelfHostedNodes(); err != nil {
 		log.Printf("[xray] 同步自建节点失败: %v", err)
 	}
@@ -391,6 +413,11 @@ func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.P
 }
 
 func inboundName(server models.ProxyServer, in models.ProxyInbound) string {
+	// Gateways use the user-entered name, independently of the selected exit.
+	// Keep this helper query-free; generatedNodeNames calls it inside a tx.
+	if in.EgressNodeID > 0 {
+		return in.Remark
+	}
 	if in.Remark != "" {
 		return server.Name + " " + in.Remark
 	}
@@ -418,6 +445,14 @@ func serverNodes(s models.ProxyServer, acc models.ProxyAccount) []models.Node {
 
 // AccountNodes 账户可用的全部自建节点（启用的服务器与入站）。
 func AccountNodes(acc models.ProxyAccount) []models.Node {
+	var disabledNames []string
+	if err := models.DB.Model(&models.Node{}).Where("source = ? AND delivery_disabled = ?", selfHostedSource, true).Pluck("name", &disabledNames).Error; err != nil {
+		return nil
+	}
+	disabled := make(map[string]bool, len(disabledNames))
+	for _, name := range disabledNames {
+		disabled[name] = true
+	}
 	var servers []models.ProxyServer
 	models.DB.Where("enabled = ? AND public_host <> ''", true).Order("id asc").Find(&servers)
 	nodes := []models.Node{}
@@ -426,7 +461,11 @@ func AccountNodes(acc models.ProxyAccount) []models.Node {
 		if s.TrafficLimit > 0 && serverQuota(s, now).Over {
 			continue // 本月流量用完，到重置日前不下发
 		}
-		nodes = append(nodes, serverNodes(s, acc)...)
+		for _, n := range serverNodes(s, acc) {
+			if !disabled[n.Name] {
+				nodes = append(nodes, n)
+			}
+		}
 	}
 	return nodes
 }
@@ -577,6 +616,11 @@ func serverQuota(s models.ProxyServer, now time.Time) serverQuotaState {
 	var used int64
 	models.DB.Model(&models.ProxyTraffic{}).Select("COALESCE(SUM(up + down), 0)").
 		Where("server_id = ? AND day >= ?", s.ID, start.Format("2006-01-02")).Scan(&used)
+	if models.DB.Migrator().HasTable(&models.AgentRelayDay{}) {
+		var raw int64
+		models.DB.Model(&models.AgentRelayDay{}).Select("COALESCE(SUM(up + down),0)").Where("server_id = ? AND day >= ?", s.ID, start.Format("2006-01-02")).Scan(&raw)
+		used += raw
+	}
 	return serverQuotaState{Used: used, Limit: s.TrafficLimit, ResetAt: next,
 		Over: s.TrafficLimit > 0 && used >= s.TrafficLimit}
 }

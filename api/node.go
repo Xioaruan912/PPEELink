@@ -372,50 +372,6 @@ func NodeAdd(c *gin.Context) {
 	})
 }
 
-func NodeVisibility(c *gin.Context) {
-	var input struct {
-		ID     int  `json:"id"`
-		Hidden bool `json:"hidden"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil || input.ID <= 0 {
-		c.JSON(400, gin.H{"code": "40000", "msg": "节点 id 无效"})
-		return
-	}
-	var n models.Node
-	if err := models.DB.First(&n, input.ID).Error; err != nil {
-		c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
-		return
-	}
-	if err := models.DB.Model(&n).Update("hidden", input.Hidden).Error; err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "更新隐藏状态失败"})
-		return
-	}
-	InvalidateOverview()
-	c.JSON(200, gin.H{"code": "00000", "msg": map[bool]string{true: "节点已全局隐藏", false: "节点已恢复显示"}[input.Hidden]})
-}
-
-func GroupNodeVisibility(c *gin.Context) {
-	var input struct {
-		ID     int  `json:"id"`
-		Hidden bool `json:"hidden"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil || input.ID <= 0 {
-		c.JSON(400, gin.H{"code": "40000", "msg": "分组 id 无效"})
-		return
-	}
-	var g models.GroupNode
-	if err := models.DB.First(&g, input.ID).Error; err != nil {
-		c.JSON(404, gin.H{"code": "40400", "msg": "分组不存在"})
-		return
-	}
-	if err := models.DB.Model(&g).Update("hidden", input.Hidden).Error; err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "更新分组隐藏状态失败"})
-		return
-	}
-	InvalidateOverview()
-	c.JSON(200, gin.H{"code": "00000", "msg": map[bool]string{true: "分组及其节点已全局隐藏", false: "分组已恢复显示"}[input.Hidden]})
-}
-
 // 删除节点
 func NodeDel(c *gin.Context) {
 	var n models.Node

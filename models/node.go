@@ -26,6 +26,9 @@ type Node struct {
 	Link   string
 	Flags  string `gorm:"type:text" json:"flags,omitempty"` // 每节点构建覆盖(udp/tfo/skip-cert-verify) JSON
 	Hidden bool   `gorm:"not null;default:false;index" json:"Hidden"`
+	// DeliveryDisabled only controls subscription output; management and checks
+	// keep the node visible. Hidden is reserved for internal runtime readiness.
+	DeliveryDisabled bool `gorm:"not null;default:false;index" json:"deliveryDisabled"`
 	// 手动暂停下发：到期前不出现在任何订阅里（例如节点本月流量用完，等下月恢复）
 	PausedUntil *time.Time `json:"pausedUntil"`
 	PauseNote   string     `gorm:"size:120" json:"pauseNote"`

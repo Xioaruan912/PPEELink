@@ -35,6 +35,7 @@ export interface ProxyServer {
   enabled: boolean;
   xrayVersion: string;
   agentVersion: string;
+  proxyFeatures?: number;
   /** 统一 Agent 上报的程序摘要（有值时以它为准，语义化版本号已废弃）。 */
   agentHash?: string;
   arch: string;
@@ -182,3 +183,50 @@ export const getProxyEgressOptions = () =>
     url: "/api/v1/proxy/egress-options",
     method: "get",
   });
+
+export type RelayNetwork = "tcp" | "udp" | "both";
+export interface ProxyRelay {
+  id: number;
+  serverId: number;
+  name: string;
+  listenPort: number;
+  network: RelayNetwork;
+  targetNodeId: number;
+  enabled: boolean;
+  nodeId: number;
+  revision: string;
+  appliedRevision: string;
+  running: boolean;
+  lastError: string;
+  lastSeenAt: string | null;
+  up: number;
+  down: number;
+  tcpConnections: number;
+  udpSessions: number;
+}
+export interface RelayTarget {
+  id: number;
+  name: string;
+  protocol: "Reality" | "HY2";
+  network: "tcp" | "udp";
+}
+export type RelaySave = Pick<
+  ProxyRelay,
+  "serverId" | "name" | "listenPort" | "network" | "targetNodeId" | "enabled"
+> & { id?: number };
+export const listProxyRelays = () =>
+  request<ProxyRelay[]>({ url: "/api/v1/proxy/relays", method: "get" });
+export const saveProxyRelay = (data: RelaySave) =>
+  request<ProxyRelay>({
+    url: "/api/v1/proxy/relays/save",
+    method: "post",
+    data,
+  });
+export const deleteProxyRelay = (id: number) =>
+  request({
+    url: "/api/v1/proxy/relays/delete",
+    method: "delete",
+    params: { id },
+  });
+export const listRelayTargets = () =>
+  request<RelayTarget[]>({ url: "/api/v1/proxy/relay-targets", method: "get" });

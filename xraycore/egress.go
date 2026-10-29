@@ -5,30 +5,89 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net"
+	"ppeelink/certpin"
 	"strconv"
 	"strings"
 )
 
-// EgressSpec deliberately accepts only VLESS Reality raw/XHTTP, without chaining or insecure TLS overrides.
+// EgressSpec describes a physical upstream; client-side proxy chains are not inherited.
 type EgressSpec struct {
-	Address     string `json:"address"`
-	Port        int    `json:"port"`
-	UUID        string `json:"uuid"`
-	SNI         string `json:"sni"`
-	PublicKey   string `json:"publicKey"`
-	ShortID     string `json:"shortId"`
-	Transport   string `json:"transport"`
-	Flow        string `json:"flow"`
-	Path        string `json:"path"`
-	Fingerprint string `json:"fingerprint"`
+	Protocol     string   `json:"protocol,omitempty"`
+	Address      string   `json:"address"`
+	Port         int      `json:"port"`
+	UUID         string   `json:"uuid,omitempty"`
+	SNI          string   `json:"sni"`
+	PublicKey    string   `json:"publicKey,omitempty"`
+	ShortID      string   `json:"shortId,omitempty"`
+	Transport    string   `json:"transport,omitempty"`
+	Flow         string   `json:"flow,omitempty"`
+	Path         string   `json:"path,omitempty"`
+	Fingerprint  string   `json:"fingerprint,omitempty"`
+	Password     string   `json:"password,omitempty"`
+	PinSHA256    string   `json:"pinSHA256,omitempty"`
+	Obfs         string   `json:"obfs,omitempty"`
+	ObfsPassword string   `json:"obfsPassword,omitempty"`
+	ALPN         []string `json:"alpn,omitempty"`
+}
+
+func (e EgressSpec) IsHY2() bool { return e.Protocol == "hysteria2" }
+
+func validEgressHost(host string) bool {
+	host = strings.TrimSuffix(host, ".")
+	if ip := net.ParseIP(host); ip != nil {
+		return !websitePrivateIP(ip)
+	}
+	if len(host) > 253 || !strings.Contains(host, ".") {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, c := range label {
+			if c != '-' && (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') {
+				return false
+			}
+		}
+	}
+	lower := strings.ToLower(host)
+	return !strings.HasSuffix(lower, ".localhost") && !strings.HasSuffix(lower, ".local") && !strings.HasSuffix(lower, ".internal")
 }
 
 func (e EgressSpec) Validate() error {
-	if strings.TrimSpace(e.Address) == "" || strings.ContainsAny(e.Address, " /\\\r\n") || e.Port < 1 || e.Port > 65535 {
-		return fmt.Errorf("出口地址或端口无效")
+	if !validEgressHost(e.Address) || e.Port < 1 || e.Port > 65535 {
+		return fmt.Errorf("出口需为有效公网地址和端口")
 	}
-	if ip := net.ParseIP(e.Address); ip != nil && websitePrivateIP(ip) {
-		return fmt.Errorf("出口需为公网地址")
+	if e.Protocol != "" && e.Protocol != "vless" && !e.IsHY2() {
+		return fmt.Errorf("出口协议不受支持")
+	}
+	if e.SNI == "" || strings.ContainsAny(e.SNI, " ,/\\\r\n\t") {
+		return fmt.Errorf("出口 SNI 无效")
+	}
+	if e.IsHY2() {
+		if e.Password == "" || len(e.Password) > 4096 {
+			return fmt.Errorf("出口 HY2 密码无效")
+		}
+		if e.PinSHA256 != "" {
+			if _, err := certpin.Normalize(e.PinSHA256); err != nil {
+				return fmt.Errorf("出口 HY2 证书指纹无效")
+			}
+		}
+		if e.Obfs != "" && e.Obfs != "salamander" || (e.Obfs == "") != (e.ObfsPassword == "") {
+			return fmt.Errorf("出口 HY2 混淆参数无效")
+		}
+		for _, alpn := range e.ALPN {
+			if len(alpn) == 0 || len(alpn) > 255 || strings.ContainsAny(alpn, ", \t\r\n") {
+				return fmt.Errorf("出口 HY2 ALPN 无效")
+			}
+		}
+		if e.UUID != "" || e.PublicKey != "" || e.ShortID != "" || e.Transport != "" || e.Flow != "" || e.Path != "" || e.Fingerprint != "" {
+			return fmt.Errorf("出口 HY2 包含不支持的传输参数")
+		}
+		return nil
+	}
+	if e.Password != "" || e.PinSHA256 != "" || e.Obfs != "" || e.ObfsPassword != "" || len(e.ALPN) > 0 {
+		return fmt.Errorf("出口 Reality 包含不支持的 HY2 参数")
 	}
 	id, err := hex.DecodeString(strings.ReplaceAll(e.UUID, "-", ""))
 	if err != nil || len(id) != 16 {
@@ -42,11 +101,11 @@ func (e EgressSpec) Validate() error {
 	if err != nil || len(sid) > 8 {
 		return fmt.Errorf("出口 Short ID 无效")
 	}
-	if e.SNI == "" || strings.ContainsAny(e.SNI, " ,/\r\n") {
-		return fmt.Errorf("出口 SNI 无效")
-	}
 	if e.Transport != "raw" && e.Transport != "xhttp" {
 		return fmt.Errorf("出口仅支持 VLESS Reality TCP/XHTTP")
+	}
+	if e.Transport == "raw" && e.Path != "" {
+		return fmt.Errorf("出口 TCP 不支持 path 参数")
 	}
 	if (e.Flow != "" && e.Flow != "xtls-rprx-vision") || (e.Transport == "xhttp" && e.Flow != "") {
 		return fmt.Errorf("出口 flow 不受支持")
@@ -54,6 +113,24 @@ func (e EgressSpec) Validate() error {
 	return nil
 }
 func (e EgressSpec) outbound(tag string) map[string]any {
+	if e.IsHY2() {
+		alpn := e.ALPN
+		if len(alpn) == 0 {
+			alpn = []string{"h3"}
+		}
+		tls := map[string]any{"serverName": e.SNI, "alpn": alpn}
+		if e.PinSHA256 != "" {
+			pin, _ := certpin.Normalize(e.PinSHA256)
+			// Xray treats a matching leaf pin as the trust anchor, replacing
+			// normal PKI/name verification. Never emit allowInsecure.
+			tls["pinnedPeerCertSha256"] = pin
+		}
+		stream := map[string]any{"network": "hysteria", "security": "tls", "tlsSettings": tls, "hysteriaSettings": map[string]any{"version": 2, "auth": e.Password}}
+		if e.Obfs == "salamander" {
+			stream["finalmask"] = map[string]any{"udp": []any{map[string]any{"type": "salamander", "settings": map[string]any{"password": e.ObfsPassword}}}}
+		}
+		return map[string]any{"tag": tag, "protocol": "hysteria", "settings": map[string]any{"version": 2, "address": e.Address, "port": e.Port}, "streamSettings": stream}
+	}
 	fp := e.Fingerprint
 	if fp == "" {
 		fp = "chrome"
@@ -72,6 +149,7 @@ func (e EgressSpec) outbound(tag string) map[string]any {
 	}
 	return map[string]any{"tag": tag, "protocol": "vless", "settings": map[string]any{"vnext": []any{map[string]any{"address": e.Address, "port": e.Port, "users": []any{user}}}}, "streamSettings": stream}
 }
+
 func appendEgressConfig(spec Spec, collector *WebsiteCollector, inbounds, outbounds, rules []any) ([]any, []any, []any, error) {
 	metered := spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled
 	if metered {

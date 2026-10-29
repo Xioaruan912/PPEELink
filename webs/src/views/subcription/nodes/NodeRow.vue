@@ -4,13 +4,7 @@ import { StatusDot } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import CountryFlag from "@/ui/CountryFlag.vue";
 import { formatDateTime } from "@/utils/date";
-import {
-  useNodes,
-  validState,
-  validText,
-  nodeEffectiveHidden,
-  type OverviewItem,
-} from "./useNodes";
+import { useNodes, validState, validText, type OverviewItem } from "./useNodes";
 defineProps<{ node: OverviewItem }>();
 // 暂不下发标签：原因的简称 + 预计恢复日期
 const probeTitle = (node: OverviewItem) =>
@@ -37,7 +31,9 @@ const blockLabel = (node: OverviewItem) => {
       ? "已暂停"
       : b.kind === "server-quota"
         ? "服务器流量用完"
-        : "连续检测无效";
+        : b.kind === "delivery-disabled"
+          ? "已关闭下发"
+          : "连续检测无效";
   return b.until ? `${short}，${b.until.slice(5, 10)} 恢复` : short;
 };
 const {
@@ -45,12 +41,10 @@ const {
   toggleSelect,
   nodeCommand,
   copyNode,
-  fullNode,
   protocol,
   busy,
-  setRowVisible,
+  setDelivery,
   activeGroup,
-  nodeName,
   checking,
 } = useNodes();
 </script>
@@ -80,8 +74,6 @@ const {
             :class="`block-${node.blocked.kind}`"
             :title="node.blocked.reason"
             >暂不下发 · {{ blockLabel(node) }}</span
-          ><span v-if="node.relayId" class="relay-badge"
-            >经 {{ nodeName(node.relayId) || "已删除节点" }} 中转</span
           ><span
             v-if="node.forceDeliver"
             class="force-badge"
@@ -122,23 +114,23 @@ const {
       >
     </div>
     <div class="row-visibility">
-      <span class="mobile-label">可见</span
+      <span class="mobile-label">下发</span
       ><el-tooltip
         :trigger="['hover', 'focus']"
         :trigger-keys="[]"
         :content="
-          nodeEffectiveHidden(fullNode(node.id))
-            ? '节点已全局隐藏，分组管理中可恢复'
-            : '关闭后全局隐藏节点'
+          node.deliveryEnabled === false
+            ? '已关闭订阅下发；节点仍可管理和检测'
+            : node.blocked
+              ? `已允许订阅下发，当前暂不下发：${node.blocked.reason}`
+              : '已允许订阅下发；关闭后节点仍保留在列表中'
         "
       >
         <el-switch
-          :model-value="!nodeEffectiveHidden(fullNode(node.id))"
-          :disabled="
-            busy || !!fullNode(node.id)?.GroupNodes?.some((g) => g.Hidden)
-          "
-          :aria-label="`${node.name} 可见性`"
-          @change="setRowVisible(node)"
+          :model-value="node.deliveryEnabled !== false"
+          :disabled="busy"
+          :aria-label="`${node.name} 是否下发`"
+          @change="(value) => setDelivery(node.id, value === true)"
         />
       </el-tooltip>
     </div>

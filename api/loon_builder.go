@@ -239,8 +239,6 @@ func buildLoonConfig(req *LoonBuilder) string {
 		b.WriteString(strings.TrimSpace(req.RemoteRules) + "\n")
 	}
 
-	b.WriteString("\n[Proxy Chain]\n")
-
 	// [Rule]
 	b.WriteString("[Rule]\n")
 	if strings.TrimSpace(req.Rules) != "" {

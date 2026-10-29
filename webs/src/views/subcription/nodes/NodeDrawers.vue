@@ -2,7 +2,7 @@
 import { UiDrawer, UiButton, EmptyState, StatusDot } from "@/ui";
 import GroupFields from "./GroupFields.vue";
 import CountryPicker from "./CountryPicker.vue";
-import { useNodes, nodeEffectiveHidden } from "./useNodes";
+import { useNodes } from "./useNodes";
 const {
   nodeDialog,
   groupDialog,
@@ -15,9 +15,7 @@ const {
   fullNodes,
   manageGroupNodes,
   manageGroupId,
-  hiddenNodeCount,
-  toggleGroupHidden,
-  toggleNodeHidden,
+  setDelivery,
   selectionNode,
   bindGroup,
   delGroupName,
@@ -71,13 +69,8 @@ const {
     >
   </UiDrawer>
   <UiDrawer v-model="groupDialog" title="分组管理" size="640px">
-    <p class="field-hint">
-      当前隐藏
-      <span class="mono">{{ hiddenNodeCount }}</span>
-      个节点。隐藏影响全局展示、检测、推荐及订阅下发，数据仍保留。
-    </p>
     <section class="form-section">
-      <h3>分组可见性</h3>
+      <h3>分组</h3>
       <EmptyState
         v-if="!groupDetails.length"
         size="inline"
@@ -88,20 +81,10 @@ const {
           <strong>{{ group.name }}</strong
           ><span class="mono">{{ group.node_count }} 个节点</span>
         </div>
-        <StatusDot
-          :state="group.hidden ? 'idle' : 'ok'"
-          :label="group.hidden ? '已隐藏' : '显示'"
-        />
-        <UiButton
-          variant="ghost"
-          :disabled="busy"
-          @click="toggleGroupHidden(group)"
-          >{{ group.hidden ? "恢复分组" : "隐藏整组" }}</UiButton
-        >
       </div>
     </section>
     <section class="form-section">
-      <h3>节点可见性</h3>
+      <h3>节点下发</h3>
       <el-select
         v-model="manageGroupId"
         placeholder="选择分组查看节点"
@@ -120,14 +103,14 @@ const {
         >
           <strong class="visibility-name">{{ node.Name }}</strong
           ><StatusDot
-            :state="nodeEffectiveHidden(node) ? 'idle' : 'ok'"
-            :label="nodeEffectiveHidden(node) ? '全局隐藏' : '显示'"
+            :state="node.deliveryDisabled ? 'idle' : 'ok'"
+            :label="node.deliveryDisabled ? '不下发' : '允许下发'"
           />
           <UiButton
             variant="ghost"
             :disabled="busy"
-            @click="toggleNodeHidden(node)"
-            >{{ node.Hidden ? "恢复节点" : "隐藏节点" }}</UiButton
+            @click="setDelivery(node.ID, !!node.deliveryDisabled)"
+            >{{ node.deliveryDisabled ? "开启下发" : "关闭下发" }}</UiButton
           >
         </div>
         <EmptyState
@@ -136,7 +119,7 @@ const {
           description="该分组暂无节点。"
         />
       </div>
-      <p class="field-hint">整组隐藏时，需先恢复分组，组内节点才会显示。</p>
+      <p class="field-hint">关闭下发后节点仍可管理、复制链接和检测。</p>
     </section>
     <section class="form-section">
       <h3>绑定节点</h3>

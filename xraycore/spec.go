@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"ppeelink/monitorcore"
+	"ppeelink/relaycore"
 )
 
 // DefaultVersion 默认安装的 xray-core 版本（官方 release，下载后校验 SHA2-256）。
@@ -22,10 +23,11 @@ const (
 
 // Spec 面板下发给一台服务器的完整期望状态。
 type Spec struct {
-	Version  string        `json:"version"`
-	Enabled  bool          `json:"enabled"` // false 时停止 xray（一键停用）
-	APIPort  int           `json:"apiPort"`
-	Inbounds []InboundSpec `json:"inbounds"`
+	Relays   []relaycore.Spec `json:"relays,omitempty"`
+	Version  string           `json:"version"`
+	Enabled  bool             `json:"enabled"` // false 时停止 xray（一键停用）
+	APIPort  int              `json:"apiPort"`
+	Inbounds []InboundSpec    `json:"inbounds"`
 	// 防滥用：阻断访问内网与 BT 流量
 	BlockPrivate    bool `json:"blockPrivate"`
 	BlockBitTorrent bool `json:"blockBitTorrent"`
@@ -90,7 +92,7 @@ type UserSpec struct {
 func (s Spec) Rev() string {
 	// Only configuration consumed by Xray/its relay belongs in this revision.
 	// Agent upgrades and metric sampling settings do not change proxy routing.
-	s.Monitor, s.AgentUpdate, s.AgentHash = nil, false, ""
+	s.Monitor, s.AgentUpdate, s.AgentHash, s.Relays = nil, false, "", nil
 	raw, _ := json.Marshal(s)
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])[:16]
@@ -104,19 +106,20 @@ type Counter struct {
 
 // Report 服务器回报给面板的运行状态。Traffic 为自上次回报以来的增量。
 type Report struct {
-	Certificates   map[string]string      `json:"certificates,omitempty"`
-	ProxyFeatures  int                    `json:"proxyFeatures"`
-	Rev            string                 `json:"rev"`
-	XrayVersion    string                 `json:"xrayVersion"`
-	AgentVersion   string                 `json:"agentVersion,omitempty"`
-	AgentHash      string                 `json:"agentHash,omitempty"`
-	Arch           string                 `json:"arch"`
-	Running        bool                   `json:"running"`
-	Error          string                 `json:"error"`
-	Traffic        map[string]Counter     `json:"traffic"`
-	Online         map[string]int         `json:"online"` // email -> 在线 IP 数
-	Uninstalled    bool                   `json:"uninstalled,omitempty"`
-	Monitor        *monitorcore.Metric    `json:"monitor,omitempty"`
-	WebsiteTraffic []WebsiteTrafficBucket `json:"websiteTraffic,omitempty"`
-	WebsiteBatchID string                 `json:"websiteBatchId,omitempty"`
+	Relays         map[string]relaycore.Status `json:"relays,omitempty"`
+	Certificates   map[string]string           `json:"certificates,omitempty"`
+	ProxyFeatures  int                         `json:"proxyFeatures"`
+	Rev            string                      `json:"rev"`
+	XrayVersion    string                      `json:"xrayVersion"`
+	AgentVersion   string                      `json:"agentVersion,omitempty"`
+	AgentHash      string                      `json:"agentHash,omitempty"`
+	Arch           string                      `json:"arch"`
+	Running        bool                        `json:"running"`
+	Error          string                      `json:"error"`
+	Traffic        map[string]Counter          `json:"traffic"`
+	Online         map[string]int              `json:"online"` // email -> 在线 IP 数
+	Uninstalled    bool                        `json:"uninstalled,omitempty"`
+	Monitor        *monitorcore.Metric         `json:"monitor,omitempty"`
+	WebsiteTraffic []WebsiteTrafficBucket      `json:"websiteTraffic,omitempty"`
+	WebsiteBatchID string                      `json:"websiteBatchId,omitempty"`
 }

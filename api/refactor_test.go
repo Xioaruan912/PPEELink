@@ -164,26 +164,21 @@ func TestNodeBatchRenameAndChain(t *testing.T) {
 		t.Fatalf("node order not updated: %q", sub.NodeOrder)
 	}
 
-	rec = jsonRequest(t, NodeBatch, nodeBatchRequest{IDs: []int{b.ID}, Action: "chain", RelayID: a.ID}, nil)
-	if rec.Code != 200 {
-		t.Fatalf("chain failed: %s", rec.Body.String())
+	rec = jsonRequest(t, NodeBatch, map[string]any{"ids": []int{b.ID}, "action": "chain", "relayId": a.ID}, nil)
+	if rec.Code != 400 {
+		t.Fatalf("retired chain action accepted: %s", rec.Body.String())
 	}
+	models.DB.Model(&b).Update("flags", `{"dialerProxyId":999}`)
 	var landing models.Node
 	models.DB.First(&landing, b.ID)
-	// 只输出落地节点时，中转节点会被自动补进配置
+	// Old settings no longer inject any extra nodes into client configuration.
 	urls, flags := collectNodeInputs([]models.Node{landing})
-	if len(urls) != 2 {
-		t.Fatalf("relay must be appended, got %v", urls)
+	if len(urls) != 1 {
+		t.Fatalf("legacy relay unexpectedly appended, got %v", urls)
 	}
 	proxies := node.BuildClashProxies(urls, flags, node.SqlConfig{})
-	var found bool
-	for _, p := range proxies {
-		if p.Name == "Bravo" && p.Dialer_proxy == "Alpha-HK" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("dialer-proxy missing: %+v", proxies)
+	if len(proxies) != 1 || proxies[0].Name != "Bravo" || len(flags) != 0 {
+		t.Fatalf("legacy client-chain flags retained: %+v", proxies)
 	}
 }
 

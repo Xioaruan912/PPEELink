@@ -49,6 +49,12 @@ func ProxyServerList(c *gin.Context) {
 		var sum struct{ Up, Down int64 }
 		models.DB.Model(&models.ProxyTraffic{}).Select("COALESCE(SUM(up),0) AS up, COALESCE(SUM(down),0) AS down").
 			Where("day = ? AND server_id = ?", day, s.ID).Scan(&sum)
+		if models.DB.Migrator().HasTable(&models.AgentRelayDay{}) {
+			var raw struct{ Up, Down int64 }
+			models.DB.Model(&models.AgentRelayDay{}).Select("COALESCE(SUM(up),0) AS up, COALESCE(SUM(down),0) AS down").Where("server_id = ? AND day = ?", s.ID, day).Scan(&raw)
+			sum.Up += raw.Up
+			sum.Down += raw.Down
+		}
 		v.TodayUp, v.TodayDown = sum.Up, sum.Down
 		var users int64
 		models.DB.Model(&models.ProxyTraffic{}).Where("day = ? AND server_id = ?", day, s.ID).Distinct("user_id").Count(&users)
@@ -221,6 +227,10 @@ func ProxyServerDelete(c *gin.Context) {
 		c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
 		return
 	}
+	if err := deleteServerAgentRelays(s.ID); err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "清理中转线路失败，服务器尚未删除"})
+		return
+	}
 	models.DB.Where("server_id = ?", s.ID).Delete(&models.ProxyInbound{})
 	// 先停用让同步清空节点
 	models.DB.Model(&s).Update("enabled", false)
@@ -307,6 +317,12 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(404, gin.H{"code": "40400", "msg": "服务器不存在"})
 		return
 	}
+	relayMutationMu.Lock()
+	defer relayMutationMu.Unlock()
+	if err := relayPortConflict(req.ServerID, req.Port, 0, req.ID); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
+	}
 	var clash int64
 	models.DB.Model(&models.ProxyInbound{}).Where("server_id = ? AND port = ? AND id <> ?", req.ServerID, req.Port, req.ID).Count(&clash)
 	if clash > 0 {
@@ -357,6 +373,22 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "出口节点无效"})
 		return
 	}
+	req.Remark = strings.TrimSpace(req.Remark)
+	if req.EgressNodeID > 0 {
+		if req.Remark == "" || len([]rune(req.Remark)) > 80 || strings.ContainsAny(req.Remark, "\r\n") {
+			c.JSON(400, gin.H{"code": "40000", "msg": "请填写 1–80 字的网关节点名称"})
+			return
+		}
+		var names int64
+		if err := models.DB.Model(&models.ProxyInbound{}).Where("egress_node_id > 0 AND remark = ? AND id <> ?", req.Remark, req.ID).Count(&names).Error; err != nil {
+			c.JSON(500, gin.H{"code": "50000", "msg": "检查节点名称失败"})
+			return
+		}
+		if names > 0 {
+			c.JSON(400, gin.H{"code": "40000", "msg": "已有同名网关，请填写不同的节点名称"})
+			return
+		}
+	}
 	if (req.EgressNodeID > 0 || req.Template == xraycore.TemplateHysteria2) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 1 {
 		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级此服务器 Agent，再配置新增代理功能"})
 		return
@@ -387,7 +419,14 @@ func ProxyInboundSave(c *gin.Context) {
 		}
 		in.PrivateKey, in.PublicKey, in.ShortID = priv, pub, models.RandomHex(4)
 	}
-	if _, err := resolveInboundEgress(in, server); err != nil {
+	egress, routes, err := resolveInboundRoutes(in, server)
+	if err == nil {
+		err = requireGatewayCapability(egress, routes, server)
+	}
+	if err == nil {
+		err = validateManagedForwardGraph(nil, &in)
+	}
+	if err != nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
 		return
 	}

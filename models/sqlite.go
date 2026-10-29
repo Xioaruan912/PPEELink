@@ -34,9 +34,15 @@ func InitSqlite() {
 		sqlDB.SetConnMaxLifetime(time.Hour)
 	}
 	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{},
-		&Probe{}, &ProbeResult{}, &NetworkTraceRun{}, &NetworkTraceView{}, &TraceProbeCapability{}, &TraceAgentCapability{}, &Monitor{}, &MonitorMetric{}, &NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &ProxyServer{}, &ProxyInbound{}, &ProxyTraffic{}, &ProxyAccount{}, &WebsiteTraffic{}, &WebsiteTrafficReceipt{})
+		&Probe{}, &ProbeResult{}, &NetworkTraceRun{}, &NetworkTraceView{}, &TraceProbeCapability{}, &TraceAgentCapability{}, &Monitor{}, &MonitorMetric{}, &NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &ProxyServer{}, &AgentRelay{}, &AgentRelayDay{}, &ProxyInbound{}, &ProxyTraffic{}, &ProxyAccount{}, &WebsiteTraffic{}, &WebsiteTrafficReceipt{})
 	if err != nil {
 		log.Println("数据表迁移失败:", err)
+	}
+	if err := RemoveClientProxyChains(); err != nil {
+		log.Fatalf("清理已移除的客户端链式代理设置失败: %v", err)
+	}
+	if err := MigrateNodeVisibilityToDelivery(); err != nil {
+		log.Fatalf("迁移节点下发设置失败: %v", err)
 	}
 	_ = RecoverInterruptedTasks()
 	if err := EnsureDefaultEgressTargets(); err != nil {

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"ppeelink/monitorcore"
+	"ppeelink/relaycore"
 )
 
 // Source 期望状态的来源与回报去向：面板本机直接读写数据库，远程 agent 走 HTTPS。
@@ -39,6 +40,9 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 	if interval <= 0 {
 		interval = time.Minute
 	}
+	relays := relaycore.NewManager(runner.Dir)
+	defer relays.Close()
+	relayRestoreErr := relays.Restore(ctx)
 	pending := map[string]Counter{}
 	websiteBatchID, pendingWebsites, spoolLoadErr := loadWebsiteBatch(runner.Dir)
 	ackWebsites := func() {
@@ -78,9 +82,20 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		if ctx.Err() != nil {
 			return false
 		}
-		report := Report{ProxyFeatures: 4, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
+		report := Report{ProxyFeatures: 5, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
+		if relayRestoreErr != nil {
+			report.Error = "恢复端口转发失败: " + relayRestoreErr.Error()
+			relayRestoreErr = nil
+		}
 		if err == nil && spec.Uninstall {
+			if relayErr := relays.Apply(ctx, nil); relayErr != nil {
+				report.Error = "停止端口转发失败: " + relayErr.Error()
+				report.Relays = relays.Status()
+				_ = src.Report(ctx, report)
+				return false
+			}
+			report.Relays = relays.Status()
 			// 先收最后一轮流量，再卸载
 			traffic, _, _ := runner.Collect(ctx)
 			for email, c := range traffic {
@@ -128,13 +143,25 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		if err != nil {
 			report.Error = "获取配置失败: " + err.Error()
 		} else {
+			relaySpecs := spec.Relays
+			if !spec.Enabled {
+				relaySpecs = nil
+			}
+			if relayErr := relays.Apply(ctx, relaySpecs); relayErr != nil {
+				if report.Error != "" {
+					report.Error += "; "
+				}
+				report.Error += "应用端口转发失败: " + relayErr.Error()
+			}
+
 			if spec.AgentUpdate && spec.AgentHash != "" && report.AgentHash != spec.AgentHash {
 				if updater, ok := src.(Updater); ok {
 					// Persist/flush queued website data before replacing this process.
 					flushErr := collectWebsites()
-					if flushErr == nil && len(pendingWebsites) > 0 {
+					if flushErr == nil {
 						report.WebsiteTraffic, report.WebsiteBatchID = pendingWebsites, websiteBatchID
 						report.Rev = runner.Rev()
+						report.Relays = relays.Status()
 						report.Running, _ = runner.Status()
 						flushErr = src.Report(ctx, report)
 						if flushErr == nil {
@@ -143,7 +170,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 						report.WebsiteTraffic, report.WebsiteBatchID = nil, ""
 					}
 					if flushErr != nil {
-						report.Error = "agent 更新前网站流量补报失败: " + flushErr.Error()
+						report.Error = "agent 更新前流量补报失败: " + flushErr.Error()
 					} else if updateErr := updater.Update(ctx, spec.AgentHash); updateErr != nil {
 						report.Error = "agent 自更新失败: " + updateErr.Error()
 					}
@@ -193,6 +220,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		if report.Error == "" {
 			report.Error = runtimeError
 		}
+		report.Relays = relays.Status()
 		report.XrayVersion = InstalledVersion(runner.Dir)
 		report.Certificates = runner.CertificateReports()
 		if err := src.Report(ctx, report); err != nil {

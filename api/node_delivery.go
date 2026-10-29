@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
 	"ppeelink/models"
 
 	"github.com/gin-gonic/gin"
@@ -16,9 +17,10 @@ import (
 //   - 面板连续多次检测无效（健康事件为 down），检测恢复后自动下发。
 
 const (
-	blockPaused = "paused"
-	blockServer = "server-quota"
-	blockHealth = "health"
+	blockPaused   = "paused"
+	blockServer   = "server-quota"
+	blockHealth   = "health"
+	blockDisabled = "delivery-disabled"
 )
 
 // deliveryBlock 节点暂不下发的原因。Until 为预计恢复时间，未知时为空。
@@ -37,6 +39,11 @@ func undeliverableNodes(now time.Time) map[int]deliveryBlock {
 		}
 	}
 
+	var disabled []int
+	models.DB.Model(&models.Node{}).Where("delivery_disabled = ?", true).Pluck("id", &disabled)
+	for _, id := range disabled {
+		add(id, deliveryBlock{Kind: blockDisabled, Reason: "已关闭订阅下发"})
+	}
 	var paused []models.Node
 	models.DB.Select("id", "paused_until", "pause_note").Where("paused_until > ?", now).Find(&paused)
 	for _, n := range paused {
@@ -82,6 +89,35 @@ func undeliverableNodes(now time.Time) map[int]deliveryBlock {
 		}
 	}
 	return blocks
+}
+
+// NodeDelivery controls subscription inclusion without hiding/stopping a node.
+func NodeDelivery(c *gin.Context) {
+	var req struct {
+		ID      int   `json:"id"`
+		Enabled *bool `json:"enabled"`
+	}
+	if c.ShouldBindJSON(&req) != nil || req.ID <= 0 || req.Enabled == nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请提供节点 id 和下发状态"})
+		return
+	}
+	err := models.DB.Transaction(func(tx *gorm.DB) error {
+		var n models.Node
+		if err := tx.First(&n, req.ID).Error; err != nil {
+			return err
+		}
+		return tx.Model(&n).Update("delivery_disabled", !*req.Enabled).Error
+	})
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
+		} else {
+			c.JSON(500, gin.H{"code": "50000", "msg": "保存下发状态失败"})
+		}
+		return
+	}
+	InvalidateOverview()
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"enabled": *req.Enabled}, "msg": map[bool]string{true: "已开启订阅下发", false: "已关闭订阅下发，节点仍保留在列表中"}[*req.Enabled]})
 }
 
 type nodeForceDeliverRequest struct {

@@ -126,7 +126,6 @@ func nodesToItems(nodes []models.Node) []pipelineItem {
 		}
 		if f := decodeNodeFlags(n.Flags); !f.Empty() {
 			p.UDP, p.TFO, p.SkipCertVerify = f.UDP, f.TFO, f.SkipCertVerify
-			p.DialerProxyID = f.DialerProxyID
 		}
 		items = append(items, pipelineItem{ID: n.ID, P: p, Raw: n})
 	}

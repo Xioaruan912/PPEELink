@@ -1,6 +1,9 @@
 package api
 
 import (
+	"github.com/gin-gonic/gin"
+	"ppeelink/node"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +27,112 @@ func deliveryFixture(t *testing.T) (models.Subcription, models.GroupNode, []mode
 	models.DB.Create(&sub)
 	_ = models.DB.Model(&sub).Association("GroupRefs").Append(&group)
 	return sub, group, nodes
+}
+
+func TestDeliverySwitchDoesNotHideOrLoseNodeAndCannotBeOverridden(t *testing.T) {
+	sub, _, nodes := deliveryFixture(t)
+	t.Cleanup(InvalidateOverview)
+	models.DB.Model(&nodes[0]).Update("force_deliver", true)
+	res := jsonRequest(t, NodeDelivery, map[string]any{"id": nodes[0].ID, "enabled": false}, nil)
+	if res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	listed, err := models.GetNodeList()
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("switch hid node: %d %v", len(listed), err)
+	}
+	items := withBlocks([]NodeOverviewItem{{ID: nodes[0].ID}, {ID: nodes[1].ID}})
+	if items[0].DeliveryEnabled || items[0].Blocked == nil || items[0].Blocked.Kind != blockDisabled || !items[1].DeliveryEnabled {
+		t.Fatalf("overview does not reflect switch: %+v", items)
+	}
+	names, excluded := deliveredNames(t, sub)
+	if len(names) != 1 || names[0] != "B" || len(excluded) != 1 || excluded[0].Kind != blockDisabled {
+		t.Fatalf("disabled node delivered: %v %+v", names, excluded)
+	}
+	jsonRequest(t, NodeDelivery, map[string]any{"id": nodes[1].ID, "enabled": false}, nil)
+	if names, _ := deliveredNames(t, sub); len(names) != 0 {
+		t.Fatal("all-disabled fallback revived nodes", names)
+	}
+	res = jsonRequest(t, NodeDelivery, map[string]any{"id": nodes[0].ID, "enabled": true}, nil)
+	if res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	if names, _ := deliveredNames(t, sub); len(names) != 1 || names[0] != "A" {
+		t.Fatal("re-enabling failed", names)
+	}
+	var saved models.Node
+	models.DB.First(&saved, nodes[0].ID)
+	if saved.Hidden || saved.Link != nodes[0].Link || saved.ID != nodes[0].ID || !saved.ForceDeliver {
+		t.Fatal("delivery switch changed node identity or other settings")
+	}
+}
+
+func TestDeliverySwitchRequiresAnExplicitState(t *testing.T) {
+	_, _, nodes := deliveryFixture(t)
+	for _, req := range []map[string]any{{"id": nodes[0].ID}, {"id": nodes[0].ID, "enabled": "false"}, {"id": 0, "enabled": true}} {
+		if res := jsonRequest(t, NodeDelivery, req, nil); res.Code != 400 {
+			t.Fatal("invalid request accepted")
+		}
+	}
+	if res := jsonRequest(t, NodeDelivery, map[string]any{"id": 999999, "enabled": false}, nil); res.Code != 404 {
+		t.Fatal("missing node accepted")
+	}
+}
+
+func TestDisabledNodeDoesNotLeakThroughTemporaryOrOldFallbackSubscription(t *testing.T) {
+	sub, _, nodes := deliveryFixture(t)
+	sub.Config = "{}"
+	models.DB.Model(&sub).Update("config", sub.Config)
+	oldBody := []byte(node.Base64Encode(nodes[0].Link + "\n" + nodes[1].Link))
+	rememberGoodArtifact(sub.ID, "v2ray", oldBody, "")
+	if res := jsonRequest(t, NodeDelivery, map[string]any{"id": nodes[0].ID, "enabled": false}, nil); res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	token := signTempLink(nodes[0].ID, time.Now().Add(time.Hour).Unix())
+	res := jsonRequest(t, GetTempLink, nil, func(c *gin.Context) { c.Request.URL.RawQuery = "token=" + token })
+	if res.Code != 403 {
+		t.Fatal("disabled node leaked through temp link", res.Code)
+	}
+	res = jsonRequest(t, func(c *gin.Context) { serveSubscriptionClient(c, sub, "v2ray") }, nil, nil)
+	decoded := node.Base64Decode(res.Body.String())
+	if res.Code != 200 || strings.Contains(decoded, nodes[0].Link) || !strings.Contains(decoded, nodes[1].Link) {
+		t.Fatalf("live subscription ignored switch: HTTP %d", res.Code)
+	}
+	// Recreate a stale cache and fail generation: it must not bypass the switch.
+	models.DB.Where("subscription_id = ?", sub.ID).Delete(&models.SubscriptionArtifactPointer{})
+	rememberGoodArtifact(sub.ID, "v2ray", oldBody, "")
+	sub.Name = "missing-subscription"
+	res = jsonRequest(t, func(c *gin.Context) { serveSubscriptionClient(c, sub, "v2ray") }, nil, nil)
+	if res.Code != 502 || res.Header().Get("X-SubLinkX-Artifact") != "" {
+		t.Fatal("old artifact bypassed delivery settings", res.Code)
+	}
+}
+
+func TestPersonalDeliverySwitchSurvivesManagedNodeSync(t *testing.T) {
+	_, _, user := selfHostedFixture(t)
+	if err := SyncSelfHostedNodes(); err != nil {
+		t.Fatal(err)
+	}
+	var n models.Node
+	models.DB.Where("source = ?", selfHostedSource).First(&n)
+	var account models.ProxyAccount
+	models.DB.Where("user_id = ?", user.ID).First(&account)
+	if len(AccountNodes(account)) != 1 {
+		t.Fatal("fixture missing account node")
+	}
+	if res := jsonRequest(t, NodeDelivery, map[string]any{"id": n.ID, "enabled": false}, nil); res.Code != 200 {
+		t.Fatal(res.Body.String())
+	}
+	if err := SyncSelfHostedNodes(); err != nil {
+		t.Fatal(err)
+	}
+	if len(AccountNodes(account)) != 0 {
+		t.Fatal("personal subscription bypassed node switch")
+	}
+	var same models.Node
+	if err := models.DB.First(&same, n.ID).Error; err != nil || !same.DeliveryDisabled {
+		t.Fatal("managed sync overwrote switch", err)
+	}
 }
 
 func deliveredNames(t *testing.T, sub models.Subcription) ([]string, []excludedNode) {

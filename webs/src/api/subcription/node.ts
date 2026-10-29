@@ -49,8 +49,7 @@ export function updateAlertSetting(
 ) {
   const form = new FormData();
   Object.entries(data).forEach(([key, value]) => {
-    if (value !== undefined && value !== null)
-      form.append(key, String(value));
+    if (value !== undefined && value !== null) form.append(key, String(value));
   });
   return request({
     url: "/api/v1/nodes/alerts",
@@ -153,11 +152,11 @@ export function GetGroupFull(includeHidden = false) {
     params: includeHidden ? { include_hidden: 1 } : undefined,
   });
 }
-export function SetNodeVisibility(id: number, hidden: boolean) {
+export function SetNodeDelivery(id: number, enabled: boolean) {
   return request({
-    url: "/api/v1/nodes/visibility",
+    url: "/api/v1/nodes/delivery",
     method: "post",
-    data: { id, hidden },
+    data: { id, enabled },
   });
 }
 // 即使检测无效也始终下发
@@ -166,13 +165,6 @@ export function SetNodeForceDeliver(id: number, forceDeliver: boolean) {
     url: "/api/v1/nodes/deliver",
     method: "post",
     data: { id, forceDeliver },
-  });
-}
-export function SetGroupVisibility(id: number, hidden: boolean) {
-  return request({
-    url: "/api/v1/nodes/group/visibility",
-    method: "post",
-    data: { id, hidden },
   });
 }
 // 设置关联分组
@@ -207,21 +199,19 @@ export function DelGroup(data: any) {
   });
 }
 
-export type NodeBatchAction =
-  "rename" | "emoji-add" | "emoji-remove" | "flags" | "chain";
+export type NodeBatchAction = "rename" | "emoji-add" | "emoji-remove" | "flags";
 export interface NodeChange {
   id: number;
   before: string;
   after: string;
 }
-/** 批量改名 / 加减国旗 / 开关 / 链式代理；preview 为真时只返回改动预览。 */
+/** 批量改名 / 加减国旗 / 开关；preview 为真时只返回改动预览。 */
 export function nodeBatch(data: {
   ids: number[];
   action: NodeBatchAction;
   pattern?: string;
   replacement?: string;
   flags?: { udp: boolean; tfo: boolean; skipCertVerify: boolean };
-  relayId?: number;
   preview?: boolean;
 }) {
   return request<{ changes: NodeChange[] }>({

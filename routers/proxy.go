@@ -10,6 +10,10 @@ import (
 func Proxy(r *gin.Engine) {
 	g := r.Group("/api/v1/proxy")
 	{
+		g.GET("/relays", api.AgentRelayList)
+		g.GET("/relay-targets", api.AgentRelayTargets)
+		g.POST("/relays/save", api.AgentRelaySave)
+		g.DELETE("/relays/delete", api.AgentRelayDelete)
 		g.GET("/egress-options", api.ProxyEgressOptions)
 		g.GET("/servers", api.ProxyServerList)
 		g.POST("/servers/save", api.ProxyServerSave)
