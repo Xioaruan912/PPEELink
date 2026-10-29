@@ -179,8 +179,13 @@ function copyReport() {
         </div>
         <UiButton @click="copyReport">复制诊断结果</UiButton>
       </div>
-      <ol>
-        <li v-for="step in result.steps" :key="step.key" :class="step.status">
+      <ol class="diagnostic-steps">
+        <li
+          v-for="step in result.steps"
+          :key="step.key"
+          class="diagnostic-step"
+          :class="step.status"
+        >
           <div class="step-status">{{ statusText[step.status] }}</div>
           <div>
             <h3>
@@ -267,19 +272,19 @@ small {
 .failure {
   color: #b42318;
 }
-ol {
+.diagnostic-steps {
   padding: 0;
   list-style: none;
   margin: 20px 0 0;
 }
-li {
+.diagnostic-step {
   display: grid;
   grid-template-columns: 64px minmax(0, 1fr);
   gap: 14px;
   padding: 18px 0;
   border-top: 1px solid var(--c-line);
 }
-li p {
+.diagnostic-step p {
   overflow-wrap: anywhere;
 }
 .step-status {
@@ -312,7 +317,7 @@ aside {
   .run-actions :deep(button) {
     min-height: 44px;
   }
-  li {
+  .diagnostic-step {
     grid-template-columns: 48px minmax(0, 1fr);
     gap: 8px;
   }

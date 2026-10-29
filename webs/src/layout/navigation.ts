@@ -35,6 +35,7 @@ const META: Record<string, { icon: Component; hint?: string; label?: string }> =
   "/network/traceroute": { icon: IconGauge, hint: "从面板与探针对比网络路径" },
   "/subcription": { icon: IconSubs },
   "/subcription/subs": { icon: IconLink, hint: "生成与分发订阅链接" },
+  "/subcription/diagnostic": { icon: IconGauge, hint: "定位 Reality / HY2 的连接故障" },
   "/subcription/nodes": { icon: IconNodes, hint: "分组、编辑与检测节点" },
   "/subcription/servers": {
     icon: IconServer,
@@ -91,7 +92,7 @@ export function flattenNavigation(items: NavigationItem[]): NavigationItem[] {
 // Presentation groups only consume permitted routes; URLs and route guards stay authoritative.
 const GROUPS = [
   { label: "服务器", icon: IconServer, paths: ["/monitor/index", "/subcription/servers", "/monitor/workspace", "/monitor/website"] },
-  { label: "订阅与节点", icon: IconSubs, paths: ["/subcription/subs", "/subcription/nodes"] },
+  { label: "订阅与节点", icon: IconSubs, paths: ["/subcription/subs", "/subcription/nodes", "/subcription/diagnostic"] },
   { label: "配置与规则", icon: IconCode, paths: ["/template/list", "/template/builder", "/template/rules"] },
   { label: "网络诊断", icon: IconGauge, paths: ["/test/index", "/network/traceroute"] },
   { label: "系统", icon: IconGear, paths: ["/system/users", "/system/settings"] },
