@@ -39,3 +39,7 @@ export function diagnosticVerdict(result: {
   if (result.steps.some((step) => step.status === "failed")) return "failed";
   return "unknown";
 }
+
+export function canOpenDiagnosticDetails(row: { status: string }): boolean {
+  return !["waiting", "running"].includes(row.status);
+}

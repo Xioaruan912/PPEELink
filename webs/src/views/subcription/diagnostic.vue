@@ -1,9 +1,13 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import request from "@/utils/request";
-import { runDiagnosticQueue, diagnosticVerdict } from "./diagnosticBatch";
+import {
+  runDiagnosticQueue,
+  diagnosticVerdict,
+  canOpenDiagnosticDetails,
+} from "./diagnosticBatch";
 import { getNodes } from "@/api/subcription/node";
-import { UiButton, UiSegmented } from "@/ui";
+import { UiButton, UiSegmented, UiDrawer } from "@/ui";
 const mode = ref("node"),
   selected = ref<number>(),
   link = ref(""),
@@ -48,6 +52,14 @@ interface BatchRow {
 }
 const batchRows = ref<BatchRow[]>([]);
 const batchRunning = ref(false);
+const detailVisible = ref(false);
+const detailRow = ref<BatchRow | null>(null);
+const detailResult = computed(() => detailRow.value?.result);
+function openDetails(row: BatchRow) {
+  if (!canOpenDiagnosticDetails(row)) return;
+  detailRow.value = { ...row };
+  detailVisible.value = true;
+}
 const batchStatusText: Record<BatchStatus, string> = {
   waiting: "等待中",
   running: "检测中",
@@ -76,6 +88,8 @@ async function runAll() {
   if (loading.value || !nodes.value.length) return;
   loading.value = true;
   batchRunning.value = true;
+  detailVisible.value = false;
+  detailRow.value = null;
   error.value = "";
   result.value = null;
   const abort = new AbortController();
@@ -197,9 +211,9 @@ const statusText: Record<string, string> = {
   failed: "失败",
   unknown: "待确认",
 };
-function copyReport() {
-  if (!result.value) return;
-  const r = result.value;
+function copyReport(report?: Result) {
+  const r = report || result.value;
+  if (!r) return;
   navigator.clipboard
     .writeText(
       [
@@ -330,8 +344,16 @@ function copyReport() {
           <span class="batch-status" :class="`batch-status-${row.status}`">{{
             batchStatusText[row.status]
           }}</span>
-          <UiButton :disabled="!row.result" @click="result = row.result || null"
-            >查看详情</UiButton
+          <UiButton
+            :disabled="!canOpenDiagnosticDetails(row)"
+            @click="openDetails(row)"
+            >{{
+              row.status === "waiting"
+                ? "等待检测"
+                : row.status === "running"
+                  ? "检测中…"
+                  : "查看详情"
+            }}</UiButton
           >
         </div>
       </div>
@@ -346,7 +368,7 @@ function copyReport() {
             {{ new Date(result.checkedAt).toLocaleString() }}
           </p>
         </div>
-        <UiButton @click="copyReport">复制诊断结果</UiButton>
+        <UiButton @click="copyReport()">复制诊断结果</UiButton>
       </div>
       <ol class="diagnostic-steps">
         <li
@@ -369,6 +391,62 @@ function copyReport() {
         <p v-for="advice in result.advice" :key="advice">{{ advice }}</p>
       </aside>
     </section>
+    <UiDrawer
+      v-model="detailVisible"
+      :title="detailRow ? `${detailRow.name} · 诊断详情` : '诊断详情'"
+      size="min(640px, 100vw)"
+    >
+      <section v-if="detailRow" class="detail-body">
+        <p class="detail-status">{{ batchStatusText[detailRow.status] }}</p>
+        <template v-if="detailResult">
+          <h2>{{ detailResult.summary }}</h2>
+          <p>
+            {{ detailResult.protocol }} {{ detailResult.transport }} ·
+            {{ detailResult.perspective }} ·
+            {{ new Date(detailResult.checkedAt).toLocaleString() }}
+          </p>
+          <ol class="diagnostic-steps">
+            <li
+              v-for="step in detailResult.steps"
+              :key="step.key"
+              class="diagnostic-step"
+              :class="step.status"
+            >
+              <div class="step-status">{{ statusText[step.status] }}</div>
+              <div>
+                <h3>
+                  {{ step.title }} <small>{{ step.millis }} ms</small>
+                </h3>
+                <p>{{ step.detail }}</p>
+              </div>
+            </li>
+          </ol>
+          <aside v-if="detailResult.advice.length">
+            <h3>接下来检查</h3>
+            <p v-for="advice in detailResult.advice" :key="advice">
+              {{ advice }}
+            </p>
+          </aside>
+        </template>
+        <template v-else>
+          <h2>{{ detailRow.note || "本次没有生成完整的诊断报告" }}</h2>
+          <p v-if="detailRow.status === 'error'">
+            这是诊断请求失败，不代表节点已经损坏。请稍后重试，或单独选择这个节点检测。
+          </p>
+          <p v-else-if="detailRow.status === 'skipped'">
+            这个节点尚未进行深度诊断，不能据此判定是否可用。
+          </p>
+          <p v-else-if="detailRow.status === 'cancelled'">
+            检测已取消，没有足够结果判断节点是否可用。可以重新检测。
+          </p>
+        </template>
+      </section>
+      <template #footer
+        ><UiButton v-if="detailResult" @click="copyReport(detailResult)"
+          >复制诊断结果</UiButton
+        ><UiButton @click="detailVisible = false">关闭</UiButton></template
+      >
+    </UiDrawer>
     <p class="context-note">
       面板可连通而手机无法访问时，还需检查手机网络、客户端参数和本地
       DNS。网站返回 403 / 429
@@ -495,6 +573,14 @@ aside {
 </style>
 
 <style scoped>
+.detail-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.detail-status {
+  font-weight: 600;
+  color: var(--c-ink);
+}
 .source-switch {
   display: inline-grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
