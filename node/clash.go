@@ -56,7 +56,6 @@ type Proxy struct {
 	Mtu                int                    `yaml:"mtu,omitempty"`
 	Reserved           []int                  `yaml:"reserved,omitempty"`
 	Dns                []string               `yaml:"dns,omitempty"`
-	Dialer_proxy       string                 `yaml:"dialer-proxy,omitempty"`
 }
 
 type ProxyGroup struct {
@@ -146,9 +145,8 @@ func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlC
 		udp := sqlconfig.Udp
 		cert := sqlconfig.Cert
 		tfo := false
-		dialer := ""
 		if f, ok := flags[link]; ok {
-			udp, cert, tfo, dialer = f.UDP, f.SkipCertVerify, f.TFO, f.DialerProxy
+			udp, cert, tfo = f.UDP, f.SkipCertVerify, f.TFO
 		}
 		before := len(proxys)
 		Scheme := strings.Split(link, "://")[0]
@@ -472,9 +470,6 @@ func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlC
 		}
 		if tfo && len(proxys) > before {
 			proxys[len(proxys)-1].Tfo = true
-		}
-		if dialer != "" && len(proxys) > before && dialer != proxys[len(proxys)-1].Name {
-			proxys[len(proxys)-1].Dialer_proxy = dialer
 		}
 	}
 	return proxys

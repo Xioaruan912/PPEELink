@@ -23,19 +23,11 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 		sqlconfig.Loon = "./template/loon.conf"
 	}
 	var proxys []string
-	relations := map[string]string{}
 	for _, link := range urls {
 		udp := sqlconfig.Udp
 		cert := sqlconfig.Cert
 		if f, ok := flags[link]; ok {
 			udp, cert = f.UDP, f.SkipCertVerify
-		}
-		if f, ok := flags[link]; ok && f.DialerProxy != "" {
-			parsed, err := ParseOutbound(link)
-			if err != nil {
-				return "", fmt.Errorf("中转节点解析失败")
-			}
-			relations[parsed.Name] = f.DialerProxy
 		}
 		scheme := strings.Split(link, "://")[0]
 		switch {
@@ -165,43 +157,7 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 			continue
 		}
 	}
-	proxys, chains, names, err := loonChains(proxys, relations)
-	if err != nil {
-		return "", err
-	}
-	out, err := DecodeLoon(proxys, sqlconfig.Loon)
-	if err != nil || len(chains) == 0 {
-		return out, err
-	}
-	// Chains are full-profile policies; remote node-only subscriptions cannot carry this section.
-	out = appendLoonSection(out, "Proxy Chain", strings.Join(chains, "\n"))
-	group := "中转线路"
-	for strings.Contains(out, group+" =") {
-		group += "_"
-	}
-	out = appendLoonSection(out, "Proxy Group", group+" = select,"+strings.Join(names, ","))
-	lines := strings.Split(out, "\n")
-	inGroups := false
-	for i, line := range lines {
-		trim := strings.TrimSpace(line)
-		if strings.HasPrefix(trim, "[") {
-			inGroups = trim == "[Proxy Group]"
-			continue
-		}
-		if inGroups && strings.Contains(line, "=") {
-			left, right, _ := strings.Cut(line, "=")
-			typ, rest, ok := strings.Cut(strings.TrimSpace(right), ",")
-			if strings.EqualFold(strings.TrimSpace(typ), "select") && strings.TrimSpace(left) != group {
-				if ok {
-					lines[i] = left + "= select," + group + "," + rest
-				} else {
-					lines[i] = left + "= select," + group
-				}
-				break
-			}
-		}
-	}
-	return strings.Join(lines, "\n"), nil
+	return DecodeLoon(proxys, sqlconfig.Loon)
 }
 
 // DecodeLoon 读取 Loon 模板（本地文件或 URL），将 [Proxy] 段替换为生成的节点。
@@ -242,101 +198,4 @@ func replaceLoonSection(raw, section, body string) string {
 		}
 	}
 	return strings.TrimRight(raw, "\r\n") + "\n\n[" + section + "]\n" + body + "\n"
-}
-func appendLoonSection(raw, section, body string) string {
-	marker := "[" + section + "]"
-	lines := strings.Split(raw, "\n")
-	for i, line := range lines {
-		if strings.TrimSpace(line) == marker {
-			lines[i] = line + "\n" + body
-			return strings.Join(lines, "\n")
-		}
-	}
-	return replaceLoonSection(raw, section, body)
-}
-func loonChains(proxies []string, relations map[string]string) ([]string, []string, []string, error) {
-	byName := map[string]int{}
-	rawName := map[string]string{}
-	for i, line := range proxies {
-		n, _, ok := strings.Cut(line, " = ")
-		if ok {
-			byName[n] = i
-			rawName[n] = n
-		}
-	}
-	for n := range relations {
-		if _, ok := byName[n]; !ok {
-			return nil, nil, nil, fmt.Errorf("Loon 无法输出中转落地节点 %s", n)
-		}
-	}
-	// These are direct support nodes, not the selectable relay policies. Keep
-	// their names human-readable and country-neutral so region filters do not
-	// accidentally select them as relayed Japan/US nodes.
-	used := map[string]bool{}
-	for n := range byName {
-		used[n] = true
-	}
-	nextAlias := 1
-	for _, line := range proxies {
-		n, _, _ := strings.Cut(line, " = ")
-		if relations[n] == "" {
-			continue
-		}
-		alias := ""
-		for {
-			alias = fmt.Sprintf("链路底层 %d（直连）", nextAlias)
-			nextAlias++
-			if !used[alias] {
-				break
-			}
-		}
-		used[alias] = true
-		rawName[n] = alias
-	}
-	chains := []string{}
-	names := []string{}
-	for _, line := range proxies {
-		n, _, _ := strings.Cut(line, " = ")
-		if relations[n] == "" {
-			continue
-		}
-		path := []string{}
-		seen := map[string]bool{}
-		cur := n
-		for cur != "" {
-			if seen[cur] || len(path) >= 4 {
-				return nil, nil, nil, fmt.Errorf("Loon 中转路径循环或超过 4 跳")
-			}
-			seen[cur] = true
-			if _, ok := byName[cur]; !ok {
-				return nil, nil, nil, fmt.Errorf("Loon 中转入口 %s 未输出，无法生成完整路径", cur)
-			}
-			if strings.ContainsAny(cur, ",\r\n") {
-				return nil, nil, nil, fmt.Errorf("Loon 中转节点名称不能含逗号或换行")
-			}
-			path = append(path, rawName[cur])
-			cur = relations[cur]
-		}
-		for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-			path[i], path[j] = path[j], path[i]
-		}
-		chains = append(chains, n+" = "+strings.Join(path, ",")+",udp=true")
-		names = append(names, n)
-		// QUIC to a later HY2 hop requires UDP forwarding on each earlier hop.
-		for member := range seen {
-			idx := byName[member]
-			proxies[idx] = strings.ReplaceAll(proxies[idx], "udp=false", "udp=true")
-			if !strings.Contains(proxies[idx], "block-quic=") {
-				proxies[idx] += ",block-quic=false"
-			}
-		}
-	}
-	for n, alias := range rawName {
-		if n != alias {
-			idx := byName[n]
-			_, rest, _ := strings.Cut(proxies[idx], " = ")
-			proxies[idx] = alias + " = " + rest
-		}
-	}
-	return proxies, chains, names, nil
 }

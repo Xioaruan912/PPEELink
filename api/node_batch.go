@@ -16,11 +16,10 @@ import (
 // nodeBatchRequest 批量操作节点。Preview 为真时只返回改动预览，不落库。
 type nodeBatchRequest struct {
 	IDs         []int           `json:"ids"`
-	Action      string          `json:"action"` // rename / emoji-add / emoji-remove / flags / chain
+	Action      string          `json:"action"` // rename / emoji-add / emoji-remove / flags
 	Pattern     string          `json:"pattern"`
 	Replacement string          `json:"replacement"`
 	Flags       *node.NodeFlags `json:"flags"`
-	RelayID     int             `json:"relayId"` // action=chain：中转节点 ID，0 表示取消
 	Preview     bool            `json:"preview"`
 }
 
@@ -67,55 +66,14 @@ func NodeBatch(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "请填写匹配正则或新名称"})
 		return
 	}
-	if req.Action == "chain" && req.RelayID != 0 {
-		var relay models.Node
-		if err := models.DB.First(&relay, req.RelayID).Error; err != nil {
-			c.JSON(400, gin.H{"code": "40000", "msg": "中转节点不存在"})
-			return
-		}
+	if req.Action != "rename" && req.Action != "emoji-add" && req.Action != "emoji-remove" && req.Action != "flags" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "不支持的操作"})
+		return
 	}
 	var nodes []models.Node
 	if err := models.DB.Where("id IN ?", req.IDs).Order("id asc").Find(&nodes).Error; err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点失败"})
 		return
-	}
-	if req.Action == "chain" && req.RelayID != 0 {
-		// Validate the final graph before writing any selected node.
-		var all []models.Node
-		if models.DB.Find(&all).Error != nil {
-			c.JSON(500, gin.H{"code": "50000", "msg": "读取中转路径失败"})
-			return
-		}
-		next := map[int]int{}
-		for _, n := range all {
-			next[n.ID] = decodeNodeFlags(n.Flags).DialerProxyID
-		}
-		for _, n := range nodes {
-			if n.ID != req.RelayID {
-				next[n.ID] = req.RelayID
-			}
-		}
-		for _, n := range nodes {
-			seen := map[int]bool{}
-			id := n.ID
-			for id != 0 {
-				if seen[id] {
-					c.JSON(400, gin.H{"code": "40000", "msg": "此设置会形成中转循环，未保存任何更改"})
-					return
-				}
-				if len(seen) >= 4 {
-					c.JSON(400, gin.H{"code": "40000", "msg": "中转路径最多支持 4 跳"})
-					return
-				}
-				seen[id] = true
-				v, ok := next[id]
-				if !ok {
-					c.JSON(400, gin.H{"code": "40000", "msg": "路径中的中转节点已不存在"})
-					return
-				}
-				id = v
-			}
-		}
 	}
 	changes := []nodeChange{}
 	for _, n := range nodes {
@@ -146,16 +104,6 @@ func NodeBatch(c *gin.Context) {
 			}
 			merged := decodeNodeFlags(n.Flags)
 			merged.UDP, merged.TFO, merged.SkipCertVerify = req.Flags.UDP, req.Flags.TFO, req.Flags.SkipCertVerify
-			change.Flags = encodeNodeFlags(merged)
-			if change.Flags == n.Flags {
-				continue
-			}
-		case "chain":
-			if req.RelayID == n.ID {
-				continue // 节点不能经由自己中转
-			}
-			merged := decodeNodeFlags(n.Flags)
-			merged.DialerProxyID = req.RelayID
 			change.Flags = encodeNodeFlags(merged)
 			if change.Flags == n.Flags {
 				continue

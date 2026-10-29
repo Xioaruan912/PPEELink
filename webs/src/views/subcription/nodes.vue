@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
+import { useRoute } from "vue-router";
 import { Plus, Refresh } from "@element-plus/icons-vue";
 import SubscriptionHeader from "@/components/subscriptions/SubscriptionHeader.vue";
 import { UiButton, UiPanel, UiSkeleton, EmptyState } from "@/ui";
@@ -36,7 +37,6 @@ const {
   checkValidity,
   handleAddNode,
   openGroupManager,
-  hideActiveGroup,
   copySelected,
   bulk,
   openPause,
@@ -46,6 +46,18 @@ const {
   testNode,
   openTool,
 } = provideNodes();
+const route = useRoute();
+watch(
+  () => [route.path, route.query.group] as const,
+  ([path, group]) => {
+    if (path === "/subcription/nodes" && typeof group === "string") {
+      activeGroup.value = group;
+      searchText.value = "";
+      filterCountries.value = [];
+    }
+  },
+  { immediate: true }
+);
 const root = ref<HTMLElement>();
 const { reduced, animate } = useMotion();
 const validCount = computed(
@@ -152,14 +164,7 @@ function leaveBar(element: Element, done: () => void) {
             ><span class="mono">{{ group.count }}</span>
           </button>
         </nav>
-        <UiButton
-          v-if="activeGroup !== '全部'"
-          variant="ghost"
-          :disabled="busy"
-          @click="hideActiveGroup"
-          >隐藏当前分组</UiButton
-        >
-        <p class="group-hint">隐藏的节点与分组可在管理中恢复。</p>
+        <p class="group-hint">下发开关控制订阅输出，关闭后节点仍保留。</p>
       </UiPanel>
       <UiPanel
         class="node-main"
@@ -237,7 +242,7 @@ function leaveBar(element: Element, done: () => void) {
           <template v-else>
             <div class="list-heading" aria-hidden="true">
               <span>节点 / 主机</span><span>协议</span><span>状态</span
-              ><span>可见</span><span class="actions-heading">操作</span>
+              ><span>下发</span><span class="actions-heading">操作</span>
             </div>
             <TransitionGroup
               tag="div"
@@ -272,8 +277,10 @@ function leaveBar(element: Element, done: () => void) {
                 >移出分组</UiButton
               ><UiButton :disabled="busy" @click="openPause(selectedNodes)"
                 >暂停下发</UiButton
-              ><UiButton :disabled="busy" @click="bulk('hide')"
-                >隐藏选中</UiButton
+              ><UiButton :disabled="busy" @click="bulk('enable-delivery')"
+                >开启下发</UiButton
+              ><UiButton :disabled="busy" @click="bulk('disable-delivery')"
+                >关闭下发</UiButton
               ><UiButton
                 variant="danger"
                 :disabled="busy"

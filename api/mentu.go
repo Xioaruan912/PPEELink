@@ -114,6 +114,9 @@ func GetMenus(c *gin.Context) {
 					},
 				},
 				{
+					Path: "relays", Component: "subcription/relays", Name: "ProxyRelays", Meta: Meta{Title: "中转设置", Icon: "link", Roles: []string{"ADMIN"}},
+				},
+				{
 					Path: "diagnostic", Component: "subcription/diagnostic", Name: "NodeDiagnostic", Meta: Meta{Title: "节点一键诊断", Icon: "monitor", Roles: []string{"ADMIN"}},
 				},
 				{

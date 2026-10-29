@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { computed, reactive, ref, watch } from "vue";
 import DomainRouteFields from "./DomainRouteFields.vue";
 import IconShuffle from "~icons/ph/shuffle";
 import IconCheck from "~icons/ph/seal-check";
@@ -13,7 +13,11 @@ import {
 } from "@/api/proxy";
 import { UiButton, UiDrawer, UiSegmented } from "@/ui";
 
-const props = defineProps<{ serverId: number; inbound: ProxyInbound | null }>();
+const props = defineProps<{
+  serverId: number;
+  inbound: ProxyInbound | null;
+  requireEgress?: boolean;
+}>();
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ saved: [] }>();
 
@@ -43,6 +47,7 @@ const blank = () => ({
   regenerateKey: false,
 });
 const form = reactive(blank());
+const identityLocked = computed(() => !!props.requireEgress && form.id > 0);
 watch(
   () => form.template,
   (template) => {
@@ -92,6 +97,7 @@ watch(visible, (open) => {
         }
       : {}
   );
+  if (props.requireEgress && !props.inbound) form.remark = "";
 });
 function pickTarget(host: string) {
   form.target = `${host}:443`;
@@ -107,16 +113,37 @@ async function runCheck() {
   }
 }
 async function save() {
+  if (props.requireEgress && !form.remark.trim()) {
+    error.value = "请填写网关节点名称。";
+    return;
+  }
+  if (props.requireEgress && !form.egressNodeId) {
+    error.value = "请选择落地出口，固定入口网关不能使用当前服务器直连。";
+    return;
+  }
   saving.value = true;
   error.value = "";
   try {
     await saveProxyInbound({
       ...form,
+      regenerateKey: props.requireEgress ? false : form.regenerateKey,
       tlsMode: form.template === "hysteria2" ? form.tlsMode : "manual",
+      ...(identityLocked.value && props.inbound
+        ? {
+            template: props.inbound.template,
+            port: props.inbound.port,
+            target: props.inbound.target,
+            sni: props.inbound.sni,
+            path: props.inbound.path,
+            tlsMode: props.inbound.tlsMode,
+            tlsCertFile: props.inbound.tlsCertFile,
+            tlsKeyFile: props.inbound.tlsKeyFile,
+          }
+        : {}),
       id: form.id || undefined,
       serverId: props.serverId,
     });
-    ElMessage.success("已保存，服务器将在一分钟内应用");
+    ElMessage.success("已保存，等待 Agent 应用，以运行状态和最近回报为准");
     visible.value = false;
     emit("saved");
   } catch (e: any) {
@@ -129,18 +156,41 @@ async function save() {
 <template>
   <UiDrawer
     v-model="visible"
-    :title="form.id ? '编辑入站' : '添加入站'"
+    :title="
+      props.requireEgress
+        ? form.id
+          ? '修改落地与规则'
+          : '添加固定入口网关'
+        : form.id
+          ? '编辑入站'
+          : '添加入站'
+    "
     size="min(560px, 100vw)"
   >
+    <p v-if="identityLocked" class="hint identity-hint">
+      入口地址与认证保持不变，需要更改入口请新建网关
+    </p>
     <el-form label-position="top" @submit.prevent="save">
       <el-form-item label="协议模板">
         <UiSegmented
           v-model="form.template"
           label="协议模板"
           :options="[
-            { label: 'Reality Vision', value: 'vless-reality-vision' },
-            { label: 'XHTTP Reality', value: 'vless-xhttp-reality' },
-            { label: 'Hysteria2', value: 'hysteria2' },
+            {
+              label: 'Reality Vision',
+              value: 'vless-reality-vision',
+              disabled: identityLocked,
+            },
+            {
+              label: 'XHTTP Reality',
+              value: 'vless-xhttp-reality',
+              disabled: identityLocked,
+            },
+            {
+              label: 'Hysteria2',
+              value: 'hysteria2',
+              disabled: identityLocked,
+            },
           ]"
         />
         <p class="hint">
@@ -154,13 +204,14 @@ async function save() {
         </p>
       </el-form-item>
       <div class="grid">
-        <el-form-item label="备注">
-          <el-input v-model="form.remark" placeholder="显示在节点名里" />
+        <el-form-item :label="props.requireEgress ? '节点名称' : '备注'" :required="props.requireEgress">
+          <el-input v-model="form.remark" :placeholder="props.requireEgress ? '请输入节点名称' : '显示在节点名里'" />
         </el-form-item>
         <el-form-item label="端口">
           <div class="port-row">
             <el-input-number
               v-model="form.port"
+              :disabled="identityLocked"
               :min="1024"
               :max="65535"
               controls-position="right"
@@ -168,6 +219,7 @@ async function save() {
             <UiButton
               variant="ghost"
               :icon="IconShuffle"
+              v-if="!identityLocked"
               aria-label="随机端口"
               @click="form.port = randomPort()"
             />
@@ -180,10 +232,11 @@ async function save() {
       >
         <el-input
           v-model="form.target"
+          :readonly="identityLocked"
           placeholder="www.apple.com:443"
           @input="check = null"
         />
-        <div class="chips">
+        <div v-if="!identityLocked" class="chips">
           <button
             v-for="h in targets"
             :key="h"
@@ -201,8 +254,16 @@ async function save() {
           v-model="form.tlsMode"
           label="部署方式"
           :options="[
-            { label: '无域名自动部署', value: 'auto' },
-            { label: '使用已有证书', value: 'manual' },
+            {
+              label: '无域名自动部署',
+              value: 'auto',
+              disabled: identityLocked,
+            },
+            {
+              label: '使用已有证书',
+              value: 'manual',
+              disabled: identityLocked,
+            },
           ]"
         />
       </el-form-item>
@@ -244,6 +305,7 @@ async function save() {
       >
         <el-input
           v-model="form.sni"
+          :readonly="identityLocked"
           :placeholder="
             form.template === 'hysteria2'
               ? '证书对应域名，如 proxy.example.com'
@@ -266,14 +328,18 @@ async function save() {
           </span>
         </Transition>
       </div>
-      <p v-if="form.template !== 'hysteria2'" class="hint">
+      <p v-if="form.template !== 'hysteria2' && !identityLocked" class="hint">
         检测在面板所在机器上进行；同一站点在不同地区表现可能不同，保存后若节点不通，换一个目标再试。
       </p>
       <el-form-item
         v-if="form.template === 'vless-xhttp-reality'"
         label="XHTTP 路径"
       >
-        <el-input v-model="form.path" placeholder="留空自动生成随机路径" />
+        <el-input
+          v-model="form.path"
+          :readonly="identityLocked"
+          placeholder="留空自动生成随机路径"
+        />
       </el-form-item>
       <template
         v-if="form.template === 'hysteria2' && form.tlsMode === 'manual'"
@@ -281,11 +347,13 @@ async function save() {
         <el-form-item label="证书文件路径" required
           ><el-input
             v-model="form.tlsCertFile"
+            :readonly="identityLocked"
             placeholder="/etc/ssl/proxy/fullchain.pem"
         /></el-form-item>
         <el-form-item label="私钥文件路径" required
           ><el-input
             v-model="form.tlsKeyFile"
+            :readonly="identityLocked"
             placeholder="/etc/ssl/proxy/privkey.pem"
         /></el-form-item>
         <p class="hint">
@@ -294,15 +362,19 @@ async function save() {
       </template>
       <el-form-item label="默认服务端出口">
         <el-select v-model="form.egressNodeId" filterable style="width: 100%"
-          ><el-option :value="0" label="当前服务器直接访问" /><el-option
+          ><el-option
+            v-if="!props.requireEgress"
+            :value="0"
+            label="当前服务器直接访问" /><el-option
             v-for="item in exitOptions"
             :key="item.id"
             :value="item.id"
             :label="item.name"
         /></el-select>
         <p class="hint">
-          未命中网站规则的 TCP / UDP 流量使用此出口。支持 VLESS Reality TCP /
-          XHTTP；出口失效时不会改为直连。保存前需升级 Agent。
+          未命中网站规则的 TCP / UDP 流量使用此出口。支持 Reality TCP / XHTTP 与
+          HY2；出口失效时不会改为直连。保存前需升级
+          Agent。
         </p>
         <p v-if="exitError" class="error">
           {{ exitError }} <UiButton @click="loadExitOptions">重试</UiButton>
@@ -315,7 +387,10 @@ async function save() {
       />
       <div class="switches">
         <label><el-switch v-model="form.enabled" /> 启用</label>
-        <label v-if="form.id && form.template !== 'hysteria2'"
+        <label
+          v-if="
+            form.id && form.template !== 'hysteria2' && !props.requireEgress
+          "
           ><el-switch v-model="form.regenerateKey" />
           重新生成密钥（所有客户端需更新订阅）</label
         >
@@ -333,6 +408,12 @@ async function save() {
   </UiDrawer>
 </template>
 <style scoped>
+.identity-hint {
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border-radius: 10px;
+  background: var(--c-surface-2);
+}
 .auto-tls-info {
   padding: 14px;
   margin-bottom: 18px;

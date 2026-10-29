@@ -88,6 +88,10 @@ func GetTempLink(c *gin.Context) {
 		c.String(404, "节点已删除")
 		return
 	}
+	if n.DeliveryDisabled {
+		c.String(403, "此节点已关闭订阅下发")
+		return
+	}
 	client := normalizeClient(c.Query("client"))
 	if client == "" {
 		client = clientFromUserAgent(c.Request.UserAgent())

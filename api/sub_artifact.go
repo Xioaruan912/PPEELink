@@ -75,15 +75,16 @@ func lastKnownGoodArtifact(subscriptionID int, client string) (*models.Subscript
 
 // rememberGoodArtifact 保存本次成功生成的内容作为该客户端的回退版本；
 // 内容未变时不写库，每个订阅每个客户端只保留最新一份。
-func rememberGoodArtifact(subscriptionID int, client string, body []byte) {
+func rememberGoodArtifact(subscriptionID int, client string, body []byte, deliveryDigest string) {
 	client = strings.ToLower(client)
 	checksum := shaHex(body)
-	if current, err := lastKnownGoodArtifact(subscriptionID, client); err == nil && current.ContentChecksum == checksum {
+	if current, err := lastKnownGoodArtifact(subscriptionID, client); err == nil && current.ContentChecksum == checksum && current.InputDigest == deliveryDigest {
 		return
 	}
 	artifact := models.SubscriptionArtifact{
 		SubscriptionID: subscriptionID, Client: client, ContentChecksum: checksum,
-		ByteSize: len(body), ValidationStatus: "valid", TestStatus: "passed",
+		InputDigest: deliveryDigest,
+		ByteSize:    len(body), ValidationStatus: "valid", TestStatus: "passed",
 		Content: append([]byte(nil), body...),
 	}
 	if err := models.DB.Create(&artifact).Error; err != nil {
@@ -148,6 +149,16 @@ var clientFileExt = map[string]string{
 
 func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client string) {
 	client = strings.ToLower(client)
+	var disabled []int
+	if err := models.DB.Model(&models.Node{}).Where("delivery_disabled = ?", true).Order("id").Pluck("id", &disabled).Error; err != nil {
+		c.String(500, "读取节点下发设置失败")
+		return
+	}
+	deliveryDigest := ""
+	if len(disabled) > 0 {
+		raw, _ := json.Marshal(disabled)
+		deliveryDigest = shaHex(raw)
+	}
 	var appConfig node.SqlConfig
 	_ = json.Unmarshal([]byte(sub.Config), &appConfig)
 	if len(appConfig.AppRules) > 0 && client != "clash" && client != "singbox" && client != "clash-proxies" {
@@ -156,14 +167,17 @@ func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client stri
 	}
 
 	body, err := buildSubscriptionOutput(sub, client, baseURL(c))
-	liveValid := err == nil && validateSubscriptionContent(client, body) == nil
+	if err == nil {
+		err = validateSubscriptionContent(client, body)
+	}
+	liveValid := err == nil
 	if !liveValid && len(appConfig.AppRules) > 0 {
 		c.String(502, "应用规则生成失败，请检查目标节点是否仍在订阅中")
 		return
 	}
 	if liveValid {
-		rememberGoodArtifact(sub.ID, client, body)
-	} else if artifact, lkgErr := lastKnownGoodArtifact(sub.ID, client); lkgErr == nil && len(artifact.Content) > 0 {
+		rememberGoodArtifact(sub.ID, client, body, deliveryDigest)
+	} else if artifact, lkgErr := lastKnownGoodArtifact(sub.ID, client); lkgErr == nil && len(artifact.Content) > 0 && artifact.InputDigest == deliveryDigest {
 		body, err = artifact.Content, nil
 		c.Header("X-SubLinkX-Artifact", "last-known-good")
 	}

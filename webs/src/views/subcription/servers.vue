@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import RelaySettings from "./servers/RelaySettings.vue";
 import ServerHeader from "@/components/servers/ServerHeader.vue";
 import {
   computed,
@@ -357,7 +356,6 @@ const usageRatio = (a: ProxyAccount) =>
         >
       </template>
     </ServerHeader>
-    <RelaySettings />
 
     <EmptyState
       v-if="loadError"

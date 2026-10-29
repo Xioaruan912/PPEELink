@@ -143,8 +143,9 @@ Expected countries are never hardcoded into targets; region expectations are inf
 - every node must belong to at least one group
 - historical ungrouped nodes are assigned to a default group
 - nodes may belong to multiple groups
-- individual nodes or entire groups can be globally hidden without deleting data
-- hidden nodes are excluded from normal lists, subscription output, quality sampling, recommendations, routing selection, and safe publishing
+- per-node switches and batch actions enable or disable subscription delivery
+- disabled nodes remain visible and available for management and checks; regular, personal self-hosted, and temporary subscriptions respect the delivery setting
+- legacy node/group hiding is migrated to per-node delivery opt-outs, preserving records and subscription references
 
 ### Security, Audit & Public Status
 

@@ -52,34 +52,19 @@ func NodeDiagnostic(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "data": result, "msg": "诊断完成"})
 }
 
-// diagnosticPath resolves saved client-side relay relationships without changing them.
+// diagnosticPath uses the saved entry endpoint directly. Server-side gateways
+// and native relays are traversed by the real connection, not client policies.
 func diagnosticPath(id int) ([]diagnostic.Hop, error) {
-	path := []diagnostic.Hop{}
-	seen := map[int]bool{}
-	for id != 0 {
-		if seen[id] {
-			return nil, fmt.Errorf("中转关系存在循环，请先在中转设置中修正")
-		}
-		if len(path) >= 4 {
-			return nil, fmt.Errorf("中转诊断最多支持 4 跳，请缩短路径")
-		}
-		seen[id] = true
-		var n models.Node
-		if models.DB.First(&n, id).Error != nil {
-			return nil, fmt.Errorf("路径中的节点已删除或不存在（ID %d）", id)
-		}
-		var flags node.NodeFlags
-		if n.Flags != "" && json.Unmarshal([]byte(n.Flags), &flags) != nil {
-			return nil, fmt.Errorf("%s 的连接设置无效", n.Name)
-		}
-		if flags.SkipCertVerify {
-			return nil, fmt.Errorf("%s 开启了跳过证书校验，请先使用可信证书或证书指纹", n.Name)
-		}
-		path = append(path, diagnostic.Hop{Name: n.Name, Link: n.Link})
-		id = flags.DialerProxyID
+	var n models.Node
+	if models.DB.First(&n, id).Error != nil {
+		return nil, fmt.Errorf("节点已删除或不存在（ID %d）", id)
 	}
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
+	var flags node.NodeFlags
+	if n.Flags != "" && json.Unmarshal([]byte(n.Flags), &flags) != nil {
+		return nil, fmt.Errorf("%s 的连接设置无效", n.Name)
 	}
-	return path, nil
+	if flags.SkipCertVerify {
+		return nil, fmt.Errorf("%s 开启了跳过证书校验，请先使用可信证书或证书指纹", n.Name)
+	}
+	return []diagnostic.Hop{{Name: n.Name, Link: n.Link}}, nil
 }

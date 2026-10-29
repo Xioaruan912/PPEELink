@@ -1,6 +1,9 @@
 package xraycore
 
-import "testing"
+import (
+	"ppeelink/relaycore"
+	"testing"
+)
 
 func TestRuntimeRevisionIgnoresManagementState(t *testing.T) {
 	base := Spec{Enabled: true, Version: DefaultVersion, APIPort: 62789, Inbounds: []InboundSpec{{Tag: "in-1", Port: 443}}, Monitor: &MonitorSpec{Enabled: true, IntervalSeconds: 60}}
@@ -19,5 +22,14 @@ func TestRuntimeRevisionIgnoresManagementState(t *testing.T) {
 	changed.WebsiteTraffic = &WebsiteTrafficSpec{Enabled: true, BucketSeconds: 3600}
 	if base.Rev() == changed.Rev() {
 		t.Fatal("relay configuration change was ignored")
+	}
+}
+
+func TestRuntimeRevisionIgnoresNativeRelays(t *testing.T) {
+	base := Spec{Enabled: true}
+	changed := base
+	changed.Relays = []relaycore.Spec{{ID: "line", ListenPort: 8443, Network: "both", TargetHost: "1.1.1.1", TargetPort: 443}}
+	if base.Rev() != changed.Rev() {
+		t.Fatal("native forwarding edit would restart Xray")
 	}
 }

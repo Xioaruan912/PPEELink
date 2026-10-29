@@ -1,9 +1,6 @@
 package api
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"gorm.io/gorm"
 	"ppeelink/models"
 )
@@ -86,7 +83,7 @@ func migrateSelfHostedGroups() error {
 }
 
 // mergeManagedNode 把重复的自动节点合并到保留节点：迁移订阅直连引用，
-// 保留分组归属，并改掉中转节点里指向旧 ID 的 dialerProxyId。
+// 保留分组归属。
 func mergeManagedNode(tx *gorm.DB, keepID, duplicateID int) error {
 	if keepID <= 0 || duplicateID <= 0 || keepID == duplicateID {
 		return nil
@@ -114,42 +111,7 @@ func mergeManagedNode(tx *gorm.DB, keepID, duplicateID int) error {
 	if err := tx.Exec("DELETE FROM group_node_nodes WHERE node_id = ?", duplicateID).Error; err != nil {
 		return err
 	}
-	// 中转关系保存在 flags JSON 中，不能留下指向已删除节点的 ID。
-	var relays []models.Node
-	if err := tx.Where("flags LIKE ?", fmt.Sprintf("%%%d%%", duplicateID)).Find(&relays).Error; err != nil {
-		return err
-	}
-	for _, relay := range relays {
-		flags := map[string]any{}
-		if json.Unmarshal([]byte(relay.Flags), &flags) != nil {
-			continue
-		}
-		if intValue(flags["dialerProxyId"]) != duplicateID {
-			continue
-		}
-		flags["dialerProxyId"] = keepID
-		raw, err := json.Marshal(flags)
-		if err != nil {
-			return err
-		}
-		if err := tx.Model(&models.Node{}).Where("id = ?", relay.ID).Update("flags", string(raw)).Error; err != nil {
-			return err
-		}
-	}
 	return tx.Unscoped().Delete(&models.Node{}, duplicateID).Error
-}
-
-func intValue(value any) int {
-	switch v := value.(type) {
-	case float64:
-		return int(v)
-	case int:
-		return v
-	case json.Number:
-		n, _ := v.Int64()
-		return int(n)
-	}
-	return 0
 }
 
 // generatedNodeNames 返回所有服务器入站会生成的节点名，用于识别和清理旧自动节点。
