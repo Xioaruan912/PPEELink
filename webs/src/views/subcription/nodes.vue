@@ -265,8 +265,6 @@ function leaveBar(element: Element, done: () => void) {
                 >改名</UiButton
               ><UiButton :disabled="busy" @click="openTool('flags')"
                 >开关</UiButton
-              ><UiButton :disabled="busy" @click="openTool('chain')"
-                >中转</UiButton
               ><UiButton
                 v-if="activeGroup !== '全部'"
                 :disabled="busy"

@@ -1,10 +1,12 @@
 package node
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
 	"os"
+	"ppeelink/certpin"
 	"regexp"
 	"strings"
 )
@@ -22,11 +24,19 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 		sqlconfig.Loon = "./template/loon.conf"
 	}
 	var proxys []string
+	relations := map[string]string{}
 	for _, link := range urls {
 		udp := sqlconfig.Udp
 		cert := sqlconfig.Cert
 		if f, ok := flags[link]; ok {
 			udp, cert = f.UDP, f.SkipCertVerify
+		}
+		if f, ok := flags[link]; ok && f.DialerProxy != "" {
+			parsed, err := ParseOutbound(link)
+			if err != nil {
+				return "", fmt.Errorf("中转节点解析失败")
+			}
+			relations[parsed.Name] = f.DialerProxy
 		}
 		scheme := strings.Split(link, "://")[0]
 		switch {
@@ -132,9 +142,6 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 				log.Println(err)
 				continue
 			}
-			if h.PinSHA256 != "" {
-				continue
-			} // Unsupported pinning must never become insecure output.
 
 			p := fmt.Sprintf("%s = Hysteria2,%s,%d,\"%s\",udp=%t",
 				h.Name, h.Host, h.Port, h.Password, udp)
@@ -144,7 +151,13 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 			if h.Obfs != "" {
 				p += fmt.Sprintf(",salamander-password=\"%s\"", h.ObfsPassword)
 			}
-			if cert {
+			if h.PinSHA256 != "" {
+				pin, e := certpin.Normalize(h.PinSHA256)
+				if e != nil {
+					return "", fmt.Errorf("HY2 证书指纹无效")
+				}
+				p += ",skip-cert-verify=false,tls-cert-sha256=" + pin
+			} else if cert {
 				p += ",skip-cert-verify=true"
 			}
 			proxys = append(proxys, p)
@@ -153,7 +166,43 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 			continue
 		}
 	}
-	return DecodeLoon(proxys, sqlconfig.Loon)
+	proxys, chains, names, err := loonChains(proxys, relations)
+	if err != nil {
+		return "", err
+	}
+	out, err := DecodeLoon(proxys, sqlconfig.Loon)
+	if err != nil || len(chains) == 0 {
+		return out, err
+	}
+	// Chains are full-profile policies; remote node-only subscriptions cannot carry this section.
+	out = appendLoonSection(out, "Proxy Chain", strings.Join(chains, "\n"))
+	group := "中转线路"
+	for strings.Contains(out, group+" =") {
+		group += "_"
+	}
+	out = appendLoonSection(out, "Proxy Group", group+" = select,"+strings.Join(names, ","))
+	lines := strings.Split(out, "\n")
+	inGroups := false
+	for i, line := range lines {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "[") {
+			inGroups = trim == "[Proxy Group]"
+			continue
+		}
+		if inGroups && strings.Contains(line, "=") {
+			left, right, _ := strings.Cut(line, "=")
+			typ, rest, ok := strings.Cut(strings.TrimSpace(right), ",")
+			if strings.EqualFold(strings.TrimSpace(typ), "select") && strings.TrimSpace(left) != group {
+				if ok {
+					lines[i] = left + "= select," + group + "," + rest
+				} else {
+					lines[i] = left + "= select," + group
+				}
+				break
+			}
+		}
+	}
+	return strings.Join(lines, "\n"), nil
 }
 
 // DecodeLoon 读取 Loon 模板（本地文件或 URL），将 [Proxy] 段替换为生成的节点。
@@ -178,10 +227,99 @@ func DecodeLoon(proxys []string, file string) (string, error) {
 		}
 	}
 
-	proxyReg := regexp.MustCompile(`(?s)\[Proxy\](.*?)\[`)
-	out := proxyReg.ReplaceAllStringFunc(string(raw), func(s string) string {
-		text := strings.Join(proxys, "\n")
-		return "[Proxy]\n" + text + s[len("[Proxy]"):]
-	})
-	return out, nil
+	return replaceLoonSection(string(raw), "Proxy", strings.Join(proxys, "\n")), nil
+}
+
+func replaceLoonSection(raw, section, body string) string {
+	re := regexp.MustCompile(`(?m)^\s*\[[^]\r\n]+\][ \t]*\r?$`)
+	spans := re.FindAllStringIndex(raw, -1)
+	for i, span := range spans {
+		if strings.TrimSpace(raw[span[0]:span[1]]) == "["+section+"]" {
+			end := len(raw)
+			if i+1 < len(spans) {
+				end = spans[i+1][0]
+			}
+			return raw[:span[0]] + "[" + section + "]\n" + body + "\n\n" + raw[end:]
+		}
+	}
+	return strings.TrimRight(raw, "\r\n") + "\n\n[" + section + "]\n" + body + "\n"
+}
+func appendLoonSection(raw, section, body string) string {
+	marker := "[" + section + "]"
+	lines := strings.Split(raw, "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) == marker {
+			lines[i] = line + "\n" + body
+			return strings.Join(lines, "\n")
+		}
+	}
+	return replaceLoonSection(raw, section, body)
+}
+func loonChains(proxies []string, relations map[string]string) ([]string, []string, []string, error) {
+	byName := map[string]int{}
+	rawName := map[string]string{}
+	for i, line := range proxies {
+		n, _, ok := strings.Cut(line, " = ")
+		if ok {
+			byName[n] = i
+			rawName[n] = n
+		}
+	}
+	for n := range relations {
+		if _, ok := byName[n]; !ok {
+			return nil, nil, nil, fmt.Errorf("Loon 无法输出中转落地节点 %s", n)
+		}
+		sum := sha256.Sum256([]byte(n))
+		alias := fmt.Sprintf("__subl_hop_%x", sum[:8])
+		for _, exists := byName[alias]; exists; _, exists = byName[alias] {
+			alias += "_"
+		}
+		rawName[n] = alias
+	}
+	chains := []string{}
+	names := []string{}
+	for _, line := range proxies {
+		n, _, _ := strings.Cut(line, " = ")
+		if relations[n] == "" {
+			continue
+		}
+		path := []string{}
+		seen := map[string]bool{}
+		cur := n
+		for cur != "" {
+			if seen[cur] || len(path) >= 4 {
+				return nil, nil, nil, fmt.Errorf("Loon 中转路径循环或超过 4 跳")
+			}
+			seen[cur] = true
+			if _, ok := byName[cur]; !ok {
+				return nil, nil, nil, fmt.Errorf("Loon 中转入口 %s 未输出，无法生成完整路径", cur)
+			}
+			if strings.ContainsAny(cur, ",\r\n") {
+				return nil, nil, nil, fmt.Errorf("Loon 中转节点名称不能含逗号或换行")
+			}
+			path = append(path, rawName[cur])
+			cur = relations[cur]
+		}
+		for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+			path[i], path[j] = path[j], path[i]
+		}
+		chains = append(chains, n+" = "+strings.Join(path, ",")+",udp=true")
+		names = append(names, n)
+		// QUIC to a later HY2 hop requires UDP forwarding on each earlier hop.
+		for member := range seen {
+			idx := byName[member]
+			proxies[idx] = strings.ReplaceAll(proxies[idx], "udp=false", "udp=true")
+			if !strings.Contains(proxies[idx], "block-quic=") {
+				proxies[idx] += ",block-quic=false"
+			}
+		}
+	}
+	for n, alias := range rawName {
+		if n != alias {
+			idx := byName[n]
+			_, rest, _ := strings.Cut(proxies[idx], " = ")
+			proxies[idx] = alias + " = " + rest
+		}
+	}
+	return proxies, chains, names, nil
 }

@@ -29,14 +29,26 @@ type Step struct {
 	Detail string `json:"detail"`
 	Millis int64  `json:"millis"`
 }
+
+// Hop is ordered from the first relay to the final exit; Link never enters reports.
+type Hop struct {
+	Name string
+	Link string
+}
+type RouteHop struct {
+	Name      string `json:"name"`
+	Protocol  string `json:"protocol"`
+	Transport string `json:"transport"`
+}
 type Result struct {
-	Protocol    string    `json:"protocol"`
-	Transport   string    `json:"transport"`
-	Perspective string    `json:"perspective"`
-	Steps       []Step    `json:"steps"`
-	Summary     string    `json:"summary"`
-	Advice      []string  `json:"advice"`
-	CheckedAt   time.Time `json:"checkedAt"`
+	Route       []RouteHop `json:"route,omitempty"`
+	Protocol    string     `json:"protocol"`
+	Transport   string     `json:"transport"`
+	Perspective string     `json:"perspective"`
+	Steps       []Step     `json:"steps"`
+	Summary     string     `json:"summary"`
+	Advice      []string   `json:"advice"`
+	CheckedAt   time.Time  `json:"checkedAt"`
 }
 
 var slots = make(chan struct{}, 2)
@@ -77,6 +89,12 @@ func (b *safeLog) hint() string {
 	}
 }
 func Run(ctx context.Context, link, target string) (*Result, error) {
+	return RunPath(ctx, []Hop{{Name: "所选节点", Link: link}}, target)
+}
+func RunPath(ctx context.Context, path []Hop, target string) (*Result, error) {
+	if len(path) == 0 || len(path) > 4 {
+		return nil, invalid("诊断路径需包含 1–4 个节点")
+	}
 	if _, ok := targets[target]; !ok {
 		return nil, invalid("检测目标无效")
 	}
@@ -92,44 +110,57 @@ func Run(ctx context.Context, link, target string) (*Result, error) {
 	add := func(key, title, status, detail string, start time.Time) {
 		r.Steps = append(r.Steps, Step{key, title, status, detail, time.Since(start).Milliseconds()})
 	}
-	start := time.Now()
-	p, e := parse(link)
-	if e != nil {
-		add("config", "节点配置", "failed", e.Error(), start)
-		r.Summary = "节点参数未通过校验"
-		return r, nil
-	}
-	r.Protocol = p.protocol
-	r.Transport = p.network
-	add("config", "节点配置", "passed", "链接参数已解析，将由 Xray 再次校验。", start)
-	start = time.Now()
-	dnsCtx, dc := context.WithTimeout(ctx, 5*time.Second)
-	ips, e := net.DefaultResolver.LookupIPAddr(dnsCtx, p.host)
-	dc()
-	if e != nil || len(ips) == 0 {
-		add("dns", "服务器 DNS", "failed", "无法解析节点服务器地址。", start)
-		r.Summary = "节点服务器域名解析失败"
-		r.Advice = []string{"检查节点域名是否过期、拼写是否正确，以及面板服务器的 DNS。"}
-		return r, nil
-	}
-	addresses := []string{}
-	for _, a := range ips {
-		if !publicIP(a.IP.String()) {
-			add("dns", "服务器 DNS", "failed", "服务器域名包含内网或保留地址，诊断已拒绝连接。", start)
-			r.Summary = "服务器地址不允许用于公网诊断"
+
+	profiles := []profile{}
+	allAddresses := [][]string{}
+	// Resolve and pin every hop before making any connection, including later relays.
+	for i, hop := range path {
+		start := time.Now()
+		label := hop.Name
+		if label == "" {
+			label = fmt.Sprintf("第 %d 跳", i+1)
+		}
+		p, e := parse(hop.Link)
+		if e != nil {
+			add(fmt.Sprintf("config-%d", i), label+" · 节点配置", "failed", e.Error(), start)
+			r.Summary = "路径节点参数未通过校验"
 			return r, nil
 		}
-		addresses = append(addresses, a.IP.String())
+		r.Route = append(r.Route, RouteHop{Name: label, Protocol: p.protocol, Transport: p.network})
+		add(fmt.Sprintf("config-%d", i), label+" · 节点配置", "passed", "已解析参数，将按保存的中转顺序连接。", start)
+		start = time.Now()
+		dnsCtx, dc := context.WithTimeout(ctx, 5*time.Second)
+		ips, e := net.DefaultResolver.LookupIPAddr(dnsCtx, p.host)
+		dc()
+		if e != nil || len(ips) == 0 {
+			add(fmt.Sprintf("dns-%d", i), label+" · 服务器 DNS", "failed", "无法解析该跳的服务器地址。", start)
+			r.Summary = "路径节点域名解析失败"
+			return r, nil
+		}
+		addresses := []string{}
+		for _, a := range ips {
+			if !publicIP(a.IP.String()) {
+				add(fmt.Sprintf("dns-%d", i), label+" · 服务器 DNS", "failed", "该跳包含内网或保留地址，已拒绝整条路径。", start)
+				r.Summary = "路径服务器地址不允许用于公网诊断"
+				return r, nil
+			}
+			addresses = append(addresses, a.IP.String())
+		}
+		add(fmt.Sprintf("dns-%d", i), label+" · 服务器 DNS", "passed", strings.Join(addresses, ", ")+"；本次固定使用解析地址，远端 DNS 可能不同。", start)
+		p.pinAddress(addresses[0])
+		profiles = append(profiles, p)
+		allAddresses = append(allAddresses, addresses)
 	}
-	add("dns", "服务器 DNS", "passed", strings.Join(addresses, ", "), start)
-	selected := addresses[0]
-	start = time.Now()
-	if p.protocol == "Reality" {
-		var conn net.Conn
-		for _, ip := range addresses {
+	first := &profiles[0]
+	start := time.Now()
+	selected := allAddresses[0][0]
+	if first.protocol == "Reality" {
+		var e error
+		for _, ip := range allAddresses[0] {
 			tc, cc := context.WithTimeout(ctx, 3*time.Second)
-			conn, e = (&net.Dialer{}).DialContext(tc, "tcp", net.JoinHostPort(ip, strconv.Itoa(p.port)))
+			conn, err := (&net.Dialer{}).DialContext(tc, "tcp", net.JoinHostPort(ip, strconv.Itoa(first.port)))
 			cc()
+			e = err
 			if e == nil {
 				selected = ip
 				conn.Close()
@@ -137,16 +168,23 @@ func Run(ctx context.Context, link, target string) (*Result, error) {
 			}
 		}
 		if e != nil {
-			add("transport", "服务器 TCP 连接", "failed", "所有解析地址的 TCP 连接均失败，尚未进入 Reality 握手。", start)
-			r.Summary = "服务器端口无法连接"
-			r.Advice = []string{"检查端口、VPS 防火墙、安全组和代理服务监听。", "此结果仅代表从面板服务器出发的网络。"}
+			add("transport", "入口 TCP 连接", "failed", "入口所有地址均无法连接，尚未进入中转或协议握手。", start)
+			r.Summary = "入口服务器端口无法连接"
+			r.Advice = []string{"检查入口节点端口、防火墙和服务监听。后续落地节点未被直连测试。"}
 			return r, nil
 		}
-		add("transport", "服务器 TCP 连接", "passed", "端口可连接；这不代表 Reality 握手或 UUID 正确。使用地址："+selected, start)
+		first.pinAddress(selected)
+		add("transport", "入口 TCP 连接", "passed", "入口可连接；后续节点将经中转访问，不会从面板直连。地址："+selected, start)
 	} else {
-		add("transport", "HY2 UDP 可达性", "unknown", "UDP 无法用 TCP 端口测试判断；下方实际 QUIC 代理请求负责验证。使用地址："+selected, start)
+		add("transport", "入口 HY2 UDP 可达性", "unknown", "不使用 TCP 测试判断 UDP；以整条路径的实际 QUIC 请求验证。", start)
 	}
-	p.pinAddress(selected)
+	p := profiles[len(profiles)-1]
+	p.relays = profiles[:len(profiles)-1]
+	r.Protocol = p.protocol
+	r.Transport = p.network
+	if len(path) > 1 {
+		add("route", "中转路径", "passed", "已配置 "+fmt.Sprint(len(path))+" 跳，按入口 → 落地连接；此步骤仅验证配置，通路以下方 HTTPS 为准。", time.Now())
+	}
 	start = time.Now()
 	binary, e := ensureCore(ctx)
 	if e != nil {
@@ -284,6 +322,9 @@ func runCore(ctx context.Context, r *Result, p profile, binary, target string, a
 		resp.Body.Close()
 		add("https", "目标网站 HTTPS", "passed", fmt.Sprintf("已通过节点访问所选目标，HTTP %d。HTTP 403/429 等表示网站已响应，可能限制当前出口。", resp.StatusCode), start)
 		r.Summary = "代理可连接，所选网站已响应"
+		if len(p.relays) > 0 {
+			r.Summary = "中转通路可连接，所选网站已响应"
+		}
 		if resp.StatusCode >= 400 {
 			r.Advice = append(r.Advice, "节点通路已建立，目标网站返回限制或错误，请更换出口或检查网站策略。")
 		}
@@ -301,6 +342,9 @@ func runCore(ctx context.Context, r *Result, p profile, binary, target string, a
 		}
 		add("https", "目标网站 HTTPS", status, detail, start)
 		r.Summary = "尚未定位到唯一故障环节"
+		if len(p.relays) > 0 {
+			detail += " 当前包含中转，无法仅凭整链超时断定具体哪一跳认证失败；请分别检测入口和落地，并核对入口 UDP 转发。"
+		}
 		r.Advice = []string{detail, "Reality 请核对 UUID、公钥、Short ID、SNI、flow 与 XHTTP 路径。HY2 请核对 UDP 放行、密码、证书指纹和混淆密码。", "诊断从面板网络出发；若面板可用而手机不可用，请检查手机网络、客户端配置和本地 DNS。"}
 	}
 	return r, nil

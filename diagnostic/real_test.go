@@ -63,6 +63,11 @@ func TestRealDiagnostics(t *testing.T) {
 				in.Path = "/diagnose"
 				flow = ""
 			}
+			relayIn := in
+			relayIn.Tag = "relay"
+			relayIn.Port = free(t)
+			relayIn.Template = xraycore.TemplateRealityVision
+			relayLink := node.EncodeVLESSURL(node.VLESS{Uuid: uuid, Server: "127.0.0.1", Port: relayIn.Port, Query: node.VLESSQuery{Security: "reality", Type: "raw", Sni: in.SNI, Pbk: pub, Sid: in.ShortID, Flow: "xtls-rprx-vision"}})
 			var link string
 			if kind == "hy2" {
 				key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -84,7 +89,7 @@ func TestRealDiagnostics(t *testing.T) {
 			} else {
 				link = node.EncodeVLESSURL(node.VLESS{Uuid: uuid, Server: "127.0.0.1", Port: port, Query: node.VLESSQuery{Security: "reality", Type: kind, Sni: in.SNI, Pbk: pub, Sid: in.ShortID, Flow: flow, Path: in.Path}})
 			}
-			cfg, e := xraycore.BuildConfig(xraycore.Spec{Enabled: true, APIPort: free(t), Inbounds: []xraycore.InboundSpec{in}})
+			cfg, e := xraycore.BuildConfig(xraycore.Spec{Enabled: true, APIPort: free(t), Inbounds: []xraycore.InboundSpec{in, relayIn}})
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -120,6 +125,41 @@ func TestRealDiagnostics(t *testing.T) {
 				}
 				if bad && last.Status == "passed" {
 					t.Fatal("invalid credential passed")
+				}
+				raw, _ := json.Marshal(r)
+				if strings.Contains(string(raw), uuid) || strings.Contains(string(raw), private) {
+					t.Fatal("credentials leaked")
+				}
+			}
+			for _, badRelay := range []bool{false, true} {
+				testLink := relayLink
+				if badRelay {
+					testLink = strings.ReplaceAll(relayLink, uuid, "22222222-2222-4222-8222-222222222222")
+				}
+				relay, e := parse(testLink)
+				if e != nil {
+					t.Fatal(e)
+				}
+				p, e := parse(link)
+				p.relays = []profile{relay}
+				if e != nil {
+					t.Fatal(e)
+				}
+				r := &Result{Steps: []Step{}}
+				ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+				_, e = runCore(ctx, r, p, binary, target.URL, func(k, title, status, detail string, start time.Time) {
+					r.Steps = append(r.Steps, Step{k, title, status, detail, time.Since(start).Milliseconds()})
+				})
+				cancel()
+				if e != nil {
+					t.Fatal(e)
+				}
+				last := r.Steps[len(r.Steps)-1]
+				if !badRelay && last.Status != "passed" {
+					t.Fatalf("valid chain %s failed: %+v", kind, r)
+				}
+				if badRelay && last.Status == "passed" {
+					t.Fatal("broken relay was bypassed")
 				}
 				raw, _ := json.Marshal(r)
 				if strings.Contains(string(raw), uuid) || strings.Contains(string(raw), private) {

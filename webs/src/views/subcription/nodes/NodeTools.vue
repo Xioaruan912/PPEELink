@@ -13,7 +13,7 @@ import SecretLink from "../subs/SecretLink.vue";
 import { useNodes } from "./useNodes";
 import { formatDateTime } from "@/utils/date";
 
-const { tool, loadAll, overviewList, clearSelection } = useNodes();
+const { tool, loadAll, clearSelection } = useNodes();
 const visible = computed({
   get: () => !!tool.value,
   set: (open) => {
@@ -26,7 +26,6 @@ const ids = computed(() => targets.value.map((n) => n.id));
 const titles = {
   rename: "批量改名",
   flags: "连接开关",
-  chain: "链式代理",
   dedupe: "去除重复节点",
   temp: "临时订阅",
 };
@@ -40,11 +39,6 @@ const rename = reactive({ pattern: "", replacement: "" });
 const preview = ref<NodeChange[] | null>(null);
 // 开关
 const flags = reactive({ udp: true, tfo: false, skipCertVerify: false });
-// 中转
-const relayId = ref<number>();
-const relayOptions = computed(() =>
-  overviewList.value.filter((n) => !ids.value.includes(n.id))
-);
 // 去重
 const dedupe = ref<{ groups: DedupeGroup[]; removed: number } | null>(null);
 // 临时订阅
@@ -68,8 +62,6 @@ watch(tool, async (value) => {
       skipCertVerify: !!n.skipCertVerify,
     });
   }
-  if (value.kind === "chain")
-    relayId.value = value.targets[0]?.relayId || undefined;
   if (value.kind === "dedupe") await loadDedupe();
 });
 
@@ -126,15 +118,6 @@ const applyRename = () =>
   );
 const applyFlags = () =>
   apply({ ids: ids.value, action: "flags", flags: { ...flags } }, "开关已保存");
-const applyChain = (clear = false) =>
-  apply(
-    {
-      ids: ids.value,
-      action: "chain",
-      relayId: clear ? 0 : relayId.value || 0,
-    },
-    clear ? "已取消中转" : "已设置中转"
-  );
 async function loadDedupe() {
   busy.value = true;
   try {
@@ -242,40 +225,6 @@ const tempLink = computed(
       </p>
     </template>
 
-    <template v-else-if="kind === 'chain'">
-      <div class="chain-visual" aria-hidden="true">
-        <span>你的设备</span><i></i
-        ><span class="relay">{{
-          relayOptions.find((n) => n.id === relayId)?.name || "中转节点"
-        }}</span
-        ><i></i
-        ><span class="landing">{{
-          targets.length === 1 ? targets[0].name : "落地节点"
-        }}</span>
-      </div>
-      <el-form label-position="top" class="tool-form">
-        <el-form-item label="中转节点">
-          <el-select
-            v-model="relayId"
-            filterable
-            placeholder="选择先连接的节点"
-            class="full"
-          >
-            <el-option
-              v-for="n in relayOptions"
-              :key="n.id"
-              :label="n.name"
-              :value="n.id"
-            />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <p class="hint">
-        流量先到中转再到落地节点，网站看到的是落地 IP。Clash（dialer-proxy）与
-        Surge（underlying-proxy）支持；中转节点不在订阅里时会自动补上。
-      </p>
-    </template>
-
     <template v-else-if="kind === 'dedupe'">
       <UiSkeleton v-if="busy && !dedupe" :lines="3" height="40px" />
       <EmptyState
@@ -362,21 +311,6 @@ const tempLink = computed(
         @click="applyFlags"
         >保存</UiButton
       >
-      <template v-else-if="kind === 'chain'">
-        <UiButton
-          v-if="targets.some((t) => t.relayId)"
-          :disabled="busy"
-          @click="applyChain(true)"
-          >取消中转</UiButton
-        >
-        <UiButton
-          variant="primary"
-          :loading="busy"
-          :disabled="!relayId"
-          @click="applyChain()"
-          >设置中转</UiButton
-        >
-      </template>
       <UiButton
         v-else-if="kind === 'dedupe'"
         variant="danger"
@@ -472,48 +406,6 @@ const tempLink = computed(
   gap: 10px;
   font-size: 14px;
 }
-.chain-visual {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  font-size: 12px;
-}
-.chain-visual span {
-  padding: 6px 10px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-pill);
-  background: var(--c-surface-2);
-  white-space: nowrap;
-  max-width: 34%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.chain-visual .relay {
-  border-color: var(--c-focus);
-}
-.chain-visual .landing {
-  background: var(--c-signal);
-  border-color: var(--c-signal);
-  color: var(--c-on-signal);
-}
-.chain-visual i {
-  flex: 1;
-  height: 2px;
-  min-width: 12px;
-  background: repeating-linear-gradient(
-    90deg,
-    var(--c-focus) 0 6px,
-    transparent 6px 10px
-  );
-  background-size: 20px 2px;
-  animation: chain-flow 0.8s linear infinite;
-}
-@keyframes chain-flow {
-  to {
-    background-position: 20px 0;
-  }
-}
 .temp-result {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -538,11 +430,6 @@ const tempLink = computed(
   .temp-result {
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .chain-visual i {
-    animation: none;
   }
 }
 </style>

@@ -77,38 +77,60 @@ func fetchAndExpandRemote(rawURL string) []string {
 func collectNodeInputs(nodes []models.Node) ([]string, map[string]node.NodeFlags) {
 	urls := []string{}
 	flags := map[string]node.NodeFlags{}
-	nameByID := map[int]string{}
-	for _, v := range nodes {
-		nameByID[v.ID] = v.Name
-	}
-	// 链式代理的中转节点不在本订阅时，补进输出，保证 dialer-proxy 指向存在的代理
-	relays := []string{}
-	for _, v := range nodes {
-		links := expandNodeLink(v.Link)
-		if len(links) == 0 {
-			continue
+	byID := map[int]models.Node{}
+	linksByID := map[int][]string{}
+	names := map[int]string{}
+	remember := func(n models.Node) {
+		byID[n.ID] = n
+		links := expandNodeLink(n.Link)
+		linksByID[n.ID] = links
+		names[n.ID] = n.Name
+		if len(links) == 1 {
+			if p, e := node.ParseOutbound(links[0]); e == nil && p.Name != "" {
+				names[n.ID] = p.Name
+			}
 		}
-		urls = append(urls, links...)
-		f := decodeNodeFlags(v.Flags)
-		if f.DialerProxyID != 0 && f.DialerProxyID != v.ID {
-			name, ok := nameByID[f.DialerProxyID]
-			if !ok {
-				var relay models.Node
-				if err := models.DB.First(&relay, f.DialerProxyID).Error; err == nil {
-					name = relay.Name
-					nameByID[relay.ID] = relay.Name
-					relays = append(relays, expandNodeLink(relay.Link)...)
+	}
+	for _, n := range nodes {
+		remember(n)
+	}
+	emitted := map[int]bool{}
+	var visit func(models.Node, int)
+	visit = func(n models.Node, depth int) {
+		if emitted[n.ID] {
+			return
+		}
+		emitted[n.ID] = true
+		f := decodeNodeFlags(n.Flags)
+		if f.DialerProxyID != 0 {
+			relay, ok := byID[f.DialerProxyID]
+			if !ok && depth < 4 {
+				if models.DB.First(&relay, f.DialerProxyID).Error == nil {
+					remember(relay)
+					ok = true
 				}
 			}
-			f.DialerProxy = name
+			if ok {
+				f.DialerProxy = names[relay.ID]
+				if depth < 4 {
+					visit(relay, depth+1)
+				}
+			} else {
+				f.DialerProxy = fmt.Sprintf("已删除的中转节点 #%d", f.DialerProxyID)
+			}
 		}
+		links := linksByID[n.ID]
+		urls = append(urls, links...)
 		if !f.Empty() {
-			for _, l := range links {
-				flags[l] = f
+			for _, link := range links {
+				flags[link] = f
 			}
 		}
 	}
-	return append(relays, urls...), flags
+	for _, n := range nodes {
+		visit(n, 0)
+	}
+	return urls, flags
 }
 
 // mergeGroupNodes 将订阅引用的分组节点合并进 sub.Nodes（去重，分组节点在后），

@@ -59,7 +59,7 @@ export interface OverviewItem {
   tfo?: boolean;
   skipCertVerify?: boolean;
 }
-export type NodeToolKind = "rename" | "flags" | "chain" | "dedupe" | "temp";
+export type NodeToolKind = "rename" | "flags" | "dedupe" | "temp";
 export interface NodeItem {
   ID: number;
   Name: string;
@@ -537,7 +537,7 @@ function createNodes() {
       void toggleForceDeliver(row);
       return;
     }
-    if (command === "temp" || command === "chain") {
+    if (command === "temp") {
       openTool(command, [row]);
       return;
     }
@@ -572,9 +572,12 @@ function createNodes() {
   }
   async function toggleForceDeliver(row: OverviewItem) {
     const next = !row.forceDeliver;
-    await mutation(async () => {
-      await SetNodeForceDeliver(row.id, next);
-    }, next ? "已设为始终下发" : "已恢复按检测结果下发");
+    await mutation(
+      async () => {
+        await SetNodeForceDeliver(row.id, next);
+      },
+      next ? "已设为始终下发" : "已恢复按检测结果下发"
+    );
   }
   async function resumeNodes(ids: number[]) {
     const res: any = await pauseNodes(ids, "");
