@@ -260,6 +260,7 @@ func runAgent(args []string) {
 	log.Printf("[agent] 已启动，面板 %s，每 %s 同步一次", *panel, *interval)
 	agentClient := &http.Client{Timeout: 20 * time.Second}
 	go runAgentTraceLoop(ctx, agentClient, *panel, *token)
+	go runAgentThroughputLoop(ctx, agentClient, *panel, *token)
 	go runAgentCheckLoop(ctx, agentClient, *panel, *token)
 	go runAgentTerminal(ctx, *panel, *token)
 	if xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token, Client: agentClient}, runner, *interval) {

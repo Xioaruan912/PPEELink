@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"strconv"
 	"strings"
@@ -48,9 +50,9 @@ func NetworkTraceSources(c *gin.Context) {
 		if !fresh {
 			reason = "需要升级探针并等待路由追踪轮询"
 		} else if cap.Tool == "" {
-			reason = "探针未安装 traceroute 或 tracepath"
+			reason = "探针未安装可用的 NextTrace / traceroute / tracepath"
 		}
-		items = append(items, gin.H{"id": p.ID, "name": p.Name, "region": p.Region, "supported": fresh, "tool": cap.Tool, "available": fresh && cap.Tool != "", "reason": reason, "lastSeenAt": p.LastSeenAt})
+		items = append(items, gin.H{"id": p.ID, "name": p.Name, "region": p.Region, "supported": fresh, "tool": cap.Tool, "available": fresh && cap.Tool != "", "reason": reason, "lastSeenAt": p.LastSeenAt, "optionsSupported": cap.Version >= tracecore.ClientVersion, "enriched": cap.Tool == "nexttrace"})
 	}
 	var agents []models.ProxyServer
 	models.DB.Where("kind = ? AND enabled = ?", models.ServerKindAgent, true).Order("id").Find(&agents)
@@ -68,17 +70,18 @@ func NetworkTraceSources(c *gin.Context) {
 		if !fresh {
 			reason = "agent 尚未上报追踪能力；请升级 agent 后重试"
 		} else if cap.Tool == "" {
-			reason = "服务器未安装 traceroute 或 tracepath"
+			reason = "服务器未安装可用的 NextTrace / traceroute / tracepath"
 		}
-		agentItems = append(agentItems, gin.H{"id": server.ID, "name": server.Name, "supported": fresh, "tool": cap.Tool, "available": fresh && cap.Tool != "", "reason": reason, "lastSeenAt": server.LastSeenAt})
+		agentItems = append(agentItems, gin.H{"id": server.ID, "name": server.Name, "supported": fresh, "tool": cap.Tool, "available": fresh && cap.Tool != "", "reason": reason, "lastSeenAt": server.LastSeenAt, "publicHost": server.PublicHost, "preparing": tracePreparing(cap, now), "prepareError": tracePrepareError(cap, now), "optionsSupported": cap.Version >= tracecore.ClientVersion, "enriched": cap.Tool == "nexttrace"})
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"panelTool": tracecore.AvailableTool(), "probes": items, "agents": agentItems}, "msg": "追踪来源"})
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"panelTool": tracecore.AvailableTool(), "nextTraceVersion": tracecore.NextTraceVersion, "panelEnriched": tracecore.NextTraceReady(), "probes": items, "agents": agentItems}, "msg": "追踪来源"})
 }
 
 func NetworkTraceCreate(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	var req struct {
-		Target       string `json:"target"`
+		Target string `json:"target"`
+		tracecore.Options
 		IncludePanel bool   `json:"includePanel"`
 		ProbeIDs     []uint `json:"probeIds"`
 		AgentIDs     []uint `json:"agentIds"`
@@ -88,6 +91,11 @@ func NetworkTraceCreate(c *gin.Context) {
 		return
 	}
 	target, err := tracecore.ValidateTarget(req.Target)
+	if err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
+	}
+	opts, err := tracecore.NormalizeOptions(target, req.Options)
 	if err != nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
 		return
@@ -136,13 +144,13 @@ func NetworkTraceCreate(c *gin.Context) {
 		}
 	}
 	now := time.Now()
-	run := models.NetworkTraceRun{Target: target, CreatedAt: now}
+	run := models.NetworkTraceRun{Target: target, Protocol: opts.Protocol, Port: opts.Port, Family: opts.Family, CreatedAt: now}
 	views := make([]models.NetworkTraceView, 0, len(ids)+len(agents)+1)
 	if req.IncludePanel {
 		v := models.NetworkTraceView{SourceName: "面板服务器", Status: "queued", CreatedAt: now}
 		if tracecore.AvailableTool() == "" {
 			v.Status = "unsupported"
-			v.Error = "面板未安装 traceroute 或 tracepath"
+			v.Error = "面板未安装可用的 NextTrace / traceroute / tracepath"
 			v.FinishedAt = &now
 		}
 		views = append(views, v)
@@ -154,9 +162,13 @@ func NetworkTraceCreate(c *gin.Context) {
 			v.Status = "unsupported"
 			v.Error = "探针未提供追踪能力；请升级探针后重试"
 			v.FinishedAt = &now
+		} else if cap.Version < tracecore.ClientVersion && !tracecore.LegacyCompatible(opts) {
+			v.Status = "unsupported"
+			v.Error = "请升级 agent / 探针以使用指定协议、端口或 IP 版本"
+			v.FinishedAt = &now
 		} else if cap.Tool == "" {
 			v.Status = "unsupported"
-			v.Error = "探针未安装 traceroute 或 tracepath"
+			v.Error = "探针未安装可用的 NextTrace / traceroute / tracepath"
 			v.FinishedAt = &now
 		}
 		views = append(views, v)
@@ -168,9 +180,13 @@ func NetworkTraceCreate(c *gin.Context) {
 			v.Status = "unsupported"
 			v.Error = "agent 未提供追踪能力；请先使用面板更新 agent"
 			v.FinishedAt = &now
+		} else if cap.Version < tracecore.ClientVersion && !tracecore.LegacyCompatible(opts) {
+			v.Status = "unsupported"
+			v.Error = "请升级 agent / 探针以使用指定协议、端口或 IP 版本"
+			v.FinishedAt = &now
 		} else if cap.Tool == "" {
 			v.Status = "unsupported"
-			v.Error = "服务器未安装 traceroute 或 tracepath"
+			v.Error = "服务器未安装可用的 NextTrace / traceroute / tracepath"
 			v.FinishedAt = &now
 		}
 		views = append(views, v)
@@ -199,13 +215,13 @@ func NetworkTraceCreate(c *gin.Context) {
 	}
 	for _, v := range views {
 		if v.ProbeID == 0 && v.AgentServerID == 0 && v.Status == "queued" {
-			go runPanelTrace(v.ID, target)
+			go runPanelTrace(v.ID, target, opts)
 		}
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": run, "msg": "追踪已创建"})
 }
 
-func runPanelTrace(id uint, target string) {
+func runPanelTrace(id uint, target string, opts tracecore.Options) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	traceCancels.Store(id, cancel)
@@ -221,7 +237,7 @@ func runPanelTrace(id uint, target string) {
 	if tx.Error != nil || tx.RowsAffected != 1 {
 		return
 	}
-	result := tracecore.Run(ctx, target)
+	result := tracecore.RunWithOptions(ctx, target, opts)
 	finish := time.Now()
 	status := "completed"
 	if result.Error != "" {
@@ -258,7 +274,7 @@ func NetworkTraceDetail(c *gin.Context) {
 	}
 	items := make([]gin.H, 0, len(views))
 	for _, v := range views {
-		items = append(items, gin.H{"id": v.ID, "probeId": v.ProbeID, "sourceName": v.SourceName, "status": v.Status, "tool": v.Tool, "output": v.Output, "error": v.Error, "startedAt": v.StartedAt, "finishedAt": v.FinishedAt, "hops": tracecore.Parse(v.Output)})
+		items = append(items, gin.H{"id": v.ID, "probeId": v.ProbeID, "agentServerId": v.AgentServerID, "sourceName": v.SourceName, "status": v.Status, "tool": v.Tool, "output": v.Output, "error": v.Error, "startedAt": v.StartedAt, "finishedAt": v.FinishedAt, "hops": tracecore.Parse(v.Output)})
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"run": run, "views": items}, "msg": "追踪详情"})
 }
@@ -290,11 +306,15 @@ func ProbeTraceJobs(c *gin.Context) {
 		return
 	}
 	tool := c.Query("tool")
-	if tool != "traceroute" && tool != "tracepath" {
+	if tool != "traceroute" && tool != "tracepath" && tool != "nexttrace" {
 		tool = ""
 	}
-	cap := models.TraceProbeCapability{ProbeID: probe.ID, SeenAt: time.Now(), Tool: tool}
-	if err := models.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "probe_id"}}, DoUpdates: clause.AssignmentColumns([]string{"seen_at", "tool"})}).Create(&cap).Error; err != nil {
+	version, _ := strconv.Atoi(c.Query("version"))
+	if version != tracecore.ClientVersion {
+		version = 0
+	}
+	cap := models.TraceProbeCapability{ProbeID: probe.ID, SeenAt: time.Now(), Tool: tool, Version: version}
+	if err := models.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "probe_id"}}, DoUpdates: clause.AssignmentColumns([]string{"seen_at", "tool", "version"})}).Create(&cap).Error; err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "记录能力失败"})
 		return
 	}
@@ -310,10 +330,14 @@ func ProbeTraceJobs(c *gin.Context) {
 		if models.DB.First(&run, v.RunID).Error != nil {
 			continue
 		}
+		if version < tracecore.ClientVersion && !tracecore.LegacyCompatible(traceRunOptions(run)) {
+			markTraceUnsupported(v.ID, "请升级探针以执行指定追踪选项")
+			continue
+		}
 		now := time.Now()
 		tx := models.DB.Model(&models.NetworkTraceView{}).Where("id = ? AND probe_id = ? AND status = ?", v.ID, probe.ID, "queued").Updates(map[string]any{"status": "running", "started_at": now})
 		if tx.Error == nil && tx.RowsAffected == 1 {
-			jobs = append(jobs, gin.H{"id": v.ID, "target": run.Target})
+			jobs = append(jobs, gin.H{"id": v.ID, "target": run.Target, "protocol": run.Protocol, "port": run.Port, "family": run.Family})
 		}
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": jobs, "msg": "路由追踪任务"})
@@ -334,7 +358,7 @@ func ProbeTraceReport(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "回报内容过大或格式无效"})
 		return
 	}
-	if req.Tool != "traceroute" && req.Tool != "tracepath" {
+	if req.Tool != "traceroute" && req.Tool != "tracepath" && req.Tool != "nexttrace" {
 		req.Tool = ""
 	}
 	status := "completed"
@@ -361,15 +385,29 @@ func AgentTraceJobs(c *gin.Context) {
 		return
 	}
 	tool := c.Query("tool")
-	if tool != "traceroute" && tool != "tracepath" {
+	if tool != "traceroute" && tool != "tracepath" && tool != "nexttrace" {
 		tool = ""
 	}
-	cap := models.TraceAgentCapability{ServerID: server.ID, SeenAt: time.Now(), Tool: tool}
-	if err := models.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}}, DoUpdates: clause.AssignmentColumns([]string{"seen_at", "tool"})}).Create(&cap).Error; err != nil {
+	version, _ := strconv.Atoi(c.Query("version"))
+	if version != tracecore.ClientVersion {
+		version = 0
+	}
+	cap := models.TraceAgentCapability{ServerID: server.ID, SeenAt: time.Now(), Tool: tool, Version: version}
+	if err := models.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}}, DoUpdates: clause.AssignmentColumns([]string{"seen_at", "tool", "version"})}).Create(&cap).Error; err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "记录能力失败"})
 		return
 	}
 	models.DB.Model(server).Update("last_seen_at", time.Now())
+	models.DB.First(&cap, "server_id = ?", server.ID)
+	if version >= tracecore.ClientVersion && tracePreparing(cap, time.Now()) && cap.PrepareStartedAt == nil {
+		now := time.Now()
+		tx := models.DB.Model(&models.TraceAgentCapability{}).Where("server_id = ? AND prepare_id = ? AND prepare_started_at IS NULL AND prepare_finished_at IS NULL", server.ID, cap.PrepareID).Update("prepare_started_at", now)
+		if tx.Error == nil && tx.RowsAffected == 1 {
+			c.JSON(200, gin.H{"code": "00000", "data": []gin.H{{"action": "prepare", "prepareId": cap.PrepareID}}, "msg": "准备 NextTrace"})
+			return
+		}
+	}
+
 	expireNetworkTraces()
 	var views []models.NetworkTraceView
 	if tool != "" {
@@ -381,10 +419,14 @@ func AgentTraceJobs(c *gin.Context) {
 		if models.DB.First(&run, v.RunID).Error != nil {
 			continue
 		}
+		if version < tracecore.ClientVersion && !tracecore.LegacyCompatible(traceRunOptions(run)) {
+			markTraceUnsupported(v.ID, "请升级 agent 以执行指定追踪选项")
+			continue
+		}
 		now := time.Now()
 		tx := models.DB.Model(&models.NetworkTraceView{}).Where("id = ? AND agent_server_id = ? AND status = ?", v.ID, server.ID, "queued").Updates(map[string]any{"status": "running", "started_at": now})
 		if tx.Error == nil && tx.RowsAffected == 1 {
-			jobs = append(jobs, gin.H{"id": v.ID, "target": run.Target})
+			jobs = append(jobs, gin.H{"id": v.ID, "target": run.Target, "protocol": run.Protocol, "port": run.Port, "family": run.Family})
 		}
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": jobs, "msg": "路由追踪任务"})
@@ -397,16 +439,49 @@ func AgentTraceReport(c *gin.Context) {
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 64*1024)
 	var req struct {
-		ID     uint   `json:"id"`
-		Tool   string `json:"tool"`
-		Output string `json:"output"`
-		Error  string `json:"error"`
+		Action    string `json:"action"`
+		PrepareID string `json:"prepareId"`
+		ID        uint   `json:"id"`
+		Tool      string `json:"tool"`
+		Output    string `json:"output"`
+		Error     string `json:"error"`
 	}
-	if c.ShouldBindJSON(&req) != nil || req.ID == 0 || len(req.Output) > tracecore.MaxOutput || len(req.Error) > 512 {
+	if c.ShouldBindJSON(&req) != nil || len(req.Output) > tracecore.MaxOutput || len(req.Error) > 512 {
 		c.JSON(400, gin.H{"code": "40000", "msg": "回报内容过大或格式无效"})
 		return
 	}
-	if req.Tool != "traceroute" && req.Tool != "tracepath" {
+
+	if req.Action == "prepare" {
+		if len(req.PrepareID) != 32 {
+			c.JSON(400, gin.H{"code": "40000", "msg": "准备标识无效"})
+			return
+		}
+		message := req.Error
+		if req.Tool != "nexttrace" && message == "" {
+			message = "准备结束但未检测到匹配版本的 NextTrace"
+		}
+		now := time.Now()
+		updates := map[string]any{"prepare_finished_at": now, "prepare_error": message, "seen_at": now}
+		if message == "" {
+			updates["tool"] = "nexttrace"
+		}
+		tx := models.DB.Model(&models.TraceAgentCapability{}).Where("server_id = ? AND prepare_id = ? AND prepare_started_at IS NOT NULL AND prepare_finished_at IS NULL AND prepare_requested_at > ?", server.ID, req.PrepareID, now.Add(-3*time.Minute)).Updates(updates)
+		if tx.Error != nil {
+			c.JSON(500, gin.H{"code": "50000", "msg": "保存准备结果失败"})
+			return
+		}
+		if tx.RowsAffected != 1 {
+			c.JSON(409, gin.H{"code": "40900", "msg": "准备任务不属于此 agent 或已经结束"})
+			return
+		}
+		c.JSON(200, gin.H{"code": "00000", "msg": "准备结果已保存"})
+		return
+	}
+	if req.ID == 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "追踪标识无效"})
+		return
+	}
+	if req.Tool != "traceroute" && req.Tool != "tracepath" && req.Tool != "nexttrace" {
 		req.Tool = ""
 	}
 	status := "completed"
@@ -424,4 +499,81 @@ func AgentTraceReport(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"code": "00000", "msg": "已保存"})
+}
+
+func traceRunOptions(run models.NetworkTraceRun) tracecore.Options {
+	return tracecore.Options{Protocol: run.Protocol, Port: run.Port, Family: run.Family}
+}
+
+func markTraceUnsupported(id uint, message string) {
+	models.DB.Model(&models.NetworkTraceView{}).Where("id = ? AND status = ?", id, "queued").Updates(map[string]any{"status": "unsupported", "error": message, "finished_at": time.Now()})
+}
+
+func tracePreparing(cap models.TraceAgentCapability, now time.Time) bool {
+	return cap.PrepareID != "" && cap.PrepareRequestedAt != nil && cap.PrepareFinishedAt == nil && now.Sub(*cap.PrepareRequestedAt) < 3*time.Minute
+}
+func tracePrepareError(cap models.TraceAgentCapability, now time.Time) string {
+	if cap.PrepareID != "" && cap.PrepareRequestedAt != nil && cap.PrepareFinishedAt == nil && !tracePreparing(cap, now) {
+		return "准备任务未在 3 分钟内完成，请重试"
+	}
+	return cap.PrepareError
+}
+
+// NetworkTracePrepare queues installation only after an authenticated admin action.
+// Agent token and a one-use nonce bind the assignment and its report.
+func NetworkTracePrepare(c *gin.Context) {
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	var req struct {
+		AgentIDs []uint `json:"agentIds"`
+	}
+	if c.ShouldBindJSON(&req) != nil || len(req.AgentIDs) == 0 || len(req.AgentIDs) > 8 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请选择 1–8 个 agent"})
+		return
+	}
+	traceCreateMu.Lock()
+	defer traceCreateMu.Unlock()
+	now := time.Now()
+	seen := map[uint]bool{}
+	caps := make([]models.TraceAgentCapability, 0, len(req.AgentIDs))
+	for _, id := range req.AgentIDs {
+		if id == 0 || seen[id] {
+			c.JSON(400, gin.H{"code": "40000", "msg": "agent 标识无效或重复"})
+			return
+		}
+		seen[id] = true
+		var server models.ProxyServer
+		var cap models.TraceAgentCapability
+		if models.DB.First(&server, "id = ? AND kind = ? AND enabled = ?", id, models.ServerKindAgent, true).Error != nil || models.DB.First(&cap, "server_id = ?", id).Error != nil || cap.Version < tracecore.ClientVersion || now.Sub(cap.SeenAt) > 2*time.Minute {
+			c.JSON(400, gin.H{"code": "40000", "msg": "请先更新 agent 并等待其上线"})
+			return
+		}
+		if tracePreparing(cap, now) {
+			c.JSON(409, gin.H{"code": "40900", "msg": "所选 agent 正在准备 NextTrace"})
+			return
+		}
+		caps = append(caps, cap)
+	}
+	tx := models.DB.Begin()
+	if tx.Error != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "创建准备任务失败"})
+		return
+	}
+	for _, cap := range caps {
+		nonce := make([]byte, 16)
+		if _, err := rand.Read(nonce); err != nil {
+			tx.Rollback()
+			c.JSON(500, gin.H{"code": "50000", "msg": "生成准备标识失败"})
+			return
+		}
+		if err := tx.Model(&models.TraceAgentCapability{}).Where("server_id = ?", cap.ServerID).Updates(map[string]any{"prepare_id": hex.EncodeToString(nonce), "prepare_requested_at": now, "prepare_started_at": nil, "prepare_finished_at": nil, "prepare_error": ""}).Error; err != nil {
+			tx.Rollback()
+			c.JSON(500, gin.H{"code": "50000", "msg": "保存准备任务失败"})
+			return
+		}
+	}
+	if tx.Commit().Error != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "保存准备任务失败"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": "已安排准备 NextTrace v" + tracecore.NextTraceVersion + "；agent 将校验官方 SHA256 后安装"})
 }

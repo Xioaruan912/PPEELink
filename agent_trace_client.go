@@ -10,14 +10,18 @@ import (
 	"net/http"
 	"net/url"
 	"os/exec"
+	"strings"
 	"time"
 
 	"ppeelink/tracecore"
 )
 
 type agentTraceJob struct {
-	ID     uint   `json:"id"`
-	Target string `json:"target"`
+	Action    string `json:"action"`
+	PrepareID string `json:"prepareId"`
+	ID        uint   `json:"id"`
+	Target    string `json:"target"`
+	tracecore.Options
 }
 
 func runAgentTraceLoop(ctx context.Context, client *http.Client, panel, token string) {
@@ -35,7 +39,14 @@ func runAgentTraceLoop(ctx context.Context, client *http.Client, panel, token st
 		jobs, err := fetchAgentTraceJobs(client, panel, token)
 		if err == nil {
 			for _, job := range jobs {
-				result := tracecore.Run(ctx, job.Target)
+				if job.Action == "prepare" {
+					prepareErr := tracecore.Prepare(ctx)
+					if reportErr := reportAgentTracePreparation(client, panel, token, job.PrepareID, prepareErr); reportErr != nil {
+						log.Printf("[agent] NextTrace 准备结果回报失败: %v", reportErr)
+					}
+					continue
+				}
+				result := tracecore.RunWithOptions(ctx, job.Target, job.Options)
 				if reportErr := reportAgentTrace(client, panel, token, job.ID, result); reportErr != nil {
 					log.Printf("[agent] 路由追踪回报失败: %v", reportErr)
 				}
@@ -116,7 +127,7 @@ func truncateLog(value string, max int) string {
 }
 
 func fetchAgentTraceJobs(client *http.Client, panel, token string) ([]agentTraceJob, error) {
-	req, err := http.NewRequest(http.MethodGet, panel+"/api/v1/agent/trace/jobs?tool="+url.QueryEscape(tracecore.AvailableTool()), nil)
+	req, err := http.NewRequest(http.MethodGet, panel+"/api/v1/agent/trace/jobs?version=2&tool="+url.QueryEscape(tracecore.AvailableTool()), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -151,6 +162,24 @@ func reportAgentTrace(client *http.Client, panel, token string, id uint, result 
 	if err != nil {
 		return err
 	}
+	return sendAgentTraceReport(client, panel, token, body)
+}
+
+func reportAgentTracePreparation(client *http.Client, panel, token, prepareID string, prepareErr error) error {
+	message := ""
+	if prepareErr != nil {
+		message = prepareErr.Error()
+		if len(message) > 512 {
+			message = strings.ToValidUTF8(message[:509], "") + "…"
+		}
+	}
+	body, err := json.Marshal(map[string]any{"action": "prepare", "prepareId": prepareID, "tool": tracecore.AvailableTool(), "error": message})
+	if err != nil {
+		return err
+	}
+	return sendAgentTraceReport(client, panel, token, body)
+}
+func sendAgentTraceReport(client *http.Client, panel, token string, body []byte) error {
 	req, err := http.NewRequest(http.MethodPost, panel+"/api/v1/agent/trace/report", bytes.NewReader(body))
 	if err != nil {
 		return err
