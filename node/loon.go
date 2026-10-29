@@ -1,7 +1,6 @@
 package node
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"io"
 	"log"
@@ -269,11 +268,29 @@ func loonChains(proxies []string, relations map[string]string) ([]string, []stri
 		if _, ok := byName[n]; !ok {
 			return nil, nil, nil, fmt.Errorf("Loon 无法输出中转落地节点 %s", n)
 		}
-		sum := sha256.Sum256([]byte(n))
-		alias := fmt.Sprintf("__subl_hop_%x", sum[:8])
-		for _, exists := byName[alias]; exists; _, exists = byName[alias] {
-			alias += "_"
+	}
+	// These are direct support nodes, not the selectable relay policies. Keep
+	// their names human-readable and country-neutral so region filters do not
+	// accidentally select them as relayed Japan/US nodes.
+	used := map[string]bool{}
+	for n := range byName {
+		used[n] = true
+	}
+	nextAlias := 1
+	for _, line := range proxies {
+		n, _, _ := strings.Cut(line, " = ")
+		if relations[n] == "" {
+			continue
 		}
+		alias := ""
+		for {
+			alias = fmt.Sprintf("链路底层 %d（直连）", nextAlias)
+			nextAlias++
+			if !used[alias] {
+				break
+			}
+		}
+		used[alias] = true
 		rawName[n] = alias
 	}
 	chains := []string{}

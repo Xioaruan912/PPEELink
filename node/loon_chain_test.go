@@ -28,6 +28,9 @@ func TestLoonSavedRelayAndPin(t *testing.T) {
 	if !strings.Contains(out, "Global = select,中转线路,") {
 		t.Fatal("chain inaccessible from root group")
 	}
+	if strings.Contains(out, "__subl_hop_") || !strings.Contains(out, "JP = HK,链路底层 1（直连）,udp=true") {
+		t.Fatal("internal machine names leaked instead of readable, explicitly direct support nodes")
+	}
 	if strings.Contains(out, "JP = Hysteria2") {
 		t.Fatal("chain name still refers to direct exit")
 	}
