@@ -162,9 +162,6 @@ const {
           ><el-dropdown-menu>
             <el-dropdown-item command="tcp">国内可达性</el-dropdown-item>
             <el-dropdown-item command="unlock">解锁检测</el-dropdown-item>
-            <el-dropdown-item command="chain" divided
-              >设置中转</el-dropdown-item
-            >
             <el-dropdown-item command="temp">临时订阅</el-dropdown-item>
             <el-dropdown-item command="probe-policy"
               >检测策略…</el-dropdown-item

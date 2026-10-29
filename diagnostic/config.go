@@ -16,6 +16,7 @@ type profile struct {
 	host, protocol, network string
 	port                    int
 	out                     map[string]any
+	relays                  []profile
 }
 
 func invalid(s string) error { return fmt.Errorf("%s", s) }
@@ -168,6 +169,20 @@ func publicIP(value string) bool {
 	return true
 }
 func config(p profile, port int, user, pass string) []byte {
-	b, _ := json.Marshal(map[string]any{"log": map[string]any{"loglevel": "warning"}, "inbounds": []any{map[string]any{"listen": "127.0.0.1", "port": port, "protocol": "socks", "settings": map[string]any{"auth": "password", "accounts": []any{map[string]any{"user": user, "pass": pass}}}}}, "outbounds": []any{p.out}})
+	profiles := append(append([]profile{}, p.relays...), p)
+	outbounds := []any{}
+	for i := len(profiles) - 1; i >= 0; i-- {
+		out := profiles[i].out
+		tag := fmt.Sprintf("hop-%d", i)
+		if i == len(profiles)-1 {
+			tag = "proxy"
+		}
+		out["tag"] = tag
+		if i > 0 {
+			out["streamSettings"].(map[string]any)["sockopt"] = map[string]any{"dialerProxy": fmt.Sprintf("hop-%d", i-1)}
+		}
+		outbounds = append(outbounds, out)
+	}
+	b, _ := json.Marshal(map[string]any{"log": map[string]any{"loglevel": "warning"}, "inbounds": []any{map[string]any{"listen": "127.0.0.1", "port": port, "protocol": "socks", "settings": map[string]any{"auth": "password", "accounts": []any{map[string]any{"user": user, "pass": pass}}}}}, "outbounds": outbounds})
 	return b
 }

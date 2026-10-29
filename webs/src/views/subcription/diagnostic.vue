@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
+import { useRoute } from "vue-router";
+import DiagnosticRoute from "./DiagnosticRoute.vue";
 import request from "@/utils/request";
 import {
   runDiagnosticQueue,
@@ -8,6 +10,7 @@ import {
 } from "./diagnosticBatch";
 import { getNodes } from "@/api/subcription/node";
 import { UiButton, UiSegmented, UiDrawer } from "@/ui";
+const route = useRoute();
 const mode = ref("node"),
   selected = ref<number>(),
   link = ref(""),
@@ -31,6 +34,7 @@ interface Result {
   summary: string;
   advice: string[];
   checkedAt: string;
+  route?: { name: string; protocol: string; transport: string }[];
 }
 const result = ref<Result | null>(null);
 let controller: AbortController | undefined;
@@ -171,7 +175,13 @@ async function load() {
     listError.value = "节点加载失败，请重试，或切换到粘贴链接。";
   }
 }
-onMounted(load);
+onMounted(async () => {
+  await load();
+  const id = Number(route.query.id);
+  if (Number.isInteger(id) && nodes.value.some((n) => n.ID === id)) {
+    selected.value = id;
+  }
+});
 onBeforeUnmount(() => controller?.abort());
 async function run() {
   if (loading.value) return;
@@ -219,6 +229,11 @@ function copyReport(report?: Result) {
       [
         r.summary,
         `检测位置：${r.perspective}`,
+        ...(r.route && r.route.length > 1
+          ? [
+              `中转路径：面板 → ${r.route.map((h) => h.name).join(" → ")} → 目标网站`,
+            ]
+          : []),
         `${r.protocol} / ${r.transport}`,
         ...r.steps.map(
           (s) => `${s.title}：${statusText[s.status]} · ${s.detail}`
@@ -300,7 +315,8 @@ function copyReport(report?: Result) {
         </div>
       </el-form>
       <p class="context-note">
-        支持 Reality TCP / Vision、XHTTP 等传输，以及 HY2。HY2 使用 UDP，TCP
+        支持 Reality TCP / Vision、XHTTP 等传输，以及
+        HY2；已有节点会沿保存的中转路径检测（最多 4 跳）。HY2 使用 UDP，TCP
         端口不通不代表 HY2 不可用。诊断约需 10–40 秒；首次准备内核可能需重试。
       </p>
       <p v-if="error" class="failure" role="alert">{{ error }}</p>
@@ -370,6 +386,7 @@ function copyReport(report?: Result) {
         </div>
         <UiButton @click="copyReport()">复制诊断结果</UiButton>
       </div>
+      <DiagnosticRoute :route="result.route" />
       <ol class="diagnostic-steps">
         <li
           v-for="step in result.steps"
@@ -405,6 +422,7 @@ function copyReport(report?: Result) {
             {{ detailResult.perspective }} ·
             {{ new Date(detailResult.checkedAt).toLocaleString() }}
           </p>
+          <DiagnosticRoute :route="detailResult.route" />
           <ol class="diagnostic-steps">
             <li
               v-for="step in detailResult.steps"
