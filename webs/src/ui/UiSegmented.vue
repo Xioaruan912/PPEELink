@@ -1,6 +1,8 @@
 <template>
   <div ref="root" class="ui-segmented" role="radiogroup" :aria-label="label">
-    <i ref="slider" class="ui-segmented__slider" aria-hidden="true"></i>
+    <span class="ui-segmented__track" aria-hidden="true"
+      ><i ref="slider" class="ui-segmented__slider"></i
+    ></span>
     <button
       v-for="(option, index) in options"
       :key="option.value"
@@ -124,6 +126,13 @@ watch(() => [props.modelValue, props.options], position);
 }
 .ui-segmented button:disabled {
   color: var(--c-muted);
+}
+.ui-segmented__track {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: inherit;
 }
 .ui-segmented__slider {
   position: absolute;

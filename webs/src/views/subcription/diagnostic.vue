@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import request from "@/utils/request";
+import { runDiagnosticQueue, diagnosticVerdict } from "./diagnosticBatch";
 import { getNodes } from "@/api/subcription/node";
 import { UiButton, UiSegmented } from "@/ui";
 const mode = ref("node"),
@@ -29,6 +30,121 @@ interface Result {
 }
 const result = ref<Result | null>(null);
 let controller: AbortController | undefined;
+type BatchStatus =
+  | "waiting"
+  | "running"
+  | "passed"
+  | "failed"
+  | "unknown"
+  | "skipped"
+  | "cancelled"
+  | "error";
+interface BatchRow {
+  id: number;
+  name: string;
+  status: BatchStatus;
+  note: string;
+  result?: Result;
+}
+const batchRows = ref<BatchRow[]>([]);
+const batchRunning = ref(false);
+const batchStatusText: Record<BatchStatus, string> = {
+  waiting: "等待中",
+  running: "检测中",
+  passed: "通过",
+  failed: "失败",
+  unknown: "待确认",
+  skipped: "暂不支持",
+  cancelled: "已取消",
+  error: "请求错误",
+};
+const batchDone = computed(
+  () =>
+    batchRows.value.filter(
+      (row) => !["waiting", "running"].includes(row.status)
+    ).length
+);
+const batchCounts = computed(() => ({
+  passed: batchRows.value.filter((r) => r.status === "passed").length,
+  failed: batchRows.value.filter((r) => r.status === "failed").length,
+  unknown: batchRows.value.filter((r) => r.status === "unknown").length,
+  skipped: batchRows.value.filter((r) => r.status === "skipped").length,
+  errors: batchRows.value.filter((r) => r.status === "error").length,
+  cancelled: batchRows.value.filter((r) => r.status === "cancelled").length,
+}));
+async function runAll() {
+  if (loading.value || !nodes.value.length) return;
+  loading.value = true;
+  batchRunning.value = true;
+  error.value = "";
+  result.value = null;
+  const abort = new AbortController();
+  controller = abort;
+  const batchTarget = target.value;
+  batchRows.value = nodes.value.map((n) => ({
+    id: n.ID,
+    name: n.Name,
+    status: "waiting",
+    note: "",
+  }));
+  const links = new Map(nodes.value.map((n) => [n.ID, n.Link]));
+  const queue = batchRows.value.filter((row) => {
+    const uri = links.get(row.id) || "";
+    let supported = false;
+    try {
+      const u = new URL(uri);
+      supported =
+        ["hy2:", "hysteria2:"].includes(u.protocol) ||
+        (u.protocol === "vless:" &&
+          u.searchParams.get("security") === "reality");
+    } catch {}
+    if (!supported) {
+      row.status = "skipped";
+      row.note = "当前深度诊断支持 Reality 和 HY2；此协议未发送诊断请求。";
+    }
+    return supported;
+  });
+  try {
+    await runDiagnosticQueue(
+      queue,
+      async (row) => {
+        const response = await request({
+          url: "/api/v1/nodes/diagnose",
+          method: "post",
+          timeout: 48000,
+          signal: abort.signal,
+          data: { id: row.id, target: batchTarget },
+        });
+        return response.data as Result;
+      },
+      {
+        signal: abort.signal,
+        onStart(row) {
+          row.status = "running";
+          row.note = "正在检查配置、网络与代理通路…";
+        },
+        onResult(row, data) {
+          row.result = data;
+          row.status = diagnosticVerdict(data);
+          row.note = data.summary;
+        },
+        onError(row, e: any) {
+          row.status = "error";
+          row.note = e?.message || "诊断请求失败，可单独重试";
+        },
+        onCancel(row) {
+          row.status = "cancelled";
+          row.note = "未完成的检测已取消";
+        },
+      }
+    );
+  } finally {
+    loading.value = false;
+    batchRunning.value = false;
+    if (controller === abort) controller = undefined;
+  }
+}
+
 const supported = computed(() =>
   nodes.value.filter((n) => /^(vless|hy2|hysteria2):\/\//i.test(n.Link))
 );
@@ -112,6 +228,7 @@ function copyReport() {
     <section class="diagnostic-form">
       <UiSegmented
         v-model="mode"
+        class="source-switch"
         label="节点来源"
         :options="[
           { label: '选择已有节点', value: 'node' },
@@ -156,9 +273,16 @@ function copyReport() {
         ></el-form-item>
         <div class="run-actions">
           <UiButton variant="primary" :loading="loading" @click="run">{{
-            loading ? "正在逐步检查…" : "开始诊断"
-          }}</UiButton
-          ><UiButton v-if="loading" @click="controller?.abort()">取消</UiButton>
+            loading
+              ? batchRunning
+                ? "批量检测中…"
+                : "正在逐步检查…"
+              : "开始诊断"
+          }}</UiButton>
+          <UiButton :disabled="loading || !nodes.length" @click="runAll"
+            >检测全部节点（{{ nodes.length }}）</UiButton
+          >
+          <UiButton v-if="loading" @click="controller?.abort()">取消</UiButton>
         </div>
       </el-form>
       <p class="context-note">
@@ -166,6 +290,51 @@ function copyReport() {
         端口不通不代表 HY2 不可用。诊断约需 10–40 秒；首次准备内核可能需重试。
       </p>
       <p v-if="error" class="failure" role="alert">{{ error }}</p>
+    </section>
+    <section
+      v-if="batchRows.length"
+      class="diagnostic-result batch-result"
+      aria-label="全部节点检测结果"
+    >
+      <div class="result-heading">
+        <h2>
+          {{
+            batchRunning
+              ? "正在检测全部节点"
+              : batchCounts.cancelled
+                ? "批量检测已取消"
+                : "全部节点检测结果"
+          }}
+        </h2>
+        <span>{{ batchDone }} / {{ batchRows.length }}</span>
+      </div>
+      <progress
+        :value="batchDone"
+        :max="batchRows.length"
+        :aria-label="`已完成 ${batchDone} 个，共 ${batchRows.length} 个节点`"
+      ></progress>
+      <p aria-live="polite">
+        通过 {{ batchCounts.passed }} · 失败 {{ batchCounts.failed }} · 待确认
+        {{ batchCounts.unknown }} · 暂不支持 {{ batchCounts.skipped }} ·
+        请求错误 {{ batchCounts.errors }} · 已取消 {{ batchCounts.cancelled }}
+      </p>
+      <p>
+        每次最多同时检测两个节点；目标在开始时确定。取消或关闭页面会停止后续检测，已完成的结果保留。
+      </p>
+      <div class="batch-list">
+        <div v-for="row in batchRows" :key="row.id" class="batch-row">
+          <div class="batch-node">
+            <strong>{{ row.name }}</strong>
+            <p>{{ row.note || "等待安排检测" }}</p>
+          </div>
+          <span class="batch-status" :class="`batch-status-${row.status}`">{{
+            batchStatusText[row.status]
+          }}</span>
+          <UiButton :disabled="!row.result" @click="result = row.result || null"
+            >查看详情</UiButton
+          >
+        </div>
+      </div>
     </section>
     <section v-if="result" class="diagnostic-result" aria-live="polite">
       <div class="result-heading">
@@ -259,6 +428,7 @@ p {
   width: 100%;
 }
 .run-actions {
+  flex-wrap: wrap;
   display: flex;
   gap: 10px;
 }
@@ -320,6 +490,66 @@ aside {
   .diagnostic-step {
     grid-template-columns: 48px minmax(0, 1fr);
     gap: 8px;
+  }
+}
+</style>
+
+<style scoped>
+.source-switch {
+  display: inline-grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.source-switch :deep(button) {
+  min-width: 0;
+  white-space: normal;
+}
+.batch-result progress {
+  width: 100%;
+  height: 10px;
+  accent-color: var(--c-signal-text);
+  margin: 14px 0 4px;
+}
+.batch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px auto;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 0;
+  border-top: 1px solid var(--c-line);
+}
+.batch-node {
+  min-width: 0;
+}
+.batch-node strong,
+.batch-node p {
+  overflow-wrap: anywhere;
+}
+.batch-status {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.batch-status-passed {
+  color: #15803d;
+}
+.batch-status-failed,
+.batch-status-error {
+  color: #b42318;
+}
+.batch-status-unknown {
+  color: #946200;
+}
+@media (max-width: 600px) {
+  .batch-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .batch-node {
+    grid-column: 1/-1;
+  }
+  .batch-row :deep(button) {
+    min-height: 44px;
   }
 }
 </style>
