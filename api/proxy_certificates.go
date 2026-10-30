@@ -15,7 +15,7 @@ func applyCertificateReports(tx *gorm.DB, serverID uint, report xraycore.Report)
 	changed := false
 	for identity, public := range report.Certificates {
 		var in models.ProxyInbound
-		if err := tx.Where("server_id = ? AND tls_mode = ? AND tls_auto_id = ?", serverID, "auto", identity).First(&in).Error; err == gorm.ErrRecordNotFound {
+		if err := tx.Where("server_id = ? AND tls_mode IN ? AND tls_auto_id = ?", serverID, []string{"auto", "self-signed"}, identity).First(&in).Error; err == gorm.ErrRecordNotFound {
 			continue
 		} else if err != nil {
 			return false, err

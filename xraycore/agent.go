@@ -82,7 +82,7 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		if ctx.Err() != nil {
 			return false
 		}
-		report := Report{ProxyFeatures: 5, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
+		report := Report{ProxyFeatures: 6, Arch: runtime.GOARCH, AgentVersion: AgentVersion, AgentHash: ExecutableHash(), Traffic: map[string]Counter{}, Online: map[string]int{}}
 		spec, err := src.Spec(ctx)
 		if relayRestoreErr != nil {
 			report.Error = "恢复端口转发失败: " + relayRestoreErr.Error()

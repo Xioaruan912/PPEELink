@@ -87,17 +87,17 @@ func hy2NodeEgress(link string) (*xraycore.EgressSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("出口 HY2 链接参数无效")
 	}
-	allowed := map[string]bool{"sni": true, "insecure": true, "pinSHA256": true, "subl-cert": true, "alpn": true, "obfs": true, "obfs-password": true, "upmbps": true, "downmbps": true}
+	allowed := map[string]bool{"security": true, "sni": true, "insecure": true, "pinSHA256": true, "subl-cert": true, "alpn": true, "obfs": true, "obfs-password": true, "upmbps": true, "downmbps": true}
 	for key, values := range q {
 		if !allowed[key] || len(values) != 1 {
 			return nil, fmt.Errorf("出口 HY2 包含不支持或重复的参数：%s", key)
 		}
 	}
+	if security := q.Get("security"); security != "" && security != "tls" {
+		return nil, fmt.Errorf("HY2 必须使用 TLS")
+	}
 	if value := q.Get("insecure"); value != "" && value != "0" && value != "1" {
 		return nil, fmt.Errorf("出口 HY2 insecure 参数无效")
-	}
-	if q.Get("insecure") == "1" && q.Get("pinSHA256") == "" {
-		return nil, fmt.Errorf("出口 HY2 必须校验证书或提供可信指纹")
 	}
 	for _, key := range []string{"upmbps", "downmbps"} {
 		if value := q.Get(key); value != "" && value != "0" {
@@ -118,7 +118,7 @@ func hy2NodeEgress(link string) (*xraycore.EgressSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("出口 HY2 密码无效")
 	}
-	e := &xraycore.EgressSpec{Protocol: "hysteria2", Address: hy.Host, Port: hy.Port, Password: password, SNI: hy.Sni, PinSHA256: hy.PinSHA256, Obfs: hy.Obfs, ObfsPassword: hy.ObfsPassword, ALPN: hy.ALPN}
+	e := &xraycore.EgressSpec{Protocol: "hysteria2", Insecure: hy.Insecure == 1, Address: hy.Host, Port: hy.Port, Password: password, SNI: hy.Sni, PinSHA256: hy.PinSHA256, Obfs: hy.Obfs, ObfsPassword: hy.ObfsPassword, ALPN: hy.ALPN}
 	if err := e.Validate(); err != nil {
 		return nil, err
 	}

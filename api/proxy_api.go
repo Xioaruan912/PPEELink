@@ -270,6 +270,12 @@ func purgeProxyServer(s models.ProxyServer) {
 // ---- 入站 ------------------------------------------------------------------
 
 type inboundSaveRequest struct {
+	Listen      string  `json:"listen"`
+	Fingerprint string  `json:"fingerprint"`
+	SpiderX     string  `json:"spiderX"`
+	PrivateKey  string  `json:"privateKey"`
+	ShortID     *string `json:"shortId"`
+
 	DomainRoutes  []models.DomainRoute `json:"domainRoutes"`
 	TLSMode       string               `json:"tlsMode"`
 	EgressNodeID  int                  `json:"egressNodeId"`
@@ -336,12 +342,12 @@ func ProxyInboundSave(c *gin.Context) {
 			return
 		}
 	}
-	if req.TLSMode != "" && req.TLSMode != "manual" && req.TLSMode != "auto" {
+	if req.TLSMode != "" && req.TLSMode != "manual" && req.TLSMode != "auto" && req.TLSMode != "self-signed" {
 		c.JSON(400, gin.H{"code": "40000", "msg": "证书模式无效"})
 		return
 	}
-	if req.TLSMode == "auto" {
-		if req.Template != xraycore.TemplateHysteria2 || net.ParseIP(strings.Trim(server.PublicHost, "[]")) == nil {
+	if req.TLSMode == "auto" || req.TLSMode == "self-signed" {
+		if req.Template != xraycore.TemplateHysteria2 || (req.TLSMode == "auto" && net.ParseIP(strings.Trim(server.PublicHost, "[]")) == nil) {
 			c.JSON(400, gin.H{"code": "40000", "msg": "无域名部署需选择 Hysteria2，并将服务器连接地址填写为 IP"})
 			return
 		}
@@ -363,7 +369,7 @@ func ProxyInboundSave(c *gin.Context) {
 		in.TLSFingerprint = ""
 	}
 	in.TLSMode = req.TLSMode
-	if req.Template == xraycore.TemplateHysteria2 && req.TLSMode != "auto" {
+	if req.Template == xraycore.TemplateHysteria2 && req.TLSMode != "auto" && req.TLSMode != "self-signed" {
 		if err := xraycore.ValidateHysteriaTLS(strings.TrimSpace(req.SNI), req.TLSCertFile, req.TLSKeyFile); err != nil {
 			c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
 			return
@@ -406,6 +412,69 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": routeErr.Error()})
 		return
 	}
+	listen, listenErr := xraycore.NormalizeListen(req.Listen)
+	if listenErr != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": listenErr.Error()})
+		return
+	}
+	in.Listen = listen
+	if server.Kind == models.ServerKindAgent && server.ProxyFeatures < 6 && (req.TLSMode == "self-signed" || req.PrivateKey != "" || req.Fingerprint != "" || req.SpiderX != "" || req.ShortID != nil || req.Listen != "") {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级 Agent 至1.12，以使用 x-ui 部署配置"})
+		return
+	}
+	if req.Template != xraycore.TemplateHysteria2 {
+		if req.PrivateKey != "" && req.RegenerateKey {
+			c.JSON(400, gin.H{"code": "40000", "msg": "导入私钥与重新生成密钥不能同时选择"})
+			return
+		}
+		if req.PrivateKey != "" {
+			pub, keyErr := xraycore.PublicKeyFor(strings.TrimSpace(req.PrivateKey))
+			if keyErr != nil {
+				c.JSON(400, gin.H{"code": "40000", "msg": "x-ui Reality 私钥格式无效"})
+				return
+			}
+			in.PrivateKey = strings.TrimSpace(req.PrivateKey)
+			in.PublicKey = pub
+		}
+		sid := in.ShortID
+		if req.ShortID != nil {
+			sid = *req.ShortID
+		}
+		target, sni, shortID, normalizeErr := xraycore.NormalizeReality(req.Target, req.SNI, sid)
+		if normalizeErr != nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": normalizeErr.Error()})
+			return
+		}
+		req.Target, req.SNI = target, sni
+		if req.ShortID != nil {
+			in.ShortID = shortID
+		}
+		fp := strings.TrimSpace(req.Fingerprint)
+		if fp == "" {
+			fp = in.Fingerprint
+		}
+		if fp == "" {
+			fp = "chrome"
+		}
+		switch fp {
+		case "chrome", "firefox", "safari", "ios", "android", "edge", "random", "randomized":
+		default:
+			c.JSON(400, gin.H{"code": "40000", "msg": "客户端指纹不受支持"})
+			return
+		}
+		spider := strings.TrimSpace(req.SpiderX)
+		if spider == "" {
+			spider = in.SpiderX
+		}
+		if spider == "" {
+			spider = "/"
+		}
+		if len(spider) > 512 || !strings.HasPrefix(spider, "/") || strings.ContainsAny(spider, "\r\n") {
+			c.JSON(400, gin.H{"code": "40000", "msg": "SpiderX 需为 / 开头的路径"})
+			return
+		}
+		in.Fingerprint, in.SpiderX = fp, spider
+	}
 	in.DomainRoutes = domainRoutes
 	in.EgressNodeID = req.EgressNodeID
 	in.TLSCertFile, in.TLSKeyFile = req.TLSCertFile, req.TLSKeyFile
@@ -417,7 +486,10 @@ func ProxyInboundSave(c *gin.Context) {
 			c.JSON(500, gin.H{"code": "50000", "msg": "生成密钥失败"})
 			return
 		}
-		in.PrivateKey, in.PublicKey, in.ShortID = priv, pub, models.RandomHex(4)
+		in.PrivateKey, in.PublicKey = priv, pub
+		if req.ShortID == nil {
+			in.ShortID = models.RandomHex(4)
+		}
 	}
 	egress, routes, err := resolveInboundRoutes(in, server)
 	if err == nil {

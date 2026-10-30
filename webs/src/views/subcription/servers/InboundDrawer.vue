@@ -38,7 +38,13 @@ const blank = () => ({
   template: "vless-reality-vision" as ProxyInbound["template"],
   port: randomPort(),
   target: "www.apple.com:443",
-  tlsMode: "auto" as "auto" | "manual",
+  listen: "",
+  fingerprint: "chrome",
+  spiderX: "/",
+  publicKey: "",
+  privateKey: "",
+  shortId: undefined as string | undefined,
+  tlsMode: "self-signed" as "auto" | "manual" | "self-signed",
   tlsCertFile: "",
   tlsKeyFile: "",
   sni: "www.apple.com",
@@ -47,6 +53,8 @@ const blank = () => ({
   regenerateKey: false,
 });
 const form = reactive(blank());
+const importKey = ref(false);
+
 const identityLocked = computed(() => !!props.requireEgress && form.id > 0);
 watch(
   () => form.template,
@@ -83,6 +91,8 @@ watch(visible, (open) => {
   loadExitOptions();
   error.value = "";
   check.value = null;
+  importKey.value = false;
+
   Object.assign(
     form,
     blank(),
@@ -92,7 +102,15 @@ watch(visible, (open) => {
           domainRoutes: (props.inbound.domainRoutes || []).map((rule) => ({
             ...rule,
           })),
-          tlsMode: props.inbound.tlsMode === "auto" ? "auto" : "manual",
+          tlsMode:
+            props.inbound.tlsMode === "auto"
+              ? "auto"
+              : props.inbound.tlsMode === "self-signed"
+                ? "self-signed"
+                : "manual",
+          privateKey: "",
+          fingerprint: props.inbound.fingerprint || "chrome",
+          spiderX: props.inbound.spiderX || "/",
           regenerateKey: false,
         }
       : {}
@@ -127,6 +145,8 @@ async function save() {
     await saveProxyInbound({
       ...form,
       regenerateKey: props.requireEgress ? false : form.regenerateKey,
+      privateKey:
+        !identityLocked.value && importKey.value ? form.privateKey : undefined,
       tlsMode: form.template === "hysteria2" ? form.tlsMode : "manual",
       ...(identityLocked.value && props.inbound
         ? {
@@ -135,6 +155,10 @@ async function save() {
             target: props.inbound.target,
             sni: props.inbound.sni,
             path: props.inbound.path,
+            listen: props.inbound.listen,
+            fingerprint: props.inbound.fingerprint,
+            spiderX: props.inbound.spiderX,
+            shortId: props.inbound.shortId,
             tlsMode: props.inbound.tlsMode,
             tlsCertFile: props.inbound.tlsCertFile,
             tlsKeyFile: props.inbound.tlsKeyFile,
@@ -167,6 +191,13 @@ async function save() {
     "
     size="min(560px, 100vw)"
   >
+    <div class="deployment-baseline">
+      <strong>x-ui 节点部署</strong>
+      <p class="hint">
+        Reality 参数与 x-ui 一致。HY2 可由 Agent
+        自动生成证书，无需申请域名或上传证书。
+      </p>
+    </div>
     <p v-if="identityLocked" class="hint identity-hint">
       入口地址与认证保持不变，需要更改入口请新建网关
     </p>
@@ -177,7 +208,7 @@ async function save() {
           label="协议模板"
           :options="[
             {
-              label: 'Reality Vision',
+              label: 'VLESS Reality / Vision',
               value: 'vless-reality-vision',
               disabled: identityLocked,
             },
@@ -196,16 +227,24 @@ async function save() {
         <p class="hint">
           {{
             form.template === "hysteria2"
-              ? "使用 UDP 传输，可自动生成证书，或选择已有域名证书。"
+              ? "使用 UDP，支持 x-ui 自签名方式、证书指纹或已有证书。"
               : form.template === "vless-reality-vision"
                 ? "兼容性最好，Clash Meta、Shadowrocket、sing-box 等主流客户端都支持。"
-                : "XHTTP 可走 CDN 与多路复用，需要较新的客户端（Xray 内核 / mihomo 新版）。"
+                : "XHTTP Reality 使用直连 TLS 伪装，需要支持 XHTTP 的客户端；不用于 CDN TLS 终止。"
           }}
         </p>
       </el-form-item>
       <div class="grid">
-        <el-form-item :label="props.requireEgress ? '节点名称' : '备注'" :required="props.requireEgress">
-          <el-input v-model="form.remark" :placeholder="props.requireEgress ? '请输入节点名称' : '显示在节点名里'" />
+        <el-form-item
+          :label="props.requireEgress ? '节点名称' : '备注'"
+          :required="props.requireEgress"
+        >
+          <el-input
+            v-model="form.remark"
+            :placeholder="
+              props.requireEgress ? '请输入节点名称' : '显示在节点名里'
+            "
+          />
         </el-form-item>
         <el-form-item label="端口">
           <div class="port-row">
@@ -255,7 +294,12 @@ async function save() {
           label="部署方式"
           :options="[
             {
-              label: '无域名自动部署',
+              label: '无需证书配置',
+              value: 'self-signed',
+              disabled: identityLocked,
+            },
+            {
+              label: '证书指纹校验',
               value: 'auto',
               disabled: identityLocked,
             },
@@ -267,6 +311,20 @@ async function save() {
           ]"
         />
       </el-form-item>
+      <div
+        v-if="form.template === 'hysteria2' && form.tlsMode === 'self-signed'"
+        class="auto-tls-info"
+      >
+        <strong>按 x-ui 方式部署 HY2</strong>
+        <p class="hint">
+          无需域名、无需填写证书路径。Agent
+          自动生成并保管证书，订阅和分享链接会明确携带“跳过证书验证”。
+        </p>
+        <p class="hint">
+          可用于支持 HY2 的 Mihomo、sing-box、Loon 等客户端。服务器必须放行所选
+          UDP 端口；TLS 仍然启用。
+        </p>
+      </div>
       <div
         v-if="form.template === 'hysteria2' && form.tlsMode === 'auto'"
         class="auto-tls-info"
@@ -360,6 +418,71 @@ async function save() {
           SNI 填写证书对应域名。请先放行所选 UDP 端口；证书内容不会上传到面板。
         </p>
       </template>
+      <el-form-item label="监听地址"
+        ><el-select
+          v-model="form.listen"
+          :disabled="identityLocked"
+          style="width: 100%"
+          ><el-option label="双栈监听（x-ui 默认）" value="" /><el-option
+            label="仅 IPv4"
+            value="0.0.0.0" /><el-option label="仅 IPv6" value="::" /><el-option
+            v-if="form.listen && !['0.0.0.0', '::'].includes(form.listen)"
+            :label="form.listen"
+            :value="form.listen" /></el-select
+      ></el-form-item>
+      <details v-if="form.template !== 'hysteria2'" class="reality-advanced">
+        <summary>Reality 参数（x-ui）</summary>
+        <el-form-item label="客户端指纹"
+          ><el-select
+            v-model="form.fingerprint"
+            :disabled="identityLocked"
+            style="width: 100%"
+            ><el-option
+              v-for="fp in [
+                'chrome',
+                'firefox',
+                'safari',
+                'ios',
+                'android',
+                'edge',
+                'randomized',
+              ]"
+              :key="fp"
+              :label="fp"
+              :value="fp" /></el-select></el-form-item
+        ><el-form-item label="Short ID"
+          ><el-input
+            v-model="form.shortId"
+            :readonly="identityLocked"
+            placeholder="新建时自动生成；多个值用逗号分隔"
+          />
+          <p class="hint">
+            每项为偶数位十六进制，最长16位。分享链接使用第一个值；修改后需更新订阅。
+          </p></el-form-item
+        ><el-form-item label="SpiderX"
+          ><el-input
+            v-model="form.spiderX"
+            :readonly="identityLocked"
+            placeholder="/" /></el-form-item
+        ><el-form-item v-if="form.publicKey" label="Reality 公钥"
+          ><el-input :model-value="form.publicKey" readonly /></el-form-item
+        ><template v-if="!identityLocked"
+          ><label class="import-key-toggle"
+            ><el-switch v-model="importKey" /> 使用已有 x-ui 私钥</label
+          ><el-form-item v-if="importKey" label="x-ui Private Key"
+            ><el-input
+              v-model="form.privateKey"
+              type="password"
+              show-password
+              autocomplete="new-password"
+              placeholder="粘贴 x-ui 的 X25519 私钥"
+            />
+            <p class="hint">
+              公钥由私钥自动推导；不会把私钥写入分享链接。
+            </p></el-form-item
+          ></template
+        >
+      </details>
       <el-form-item label="默认服务端出口">
         <el-select v-model="form.egressNodeId" filterable style="width: 100%"
           ><el-option
@@ -373,8 +496,7 @@ async function save() {
         /></el-select>
         <p class="hint">
           未命中网站规则的 TCP / UDP 流量使用此出口。支持 Reality TCP / XHTTP 与
-          HY2；出口失效时不会改为直连。保存前需升级
-          Agent。
+          HY2；出口失效时不会改为直连。保存前需升级 Agent。
         </p>
         <p v-if="exitError" class="error">
           {{ exitError }} <UiButton @click="loadExitOptions">重试</UiButton>
@@ -389,7 +511,10 @@ async function save() {
         <label><el-switch v-model="form.enabled" /> 启用</label>
         <label
           v-if="
-            form.id && form.template !== 'hysteria2' && !props.requireEgress
+            form.id &&
+            form.template !== 'hysteria2' &&
+            !props.requireEgress &&
+            !importKey
           "
           ><el-switch v-model="form.regenerateKey" />
           重新生成密钥（所有客户端需更新订阅）</label
@@ -400,7 +525,7 @@ async function save() {
     <template #footer>
       <UiButton @click="visible = false">取消</UiButton>
       <UiButton variant="primary" :loading="saving" @click="save">{{
-        form.template === "hysteria2" && form.tlsMode === "auto" && !form.id
+        form.template === "hysteria2" && form.tlsMode !== "manual" && !form.id
           ? "部署 HY2"
           : "保存"
       }}</UiButton>
@@ -408,6 +533,33 @@ async function save() {
   </UiDrawer>
 </template>
 <style scoped>
+.deployment-baseline {
+  padding: 12px 14px;
+  margin-bottom: 18px;
+  border-radius: 12px;
+  background: var(--c-surface-2);
+}
+.deployment-baseline strong {
+  font-size: 14px;
+}
+.reality-advanced {
+  padding: 12px 0;
+  margin-bottom: 14px;
+  border-block: 1px solid var(--c-line);
+}
+.reality-advanced summary {
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 14px;
+}
+.import-key-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
 .identity-hint {
   padding: 12px 14px;
   margin-bottom: 18px;

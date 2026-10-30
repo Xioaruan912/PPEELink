@@ -418,3 +418,8 @@ db/           SQLite、运行配置和规则缓存（运行时数据）
 ## 致谢
 
 感谢 [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) 早期项目提供的基础思路与代码参考。PPEELink 在后续开发中围绕节点质量、规则解释、Rule Provider、任务中心、版本回滚、安全发布、安全审计与运维体系进行了持续扩展与重构。
+
+
+### Agent 节点部署开发约定
+
+Agent 相关开发统一放在 `agents` 分支。Reality 与 HY2 节点部署以 V2RaySSR 中文固定版对应的 3x-ui v2.9.3 为基准；配置字段、订阅参数及后续升级请遵循 [部署基准](docs/agents-xui.md)。Agent 1.12 新增 x-ui 参数、双栈监听与 HY2 免手工证书配置，已有证书指纹模式继续保留。

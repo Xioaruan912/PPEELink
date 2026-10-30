@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ type VLESS struct {
 	Query  VLESSQuery `json:"query"`
 }
 type VLESSQuery struct {
+	SpiderX     string   `json:"spiderX,omitempty"`
 	Security    string   `json:"security"`
 	Alpn        []string `json:"alpn"`
 	Sni         string   `json:"sni"`
@@ -63,10 +65,11 @@ func EncodeVLESSURL(v VLESS) string {
 	u := url.URL{
 		Scheme: "vless",
 		User:   url.User(v.Uuid),
-		Host:   fmt.Sprintf("%s:%d", v.Server, v.Port),
+		Host:   net.JoinHostPort(strings.Trim(v.Server, "[]"), strconv.Itoa(v.Port)),
 	}
 	q := u.Query()
 	q.Set("security", v.Query.Security)
+	q.Set("spx", v.Query.SpiderX)
 	// q.Set("alpn", v.Query.Alpn)
 	q.Set("sni", v.Query.Sni)
 	q.Set("fp", v.Query.Fp)
@@ -172,6 +175,7 @@ func DecodeVLESSURL(s string) (VLESS, error) {
 		Port:   port,
 		Query: VLESSQuery{
 			Security:    security,
+			SpiderX:     u.Query().Get("spx"),
 			Alpn:        alpn,
 			Sni:         sni,
 			Fp:          fp,

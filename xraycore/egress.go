@@ -12,6 +12,7 @@ import (
 
 // EgressSpec describes a physical upstream; client-side proxy chains are not inherited.
 type EgressSpec struct {
+	Insecure     bool     `json:"insecure,omitempty"`
 	Protocol     string   `json:"protocol,omitempty"`
 	Address      string   `json:"address"`
 	Port         int      `json:"port"`
@@ -86,7 +87,7 @@ func (e EgressSpec) Validate() error {
 		}
 		return nil
 	}
-	if e.Password != "" || e.PinSHA256 != "" || e.Obfs != "" || e.ObfsPassword != "" || len(e.ALPN) > 0 {
+	if e.Insecure || e.Password != "" || e.PinSHA256 != "" || e.Obfs != "" || e.ObfsPassword != "" || len(e.ALPN) > 0 {
 		return fmt.Errorf("出口 Reality 包含不支持的 HY2 参数")
 	}
 	id, err := hex.DecodeString(strings.ReplaceAll(e.UUID, "-", ""))
@@ -119,6 +120,9 @@ func (e EgressSpec) outbound(tag string) map[string]any {
 			alpn = []string{"h3"}
 		}
 		tls := map[string]any{"serverName": e.SNI, "alpn": alpn}
+		if e.Insecure && e.PinSHA256 == "" {
+			tls["allowInsecure"] = true
+		}
 		if e.PinSHA256 != "" {
 			pin, _ := certpin.Normalize(e.PinSHA256)
 			// Xray treats a matching leaf pin as the trust anchor, replacing

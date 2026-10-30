@@ -55,6 +55,10 @@ type DomainRoute struct {
 }
 
 type ProxyInbound struct {
+	Listen      string `gorm:"size:64" json:"listen"`
+	Fingerprint string `gorm:"size:32" json:"fingerprint"`
+	SpiderX     string `gorm:"size:512" json:"spiderX"`
+
 	DomainRoutes   []DomainRoute `gorm:"serializer:json;type:text" json:"domainRoutes,omitempty"`
 	TLSMode        string        `gorm:"size:16" json:"tlsMode"`
 	TLSAutoID      string        `gorm:"size:32;index" json:"-"`
@@ -72,7 +76,7 @@ type ProxyInbound struct {
 	SNI            string        `gorm:"size:255" json:"sni"`
 	PrivateKey     string        `gorm:"size:64" json:"-"`
 	PublicKey      string        `gorm:"size:64" json:"publicKey"`
-	ShortID        string        `gorm:"size:32" json:"shortId"`
+	ShortID        string        `gorm:"size:255" json:"shortId"`
 	Path           string        `gorm:"size:120" json:"path"` // XHTTP 路径
 	Enabled        bool          `gorm:"not null;default:true" json:"enabled"`
 }
