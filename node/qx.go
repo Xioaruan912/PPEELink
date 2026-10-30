@@ -9,6 +9,10 @@ import (
 // EncodeQX builds a Quantumult X [server_local] proxy list from share links.
 // Unsupported protocols are skipped.
 func EncodeQX(urls []string, cfg SqlConfig) (string, error) {
+	urls, _ = FilterClientLinks(urls, "qx")
+	if len(urls) == 0 {
+		return "", ErrNoCompatibleNodes
+	}
 	lines := make([]string, 0, len(urls))
 	for _, link := range urls {
 		link = strings.TrimSpace(link)

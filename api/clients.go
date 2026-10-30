@@ -185,10 +185,12 @@ func GetClient(c *gin.Context) {
 func normalizeClient(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	// Stash / Egern / FlClash / Clash Verge 等读取 Clash(mihomo) 配置
-	case "clash", "mihomo", "clashmeta", "clash.meta", "meta", "stash", "egern", "flclash", "clash-verge", "clashverge", "meowx":
+	case "stash", "egern", "surfboard":
+		return strings.ToLower(strings.TrimSpace(raw))
+	case "clash", "mihomo", "clashmeta", "clash.meta", "meta", "flclash", "clash-verge", "clashverge", "meowx":
 		return "clash"
 	// Surfboard 与 Surge Mac 使用 Surge 风格配置
-	case "surge", "surgemac", "surge-mac", "surfboard":
+	case "surge", "surgemac", "surge-mac":
 		return "surge"
 	case "loon":
 		return "loon"
@@ -211,6 +213,12 @@ func normalizeClient(raw string) string {
 func clientFromUserAgent(ua string) string {
 	lower := strings.ToLower(ua)
 	switch {
+	case strings.Contains(lower, "stash"):
+		return "stash"
+	case strings.Contains(lower, "egern"):
+		return "egern"
+	case strings.Contains(lower, "surfboard"):
+		return "surfboard"
 	case strings.Contains(lower, "mihomo") || strings.Contains(lower, "clash") ||
 		strings.Contains(lower, "stash") || strings.Contains(lower, "egern"):
 		return "clash"
@@ -278,6 +286,10 @@ func GetClash(c *gin.Context) {
 	}
 
 	urls, flags := collectNodeInputs(sub.Nodes)
+	urls, ok := filterExportInputs(c, urls, "clash")
+	if !ok {
+		return
+	}
 	log.Printf("[Subscription] 构建 Clash 订阅: %s，节点数: %d\n", sub.Name, len(sub.Nodes))
 	log.Printf("[Subscription] Clash 转换输入节点数: %d\n", len(urls))
 	var configs node.SqlConfig
@@ -293,7 +305,7 @@ func GetClash(c *gin.Context) {
 	switch {
 	case proxiesOnly:
 		DecodeClash, err = node.EncodeClashProxies(urls, flags, configs)
-	case configs.ProxyProvider && token != "" && base != "":
+	case configs.ProxyProvider && token != "" && base != "" && (c.GetString("compatibilityClient") == "clash" || c.GetString("compatibilityClient") == ""):
 		providerURL := base + "/c/?token=" + url.QueryEscape(token) + "&client=clash-proxies"
 		DecodeClash, err = node.EncodeClashProvider(configs.Clash, "sub-"+token[:8], providerURL, "")
 	default:
@@ -326,6 +338,10 @@ func GetSurge(c *gin.Context) {
 		log.Println("合并分组节点失败:", err)
 	}
 	urls, flags := collectNodeInputs(sub.Nodes)
+	urls, ok := filterExportInputs(c, urls, "surge")
+	if !ok {
+		return
+	}
 
 	var configs node.SqlConfig
 	err = json.Unmarshal([]byte(sub.Config), &configs)
@@ -336,7 +352,7 @@ func GetSurge(c *gin.Context) {
 	// log.Println("surge路径:", configs)
 	DecodeClash, err := node.EncodeSurgeWithFlags(urls, flags, configs)
 	if err != nil {
-		c.Writer.WriteString(err.Error())
+		writeClientExportError(c, err)
 		return
 	}
 	c.Set("subname", subName(c))
@@ -372,6 +388,10 @@ func GetLoon(c *gin.Context) {
 	}
 
 	urls, flags := collectNodeInputs(sub.Nodes)
+	urls, ok := filterExportInputs(c, urls, "loon")
+	if !ok {
+		return
+	}
 
 	var configs node.SqlConfig
 	err = json.Unmarshal([]byte(sub.Config), &configs)
@@ -381,7 +401,7 @@ func GetLoon(c *gin.Context) {
 	}
 	loonText, err := node.EncodeLoonWithFlags(urls, flags, configs)
 	if err != nil {
-		c.Writer.WriteString(err.Error())
+		writeClientExportError(c, err)
 		return
 	}
 	c.Set("subname", subName(c))
@@ -404,15 +424,19 @@ func GetSingbox(c *gin.Context) {
 	if err := mergeGroupNodes(&sub); err != nil {
 		log.Println("合并分组节点失败:", err)
 	}
-	urls, _ := collectNodeInputs(sub.Nodes)
+	urls, flags := collectNodeInputs(sub.Nodes)
+	urls, ok := filterExportInputs(c, urls, "singbox")
+	if !ok {
+		return
+	}
 	var configs node.SqlConfig
 	if err := json.Unmarshal([]byte(sub.Config), &configs); err != nil {
 		c.Writer.WriteString("配置读取错误")
 		return
 	}
-	text, err := node.EncodeSingbox(urls, configs)
+	text, err := node.EncodeSingboxWithFlags(urls, flags, configs)
 	if err != nil {
-		c.Writer.WriteString(err.Error())
+		writeClientExportError(c, err)
 		return
 	}
 	c.Set("subname", subName(c))
@@ -435,6 +459,10 @@ func GetQX(c *gin.Context) {
 		log.Println("合并分组节点失败:", err)
 	}
 	urls, _ := collectNodeInputs(sub.Nodes)
+	urls, ok := filterExportInputs(c, urls, "qx")
+	if !ok {
+		return
+	}
 	var configs node.SqlConfig
 	if err := json.Unmarshal([]byte(sub.Config), &configs); err != nil {
 		c.Writer.WriteString("配置读取错误")
@@ -442,7 +470,7 @@ func GetQX(c *gin.Context) {
 	}
 	text, err := node.EncodeQX(urls, configs)
 	if err != nil {
-		c.Writer.WriteString(err.Error())
+		writeClientExportError(c, err)
 		return
 	}
 	c.Set("subname", subName(c))

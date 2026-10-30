@@ -58,6 +58,7 @@ async function load() {
         expiresAt: sh.expireAt || null,
         links: sh.links,
         imports: sh.imports || {},
+        compatibility: sh.compatibility,
         traffic: {
           reported: !!sh.limit,
           upload: 0,
@@ -135,6 +136,7 @@ onMounted(load);
           :links="active.links"
           :imports="active.imports"
           :reset-key="active.id"
+          :compatibility="active.compatibility"
         />
       </section>
     </div>

@@ -102,14 +102,18 @@ func EncodeClash(urls []string, sqlconfig SqlConfig) ([]byte, error) {
 
 // EncodeClashWithFlags 与 EncodeClash 相同，但允许按节点覆盖 udp/tfo/skip-cert-verify。
 func EncodeClashWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) ([]byte, error) {
-	return DecodeClash(BuildClashProxies(urls, flags, sqlconfig), sqlconfig.Clash)
+	proxys := BuildClashProxies(urls, flags, sqlconfig)
+	if len(proxys) == 0 {
+		return nil, ErrNoCompatibleNodes
+	}
+	return DecodeClash(proxys, sqlconfig.Clash)
 }
 
 // EncodeClashProxies 只输出 proxies 列表，供 proxy-provider 拉取。
 func EncodeClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) ([]byte, error) {
 	proxys := BuildClashProxies(urls, flags, sqlconfig)
 	if len(proxys) == 0 {
-		return nil, fmt.Errorf("没有可输出的节点")
+		return nil, ErrNoCompatibleNodes
 	}
 	return yaml.Marshal(map[string]interface{}{"proxies": proxys})
 }
@@ -118,7 +122,7 @@ func EncodeClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig Sql
 func EncodeClashMinimal(urls []string, flags map[string]NodeFlags) ([]byte, error) {
 	proxys := BuildClashProxies(urls, flags, SqlConfig{Udp: true})
 	if len(proxys) == 0 {
-		return nil, fmt.Errorf("没有可输出的节点")
+		return nil, ErrNoCompatibleNodes
 	}
 	names := make([]string, 0, len(proxys))
 	for _, p := range proxys {
@@ -137,6 +141,7 @@ func EncodeClashMinimal(urls []string, flags map[string]NodeFlags) ([]byte, erro
 
 // BuildClashProxies 将分享链接转换为 Clash 代理定义。
 func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) []Proxy {
+	urls, _ = FilterClientLinks(urls, "clash")
 	// 传入urls，解析urls，生成proxys
 	// yamlfile 为模板文件
 	var proxys []Proxy

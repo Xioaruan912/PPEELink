@@ -70,7 +70,9 @@ func EncodeVLESSURL(v VLESS) string {
 	q := u.Query()
 	q.Set("security", v.Query.Security)
 	q.Set("spx", v.Query.SpiderX)
-	// q.Set("alpn", v.Query.Alpn)
+	q.Set("alpn", strings.Join(v.Query.Alpn, ","))
+	q.Set("serviceName", v.Query.ServiceName)
+	q.Set("mode", v.Query.Mode)
 	q.Set("sni", v.Query.Sni)
 	q.Set("fp", v.Query.Fp)
 	q.Set("sid", v.Query.Sid)
@@ -122,12 +124,18 @@ func DecodeVLESSURL(s string) (VLESS, error) {
 			return VLESS{}, fmt.Errorf("url parse error: %v", err)
 		}
 	}
+	if u.User == nil {
+		return VLESS{}, fmt.Errorf("VLESS 缺少账户凭据")
+	}
 	uuid := u.User.Username()
 	hostname := u.Hostname()
 	port, _ := strconv.Atoi(u.Port())
 	encryption := u.Query().Get("encryption")
 	security := u.Query().Get("security")
 	types := u.Query().Get("type")
+	if types == "raw" {
+		types = "tcp"
+	}
 	flow := u.Query().Get("flow")
 	headerType := u.Query().Get("headerType")
 	pbk := u.Query().Get("pbk")

@@ -1,52 +1,38 @@
 package api
 
 import (
-	"strings"
-
 	"ppeelink/models"
 	"ppeelink/node"
+	"strings"
 )
 
-// renderClientNodes 按客户端渲染节点列表。
-func renderClientNodes(client string, nodes []models.Node, configs node.SqlConfig) ([]byte, string, string) {
+// renderClientNodes propagates export errors so clients keep their previous config.
+func renderClientNodes(client string, nodes []models.Node, configs node.SqlConfig) ([]byte, string, string, error) {
 	urls, flags := collectNodeInputs(nodes)
-	switch client {
+	urls, _ = node.FilterClientLinks(urls, client)
+	if len(urls) == 0 {
+		return nil, "txt", "text/plain; charset=utf-8", node.ErrNoCompatibleNodes
+	}
+	switch clientFormat(client) {
 	case "clash":
-		b, err := node.EncodeClashWithFlags(urls, flags, configs)
-		if err != nil {
-			return []byte(err.Error()), "yaml", "text/plain; charset=utf-8"
-		}
-		return b, "yaml", "text/plain; charset=utf-8"
+		b, e := node.EncodeClashWithFlags(urls, flags, configs)
+		return b, "yaml", "text/plain; charset=utf-8", e
+	case "clash-proxies":
+		b, e := node.EncodeClashProxies(urls, flags, configs)
+		return b, "yaml", "text/plain; charset=utf-8", e
 	case "surge":
-		s, err := node.EncodeSurgeWithFlags(urls, flags, configs)
-		if err != nil {
-			return []byte(err.Error()), "conf", "text/plain; charset=utf-8"
-		}
-		return []byte(s), "conf", "text/plain; charset=utf-8"
+		s, e := node.EncodeSurgeWithFlags(urls, flags, configs)
+		return []byte(s), "conf", "text/plain; charset=utf-8", e
 	case "loon":
-		s, err := node.EncodeLoonWithFlags(urls, flags, configs)
-		if err != nil {
-			return []byte(err.Error()), "conf", "text/plain; charset=utf-8"
-		}
-		return []byte(s), "conf", "text/plain; charset=utf-8"
+		s, e := node.EncodeLoonWithFlags(urls, flags, configs)
+		return []byte(s), "conf", "text/plain; charset=utf-8", e
 	case "singbox":
-		s, err := node.EncodeSingbox(urls, configs)
-		if err != nil {
-			return []byte(err.Error()), "json", "text/plain; charset=utf-8"
-		}
-		return []byte(s), "json", "application/json; charset=utf-8"
+		s, e := node.EncodeSingboxWithFlags(urls, flags, configs)
+		return []byte(s), "json", "application/json; charset=utf-8", e
 	case "qx":
-		s, err := node.EncodeQX(urls, configs)
-		if err != nil {
-			return []byte(err.Error()), "conf", "text/plain; charset=utf-8"
-		}
-		return []byte(s), "conf", "text/plain; charset=utf-8"
-	default: // v2ray / shadowrocket
-		var b strings.Builder
-		for _, l := range urls {
-			b.WriteString(l)
-			b.WriteString("\n")
-		}
-		return []byte(node.Base64Encode(b.String())), "txt", "text/html; charset=utf-8"
+		s, e := node.EncodeQX(urls, configs)
+		return []byte(s), "conf", "text/plain; charset=utf-8", e
+	default:
+		return []byte(node.Base64Encode(strings.Join(urls, "\n") + "\n")), "txt", "text/plain; charset=utf-8", nil
 	}
 }

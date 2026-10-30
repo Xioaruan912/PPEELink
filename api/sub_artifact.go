@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"net/url"
@@ -25,7 +26,7 @@ func validateSubscriptionContent(client string, body []byte) error {
 	if len(body) == 0 {
 		return fmt.Errorf("订阅产物为空")
 	}
-	switch strings.ToLower(client) {
+	switch clientFormat(strings.ToLower(client)) {
 	case "clash", "clash-proxies":
 		var root map[string]any
 		if err := yaml.Unmarshal(body, &root); err != nil {
@@ -108,7 +109,8 @@ func buildSubscriptionOutput(sub models.Subcription, client, providerBase string
 	c.Set("subname", sub.Name)
 	c.Set("subToken", sub.Token)
 	c.Set("providerBase", providerBase)
-	switch client {
+	c.Set("compatibilityClient", client)
+	switch clientFormat(client) {
 	case "clash", "clash-proxies":
 		c.Set("clashProxiesOnly", client == "clash-proxies")
 		GetClash(c)
@@ -128,6 +130,9 @@ func buildSubscriptionOutput(sub models.Subcription, client, providerBase string
 	body := recorder.Body.Bytes()
 	if len(body) == 0 {
 		return nil, fmt.Errorf("订阅生成结果为空")
+	}
+	if recorder.Code == 422 {
+		return nil, node.ErrNoCompatibleNodes
 	}
 	if recorder.Code >= 400 {
 		return nil, fmt.Errorf("订阅生成失败 HTTP %d", recorder.Code)
@@ -154,10 +159,10 @@ func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client stri
 		c.String(500, "读取节点下发设置失败")
 		return
 	}
-	deliveryDigest := ""
+	deliveryDigest := node.CompatibilityRevision
 	if len(disabled) > 0 {
 		raw, _ := json.Marshal(disabled)
-		deliveryDigest = shaHex(raw)
+		deliveryDigest = node.CompatibilityRevision + ":" + shaHex(raw)
 	}
 	var appConfig node.SqlConfig
 	_ = json.Unmarshal([]byte(sub.Config), &appConfig)
@@ -169,6 +174,10 @@ func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client stri
 	body, err := buildSubscriptionOutput(sub, client, baseURL(c))
 	if err == nil {
 		err = validateSubscriptionContent(client, body)
+	}
+	if errors.Is(err, node.ErrNoCompatibleNodes) {
+		c.String(422, err.Error())
+		return
 	}
 	liveValid := err == nil
 	if !liveValid && len(appConfig.AppRules) > 0 {
@@ -193,7 +202,7 @@ func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client stri
 	if client == "singbox" {
 		contentType = "application/json; charset=utf-8"
 	}
-	filename := sub.Name + "." + clientFileExt[client]
+	filename := sub.Name + "." + clientFileExt[clientFormat(client)]
 	c.Header("Content-Disposition", "inline; filename*=utf-8''"+url.QueryEscape(filename))
 	c.Data(200, contentType, body)
 }

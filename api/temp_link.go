@@ -97,15 +97,28 @@ func GetTempLink(c *gin.Context) {
 		client = clientFromUserAgent(c.Request.UserAgent())
 	}
 	urls, flags := collectNodeInputs([]models.Node{n})
+	urls, _ = node.FilterClientLinks(urls, client)
+	if len(urls) == 0 {
+		c.String(422, node.ErrNoCompatibleNodes.Error())
+		return
+	}
 	var body []byte
 	contentType := "text/plain; charset=utf-8"
-	switch client {
+	switch clientFormat(client) {
 	case "clash":
 		body, err = node.EncodeClashMinimal(urls, flags)
 	case "singbox":
 		var s string
-		s, err = node.EncodeSingbox(urls, node.SqlConfig{})
+		s, err = node.EncodeSingboxWithFlags(urls, flags, node.SqlConfig{})
 		body, contentType = []byte(s), "application/json; charset=utf-8"
+	case "surge":
+		var s string
+		s, err = node.EncodeSurgeWithFlags(urls, flags, defaultTemplates())
+		body = []byte(s)
+	case "loon":
+		var s string
+		s, err = node.EncodeLoonWithFlags(urls, flags, defaultTemplates())
+		body = []byte(s)
 	case "qx":
 		var s string
 		s, err = node.EncodeQX(urls, node.SqlConfig{})

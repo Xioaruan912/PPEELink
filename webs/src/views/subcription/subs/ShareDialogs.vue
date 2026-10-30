@@ -38,6 +38,7 @@ const {
         :links="importData.links"
         :imports="importData.imports"
         :reset-key="importSub?.ID"
+        :subscription-id="importSub?.ID"
         ><template #actions="{ link }"
           ><UiButton @click="makeShortLink(link)">生成短链</UiButton></template
         ></ClientShare

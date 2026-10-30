@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"ppeelink/certpin"
 	"regexp"
 	"strings"
 )
@@ -15,6 +16,10 @@ func EncodeSurge(urls []string, sqlconfig SqlConfig) (string, error) {
 
 // EncodeSurgeWithFlags 与 EncodeSurge 相同，但允许按节点覆盖 udp/skip-cert-verify。
 func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) (string, error) {
+	urls, _ = FilterClientLinks(urls, "surge")
+	if len(urls) == 0 {
+		return "", ErrNoCompatibleNodes
+	}
 	var proxys, groups []string
 	for _, link := range urls {
 		udp := sqlconfig.Udp
@@ -106,9 +111,6 @@ func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 				log.Println(err)
 				continue
 			}
-			if hy2.PinSHA256 != "" {
-				continue
-			} // Unsupported pinning must never become insecure output.
 
 			proxy := map[string]interface{}{
 				"name":             hy2.Name,
@@ -123,6 +125,17 @@ func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 			if hy2.Sni != "" {
 				hy2proxy = fmt.Sprintf("%s, sni=%s", hy2proxy, hy2.Sni)
 
+			}
+			if hy2.PinSHA256 != "" {
+				pin, e := certpin.Normalize(hy2.PinSHA256)
+				if e != nil {
+					return "", fmt.Errorf("HY2 证书指纹无效")
+				}
+				hy2proxy = strings.Replace(hy2proxy, "skip-cert-verify=true", "skip-cert-verify=false", 1)
+				hy2proxy += ", server-cert-fingerprint-sha256=" + pin
+			}
+			if hy2.Obfs != "" {
+				hy2proxy += fmt.Sprintf(", salamander-password=%s", hy2.ObfsPassword)
 			}
 			groups = append(groups, hy2.Name)
 			proxys = append(proxys, hy2proxy)

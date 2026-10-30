@@ -22,6 +22,10 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 	if sqlconfig.Loon == "" {
 		sqlconfig.Loon = "./template/loon.conf"
 	}
+	urls, _ = FilterClientLinks(urls, "loon")
+	if len(urls) == 0 {
+		return "", ErrNoCompatibleNodes
+	}
 	var proxys []string
 	for _, link := range urls {
 		udp := sqlconfig.Udp
