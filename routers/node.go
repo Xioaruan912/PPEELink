@@ -13,6 +13,7 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.DELETE("/delete", api.NodeDel)
 		NodesGroup.GET("/get", api.NodeGet)
 		NodesGroup.GET("/overview", api.NodeOverview)
+		NodesGroup.POST("/compatibility", api.NodeCompatibility)
 		NodesGroup.GET("/quality/summary", api.NodeQualitySummary)
 		NodesGroup.GET("/health/events", api.NodeHealthEvents)
 		NodesGroup.GET("/alerts", api.GetAlertSetting)

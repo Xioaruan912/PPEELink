@@ -8,30 +8,38 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
 )
 
 // Runner 管理一台机器上的 xray 进程。有 systemd 且以 root 运行时托管为独立服务
 // （面板或 agent 重启不会断开用户连接），否则作为子进程运行。
 type Runner struct {
-	certificates map[string]string
-	Dir          string
-	Unit         string // systemd 服务名
-	mu           sync.Mutex
-	systemd      bool
-	cmd          *exec.Cmd
-	exited       chan struct{}
-	rev          string
-	apiPort      int
-	lastErr      string
-	stderr       *tailBuffer
-	stopping     bool
-	website      *WebsiteCollector
-	websiteStats *websiteCounters
-	egressLookup egressLookup
+	certificates  map[string]string
+	Dir           string
+	Unit          string // systemd 服务名
+	mu            sync.Mutex
+	systemd       bool
+	cmd           *exec.Cmd
+	exited        chan struct{}
+	rev           string
+	apiPort       int
+	lastErr       string
+	stderr        *tailBuffer
+	stopping      bool
+	website       *WebsiteCollector
+	websiteStats  *websiteCounters
+	egressLookup  egressLookup
+	collectMu     sync.Mutex
+	statsConn     *grpc.ClientConn
+	statsPort     int
+	statusChecked time.Time
+	statusRunning bool
+	versionStamp  string
+	versionCached string
 }
 
 func NewRunner(dir, unit string) *Runner {
@@ -157,7 +165,14 @@ func (r *Runner) Status() (running bool, lastErr string) {
 
 func (r *Runner) runningLocked() bool {
 	if r.systemd {
-		return exec.Command("systemctl", "is-active", "--quiet", r.Unit).Run() == nil
+		if !r.statusChecked.IsZero() && time.Since(r.statusChecked) < 2*time.Second {
+			return r.statusRunning
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		r.statusRunning = exec.CommandContext(ctx, "systemctl", "is-active", "--quiet", r.Unit).Run() == nil
+		r.statusChecked = time.Now()
+		return r.statusRunning
 	}
 	if r.cmd == nil || r.exited == nil {
 		return false
@@ -171,6 +186,9 @@ func (r *Runner) runningLocked() bool {
 }
 
 func (r *Runner) restartLocked() error {
+	r.closeStatsLocked()
+	r.statusChecked = time.Time{}
+	defer func() { r.statusChecked = time.Time{} }()
 	if r.systemd {
 		unit := fmt.Sprintf(`[Unit]
 Description=Xray managed by PPEELink
@@ -225,6 +243,9 @@ WantedBy=multi-user.target
 }
 
 func (r *Runner) stopLocked() {
+	r.closeStatsLocked()
+	r.statusChecked = time.Time{}
+	defer func() { r.statusChecked = time.Time{} }()
 	if r.systemd {
 		_ = exec.Command("systemctl", "stop", r.Unit).Run()
 		return
@@ -247,6 +268,7 @@ func (r *Runner) stopLocked() {
 func (r *Runner) Stop() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.closeStatsLocked()
 	if !r.systemd || r.website != nil {
 		r.stopLocked()
 	}
@@ -309,56 +331,6 @@ func removeManagedDir(dir string) error {
 		return nil
 	}
 	return os.RemoveAll(dir)
-}
-
-// Collect 读取并清零用户流量计数，同时统计每个用户的在线 IP 数。
-func (r *Runner) Collect(ctx context.Context) (map[string]Counter, map[string]int, error) {
-	r.mu.Lock()
-	port := r.apiPort
-	running := r.runningLocked()
-	r.mu.Unlock()
-	traffic := map[string]Counter{}
-	online := map[string]int{}
-	if port == 0 || !running {
-		return traffic, online, nil
-	}
-	server := "--server=127.0.0.1:" + strconv.Itoa(port)
-	out, err := exec.CommandContext(ctx, r.bin(), "api", "statsquery", server, "-pattern", "user>>>", "-reset").Output()
-	if err != nil {
-		return traffic, online, fmt.Errorf("读取流量失败: %w", err)
-	}
-	var stats struct {
-		Stat []struct {
-			Name  string `json:"name"`
-			Value int64  `json:"value"`
-		} `json:"stat"`
-	}
-	if err := json.Unmarshal(out, &stats); err != nil {
-		return traffic, online, fmt.Errorf("解析流量失败: %w", err)
-	}
-	for _, s := range stats.Stat {
-		// user>>>u12>>>traffic>>>uplink
-		parts := strings.Split(s.Name, ">>>")
-		if len(parts) != 4 || parts[2] != "traffic" {
-			continue
-		}
-		c := traffic[parts[1]]
-		if parts[3] == "uplink" {
-			c.Up += s.Value
-		} else {
-			c.Down += s.Value
-		}
-		traffic[parts[1]] = c
-	}
-	if out, err := exec.CommandContext(ctx, r.bin(), "api", "statsgetallonlineusers", server).Output(); err == nil {
-		for _, email := range parseOnlineUsers(out) {
-			ipOut, err := exec.CommandContext(ctx, r.bin(), "api", "statsonlineiplist", server, "-email", email).Output()
-			if err == nil {
-				online[email] = countOnlineIPs(ipOut)
-			}
-		}
-	}
-	return traffic, online, nil
 }
 
 // parseOnlineUsers 解析 statsgetallonlineusers 输出：{"users":["user>>>u1>>>online",...]}。
@@ -427,4 +399,22 @@ func (t *tailBuffer) Reset() {
 	t.mu.Lock()
 	t.buf.Reset()
 	t.mu.Unlock()
+}
+
+// Version only executes the binary again after its file identity changes.
+func (r *Runner) Version() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	info, err := os.Stat(r.bin())
+	if err != nil {
+		r.versionStamp = ""
+		r.versionCached = ""
+		return ""
+	}
+	stamp := fmt.Sprintf("%d:%d", info.Size(), info.ModTime().UnixNano())
+	if stamp != r.versionStamp {
+		r.versionCached = InstalledVersion(r.Dir)
+		r.versionStamp = stamp
+	}
+	return r.versionCached
 }

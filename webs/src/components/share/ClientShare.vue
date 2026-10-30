@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import QrcodeVue from "qrcode.vue";
+import CompatibilityReport from "./CompatibilityReport.vue";
+import type { CompatibilityData } from "./compatibility";
 import { UiButton } from "@/ui";
 import SecretLink from "@/views/subcription/subs/SecretLink.vue";
 
@@ -10,6 +12,8 @@ const props = defineProps<{
   imports?: Record<string, string>;
   /** 切换订阅时重置为默认客户端 */
   resetKey?: string | number;
+  subscriptionId?: number;
+  compatibility?: CompatibilityData;
 }>();
 defineSlots<{
   actions?: (props: { link: string; clientName: string }) => unknown;
@@ -163,6 +167,12 @@ function openUrl(url: string) {
         </div>
       </section>
     </Transition>
+    <CompatibilityReport
+      v-if="(subscriptionId || compatibility) && current"
+      :subscription-id="subscriptionId"
+      :client-key="current.key"
+      :preloaded="compatibility"
+    />
   </div>
 </template>
 <style scoped>

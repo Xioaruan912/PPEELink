@@ -11,6 +11,13 @@ import (
 // EncodeSingbox builds a complete sing-box client configuration where every
 // node becomes an outbound and a "proxy" selector points at all of them.
 func EncodeSingbox(urls []string, cfg SqlConfig) (string, error) {
+	return EncodeSingboxWithFlags(urls, nil, cfg)
+}
+func EncodeSingboxWithFlags(urls []string, flags map[string]NodeFlags, cfg SqlConfig) (string, error) {
+	urls, _ = FilterClientLinks(urls, "singbox")
+	if len(urls) == 0 {
+		return "", ErrNoCompatibleNodes
+	}
 	outbounds := make([]map[string]interface{}, 0, len(urls)+1)
 	names := make([]string, 0, len(urls))
 	used := map[string]int{}
@@ -23,6 +30,25 @@ func EncodeSingbox(urls []string, cfg SqlConfig) (string, error) {
 		if err != nil {
 			log.Printf("[singbox] 跳过节点: %v", err)
 			continue
+		}
+		if tls, ok := ob["tls"].(map[string]interface{}); ok && tls["reality"] == nil {
+			skip := cfg.Cert
+			if f, ok := flags[link]; ok {
+				skip = f.SkipCertVerify
+			}
+			// Embedded certificate pins take precedence over every skip flag.
+			if tls["certificate"] != nil {
+				tls["insecure"] = false
+			} else {
+				p, _ := ParseOutbound(link)
+				switch v := p.Spec.(type) {
+				case HY2:
+					skip = skip || v.Insecure != 0
+				case AnyTLS:
+					skip = skip || v.Insecure != 0
+				}
+				tls["insecure"] = skip
+			}
 		}
 		name = uniqueTag(name, used)
 		ob["tag"] = name
@@ -105,9 +131,10 @@ func singboxOutbound(link string) (map[string]interface{}, string, error) {
 
 	case Vmess:
 		port, _ := convertToInt(v.Port)
+		aid, _ := convertToInt(v.Aid)
 		m := map[string]interface{}{
 			"type": "vmess", "server": v.Add, "server_port": port,
-			"uuid": v.Id, "security": "auto", "alter_id": 0,
+			"uuid": v.Id, "security": "auto", "alter_id": aid,
 		}
 		switch strings.ToLower(v.Net) {
 		case "ws":
@@ -217,6 +244,9 @@ func defaultNonEmpty(v, fallback string) string {
 
 func hy2TLS(v HY2) (map[string]interface{}, error) {
 	t := sbTLS(v.Sni, v.Insecure != 0, "")
+	if len(v.ALPN) > 0 {
+		t["alpn"] = v.ALPN
+	}
 	if v.PinSHA256 != "" {
 		if v.Certificate == "" {
 			return nil, fmt.Errorf("此 HY2 节点只有证书指纹，当前 sing-box 输出需要公有证书")

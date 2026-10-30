@@ -1,3 +1,4 @@
+import type { CompatibilityData } from "@/components/share/compatibility";
 /** 登录账户信息 */
 export interface UserInfo {
   userId?: number;
@@ -43,6 +44,7 @@ export interface TrafficSnapshot {
 
 /** 我的订阅 */
 export interface MySubscription {
+  compatibility?: CompatibilityData;
   id: number;
   name: string;
   expiresAt: string | null;

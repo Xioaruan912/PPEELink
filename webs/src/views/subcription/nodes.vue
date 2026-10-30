@@ -3,7 +3,7 @@ import { ref, computed, watch } from "vue";
 import { useRoute } from "vue-router";
 import { Plus, Refresh } from "@element-plus/icons-vue";
 import SubscriptionHeader from "@/components/subscriptions/SubscriptionHeader.vue";
-import { UiButton, UiPanel, UiSkeleton, EmptyState } from "@/ui";
+import { UiButton, UiPanel, UiSkeleton, UiDrawer, EmptyState } from "@/ui";
 import IconPulse from "~icons/ph/pulse";
 import { useMotion } from "@/motion";
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue";
@@ -12,6 +12,7 @@ import { provideNodes } from "./nodes/useNodes";
 import NodeRow from "./nodes/NodeRow.vue";
 import NodeDrawers from "./nodes/NodeDrawers.vue";
 import NodeTools from "./nodes/NodeTools.vue";
+import CompatibilityReport from "@/components/share/CompatibilityReport.vue";
 import PauseDialog from "./nodes/PauseDialog.vue";
 import ProbePolicyDialog from "./nodes/ProbePolicyDialog.vue";
 defineOptions({ name: "NodesPage" });
@@ -46,6 +47,12 @@ const {
   testNode,
   openTool,
 } = provideNodes();
+const compatibilityOpen = ref(false);
+const compatibilityIds = ref<number[]>([]);
+function openCompatibility() {
+  compatibilityIds.value = selectedNodes.value.map((n) => n.ID);
+  compatibilityOpen.value = true;
+}
 const route = useRoute();
 watch(
   () => [route.path, route.query.group] as const,
@@ -109,6 +116,8 @@ function leaveBar(element: Element, done: () => void) {
           >刷新</UiButton
         ><UiButton :disabled="loading || busy" @click="openTool('dedupe', [])"
           >去重</UiButton
+        ><UiButton :disabled="loading" @click="openCompatibility"
+          >客户端兼容</UiButton
         ><UiButton variant="primary" :icon="Plus" @click="handleAddNode"
           >添加节点</UiButton
         ></template
@@ -292,6 +301,23 @@ function leaveBar(element: Element, done: () => void) {
         </div>
       </div></Transition
     >
+    <UiDrawer
+      v-model="compatibilityOpen"
+      :title="
+        compatibilityIds.length
+          ? `客户端兼容 · 已选 ${compatibilityIds.length} 个节点`
+          : '客户端兼容 · 全部节点'
+      "
+      size="min(760px, 100vw)"
+    >
+      <CompatibilityReport
+        v-if="compatibilityOpen"
+        :node-ids="compatibilityIds"
+      />
+      <template #footer
+        ><UiButton @click="compatibilityOpen = false">关闭</UiButton></template
+      >
+    </UiDrawer>
     <NodeDrawers />
     <PauseDialog />
     <ProbePolicyDialog />

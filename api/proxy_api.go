@@ -762,7 +762,11 @@ func GetPersonalSubscription(c *gin.Context) {
 	if client == "" {
 		client = clientFromUserAgent(c.Request.UserAgent())
 	}
-	body, ext, contentType := renderClientNodes(client, nodes, defaultTemplates())
+	body, ext, contentType, err := renderClientNodes(client, nodes, defaultTemplates())
+	if err != nil {
+		writeClientExportError(c, err)
+		return
+	}
 	c.Header("Subscription-Userinfo", accountUserinfo(acc))
 	c.Header("Profile-Update-Interval", "12")
 	c.Header("Content-Disposition", "inline; filename*=utf-8''"+strings.ReplaceAll("自建节点."+ext, " ", "%20"))
@@ -792,9 +796,10 @@ func MySelfHosted(c *gin.Context) {
 		return
 	}
 	links, imports := personalLinks(c, acc)
+	accountNodes := AccountNodes(acc)
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"enabled": true, "active": acc.Active(time.Now()), "links": links, "imports": imports,
 		"used": acc.TrafficUsed, "limit": acc.TrafficLimit, "expireAt": acc.ExpireAt,
-		"blockedReason": acc.BlockedReason, "blockedUntil": acc.BlockedUntil, "nodes": len(AccountNodes(acc)),
+		"blockedReason": acc.BlockedReason, "blockedUntil": acc.BlockedUntil, "nodes": len(accountNodes), "compatibility": compatibilityPayload(accountNodes, ""),
 	}, "msg": "自建节点"})
 }
