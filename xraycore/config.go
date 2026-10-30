@@ -143,13 +143,17 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 	default:
 		return nil, fmt.Errorf("未知模板 %s", in.Template)
 	}
-	return map[string]any{
+	item := map[string]any{
 		"tag":            in.Tag,
-		"listen":         listen,
 		"port":           in.Port,
 		"protocol":       "vless",
 		"settings":       map[string]any{"clients": clients, "decryption": "none"},
 		"sniffing":       map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true},
 		"streamSettings": stream,
-	}, nil
+	}
+	// Omit the default listener, as x-ui does. Xray panics on an explicit empty string.
+	if listen != "" {
+		item["listen"] = listen
+	}
+	return item, nil
 }

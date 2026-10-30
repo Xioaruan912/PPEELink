@@ -43,8 +43,12 @@ func buildHysteriaInbound(in InboundSpec) (map[string]any, error) {
 		}
 		users = append(users, map[string]any{"auth": u.UUID, "email": u.Email, "level": 0})
 	}
-	return map[string]any{"tag": in.Tag, "listen": listen, "port": in.Port, "protocol": "hysteria",
+	item := map[string]any{"tag": in.Tag, "port": in.Port, "protocol": "hysteria",
 		"settings":       map[string]any{"version": 2, "clients": users},
 		"streamSettings": map[string]any{"network": "hysteria", "security": "tls", "tlsSettings": map[string]any{"serverName": in.SNI, "minVersion": "1.3", "alpn": []string{"h3"}, "certificates": []any{map[string]any{"certificateFile": in.TLSCertFile, "keyFile": in.TLSKeyFile}}}, "hysteriaSettings": map[string]any{"version": 2, "udpIdleTimeout": 60}},
-		"sniffing":       map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true}}, nil
+		"sniffing":       map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true}}
+	if listen != "" {
+		item["listen"] = listen
+	}
+	return item, nil
 }
