@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -482,6 +483,32 @@ func AccountNodes(acc models.ProxyAccount) []models.Node {
 	return nodes
 }
 
+// selfHostedIdentity ignores display names and equivalent export defaults.
+func selfHostedIdentity(link string) string {
+	u, err := url.Parse(link)
+	if err != nil || u.User == nil {
+		return ""
+	}
+	u.Fragment = ""
+	q := u.Query()
+	if u.Scheme == "vless" && q.Get("security") == "reality" {
+		if q.Get("spx") == "" {
+			q.Set("spx", "/")
+		}
+		if q.Get("fp") == "" {
+			q.Set("fp", "chrome")
+		}
+	}
+	if u.Scheme == "hy2" || u.Scheme == "hysteria2" {
+		u.Scheme = "hysteria2"
+		if q.Get("security") == "" {
+			q.Set("security", "tls")
+		}
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
+}
+
 // SyncSelfHostedNodes 用第一个开通了自建节点的管理员账户生成节点，统一放进「自建」分组。
 // 旧版本的「自建·服务器名」会先迁移并合并，已有订阅引用不会丢失。
 func SyncSelfHostedNodes() error {
@@ -536,6 +563,23 @@ func SyncSelfHostedNodes() error {
 		for _, n := range want {
 			if wanted[n.Name] {
 				continue
+			}
+			// Preserve renamed nodes and subscription IDs across Agent/profile upgrades.
+			if _, ok := byName[n.Name]; !ok {
+				identity := selfHostedIdentity(n.Link)
+				var matches []models.Node
+				for _, candidate := range group.Nodes {
+					if candidate.Source == selfHostedSource && identity != "" && selfHostedIdentity(candidate.Link) == identity {
+						matches = append(matches, candidate)
+					}
+				}
+				if len(matches) == 1 {
+					n.Name = matches[0].Name
+					if u, err := url.Parse(n.Link); err == nil {
+						u.Fragment = n.Name
+						n.Link = u.String()
+					}
+				}
 			}
 			wanted[n.Name] = true
 			if old, ok := byName[n.Name]; ok {
