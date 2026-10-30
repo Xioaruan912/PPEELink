@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"ppeelink/agentversion"
 	"ppeelink/models"
 	"ppeelink/xraycore"
 
@@ -83,7 +84,6 @@ func MonitorList(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	panelHash := xraycore.ExecutableHash()
 	items := make([]gin.H, 0, len(monitors))
 	online := 0
 	for _, m := range monitors {
@@ -94,8 +94,8 @@ func MonitorList(c *gin.Context) {
 			"enabled": m.Enabled, "hidden": m.Hidden, "os": m.OS, "arch": m.Arch,
 			"version": m.Version, "lastSeenAt": m.LastSeenAt, "createdAt": m.CreatedAt,
 			"agentHash": m.AgentHash, "agentUpdateRequested": m.AgentUpdateRequested, "agentUpgradeable": true,
-			"agentUpdateError": m.AgentUpdateError, "agentUpdateAvailable": m.AgentHash != "" && m.AgentHash != panelHash,
-			"agentUpdateConfirmed": m.AgentHash != "" && m.AgentHash == panelHash,
+			"agentUpdateError": m.AgentUpdateError, "agentUpdateAvailable": false,
+			"agentUpdateConfirmed": false,
 			"online":               monitorOnline(m, now), "sshConfigured": monitorSSHConfigured(m),
 			"proxyServerId": m.ProxyServerID, "linked": m.ProxyServerID != nil,
 		}
@@ -111,7 +111,7 @@ func MonitorList(c *gin.Context) {
 				if strings.Contains(server.LastError, "agent 自更新失败") {
 					item["agentUpdateError"] = server.LastError
 				}
-				item["agentUpdateConfirmed"] = m.AgentHash != "" && m.AgentHash == panelHash && !server.AgentUpdateRequested
+				item["agentUpdateConfirmed"] = false
 				item["agentUpgradeable"] = server.Kind == models.ServerKindAgent
 				item["ownsAgent"] = server.Kind == models.ServerKindAgent && server.AgentToken == ""
 				item["removing"] = server.Removing
@@ -131,14 +131,28 @@ func MonitorList(c *gin.Context) {
 				}
 			}
 		}
+		// Human release versions determine availability; binary digests remain
+		// the integrity check when an explicit update is acknowledged.
+		raw, _ := item["version"].(string)
+		cmp, numbered := agentversion.Compare(raw, agentversion.Current)
+		item["latestAgentVersion"] = agentversion.Current
+		item["agentVersion"] = ""
+		if numbered {
+			major, revision, _ := agentversion.Parse(raw)
+			item["agentVersion"] = fmt.Sprintf("%d.%d", major, revision)
+		}
+		item["agentUpdateAvailable"] = (numbered && cmp < 0) || (!numbered && (raw != "" || m.AgentHash != ""))
+		pending, _ := item["agentUpdateRequested"].(bool)
+		item["agentUpdateConfirmed"] = numbered && cmp >= 0 && !pending
 		if monitorOnline(m, now) {
 			online++
 		}
 		items = append(items, item)
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
-		"items":   items,
-		"summary": gin.H{"total": len(monitors), "online": online, "offline": len(monitors) - online},
+		"items":        items,
+		"agentVersion": agentversion.Current,
+		"summary":      gin.H{"total": len(monitors), "online": online, "offline": len(monitors) - online},
 	}, "msg": "服务器列表"})
 }
 

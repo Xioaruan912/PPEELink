@@ -32,7 +32,7 @@ const META: Record<string, { icon: Component; hint?: string; label?: string }> =
     "/monitor/index": {
       icon: IconChartLine,
       label: "监控与 Agent",
-      hint: "运行指标、终端与 Agent 升级",
+      hint: "服务器监控与 Agent 集中管理",
     },
     "/monitor/website": {
       icon: IconChartLine,
@@ -145,7 +145,12 @@ const GROUPS = [
   {
     label: "网络诊断",
     icon: IconGauge,
-    paths: ["/test/index", "/network/traceroute", "/network/throughput", "/subcription/diagnostic"],
+    paths: [
+      "/test/index",
+      "/network/traceroute",
+      "/network/throughput",
+      "/subcription/diagnostic",
+    ],
   },
   {
     label: "系统",
