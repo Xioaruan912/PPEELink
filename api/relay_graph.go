@@ -270,6 +270,15 @@ func validateManagedForwardGraph(relay *models.AgentRelay, inbound *models.Proxy
 	return nil
 }
 func requireGatewayCapability(e *xraycore.EgressSpec, routes []xraycore.DomainRouteSpec, s models.ProxyServer) error {
+	if s.Kind == models.ServerKindAgent && s.ProxyFeatures < 6 {
+		insecure := e != nil && e.Insecure
+		for _, route := range routes {
+			insecure = insecure || (route.Egress != nil && route.Egress.Insecure)
+		}
+		if insecure {
+			return fmt.Errorf("请先升级 Agent 至1.12，以使用 x-ui 自签名 HY2 出口")
+		}
+	}
 	if s.Kind != models.ServerKindAgent || s.ProxyFeatures >= 5 {
 		return nil
 	}

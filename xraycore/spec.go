@@ -23,11 +23,12 @@ const (
 
 // Spec 面板下发给一台服务器的完整期望状态。
 type Spec struct {
-	Relays   []relaycore.Spec `json:"relays,omitempty"`
-	Version  string           `json:"version"`
-	Enabled  bool             `json:"enabled"` // false 时停止 xray（一键停用）
-	APIPort  int              `json:"apiPort"`
-	Inbounds []InboundSpec    `json:"inbounds"`
+	DeploymentProfile string           `json:"deploymentProfile,omitempty"`
+	Relays            []relaycore.Spec `json:"relays,omitempty"`
+	Version           string           `json:"version"`
+	Enabled           bool             `json:"enabled"` // false 时停止 xray（一键停用）
+	APIPort           int              `json:"apiPort"`
+	Inbounds          []InboundSpec    `json:"inbounds"`
 	// 防滥用：阻断访问内网与 BT 流量
 	BlockPrivate    bool `json:"blockPrivate"`
 	BlockBitTorrent bool `json:"blockBitTorrent"`
@@ -67,6 +68,7 @@ type MonitorSpec struct {
 }
 
 type InboundSpec struct {
+	Listen       string            `json:"listen,omitempty"`
 	DomainRoutes []DomainRouteSpec `json:"domainRoutes,omitempty"`
 	TLSAutoID    string            `json:"tlsAutoId,omitempty"`
 	Egress       *EgressSpec       `json:"egress,omitempty"`

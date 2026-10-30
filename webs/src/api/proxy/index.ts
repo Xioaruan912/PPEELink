@@ -10,7 +10,11 @@ export interface DomainRoute {
 }
 export interface ProxyInbound {
   domainRoutes?: DomainRoute[];
-  tlsMode?: "auto" | "manual" | "";
+  tlsMode?: "auto" | "manual" | "self-signed" | "";
+  listen?: string;
+  fingerprint?: string;
+  spiderX?: string;
+  privateKey?: string;
   tlsFingerprint?: string;
   egressNodeId?: number;
   tlsCertFile?: string;
@@ -36,7 +40,7 @@ export interface ProxyServer {
   xrayVersion: string;
   agentVersion: string;
   proxyFeatures?: number;
-  /** 统一 Agent 上报的程序摘要（有值时以它为准，语义化版本号已废弃）。 */
+  /** 程序完整性摘要；Agent 的展示版本独立递增。 */
   agentHash?: string;
   arch: string;
   running: boolean;

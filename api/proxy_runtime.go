@@ -52,7 +52,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		return xraycore.Spec{Uninstall: true}, nil
 	}
 	spec := xraycore.Spec{
-		Version: xraycore.DefaultVersion, Enabled: server.Enabled, APIPort: xrayAPIPort,
+		DeploymentProfile: "xui-v2.9.3", Version: xraycore.DefaultVersion, Enabled: server.Enabled, APIPort: xrayAPIPort,
 		BlockPrivate: true, BlockBitTorrent: true,
 		Monitor:        &xraycore.MonitorSpec{Enabled: server.MonitorEnabled, IntervalSeconds: 60},
 		WebsiteTraffic: &xraycore.WebsiteTrafficSpec{Enabled: server.WebsiteTrafficEnabled, BucketSeconds: 3600},
@@ -89,7 +89,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		if len(in.DomainRoutes) > 0 && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 3 {
 			return spec, fmt.Errorf("请先升级 Agent 以支持网站分流")
 		}
-		if in.TLSMode == "auto" && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 2 {
+		if (in.TLSMode == "auto" || in.TLSMode == "self-signed") && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 2 {
 			return spec, fmt.Errorf("请先升级 Agent 以支持自动证书")
 		}
 		if (in.EgressNodeID > 0 || in.Template == xraycore.TemplateHysteria2) && server.Kind == models.ServerKindAgent && server.ProxyFeatures < 1 {
@@ -106,7 +106,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 			return spec, err
 		}
 		spec.Inbounds = append(spec.Inbounds, xraycore.InboundSpec{
-			DomainRoutes: domainRoutes, TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
+			Listen: in.Listen, DomainRoutes: domainRoutes, TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
 			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Users: users, TLSCertFile: in.TLSCertFile, TLSKeyFile: in.TLSKeyFile,
 		})
 	}
@@ -387,7 +387,13 @@ func NotifyProxyChanged() {
 // InboundLink 账户在某入站上的 VLESS 分享链接。
 func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.ProxyAccount, name string) string {
 	if in.Template == xraycore.TemplateHysteria2 {
-		hy := node.HY2{Name: name, Password: acc.UUID, Host: server.PublicHost, Port: in.Port, Sni: in.SNI}
+		hy := node.HY2{Name: name, Password: acc.UUID, Host: server.PublicHost, Port: in.Port, Sni: in.SNI, ALPN: []string{"h3"}}
+		if in.TLSMode == "self-signed" {
+			if in.TLSCertificate == "" {
+				return ""
+			}
+			hy.Insecure = 1
+		}
 		if in.TLSMode == "auto" {
 			if in.TLSCertificate == "" || in.TLSFingerprint == "" {
 				return ""
@@ -400,8 +406,14 @@ func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.P
 	}
 
 	q := node.VLESSQuery{
-		Security: "reality", Sni: strings.Split(in.SNI, ",")[0], Fp: "chrome",
-		Sid: in.ShortID, Pbk: in.PublicKey, Encryption: "none",
+		Security: "reality", Sni: strings.TrimSpace(strings.Split(in.SNI, ",")[0]), Fp: in.Fingerprint, SpiderX: in.SpiderX,
+		Sid: strings.TrimSpace(strings.Split(in.ShortID, ",")[0]), Pbk: in.PublicKey, Encryption: "none",
+	}
+	if q.Fp == "" {
+		q.Fp = "chrome"
+	}
+	if q.SpiderX == "" {
+		q.SpiderX = "/"
 	}
 	switch in.Template {
 	case xraycore.TemplateXHTTPReality:

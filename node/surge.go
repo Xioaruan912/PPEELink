@@ -116,7 +116,7 @@ func EncodeSurgeWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig S
 				"port":             hy2.Port,
 				"password":         hy2.Password,
 				"udp":              udp,
-				"skip-cert-verify": cert,
+				"skip-cert-verify": cert || hy2.Insecure != 0,
 			}
 			hy2proxy := fmt.Sprintf("%s = hysteria2, %s, %d, password=%s, udp-relay=%t, skip-cert-verify=%t",
 				proxy["name"], proxy["server"], proxy["port"], proxy["password"], proxy["udp"], proxy["skip-cert-verify"])

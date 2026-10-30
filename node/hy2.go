@@ -51,12 +51,13 @@ func EncodeHY2URL(hy2 HY2) string {
 		hy2.Name = fmt.Sprintf("%s:%d", hy2.Host, hy2.Port)
 	}
 	u := url.URL{
-		Scheme:   "hy2",
+		Scheme:   "hysteria2",
 		User:     url.User(hy2.Password),
 		Host:     net.JoinHostPort(strings.Trim(hy2.Host, "[]"), strconv.Itoa(hy2.Port)),
 		Fragment: hy2.Name,
 	}
 	q := u.Query()
+	q.Set("security", "tls")
 	q.Set("insecure", strconv.Itoa(hy2.Insecure))
 	q.Set("sni", hy2.Sni)
 	q.Set("pinSHA256", hy2.PinSHA256)

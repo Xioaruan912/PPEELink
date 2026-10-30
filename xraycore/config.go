@@ -97,6 +97,17 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 	if in.PrivateKey == "" || in.SNI == "" {
 		return nil, fmt.Errorf("缺少 Reality 私钥或 SNI")
 	}
+	target, sni, shortIDs, normalizeErr := NormalizeReality(in.Target, in.SNI, in.ShortID)
+	if normalizeErr != nil {
+		return nil, normalizeErr
+	}
+	listen, normalizeErr := NormalizeListen(in.Listen)
+	if normalizeErr != nil {
+		return nil, normalizeErr
+	}
+	if _, err := PublicKeyFor(in.PrivateKey); err != nil {
+		return nil, fmt.Errorf("Reality 私钥无效")
+	}
 	flow := ""
 	if in.Template == TemplateRealityVision {
 		flow = "xtls-rprx-vision"
@@ -111,16 +122,17 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 	}
 	reality := map[string]any{
 		"show":        false,
-		"target":      in.Target,
+		"target":      target,
 		"xver":        0,
-		"serverNames": strings.Split(in.SNI, ","),
+		"serverNames": strings.Split(sni, ","),
 		"privateKey":  in.PrivateKey,
-		"shortIds":    []string{in.ShortID},
+		"shortIds":    strings.Split(shortIDs, ","),
 	}
 	stream := map[string]any{"security": "reality", "realitySettings": reality}
 	switch in.Template {
 	case TemplateRealityVision:
 		stream["network"] = "raw"
+		stream["rawSettings"] = map[string]any{"acceptProxyProtocol": false, "header": map[string]any{"type": "none"}}
 	case TemplateXHTTPReality:
 		path := in.Path
 		if path == "" {
@@ -133,7 +145,7 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 	}
 	return map[string]any{
 		"tag":            in.Tag,
-		"listen":         "0.0.0.0",
+		"listen":         listen,
 		"port":           in.Port,
 		"protocol":       "vless",
 		"settings":       map[string]any{"clients": clients, "decryption": "none"},

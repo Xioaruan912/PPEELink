@@ -148,7 +148,7 @@ func EncodeLoonWithFlags(urls []string, flags map[string]NodeFlags, sqlconfig Sq
 					return "", fmt.Errorf("HY2 证书指纹无效")
 				}
 				p += ",skip-cert-verify=false,tls-cert-sha256=" + pin
-			} else if cert {
+			} else if cert || h.Insecure != 0 {
 				p += ",skip-cert-verify=true"
 			}
 			proxys = append(proxys, p)
