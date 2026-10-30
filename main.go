@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"ppeelink/agentversion"
 	"ppeelink/api"
 	"ppeelink/middlewares"
 	"ppeelink/models"
@@ -253,7 +254,7 @@ func runAgent(args []string) {
 	if err := os.MkdirAll(*dir, 0o700); err != nil {
 		log.Fatal(err)
 	}
-	xraycore.AgentVersion = version
+	xraycore.AgentVersion = agentversion.Current
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	runner := xraycore.NewRunner(*dir, "ppeelink-xray")

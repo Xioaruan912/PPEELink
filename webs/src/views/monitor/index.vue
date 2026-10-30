@@ -17,6 +17,7 @@ import {
   EmptyState,
   UiButton,
   UiDialog,
+  UiDrawer,
   UiPanel,
   UiSegmented,
   UiSkeleton,
@@ -53,6 +54,17 @@ function openWorkspace(tab: "files" | "docker") {
 const phase = ref<"loading" | "ready" | "error">("loading");
 const error = ref("");
 const items = ref<MonitorItem[]>([]);
+const agentManagerVisible = ref(false);
+const latestAgentVersion = ref("");
+const checkingAgents = ref(false);
+async function checkAgents() {
+  checkingAgents.value = true;
+  try {
+    await load(true, true);
+  } finally {
+    checkingAgents.value = false;
+  }
+}
 const summary = reactive({ total: 0, online: 0, offline: 0 });
 
 const avgCPU = computed(() => {
@@ -64,7 +76,7 @@ const avgCPU = computed(() => {
 });
 
 let listLoading = false;
-async function load(silent = false) {
+async function load(silent = false, showError = false) {
   if (listLoading) return;
   listLoading = true;
   if (!silent) phase.value = "loading";
@@ -72,11 +84,13 @@ async function load(silent = false) {
   try {
     const { data } = await getMonitors();
     items.value = data?.items || [];
+    latestAgentVersion.value = data?.agentVersion || "";
     summary.total = data?.summary.total || 0;
     summary.online = data?.summary.online || 0;
     summary.offline = data?.summary.offline || 0;
     phase.value = "ready";
   } catch (err: any) {
+    if (showError) error.value = err?.message || "检查更新失败，请重试";
     if (!silent || !items.value.length) {
       phase.value = "error";
       error.value = err?.message || "读取监控数据失败";
@@ -123,7 +137,7 @@ async function upgrade(item: MonitorItem, cancel = false) {
     ElMessage.success(
       cancel
         ? "已撤销尚未执行的升级请求"
-        : "已排队，等待客户端校验升级并回报；请稍后刷新状态"
+        : "升级已安排，等待服务器上的 Agent 完成更新并回报"
     );
     await load();
   } catch (err: any) {
@@ -318,10 +332,22 @@ function formatUptime(seconds?: number) {
   return `${minutes} 分`;
 }
 
-/** 统一 Agent 没有语义化版本号，展示实际程序摘要，避免历史假版本误导。 */
 function agentLabel(item: MonitorItem) {
-  if (item.agentHash) return `程序 ${item.agentHash.slice(0, 8)}`;
-  return item.version ? `版本 ${item.version}` : "等待上报";
+  return item.agentVersion
+    ? `v${item.agentVersion}`
+    : item.version || item.agentHash
+      ? "旧版本"
+      : "等待上报";
+}
+function agentState(item: MonitorItem) {
+  if (item.removing) return "等待卸载";
+  if (item.agentUpdateError) return "升级失败";
+  if (item.agentUpdateRequested)
+    return item.online ? "等待更新回报" : "等待服务器上线";
+  if (item.agentUpgradeable === false) return "随面板更新";
+  if (item.agentUpdateConfirmed) return "已是最新版本";
+  if (item.agentUpdateAvailable) return "有可用更新";
+  return "等待版本上报";
 }
 
 const currentPercent = (used?: number, total?: number) =>
@@ -372,11 +398,13 @@ async function resetToken(item: MonitorItem | null) {
 </script>
 <template>
   <div class="monitor-page server-experience">
-    <ServerHeader section="monitor"
+    <ServerHeader
+      section="monitor"
       title="监控与 Agent"
-      description="独立查看服务器 CPU、内存、磁盘与网络，不依赖节点探针。"
+      description="查看服务器运行状态；通过 Agent 管理终端、文件、容器和网络诊断。"
     >
       <template #actions>
+        <UiButton @click="agentManagerVisible = true">Agent 管理</UiButton>
         <UiButton :icon="Refresh" :loading="phase === 'loading'" @click="load()"
           >刷新</UiButton
         >
@@ -461,9 +489,14 @@ async function resetToken(item: MonitorItem | null) {
           </header>
           <p class="server-sub">
             {{
-              item.linked
-                ? "自建节点 agent"
-                : `${item.group || "未分组"} · ${item.os || "unknown"}/${item.arch || "?"}`
+              [
+                item.group,
+                item.os && item.arch
+                  ? `${item.os}/${item.arch}`
+                  : item.os || "系统待上报",
+              ]
+                .filter(Boolean)
+                .join(" · ")
             }}
             <span v-if="item.lastSeenAt">
               · {{ formatDateTime(item.lastSeenAt) }}
@@ -517,61 +550,6 @@ async function resetToken(item: MonitorItem | null) {
             </footer>
           </template>
           <p v-else class="server-empty">等待服务器首次上报…</p>
-          <div
-            class="agent-status"
-            aria-live="polite"
-            @click.stop
-            @keydown.enter.stop
-          >
-            <span>{{ agentLabel(item) }} · </span>
-            <span v-if="item.removing">待卸载，等待服务器回报</span>
-            <span
-              v-else-if="item.agentUpdateError"
-              :title="item.agentUpdateError"
-              >升级失败：{{ item.agentUpdateError }}</span
-            >
-            <span v-else-if="item.agentUpdateRequested">{{
-              item.online ? "待升级／等待结果回报" : "待升级，等待服务器上线"
-            }}</span>
-            <span v-else-if="item.agentUpdateConfirmed"
-              >版本已确认／升级成功</span
-            >
-            <span v-else>{{
-              item.agentUpdateAvailable ? "有可用升级" : "尚未确认版本校验值"
-            }}</span>
-            <UiButton
-              v-if="item.agentUpgradeable !== false"
-              size="sm"
-              variant="ghost"
-              :loading="upgrading === item.id"
-              :disabled="upgrading !== null || item.removing"
-              @click.stop="
-                upgrade(
-                  item,
-                  !!item.agentUpdateRequested && !item.agentUpdateError
-                )
-              "
-            >
-              {{
-                item.agentUpdateError
-                  ? "重试升级"
-                  : item.agentUpdateRequested
-                    ? "撤销升级"
-                    : "升级 Agent"
-              }}
-            </UiButton>
-            <span v-else>本机随面板升级</span>
-            <UiButton
-              v-if="item.proxyServerId"
-              size="sm"
-              variant="ghost"
-              @click.stop="router.push({ name: 'ProxyServers' })"
-              >代理配置</UiButton
-            >
-            <span v-if="item.ownsAgent"
-              >默认关闭代理，可在代理配置中启用，无需重装。</span
-            >
-          </div>
           <p v-if="item.check" class="check-line">
             节点检测
             <b :class="{ bad: item.check.success < item.check.total }"
@@ -582,11 +560,104 @@ async function resetToken(item: MonitorItem | null) {
             >
           </p>
           <p v-else-if="item.linked" class="check-line muted">
-            节点检测等待 agent 上报…
+            节点检测等待 Agent 上报…
           </p>
         </article>
       </div>
     </UiPanel>
+
+    <UiDrawer
+      v-model="agentManagerVisible"
+      title="Agent 管理"
+      size="min(680px, 100vw)"
+    >
+      <div class="agent-manager">
+        <p class="agent-intro">
+          Agent
+          是安装在服务器上的管理程序，提供运行监控、远程终端、文件与容器管理、网络诊断，以及已启用的节点和中转服务。
+        </p>
+        <div class="agent-release">
+          <div>
+            <span>当前发布版本</span
+            ><strong>{{
+              latestAgentVersion ? `v${latestAgentVersion}` : "等待获取"
+            }}</strong>
+          </div>
+          <UiButton
+            :icon="Refresh"
+            :loading="checkingAgents"
+            @click="checkAgents"
+            >检查更新</UiButton
+          >
+        </div>
+        <p v-if="error" class="agent-error" role="alert">{{ error }}</p>
+        <EmptyState
+          v-if="!items.length"
+          size="inline"
+          description="添加服务器后，可在这里管理 Agent。"
+        />
+        <article v-for="item in items" :key="item.id" class="agent-row">
+          <header>
+            <strong>{{ item.name }}</strong
+            ><UiTag :tone="item.online ? 'ok' : 'neutral'">{{
+              item.online ? "在线" : "离线"
+            }}</UiTag>
+          </header>
+          <div class="agent-version-line">
+            <span
+              >已安装 <b>{{ agentLabel(item) }}</b></span
+            ><span
+              class="agent-state"
+              :class="{ failed: !!item.agentUpdateError }"
+              >{{ agentState(item) }}</span
+            >
+          </div>
+          <p v-if="item.agentUpdateError" class="agent-error">
+            {{ item.agentUpdateError }}
+          </p>
+          <div class="agent-row-actions">
+            <UiButton
+              v-if="
+                item.agentUpgradeable !== false &&
+                (item.agentUpdateAvailable ||
+                  item.agentUpdateRequested ||
+                  item.agentUpdateError)
+              "
+              size="sm"
+              :variant="item.agentUpdateRequested ? 'ghost' : 'primary'"
+              :loading="upgrading === item.id"
+              :disabled="upgrading !== null || item.removing"
+              @click="
+                upgrade(
+                  item,
+                  !!item.agentUpdateRequested && !item.agentUpdateError
+                )
+              "
+              >{{
+                item.agentUpdateError
+                  ? "重试升级"
+                  : item.agentUpdateRequested
+                    ? "撤销升级"
+                    : "升级 Agent"
+              }}</UiButton
+            ><UiButton
+              v-if="item.proxyServerId"
+              size="sm"
+              variant="ghost"
+              @click="
+                agentManagerVisible = false;
+                router.push({ name: 'ProxyServers' });
+              "
+              >代理配置</UiButton
+            >
+          </div>
+        </article>
+        <p class="agent-intro">
+          版本从 1.11 顺序递增，1.19 后为 1.20。网页界面更新不会单独触发 Agent
+          升级提示；点击检查更新会读取服务器最近上报的状态。
+        </p>
+      </div>
+    </UiDrawer>
 
     <UiDialog
       v-model="addVisible"
@@ -813,6 +884,89 @@ async function resetToken(item: MonitorItem | null) {
   </div>
 </template>
 <style scoped>
+.agent-manager {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.agent-intro {
+  font-size: 12px;
+  line-height: 1.8;
+  color: var(--c-muted);
+  margin: 0;
+}
+.agent-release {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 16px;
+  background: var(--c-surface-2);
+  border-radius: 12px;
+}
+.agent-release > div {
+  display: grid;
+  gap: 5px;
+}
+.agent-release span {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.agent-release strong {
+  font-size: 23px;
+  color: var(--c-data);
+  font-variant-numeric: tabular-nums;
+}
+.agent-row {
+  display: grid;
+  gap: 12px;
+  padding: 15px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  min-width: 0;
+}
+.agent-row header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+.agent-row header strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.agent-version-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.agent-version-line b {
+  font-weight: 600;
+  color: var(--c-ink);
+  margin-left: 5px;
+}
+.agent-state {
+  color: var(--c-data);
+}
+.agent-state.failed,
+.agent-error {
+  color: var(--c-warn-ink);
+}
+.agent-error {
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.agent-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .monitor-page {
   padding-bottom: 48px;
 }
@@ -1192,16 +1346,26 @@ async function resetToken(item: MonitorItem | null) {
     gap: 10px;
     padding: 12px;
   }
-  .summary-line > div, .summary-line > div:first-child {
+  .summary-line > div,
+  .summary-line > div:first-child {
     min-width: 0;
     padding: 0;
     border: 0;
     justify-content: space-between;
   }
-  .server-sub { white-space: normal; overflow-wrap: anywhere; }
-  .agent-status { gap: 6px; }
-  .agent-status :deep(button) { flex: 1 1 auto; }
-  .server-card { padding: 14px; }
+  .server-sub {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .agent-status {
+    gap: 6px;
+  }
+  .agent-status :deep(button) {
+    flex: 1 1 auto;
+  }
+  .server-card {
+    padding: 14px;
+  }
   .detail-head {
     align-items: flex-start;
     flex-direction: column;
