@@ -3,139 +3,171 @@ package throughputcore
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
+	"strings"
 	"time"
 )
 
 const toolInstallPath = "/usr/local/lib/subl/iperf3"
-const sourceSHA256 = "1c0d0fb02c52626111d6e132db80edfbf27bbaff8bd9245df2a371dcb0b35a92"
+const staticIPerfVersion = "3.22"
+const maxIPerfDownload = 32 * 1024 * 1024
 
-// Prepare builds the pinned security-fixed release only on explicit assignment.
-// No package manager or host firewall state is changed. Missing build dependencies
-// produce a specific failure so an administrator can prepare the host deliberately.
+//go:embed licenses/iperf3.txt
+var iperfLicense string
+
+//go:embed licenses/openssl.txt
+var opensslLicense string
+
+//go:embed licenses/musl.txt
+var muslLicense string
+
+type iperfAsset struct{ URL, APIURL, SHA256 string }
+
+// Fixed third-party musl/OpenSSL static release; metadata checked 2026-11-06:
+// https://github.com/userdocs/iperf3-static/releases/tag/3.22
+func staticIPerfAsset(goos, arch string) (iperfAsset, error) {
+	if goos != "linux" {
+		return iperfAsset{}, errors.New("自动准备测速工具仅支持 Linux amd64、arm64 和 ARMv7")
+	}
+	var file, id, sum string
+	switch arch {
+	case "amd64":
+		file = "iperf3-amd64"
+		id = "600269270"
+		sum = "ef4c89f3fc01c56cf00d34b900024c74f68e540dab452eef4fd902544d9c1c64"
+	case "arm64":
+		file = "iperf3-arm64v8"
+		id = "600269303"
+		sum = "34364466812357fe021a8647cb433c8006b0360e3b690ecda470a979a2601031"
+	case "armv7":
+		file = "iperf3-arm32v7"
+		id = "600269285"
+		sum = "ebac45408e994c86d78f20dafb1ec7bfd0a5d4cf6acf05283f79c07b2d4647c4"
+	default:
+		return iperfAsset{}, errors.New("此架构暂不支持自动准备测速工具，请提供支持 RSA 认证的 iperf3 3.22 或更新版本")
+	}
+	return iperfAsset{URL: "https://github.com/userdocs/iperf3-static/releases/download/" + staticIPerfVersion + "/" + file, APIURL: "https://api.github.com/repos/userdocs/iperf3-static/releases/assets/" + id, SHA256: sum}, nil
+}
+
+func runningIPerfArch() string {
+	if runtime.GOARCH == "arm" {
+		if info, ok := debug.ReadBuildInfo(); ok {
+			for _, s := range info.Settings {
+				if s.Key == "GOARM" && strings.Split(s.Value, ",")[0] == "7" {
+					return "armv7"
+				}
+			}
+		}
+	}
+	return runtime.GOARCH
+}
+
+// Prepare installs a verified static program. The target needs no compiler,
+// package manager, shared libc or OpenSSL development libraries.
 func Prepare(parent context.Context) Capability {
 	if c := Inspect(parent); c.AuthSupported {
 		return c
 	}
 	ctx, cancel := context.WithTimeout(parent, 110*time.Second)
 	defer cancel()
-	fail := func(e error) Capability { c := Inspect(parent); c.Error = e.Error(); return c }
-	if runtime.GOOS != "linux" {
-		return fail(errors.New("automatic iperf3 preparation is supported on Linux only"))
+	fail := func(err error) Capability { c := Inspect(parent); c.Error = err.Error(); return c }
+	asset, err := staticIPerfAsset(runtime.GOOS, runningIPerfArch())
+	if err != nil {
+		return fail(err)
 	}
-	for _, name := range []string{"cc", "make", "tar"} {
-		if _, e := exec.LookPath(name); e != nil {
-			return fail(fmt.Errorf("preparation requires %s and OpenSSL development files; install build dependencies or provision iperf3 >=3.22", name))
+	client := &http.Client{Timeout: 45 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) > 5 || req.URL.Scheme != "https" {
+			return errors.New("测速工具下载重定向不安全或次数过多")
 		}
-	}
-	dir, e := os.MkdirTemp("", "subl-iperf-prepare-")
-	if e != nil {
-		return fail(e)
-	}
-	defer os.RemoveAll(dir)
-	archive := filepath.Join(dir, "source.tgz")
-	if e = downloadSource(ctx, archive); e != nil {
-		return fail(e)
-	}
-	commands := []struct {
-		name string
-		args []string
-		cwd  string
-	}{{"tar", []string{"xzf", archive, "-C", dir}, dir}, {filepath.Join(dir, "iperf-3.22", "configure"), []string{"--disable-shared", "--with-openssl=/usr"}, filepath.Join(dir, "iperf-3.22")}, {"make", []string{"-j2"}, filepath.Join(dir, "iperf-3.22")}}
-	for _, v := range commands {
-		cmd := exec.CommandContext(ctx, v.name, v.args...)
-		configureCommand(cmd)
-		cmd.Dir = v.cwd
-		out := &limitedBuffer{max: 4096}
-		cmd.Stdout = out
-		cmd.Stderr = out
-		if e = cmd.Run(); e != nil {
-			return fail(fmt.Errorf("iperf3 preparation failed at %s: %v (compiler, make and OpenSSL development files required)", filepath.Base(v.name), e))
-		}
-	}
-	built := filepath.Join(dir, "iperf-3.22", "src", "iperf3")
-	c := inspectPath(ctx, built)
-	if !c.AuthSupported {
-		return fail(errors.New("built iperf3 lacks security-fixed RSA authentication; ensure OpenSSL development files are installed"))
-	}
-	if e = os.MkdirAll(filepath.Dir(toolInstallPath), 0755); e != nil {
-		return fail(e)
-	}
-	src, e := os.Open(built)
-	if e != nil {
-		return fail(e)
-	}
-	defer src.Close()
-	dst, e := os.CreateTemp(filepath.Dir(toolInstallPath), "iperf3-new-")
-	if e != nil {
-		return fail(e)
-	}
-	name := dst.Name()
-	defer os.Remove(name)
-	_, e = io.Copy(dst, io.LimitReader(src, 32*1024*1024))
-	if e == nil {
-		e = dst.Chmod(0755)
-	}
-	if e == nil {
-		e = dst.Sync()
-	}
-	closeErr := dst.Close()
-	if e == nil {
-		e = closeErr
-	}
-	if e == nil {
-		e = os.Rename(name, toolInstallPath)
-	}
-	if e != nil {
-		return fail(e)
+		return nil
+	}}
+	if err := prepareStaticIPerf(ctx, client, asset, toolInstallPath); err != nil {
+		return fail(err)
 	}
 	return Inspect(parent)
 }
-func downloadSource(ctx context.Context, path string) error {
-	var last error
-	for _, url := range []string{"https://downloads.es.net/pub/iperf/iperf-3.22.tar.gz", "https://github.com/esnet/iperf/releases/download/3.22/iperf-3.22.tar.gz"} {
-		req, e := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if e != nil {
-			return e
-		}
-		resp, e := (&http.Client{Timeout: 25 * time.Second}).Do(req)
-		if e != nil {
-			last = e
-			continue
-		}
-		if resp.StatusCode != http.StatusOK {
-			resp.Body.Close()
-			last = fmt.Errorf("source download HTTP %d", resp.StatusCode)
-			continue
-		}
-		f, e := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-		if e != nil {
-			resp.Body.Close()
-			return e
-		}
-		h := sha256.New()
-		n, e := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, 2*1024*1024+1))
-		resp.Body.Close()
-		ce := f.Close()
-		if e == nil {
-			e = ce
-		}
-		if e != nil {
-			last = e
-			continue
-		}
-		if n > 2*1024*1024 || hex.EncodeToString(h.Sum(nil)) != sourceSHA256 {
-			return errors.New("iperf3 source SHA256 verification failed")
-		}
-		return nil
+
+func prepareStaticIPerf(ctx context.Context, client *http.Client, asset iperfAsset, dest string) error {
+	first := installStaticIPerf(ctx, client, asset, dest)
+	if first == nil || asset.APIURL == "" || ctx.Err() != nil {
+		return first
 	}
-	return fmt.Errorf("could not download pinned iperf3 source: %v", last)
+	asset.URL = asset.APIURL + "?ppeelink_download=" + fmt.Sprint(time.Now().UnixNano())
+	if err := installStaticIPerf(ctx, client, asset, dest); err != nil {
+		return fmt.Errorf("测速工具下载失败：%v；备用下载失败：%w", first, err)
+	}
+	return nil
+}
+
+func installStaticIPerf(ctx context.Context, client *http.Client, asset iperfAsset, dest string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, asset.URL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Accept", "application/octet-stream")
+	req.Header.Set("User-Agent", "PPEELink-iperf-Prepare/"+staticIPerfVersion)
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("下载测速工具失败：%w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("下载测速工具 HTTP %d", resp.StatusCode)
+	}
+	if resp.ContentLength > maxIPerfDownload {
+		return errors.New("测速工具文件超过大小限制")
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(filepath.Dir(dest), ".iperf3-download-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	h := sha256.New()
+	n, err := io.Copy(io.MultiWriter(f, h), io.LimitReader(resp.Body, maxIPerfDownload+1))
+	if err != nil {
+		return err
+	}
+	if n > maxIPerfDownload {
+		return errors.New("测速工具文件超过大小限制")
+	}
+	if hex.EncodeToString(h.Sum(nil)) != asset.SHA256 {
+		return errors.New("测速工具 SHA256 校验失败，原工具未更改")
+	}
+	if err = f.Chmod(0755); err != nil {
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	c := inspectPath(ctx, f.Name())
+	if c.Version != staticIPerfVersion || !c.AuthSupported {
+		return errors.New("测速工具版本或 RSA 认证校验失败，原工具未更改")
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+	licenses := "PPEELink iperf3 static distribution (userdocs/iperf3-static 3.22)\n\niperf3\n" + iperfLicense + "\nOpenSSL\n" + opensslLicense + "\nmusl\n" + muslLicense
+	if err = os.WriteFile(dest+".LICENSE", []byte(licenses), 0644); err != nil {
+		return err
+	}
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+	return os.Rename(f.Name(), dest)
 }

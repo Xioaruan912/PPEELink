@@ -33,7 +33,7 @@ var statsSchema = sync.OnceValues(func() (protoreflect.FileDescriptor, error) {
 	}
 	str, boolean, integer, message := descriptorpb.FieldDescriptorProto_TYPE_STRING, descriptorpb.FieldDescriptorProto_TYPE_BOOL, descriptorpb.FieldDescriptorProto_TYPE_INT64, descriptorpb.FieldDescriptorProto_TYPE_MESSAGE
 	return protodesc.NewFile(&descriptorpb.FileDescriptorProto{
-		Name: proto.String("ppeelink/stats.proto"), Package: proto.String("xray.app.stats.command"), Syntax: proto.String("proto3"),
+		Name: proto.String("github.com/Xioaruan912/PPEELink/stats.proto"), Package: proto.String("xray.app.stats.command"), Syntax: proto.String("proto3"),
 		MessageType: []*descriptorpb.DescriptorProto{
 			{Name: proto.String("QueryStatsRequest"), Field: []*descriptorpb.FieldDescriptorProto{field("pattern", 1, str, false, ""), field("reset", 2, boolean, false, "")}},
 			{Name: proto.String("Stat"), Field: []*descriptorpb.FieldDescriptorProto{field("name", 1, str, false, ""), field("value", 2, integer, false, "")}},
@@ -64,7 +64,8 @@ func statsInvoke(ctx context.Context, conn *grpc.ClientConn, method string, requ
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	err = conn.Invoke(callCtx, "/xray.app.stats.command.StatsService/"+method, request, reply)
+	// A running systemd unit may not have opened the stats listener yet.
+	err = conn.Invoke(callCtx, "/xray.app.stats.command.StatsService/"+method, request, reply, grpc.WaitForReady(true))
 	return reply, err
 }
 func (r *Runner) closeStatsLocked() {

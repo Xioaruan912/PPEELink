@@ -43,6 +43,7 @@ type Report struct {
 	Result *Result `json:"result,omitempty"`
 }
 type Capability struct {
+	Preparing           bool   `json:"preparing"`
 	Available           bool   `json:"available"`
 	Path                string `json:"path"`
 	Version             string `json:"version"`
@@ -105,9 +106,9 @@ func ParseCapability(path, version, help string) Capability {
 		c.JSONStreamSupported = modern && strings.Contains(help, "--json-stream")
 	}
 	if !c.Available {
-		c.Error = "iperf3 is not installed; prepare the Agent explicitly"
+		c.Error = "测速工具尚未就绪；Agent 将自动准备，也可点击“准备测速工具”重试"
 	} else if !c.AuthSupported {
-		c.Error = "iperf3 >=3.22 with RSA OAEP authentication is required; weak padding is disabled"
+		c.Error = "现有测速工具不支持安全认证；请准备 iperf3 3.22 或更新版本"
 	}
 	return c
 }

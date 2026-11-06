@@ -1,7 +1,7 @@
 package xraycore
 
 import (
-	"ppeelink/relaycore"
+	"github.com/Xioaruan912/PPEELink/relaycore"
 	"testing"
 )
 

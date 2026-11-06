@@ -17,28 +17,66 @@ import (
 
 	"github.com/creack/pty"
 	"github.com/gorilla/websocket"
+	"github.com/Xioaruan912/PPEELink/terminalcore"
 )
 
 type agentTermMessage struct {
-	Type    string          `json:"type"`
-	ID      string          `json:"id,omitempty"`
-	Data    string          `json:"data,omitempty"`
-	Cols    int             `json:"cols,omitempty"`
-	Rows    int             `json:"rows,omitempty"`
-	Op      string          `json:"op,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-	OK      bool            `json:"ok,omitempty"`
-	Error   string          `json:"error,omitempty"`
-	Code    int             `json:"code,omitempty"`
+	Type       string          `json:"type"`
+	ID         string          `json:"id,omitempty"`
+	Data       string          `json:"data,omitempty"`
+	Cols       int             `json:"cols,omitempty"`
+	Rows       int             `json:"rows,omitempty"`
+	Op         string          `json:"op,omitempty"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
+	OK         bool            `json:"ok,omitempty"`
+	Error      string          `json:"error,omitempty"`
+	Code       int             `json:"code,omitempty"`
+	Owner      int             `json:"owner,omitempty"`
+	SessionID  string          `json:"sessionId,omitempty"`
+	Persistent bool            `json:"persistent,omitempty"`
 }
 
 type agentPTY struct {
-	file *os.File
-	cmd  *exec.Cmd
+	file     *os.File
+	cmd      *exec.Cmd
+	input    chan []byte
+	done     chan struct{}
+	closeOne sync.Once
+}
+
+func (s *agentPTY) stop() {
+	s.closeOne.Do(func() {
+		if s.done != nil {
+			close(s.done)
+		}
+		_ = s.cmd.Process.Kill()
+		_ = s.file.Close()
+	})
+}
+func (s *agentPTY) readInput() {
+	for {
+		select {
+		case data := <-s.input:
+			_ = s.file.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			if _, err := s.file.Write(data); err != nil {
+				s.stop()
+				return
+			}
+		case <-s.done:
+			return
+		}
+	}
 }
 
 // runAgentTerminal 维持 agent 到面板的反向 WebSocket；终端完全在 agent 本地执行。
 func runAgentTerminal(ctx context.Context, panel, token string) {
+	go func() {
+		prepareCtx, cancel := context.WithTimeout(ctx, 4*time.Minute)
+		defer cancel()
+		if err := terminalcore.Default.Prepare(prepareCtx, true); err != nil {
+			log.Printf("[terminal] 任务保护未就绪: %v", err)
+		}
+	}()
 	url := strings.TrimRight(panel, "/")
 	if strings.HasPrefix(url, "https://") {
 		url = "wss://" + strings.TrimPrefix(url, "https://")
@@ -76,6 +114,7 @@ func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
 	defer cancel()
 	stopClose := context.AfterFunc(ctx, func() { _ = conn.Close() })
 	defer stopClose()
+	conn.SetReadLimit(1 << 20)
 	var writeMu sync.Mutex
 	var sessionsMu sync.Mutex
 	sessions := map[string]*agentPTY{}
@@ -85,11 +124,13 @@ func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
 		_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 		return conn.WriteJSON(msg)
 	}
+	if err := write(agentTermMessage{Type: "hello", Persistent: true}); err != nil {
+		return err
+	}
 	defer func() {
 		sessionsMu.Lock()
 		for _, session := range sessions {
-			_ = session.cmd.Process.Kill()
-			_ = session.file.Close()
+			session.stop()
 		}
 		sessionsMu.Unlock()
 	}()
@@ -105,26 +146,41 @@ func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
 		}
 		switch msg.Type {
 		case "term.open":
-			session, err := startAgentPTY(msg.Cols, msg.Rows)
+			var session *agentPTY
+			var err error
+			if msg.SessionID != "" || msg.Owner != 0 {
+				var attached *terminalcore.Attachment
+				attached, err = terminalcore.Default.Attach(ctx, msg.Owner, msg.SessionID, msg.Cols, msg.Rows)
+				if err == nil {
+					session = &agentPTY{file: attached.File, cmd: attached.Cmd}
+				}
+			} else {
+				session, err = startAgentPTY(msg.Cols, msg.Rows)
+			}
 			if err != nil {
 				_ = write(agentTermMessage{Type: "term.exit", ID: msg.ID, Code: 1, Error: err.Error()})
 				continue
 			}
+			session.input = make(chan []byte, 16)
+			session.done = make(chan struct{})
+			go session.readInput()
 			sessionsMu.Lock()
 			if old := sessions[msg.ID]; old != nil {
-				_ = old.cmd.Process.Kill()
-				_ = old.file.Close()
+				old.stop()
 			}
 			sessions[msg.ID] = session
 			sessionsMu.Unlock()
-			go func(id string, s *agentPTY) {
+			if msg.SessionID != "" {
+				_ = write(agentTermMessage{Type: "term.ready", ID: msg.ID, SessionID: msg.SessionID, Persistent: true})
+			}
+			go func(id, persistentID string, owner int, s *agentPTY) {
 				defer s.file.Close()
 				buf := make([]byte, 32*1024)
 				for {
 					n, err := s.file.Read(buf)
 					if n > 0 {
 						if write(agentTermMessage{Type: "term.output", ID: id, Data: base64.StdEncoding.EncodeToString(buf[:n])}) != nil {
-							_ = s.cmd.Process.Kill()
+							s.stop()
 							break
 						}
 					}
@@ -139,21 +195,31 @@ func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
 				if s.cmd.ProcessState != nil {
 					code = s.cmd.ProcessState.ExitCode()
 				}
-				_ = write(agentTermMessage{Type: "term.exit", ID: id, Code: code})
+				kind := "term.exit"
+				if persistentID != "" && terminalcore.Default.Exists(ctx, owner, persistentID) == nil {
+					kind = "term.detached"
+				}
+				s.stop()
+				_ = write(agentTermMessage{Type: kind, ID: id, Code: code})
 				sessionsMu.Lock()
 				if sessions[id] == s {
 					delete(sessions, id)
 				}
 				sessionsMu.Unlock()
-			}(msg.ID, session)
+			}(msg.ID, msg.SessionID, msg.Owner, session)
 		case "term.input":
 			sessionsMu.Lock()
 			session := sessions[msg.ID]
 			sessionsMu.Unlock()
 			if session != nil {
 				data, err := base64.StdEncoding.DecodeString(msg.Data)
-				if err == nil {
-					_, _ = session.file.Write(data)
+				if err == nil && len(data) <= 8192 {
+					select {
+					case session.input <- data:
+					case <-session.done:
+					default:
+						session.stop()
+					}
 				}
 			}
 		case "term.resize":
@@ -169,8 +235,7 @@ func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
 			delete(sessions, msg.ID)
 			sessionsMu.Unlock()
 			if session != nil {
-				_ = session.cmd.Process.Kill()
-				_ = session.file.Close()
+				session.stop()
 			}
 		case "op":
 			go func(id string, op string, payload json.RawMessage) {
@@ -217,6 +282,8 @@ type agentDockerRequest struct {
 
 func handleAgentOp(ctx context.Context, op string, payload json.RawMessage) (json.RawMessage, error) {
 	switch op {
+	case "terminal":
+		return handleTerminalOp(ctx, payload)
 	case "docker":
 		var req agentDockerRequest
 		if err := json.Unmarshal(payload, &req); err != nil {

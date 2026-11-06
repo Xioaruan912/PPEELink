@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"ppeelink/relaycore"
+	"github.com/Xioaruan912/PPEELink/relaycore"
 )
 
 type relayLoopSource struct {

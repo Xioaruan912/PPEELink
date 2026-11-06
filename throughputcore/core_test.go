@@ -3,6 +3,7 @@ package throughputcore
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -136,10 +137,15 @@ func TestStaleSecretsRecoveryIsScoped(t *testing.T) {
 		}
 	}
 }
-func TestPrepareReportsMissingDependencies(t *testing.T) {
-	t.Setenv("PATH", t.TempDir())
+func TestPrepareKeepsReadyToolWithoutCompiler(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "iperf3"), fixtureIPerf("3.22"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	before := Inspect(context.Background())
 	c := Prepare(context.Background())
-	if c.AuthSupported || !strings.Contains(c.Error, "requires cc") {
+	if !c.AuthSupported || c.Path != before.Path {
 		t.Fatal(c)
 	}
 }

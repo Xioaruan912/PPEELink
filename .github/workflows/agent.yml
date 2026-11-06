@@ -1,0 +1,34 @@
+name: Standalone Agent
+on:
+  push:
+    branches: [agent]
+    tags: ['agent-v*']
+  pull_request:
+    branches: [agent]
+permissions:
+  contents: read
+jobs:
+  verify-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Verify runtime boundaries
+        run: |
+          if go list -deps . | grep -E 'gorm|gin-gonic|sqlite|sing-box|/api$|/models$|/routers$'; then
+            echo 'Agent must not depend on panel or frontend packages'
+            exit 1
+          fi
+      - name: Unit and protocol tests
+        run: |
+          go test . ./agentversion ./certpin ./monitorcore ./relaycore ./terminalcore ./throughputcore ./tracecore
+          go test ./xraycore -run 'TestExecutableHash|TestUpdate|TestStats'
+      - name: Build independent Linux artifacts
+        run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ppeelink-agent
+          path: dist/
