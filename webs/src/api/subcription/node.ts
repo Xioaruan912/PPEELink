@@ -59,15 +59,19 @@ export function updateAlertSetting(
 }
 
 // 节点解锁测试
-export function UnlockTest(data: any) {
+export function UnlockTest(data: any, signal?: AbortSignal) {
   return request({
     url: "/api/v1/nodes/unlock",
     method: "post",
+    signal,
     data,
     headers: {
       "Content-Type": "multipart/form-data",
     },
   });
+}
+export function getUnlockServices() {
+  return request({ url: "/api/v1/nodes/unlock/services", method: "get" });
 }
 export function getEgressTargets() {
   return request({ url: "/api/v1/nodes/egress-targets", method: "get" });

@@ -16,16 +16,19 @@ import (
 // agentWireMessage is the small JSON protocol shared by the agent and panel.
 // Terminal data is base64 so arbitrary PTY bytes survive JSON.
 type agentWireMessage struct {
-	Type    string          `json:"type"`
-	ID      string          `json:"id,omitempty"`
-	Data    string          `json:"data,omitempty"`
-	Cols    int             `json:"cols,omitempty"`
-	Rows    int             `json:"rows,omitempty"`
-	Op      string          `json:"op,omitempty"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-	OK      bool            `json:"ok,omitempty"`
-	Error   string          `json:"error,omitempty"`
-	Code    int             `json:"code,omitempty"`
+	Type       string          `json:"type"`
+	ID         string          `json:"id,omitempty"`
+	Data       string          `json:"data,omitempty"`
+	Cols       int             `json:"cols,omitempty"`
+	Rows       int             `json:"rows,omitempty"`
+	Op         string          `json:"op,omitempty"`
+	Payload    json.RawMessage `json:"payload,omitempty"`
+	OK         bool            `json:"ok,omitempty"`
+	Error      string          `json:"error,omitempty"`
+	Code       int             `json:"code,omitempty"`
+	Owner      int             `json:"owner,omitempty"`
+	SessionID  string          `json:"sessionId,omitempty"`
+	Persistent bool            `json:"persistent,omitempty"`
 }
 
 type agentReply struct {
@@ -34,20 +37,52 @@ type agentReply struct {
 	Error string
 }
 
+type terminalFrame struct {
+	data  []byte
+	event *agentWireMessage
+}
 type agentTerminal struct {
-	out    func([]byte)
-	closed func()
+	out     func([]byte)
+	control func(agentWireMessage)
+	closed  func()
+	queue   chan terminalFrame
+	done    chan struct{}
+	once    sync.Once
+}
+
+func (s *agentTerminal) stop() { s.once.Do(func() { close(s.done); s.closed() }) }
+func (s *agentTerminal) run() {
+	for {
+		select {
+		case frame := <-s.queue:
+			if frame.event != nil {
+				if s.control != nil {
+					s.control(*frame.event)
+				}
+				if frame.event.Type == "term.exit" || frame.event.Type == "term.detached" {
+					s.stop()
+					return
+				}
+			} else {
+				s.out(frame.data)
+			}
+		case <-s.done:
+			return
+		}
+	}
 }
 
 type agentConn struct {
-	serverID uint
-	conn     *websocket.Conn
-	send     chan []byte
-	done     chan struct{}
-	closeOne sync.Once
-	mu       sync.Mutex
-	terms    map[string]*agentTerminal
-	pending  map[string]chan agentReply
+	serverID   uint
+	conn       *websocket.Conn
+	send       chan []byte
+	control    chan []byte
+	done       chan struct{}
+	closeOne   sync.Once
+	mu         sync.Mutex
+	terms      map[string]*agentTerminal
+	persistent bool
+	pending    map[string]chan agentReply
 }
 
 var (
@@ -63,7 +98,7 @@ var agentWSUpgrader = websocket.Upgrader{
 
 func newAgentConn(serverID uint, conn *websocket.Conn) *agentConn {
 	return &agentConn{
-		serverID: serverID, conn: conn, send: make(chan []byte, 128), done: make(chan struct{}),
+		serverID: serverID, conn: conn, send: make(chan []byte, 128), control: make(chan []byte, 64), done: make(chan struct{}),
 		terms: map[string]*agentTerminal{}, pending: map[string]chan agentReply{},
 	}
 }
@@ -72,28 +107,58 @@ func (ac *agentConn) writeLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
+		var raw []byte
 		select {
-		case raw := <-ac.send:
-			_ = ac.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			if err := ac.conn.WriteMessage(websocket.TextMessage, raw); err != nil {
-				ac.shutdown()
-				return
-			}
-		case <-ticker.C:
-			if err := ac.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)); err != nil {
-				ac.shutdown()
-				return
-			}
 		case <-ac.done:
+			return
+		default:
+		}
+		select {
+		case raw = <-ac.control:
+		default:
+		}
+		if raw == nil {
+			select {
+			case raw = <-ac.control:
+			case raw = <-ac.send:
+			case <-ticker.C:
+				if err := ac.conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(10*time.Second)); err != nil {
+					ac.shutdown()
+					return
+				}
+				continue
+			case <-ac.done:
+				return
+			}
+		}
+		_ = ac.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+		if err := ac.conn.WriteMessage(websocket.TextMessage, raw); err != nil {
+			ac.shutdown()
 			return
 		}
 	}
 }
-
 func (ac *agentConn) sendMessage(msg agentWireMessage) bool {
 	raw, err := json.Marshal(msg)
 	if err != nil {
 		return false
+	}
+	select {
+	case <-ac.done:
+		return false
+	default:
+	}
+	if msg.Type == "term.open" || msg.Type == "term.close" {
+		// Open and close share a reserved FIFO, so detach cannot overtake its open.
+		select {
+		case ac.control <- raw:
+			return true
+		case <-ac.done:
+			return false
+		default:
+			go ac.shutdown()
+			return false
+		}
 	}
 	select {
 	case ac.send <- raw:
@@ -101,7 +166,6 @@ func (ac *agentConn) sendMessage(msg agentWireMessage) bool {
 	case <-ac.done:
 		return false
 	default:
-		ac.shutdown()
 		return false
 	}
 }
@@ -120,24 +184,35 @@ func (ac *agentConn) readLoop() {
 			continue
 		}
 		switch msg.Type {
-		case "term.output":
-			data, err := decodeBase64(msg.Data)
-			if err != nil {
-				continue
+		case "hello":
+			ac.mu.Lock()
+			ac.persistent = msg.Persistent
+			ac.mu.Unlock()
+		case "term.output", "term.ready", "term.exit", "term.detached":
+			frame := terminalFrame{}
+			if msg.Type == "term.output" {
+				data, err := decodeBase64(msg.Data)
+				if err != nil {
+					continue
+				}
+				frame.data = data
+			} else {
+				frame.event = &msg
 			}
 			ac.mu.Lock()
 			session := ac.terms[msg.ID]
-			ac.mu.Unlock()
-			if session != nil {
-				session.out(data)
+			if msg.Type == "term.exit" || msg.Type == "term.detached" {
+				delete(ac.terms, msg.ID)
 			}
-		case "term.exit":
-			ac.mu.Lock()
-			session := ac.terms[msg.ID]
-			delete(ac.terms, msg.ID)
 			ac.mu.Unlock()
 			if session != nil {
-				session.closed()
+				select {
+				case session.queue <- frame:
+				case <-session.done:
+				default:
+					ac.closeTerminal(msg.ID)
+					session.stop()
+				}
 			}
 		case "op.result":
 			ac.mu.Lock()
@@ -158,9 +233,7 @@ func (ac *agentConn) shutdown() {
 		ac.mu.Lock()
 		for id, session := range ac.terms {
 			delete(ac.terms, id)
-			if session.closed != nil {
-				session.closed()
-			}
+			session.stop()
 		}
 		for id, reply := range ac.pending {
 			delete(ac.pending, id)
@@ -181,18 +254,39 @@ func agentConnForServer(serverID uint) *agentConn {
 	return agentConns[serverID]
 }
 
-func (ac *agentConn) openTerminal(id string, cols, rows int, out func([]byte), closed func()) bool {
+func (ac *agentConn) supportsPersistence() bool {
 	ac.mu.Lock()
-	ac.terms[id] = &agentTerminal{out: out, closed: closed}
-	ac.mu.Unlock()
-	return ac.sendMessage(agentWireMessage{Type: "term.open", ID: id, Cols: cols, Rows: rows})
+	defer ac.mu.Unlock()
+	return ac.persistent
 }
-
+func (ac *agentConn) openTerminal(id string, cols, rows int, out func([]byte), closed func()) bool {
+	return ac.openPersistentTerminal(id, "", 0, cols, rows, out, nil, closed)
+}
+func (ac *agentConn) openPersistentTerminal(id, sessionID string, owner, cols, rows int, out func([]byte), control func(agentWireMessage), closed func()) bool {
+	session := &agentTerminal{out: out, control: control, closed: closed, queue: make(chan terminalFrame, 16), done: make(chan struct{})}
+	ac.mu.Lock()
+	if len(ac.terms) >= 32 {
+		ac.mu.Unlock()
+		return false
+	}
+	ac.terms[id] = session
+	ac.mu.Unlock()
+	go session.run()
+	if !ac.sendMessage(agentWireMessage{Type: "term.open", ID: id, SessionID: sessionID, Owner: owner, Cols: cols, Rows: rows}) {
+		ac.closeTerminal(id)
+		return false
+	}
+	return true
+}
 func (ac *agentConn) closeTerminal(id string) {
 	ac.mu.Lock()
+	session := ac.terms[id]
 	delete(ac.terms, id)
 	ac.mu.Unlock()
-	ac.sendMessage(agentWireMessage{Type: "term.close", ID: id})
+	if session != nil {
+		session.stop()
+		ac.sendMessage(agentWireMessage{Type: "term.close", ID: id})
+	}
 }
 
 func agentRequest(serverID uint, op string, payload any, timeout time.Duration) (json.RawMessage, error) {

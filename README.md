@@ -422,4 +422,8 @@ db/           SQLite、运行配置和规则缓存（运行时数据）
 
 ### Agent 节点部署开发约定
 
-Agent 相关开发统一放在 `agents` 分支。Reality 与 HY2 节点部署以 V2RaySSR 中文固定版对应的 3x-ui v2.9.3 为基准；配置字段、订阅参数及后续升级请遵循 [部署基准](docs/agents-xui.md)。Agent 1.12 新增 x-ui 参数、双栈监听与 HY2 免手工证书配置，已有证书指纹模式继续保留。
+Agent 运行时代码统一在独立 `agent` 分支开发，面板和管理接口在 `main` 分支维护。Reality 与 HY2 节点部署以 V2RaySSR 中文固定版对应的 3x-ui v2.9.3 为基准；配置字段、订阅参数及后续升级请遵循 [部署基准](docs/agents-xui.md)。Agent 1.12 新增 x-ui 参数、双栈监听与 HY2 免手工证书配置，已有证书指纹模式继续保留。
+
+## Agent 独立开发
+
+Agent 源码与构建独立维护在 [agent 分支](https://github.com/Xioaruan912/PPEELink/tree/agent)，不包含前端或数据库代码。面板只分发独立发行产物。开发与发布步骤见 [docs/agent-development.md](docs/agent-development.md)。

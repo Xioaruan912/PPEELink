@@ -23,6 +23,12 @@ func MonitorUpdateAgent(c *gin.Context) {
 		return
 	}
 	requested := !req.Cancel
+	if requested {
+		if _, err := loadAgentArtifact(monitor.Arch); err != nil {
+			c.JSON(503, gin.H{"code": "50300", "msg": err.Error()})
+			return
+		}
+	}
 	var err error
 	if monitor.ProxyServerID != nil {
 		result := models.DB.Model(&models.ProxyServer{}).Where("id = ? AND kind = ?", *monitor.ProxyServerID, models.ServerKindAgent).Update("agent_update_requested", requested)

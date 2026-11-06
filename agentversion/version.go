@@ -1,4 +1,4 @@
-// Package agentversion defines the Agent release independently of panel builds.
+// Package agentversion parses Agent release identifiers received by the panel.
 package agentversion
 
 import (
@@ -6,10 +6,6 @@ import (
 	"strconv"
 	"strings"
 )
-
-// Current starts the new release sequence. Agent changes increment the second
-// integer: 1.11 -> 1.12 -> ... -> 1.19 -> 1.20. Panel-only changes do not bump it.
-const Current = "1.13"
 
 func Parse(raw string) (int, int, bool) {
 	parts := strings.Split(strings.TrimPrefix(strings.TrimSpace(raw), "v"), ".")

@@ -1,4 +1,12 @@
 <template>
+  <p class="result-provenance">
+    {{
+      result.source === "browser"
+        ? "检测来源：当前设备，跟随浏览器代理与分流规则。"
+        : "检测来源：指定节点，由面板通过该节点发起请求。"
+    }}
+    地区推测和仅可访问不代表已验证登录、播放或生成功能。
+  </p>
   <p v-if="result?.error" class="result-error" role="alert">
     {{ result.error }}
   </p>
@@ -24,8 +32,11 @@
           <strong>{{ item.name }}</strong
           ><StatusDot :state="state(item)" :label="label(item)" />
         </div>
-        <div v-if="item.region" class="unlock-meta">
-          <span>地区 {{ item.region }}</span>
+        <div class="unlock-meta">
+          <span>{{
+            unlockEvidenceLabel[item.evidence || ""] || "历史结果，请重新检测"
+          }}</span>
+          <span v-if="item.region">目标地区 {{ item.region }}</span>
         </div>
         <p v-if="item.note" class="item-note">{{ item.note }}</p>
       </article></TransitionGroup
@@ -35,6 +46,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import StatusDot from "@/ui/StatusDot.vue";
+import {
+  unlockLabel as label,
+  unlockState as state,
+  unlockEvidenceLabel,
+} from "./browserUnlock";
 import { useResultMotion } from "./useNodeTestSession";
 import type { UnlockCheckResult, UnlockResult } from "./unlock";
 const props = defineProps<{ result: UnlockResult }>();
@@ -42,7 +58,8 @@ const { enter, leave } = useResultMotion();
 const groups = [
   { key: "ai", label: "AI 服务" },
   { key: "video", label: "影视流媒体" },
-  { key: "forum", label: "论坛 / 其它" },
+  { key: "local", label: "地区电视" },
+  { key: "forum", label: "社交 / 其它" },
 ];
 const visibleGroups = computed(() => {
   const extra = [
@@ -54,16 +71,17 @@ const visibleGroups = computed(() => {
     (group) => resultByGroup(group.key).length
   );
 });
-// unknown 表示请求失败或页面无法判断，和“未解锁”分开显示
-const state = (item: UnlockCheckResult) =>
-  item.ok ? "ok" : item.status === "unknown" ? "warn" : "bad";
-const label = (item: UnlockCheckResult) =>
-  item.ok ? "已解锁" : item.status === "unknown" ? "无法判断" : "未解锁";
 const resultByGroup = (group: string) =>
   (props.result?.results || []).filter((item) => item.group === group);
 </script>
 <style scoped lang="scss">
 @use "./dialog.scss";
+.result-provenance {
+  margin: 12px 0 20px;
+  color: var(--c-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
 .result-error {
   padding: 12px;
   border-left: 3px solid var(--c-bad);

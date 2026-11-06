@@ -5,7 +5,18 @@ import { UiButton, UiDialog, UiTag } from "@/ui";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
-import { getMonitorSSHTicket } from "@/api/monitor";
+import {
+  getMonitorSSHTicket,
+  getTerminalSessions,
+  createTerminalSession,
+  endTerminalSession,
+  prepareTerminal,
+  type TerminalSession,
+} from "@/api/monitor";
+import {
+  createTerminalConnection,
+  type TerminalEvent,
+} from "./terminalConnection";
 import { quickCommands, type QuickCommand } from "./commands";
 
 const props = defineProps<{
@@ -30,9 +41,57 @@ const status = ref("未连接");
 const connected = ref(false);
 let term: Terminal | undefined;
 let fit: FitAddon | undefined;
-let socket: WebSocket | undefined;
+const sessions = ref<TerminalSession[]>([]);
+const selectedSession = ref("");
+const sessionReady = ref(false),
+  sessionSupported = ref(false),
+  preparing = ref(false);
+const sessionLoading = ref(false);
+let loadGeneration = 0;
+const showAdvanced = ref(false);
+const commandDraft = ref("");
+const draftTitle = ref("");
+const selectedCommand = ref<QuickCommand>();
+const selectedVariant = ref(0);
+const sessionKey = () => `ppeelink-terminal:${props.monitor?.id}`;
+const connection = createTerminalConnection({
+  ticket: async (id, sessionId) => {
+    const { data } = await getMonitorSSHTicket(id, sessionId);
+    if (!data?.ticket) throw new Error("没有拿到终端票据");
+    return data.ticket;
+  },
+  event: handleTerminalEvent,
+});
+function handleTerminalEvent(event: TerminalEvent) {
+  if (event.type === "output") {
+    if (event.data) term?.write(event.data);
+    return;
+  }
+  if (event.type === "ready") {
+    connecting.value = false;
+    connected.value = true;
+    setStatus("已连接 · 任务保护已启用");
+    term?.reset();
+    fit?.fit();
+    if (term) connection.resize(term.cols, term.rows);
+    if (!mobile.value) term?.focus();
+    return;
+  }
+  connected.value = false;
+  connecting.value = ["connecting", "reconnecting"].includes(event.type);
+  if (event.type === "connecting") setStatus("正在连接会话…");
+  else if (event.type === "reconnecting")
+    setStatus("连接中断 · 正在恢复原会话…");
+  else if (event.type === "exit") {
+    setStatus(event.error || "会话已结束，请新建会话");
+    void refreshSessions(false);
+  } else if (event.type === "unauthorized")
+    setStatus(event.error || "终端权限已失效");
+  else if (event.type === "error") setStatus(event.error || "连接失败");
+  else setStatus("已离开 · 会话保留在服务器");
+}
 let observer: ResizeObserver | undefined;
-let connectionGeneration = 0;
+
 const connecting = ref(false);
 const controlPressed = ref(false);
 const showCommands = ref(false);
@@ -54,8 +113,7 @@ function updateViewport() {
   mobile.value = window.innerWidth <= 640;
 }
 function sendInput(data: string) {
-  if (socket?.readyState !== WebSocket.OPEN) return;
-  socket.send(JSON.stringify({ type: "input", data }));
+  connection.input(data);
 }
 function pressKey(data: string) {
   sendInput(data);
@@ -109,6 +167,7 @@ function viewOutput() {
 const categories = computed(() => {
   const map = new Map<string, QuickCommand[]>();
   for (const command of quickCommands) {
+    if (command.advanced && !showAdvanced.value) continue;
     const list = map.get(command.category) || [];
     list.push(command);
     map.set(command.category, list);
@@ -158,9 +217,7 @@ function createTerminal() {
     selectionAvailable.value = !!term?.hasSelection();
   });
   term.onResize(({ cols, rows }) => {
-    if (socket?.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ type: "resize", cols, rows }));
-    }
+    connection.resize(cols, rows);
   });
   fit.fit();
   observer = new ResizeObserver(() => {
@@ -175,73 +232,181 @@ function createTerminal() {
 }
 
 function disconnect() {
-  connectionGeneration++;
-  connecting.value = false;
+  loadGeneration++;
+  connection.leave();
   controlPressed.value = false;
-  if (socket) {
-    socket.onopen = null;
-    socket.onmessage = null;
-    socket.onerror = null;
-    socket.onclose = null;
-    socket.close();
-    socket = undefined;
-  }
   connected.value = false;
+  connecting.value = false;
   selectionAvailable.value = false;
-  setStatus("未连接");
 }
-
 async function connect() {
-  if (!props.monitor || !visible.value || connecting.value) return;
-  if (!props.monitor.proxyServerId) {
-    setStatus("该监控未关联自建服务器 agent");
+  if (
+    !props.monitor ||
+    !visible.value ||
+    connecting.value ||
+    !selectedSession.value
+  )
     return;
-  }
-  disconnect();
-  const generation = connectionGeneration;
-  connecting.value = true;
-  setStatus("正在连接…");
+  await connection.connect(props.monitor.id, selectedSession.value);
+}
+async function refreshSessions(initial = false) {
+  if (!props.monitor || !visible.value) return;
+  const id = props.monitor.id,
+    generation = ++loadGeneration;
+  sessionLoading.value = true;
   try {
-    const { data } = await getMonitorSSHTicket(props.monitor.id);
-    if (generation !== connectionGeneration || !visible.value) return;
-    const ticket = data?.ticket;
-    if (!ticket) throw new Error("没有拿到 WebSSH 票据");
-    const protocol = location.protocol === "https:" ? "wss" : "ws";
-    const url = `${protocol}://${location.host}/api/v1/monitors/ssh/ws?ticket=${encodeURIComponent(ticket)}`;
-    socket = new WebSocket(url);
-    socket.onopen = () => {
-      connecting.value = false;
-      connected.value = true;
-      setStatus("已连接");
-      fit?.fit();
-      if (term) {
-        socket?.send(
-          JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows })
-        );
+    const { data } = await getTerminalSessions(id);
+    if (
+      generation !== loadGeneration ||
+      !visible.value ||
+      props.monitor?.id !== id
+    )
+      return;
+    sessions.value = data.sessions || [];
+    sessionReady.value = data.ready;
+    sessionSupported.value = data.supported;
+    if (!data.ready) {
+      setStatus(data.error || "任务保护尚未就绪");
+      return;
+    }
+    const previous =
+      selectedSession.value || localStorage.getItem(sessionKey());
+    if (previous && sessions.value.some((s) => s.id === previous))
+      selectedSession.value = previous;
+    else if (previous) {
+      selectedSession.value = "";
+      setStatus("上次会话已结束，请选择其他会话或新建");
+    } else if (sessions.value.length)
+      selectedSession.value = sessions.value[0].id;
+    else if (initial) {
+      const created = await createTerminalSession(id, "终端会话");
+      if (
+        generation !== loadGeneration ||
+        !visible.value ||
+        props.monitor?.id !== id
+      )
+        return;
+      sessions.value = [created.data];
+      selectedSession.value = created.data.id;
+    }
+    if (selectedSession.value)
+      localStorage.setItem(sessionKey(), selectedSession.value);
+  } catch (error: any) {
+    if (generation === loadGeneration)
+      setStatus(error?.message || "无法加载会话");
+  } finally {
+    if (generation === loadGeneration) sessionLoading.value = false;
+  }
+}
+async function open() {
+  await refreshSessions(true);
+  if (visible.value) await connect();
+}
+async function selectSession() {
+  disconnect();
+  localStorage.setItem(sessionKey(), selectedSession.value);
+  await connect();
+}
+async function newSession() {
+  if (!props.monitor || sessionLoading.value) return;
+  const id = props.monitor.id,
+    generation = loadGeneration;
+  try {
+    const { value } = await ElMessageBox.prompt(
+      "为新的终端会话命名。现有会话继续运行。",
+      "新建会话",
+      {
+        inputValue: "终端会话",
+        confirmButtonText: "创建",
+        cancelButtonText: "取消",
       }
-      if (!mobile.value) term?.focus();
-    };
-    socket.onmessage = (event) => {
-      term?.write(typeof event.data === "string" ? event.data : "");
-    };
-    socket.onerror = () => setStatus("连接出错");
-    socket.onclose = () => {
-      connected.value = false;
-      connecting.value = false;
-      setStatus("已断开 · 重连将建立新会话");
-    };
-  } catch (err: any) {
-    if (generation !== connectionGeneration) return;
-    connecting.value = false;
-    setStatus(err?.message || "连接失败");
+    );
+    if (
+      generation !== loadGeneration ||
+      !visible.value ||
+      props.monitor?.id !== id
+    )
+      return;
+    sessionLoading.value = true;
+    const { data } = await createTerminalSession(id, value);
+    if (
+      generation !== loadGeneration ||
+      !visible.value ||
+      props.monitor?.id !== id
+    )
+      return;
+    sessionLoading.value = false;
+    disconnect();
+    sessions.value.push(data);
+    selectedSession.value = data.id;
+    localStorage.setItem(sessionKey(), data.id);
+    await connect();
+  } catch (error: any) {
+    if (error?.message) ElMessage.warning(error.message);
+  } finally {
+    if (generation === loadGeneration) sessionLoading.value = false;
+  }
+}
+async function terminateSession() {
+  if (!props.monitor || !selectedSession.value) return;
+  const id = props.monitor.id,
+    sessionId = selectedSession.value,
+    generation = loadGeneration;
+  try {
+    await ElMessageBox.confirm(
+      "这会结束此会话及其中正在运行的任务。关闭窗口可保留任务。",
+      "结束会话",
+      {
+        type: "warning",
+        confirmButtonText: "结束任务",
+        cancelButtonText: "取消",
+      }
+    );
+    if (
+      generation !== loadGeneration ||
+      !visible.value ||
+      props.monitor?.id !== id ||
+      selectedSession.value !== sessionId
+    )
+      return;
+    await endTerminalSession(id, sessionId);
+    if (
+      generation !== loadGeneration ||
+      !visible.value ||
+      props.monitor?.id !== id ||
+      selectedSession.value !== sessionId
+    )
+      return;
+    disconnect();
+    selectedSession.value = "";
+    setStatus("会话已结束");
+    await refreshSessions(false);
+  } catch (error: any) {
+    if (error?.message) ElMessage.warning(error.message);
+  }
+}
+async function enableProtection() {
+  if (!props.monitor || preparing.value) return;
+  const id = props.monitor.id;
+  preparing.value = true;
+  setStatus("正在准备任务保护…");
+  try {
+    await prepareTerminal(id);
+    if (visible.value && props.monitor?.id === id) await open();
+  } catch (error: any) {
+    setStatus(error?.message || "启用失败，请稍后重试");
+  } finally {
+    preparing.value = false;
   }
 }
 
-function open() {
-  connect();
-}
-
-watch(visible, async (value) => {
+watch([visible, () => props.monitor?.id], async ([value]) => {
+  loadGeneration++;
+  disconnect();
+  selectedSession.value = "";
+  sessions.value = [];
+  sessionReady.value = false;
+  sessionSupported.value = false;
   if (value) {
     updateViewport();
     window.visualViewport?.addEventListener("resize", updateViewport);
@@ -272,31 +437,39 @@ onBeforeUnmount(() => {
   term?.dispose();
 });
 
-function sendCommand(command: string) {
-  if (!socket || socket.readyState !== WebSocket.OPEN) {
-    ElMessage.warning("请先连接终端，再执行指令");
-    return;
-  }
-  socket.send(JSON.stringify({ type: "input", data: `${command}\r` }));
-  term?.focus();
+function runCommand(command: QuickCommand) {
+  selectedCommand.value = command;
+  selectedVariant.value = 0;
+  draftTitle.value = command.name;
+  commandDraft.value = command.command;
 }
-
-async function runCommand(command: QuickCommand) {
-  if (!props.monitor) return;
-  try {
-    await ElMessageBox.confirm(
-      `将在「${props.monitor.name}」执行：\n${command.name}\n\n${command.command}`,
-      command.dangerous ? "高风险脚本" : "执行脚本",
-      {
-        type: command.dangerous ? "warning" : "info",
-        confirmButtonText: "执行",
-        cancelButtonText: "取消",
-      }
-    );
-  } catch {
+function changeVariant() {
+  const variant = selectedCommand.value?.variants?.[selectedVariant.value];
+  if (variant) commandDraft.value = variant.command;
+}
+async function executeDraft() {
+  if (!connected.value || !commandDraft.value.trim()) {
+    ElMessage.warning("请先连接会话");
     return;
   }
-  sendCommand(command.command);
+  const command = commandDraft.value;
+  if (selectedCommand.value?.dangerous || selectedCommand.value?.advanced) {
+    try {
+      await ElMessageBox.confirm(
+        `将在「${props.monitor?.name}」执行：\n${command}`,
+        "执行指令",
+        { type: "warning", confirmButtonText: "执行", cancelButtonText: "取消" }
+      );
+    } catch {
+      return;
+    }
+  }
+  if (!connection.input(command + "\r")) {
+    ElMessage.warning("连接已断开，指令未发送");
+    return;
+  }
+  commandDraft.value = "";
+  term?.focus();
 }
 </script>
 <template>
@@ -318,14 +491,84 @@ async function runCommand(command: QuickCommand) {
           <span class="dot" :class="{ 'is-on': connected }"></span>
           <span class="status">{{ status }}</span>
           <UiTag :tone="connected ? 'ok' : 'neutral'">{{
-            connected ? "在线" : "未连接"
+            connected ? "任务保护已启用" : "未连接"
           }}</UiTag>
           <span class="spacer"></span>
-          <UiButton :disabled="connecting" @click="connect">{{
-            connecting ? "连接中" : "重连"
-          }}</UiButton>
+          <UiButton
+            :disabled="connecting || connected || !selectedSession"
+            @click="connect"
+            >{{ connecting ? "连接中" : "重连" }}</UiButton
+          >
+        </div>
+        <div class="session-bar">
+          <select
+            v-model="selectedSession"
+            aria-label="终端会话"
+            :disabled="sessionLoading || !sessionReady"
+            @change="selectSession"
+          >
+            <option value="" disabled>选择会话</option>
+            <option
+              v-for="session in sessions"
+              :key="session.id"
+              :value="session.id"
+            >
+              {{ session.name }} ·
+              {{ session.attached ? "已连接" : "后台保留" }}
+            </option>
+          </select>
+          <UiButton
+            :disabled="sessionLoading || !sessionReady"
+            @click="newSession"
+            >新建</UiButton
+          >
+          <UiButton :loading="sessionLoading" @click="refreshSessions(false)"
+            >会话列表</UiButton
+          >
+          <UiButton :disabled="!selectedSession" @click="terminateSession"
+            >结束会话</UiButton
+          >
+          <UiButton
+            v-if="sessionSupported && !sessionReady"
+            :loading="preparing"
+            @click="enableProtection"
+            >启用任务保护</UiButton
+          >
         </div>
         <div ref="terminalHost" class="terminal"></div>
+        <div v-if="commandDraft" class="command-draft">
+          <label for="terminal-command-draft"
+            >{{ draftTitle }} · 确认终端已回到命令行后执行</label
+          >
+          <select
+            v-if="selectedCommand?.variants"
+            v-model="selectedVariant"
+            aria-label="指令方式"
+            @change="changeVariant"
+          >
+            <option
+              v-for="(variant, index) in selectedCommand.variants"
+              :key="variant.label"
+              :value="index"
+            >
+              {{ variant.label }}
+            </option>
+          </select>
+          <textarea
+            id="terminal-command-draft"
+            v-model="commandDraft"
+            rows="3"
+            spellcheck="false"
+          ></textarea>
+          <div>
+            <UiButton
+              variant="primary"
+              :disabled="!connected"
+              @click="executeDraft"
+              >发送并执行</UiButton
+            ><UiButton @click="commandDraft = ''">取消</UiButton>
+          </div>
+        </div>
         <div class="terminal-keys" role="group" aria-label="终端快捷键">
           <button
             type="button"
@@ -371,19 +614,23 @@ async function runCommand(command: QuickCommand) {
           </button>
         </div>
         <p class="terminal-note">
-          终端会直接操作服务器。脚本来自
-          <a
-            href="https://github.com/Xioaruan912/Xcript"
-            target="_blank"
-            rel="noreferrer"
-            >Xioaruan912/Xcript</a
-          >，交互式脚本可以直接在终端里输入。
+          关闭窗口会保留会话。任务保护启用后，断线可恢复原会话；服务器重启会结束运行任务。
         </p>
+        <UiButton @click="visible = false">离开并保留会话</UiButton>
       </section>
       <aside class="command-pane" :class="{ 'is-expanded': showCommands }">
         <header>
           <strong>快速指令</strong>
-          <small>点击后在终端执行</small>
+          <small>先填入指令，确认后执行</small>
+          <p v-if="showAdvanced">
+            扩展脚本会修改服务器；入口已固定并校验，软件包及后续下载取决于上游。
+          </p>
+          <label class="advanced-toggle"
+            ><input
+              v-model="showAdvanced"
+              type="checkbox"
+            />扩展工具与配置</label
+          >
         </header>
         <div class="command-scroll">
           <section v-for="[category, list] in categories" :key="category">
@@ -419,6 +666,51 @@ async function runCommand(command: QuickCommand) {
   </UiDialog>
 </template>
 <style scoped>
+.session-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  background: #202329;
+}
+.session-bar select {
+  flex: 1;
+  min-width: 120px;
+  max-width: 100%;
+  background: #17191d;
+  color: #e2e5eb;
+  border: 1px solid #414752;
+  border-radius: 6px;
+  padding: 8px;
+}
+.command-draft {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  color: #e2e5eb;
+  background: #202329;
+  font-size: 12px;
+}
+.command-draft textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #17191d;
+  color: #e2e5eb;
+  font: 12px/1.6 monospace;
+  padding: 8px;
+  border: 1px solid #414752;
+}
+.command-draft > div {
+  display: flex;
+  gap: 8px;
+}
+.advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
 .ssh-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 276px;

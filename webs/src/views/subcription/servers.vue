@@ -443,15 +443,11 @@ const usageRatio = (a: ProxyAccount) =>
               <dd
                 class="mono"
                 :title="
-                  s.agentHash
-                    ? `程序摘要 ${s.agentHash}`
-                    : s.agentVersion || '尚未上报版本'
+                  s.agentVersion ? `Agent ${s.agentVersion}` : '尚未上报版本'
                 "
               >
                 {{
-                  s.agentHash
-                    ? s.agentHash.slice(0, 8)
-                    : s.agentVersion || "未上报"
+                  s.agentVersion || "未上报"
                 }}
               </dd>
             </div>

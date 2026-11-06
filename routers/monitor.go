@@ -24,5 +24,9 @@ func Monitors(r *gin.Engine) {
 		g.POST("/reset-token", api.MonitorResetToken)
 		g.POST("/update-agent", api.MonitorUpdateAgent)
 		g.POST("/ssh/ticket", api.MonitorSSHTicket)
+		g.GET("/ssh/sessions", api.MonitorTerminalSessions)
+		g.POST("/ssh/sessions", api.MonitorTerminalSessions)
+		g.DELETE("/ssh/sessions", api.MonitorTerminalSessions)
+		g.POST("/ssh/prepare", api.MonitorTerminalPrepare)
 	}
 }

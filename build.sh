@@ -9,5 +9,6 @@ pnpm install --frozen-lockfile
 pnpm build
 
 cd "$ROOT_DIR"
+# Agent binaries are built independently on branch agent; this builds only the panel.
 GOOS=linux GOARCH=amd64 go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink_linux_amd64 .
 GOOS=linux GOARCH=arm64 go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink_linux_arm64 .

@@ -3,29 +3,23 @@ package node
 import (
 	"context"
 	"net/http"
+	"os"
 	"testing"
 	"time"
 )
 
+// External smoke checks are opt-in; deterministic evidence tests use fake transports.
 func TestCheckFunctionsDirect(t *testing.T) {
-	c := &http.Client{Timeout: 15 * time.Second}
-	ctx := context.Background()
-	tests := []struct {
-		name string
-		chk  func(ctx context.Context, c *http.Client) (bool, string)
-	}{
-		{"OpenAI", checkOpenAI},
-		{"Claude", checkClaude},
-		{"Gemini", checkGemini},
-		{"Netflix", checkNetflix},
-		{"YouTube", checkYouTube},
-		{"Disney", checkDisney},
-		{"Google", checkGoogle},
-		{"GitHub", checkGitHub},
-		{"Telegram", checkTelegram},
+	if os.Getenv("PPEELINK_NETWORK_TESTS") != "1" {
+		t.Skip("set PPEELINK_NETWORK_TESTS=1 for external smoke checks")
 	}
-	for _, tt := range tests {
-		ok, note := tt.chk(ctx, c)
-		t.Logf("%-8s ok=%v note=%s", tt.name, ok, note)
+	c := &http.Client{Timeout: 8 * time.Second}
+	for _, s := range ListUnlockServices() {
+		t.Run(s.Key, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+			defer cancel()
+			r := probeUnlock(ctx, c, s)
+			t.Logf("%s: %s/%s %s", s.Name, r.Status, r.Evidence, r.Note)
+		})
 	}
 }

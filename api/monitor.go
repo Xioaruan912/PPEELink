@@ -3,15 +3,12 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
 
 	"ppeelink/agentversion"
 	"ppeelink/models"
-	"ppeelink/xraycore"
 
 	"github.com/gin-gonic/gin"
 )
@@ -134,16 +131,18 @@ func MonitorList(c *gin.Context) {
 		// Human release versions determine availability; binary digests remain
 		// the integrity check when an explicit update is acknowledged.
 		raw, _ := item["version"].(string)
-		cmp, numbered := agentversion.Compare(raw, agentversion.Current)
-		item["latestAgentVersion"] = agentversion.Current
+		targetVersion := currentAgentReleaseVersion()
+		cmp, targetKnown := agentversion.Compare(raw, targetVersion)
+		_, _, numbered := agentversion.Parse(raw)
+		item["latestAgentVersion"] = targetVersion
 		item["agentVersion"] = ""
 		if numbered {
 			major, revision, _ := agentversion.Parse(raw)
 			item["agentVersion"] = fmt.Sprintf("%d.%d", major, revision)
 		}
-		item["agentUpdateAvailable"] = (numbered && cmp < 0) || (!numbered && (raw != "" || m.AgentHash != ""))
+		item["agentUpdateAvailable"] = targetVersion != "" && ((targetKnown && cmp < 0) || (!numbered && (raw != "" || m.AgentHash != "")))
 		pending, _ := item["agentUpdateRequested"].(bool)
-		item["agentUpdateConfirmed"] = numbered && cmp >= 0 && !pending
+		item["agentUpdateConfirmed"] = numbered && targetKnown && cmp >= 0 && !pending
 		if monitorOnline(m, now) {
 			online++
 		}
@@ -151,7 +150,7 @@ func MonitorList(c *gin.Context) {
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"items":        items,
-		"agentVersion": agentversion.Current,
+		"agentVersion": currentAgentReleaseVersion(),
 		"summary":      gin.H{"total": len(monitors), "online": online, "offline": len(monitors) - online},
 	}, "msg": "服务器列表"})
 }
@@ -348,10 +347,11 @@ func MonitorConfig(c *gin.Context) {
 	}
 	now := time.Now()
 	models.DB.Model(monitor).Update("last_seen_at", now)
+	targetHash := agentArtifactHash(monitor.Arch)
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"monitor":         gin.H{"id": monitor.ID, "name": monitor.Name},
 		"intervalSeconds": monitorInterval, "enabled": monitor.Enabled,
-		"agentHash": xraycore.ExecutableHash(), "agentUpdate": monitor.AgentUpdateRequested,
+		"agentHash": targetHash, "agentUpdate": monitor.AgentUpdateRequested && targetHash != "",
 	}, "msg": "监控配置"})
 }
 
@@ -394,7 +394,7 @@ func MonitorReport(c *gin.Context) {
 	}
 	updates["agent_hash"] = report.AgentHash
 	updates["agent_update_error"] = report.UpdateError
-	if monitor.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == xraycore.ExecutableHash() && report.UpdateError == "" {
+	if monitor.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == agentArtifactHash(monitor.Arch) && report.UpdateError == "" {
 		updates["agent_update_requested"] = false
 	}
 	if err := models.DB.Model(monitor).Updates(updates).Error; err != nil {
@@ -404,22 +404,12 @@ func MonitorReport(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "msg": "ok"})
 }
 
-// MonitorBinary 下发与面板同架构的监控程序。
+// MonitorBinary preserves the legacy download URL for the standalone Agent.
 func MonitorBinary(c *gin.Context) {
 	if _, ok := currentMonitor(c); !ok {
 		return
 	}
-	if arch := c.Query("arch"); arch != "" && arch != runtime.GOARCH {
-		c.JSON(400, gin.H{"code": "40000", "msg": fmt.Sprintf("面板程序为 %s 架构，无法下发 %s 版本", runtime.GOARCH, arch)})
-		return
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "找不到面板程序"})
-		return
-	}
-	c.Header("Content-Disposition", "attachment; filename=ppeelink-monitor")
-	c.File(exe)
+	serveAgentArtifact(c, "ppeelink-monitor")
 }
 
 // MonitorInstallScript 下发一行式安装脚本。

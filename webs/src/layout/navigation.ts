@@ -28,7 +28,7 @@ export interface NavigationItem {
 // Per-route icon and one-line hint for menus; routes themselves come from the server.
 const META: Record<string, { icon: Component; hint?: string; label?: string }> =
   {
-    "/dashboard": { icon: IconHouse, label: "总览" },
+    "/dashboard": { icon: IconHouse, label: "网络总览" },
     "/monitor/index": {
       icon: IconChartLine,
       label: "监控与 Agent",
@@ -56,7 +56,7 @@ const META: Record<string, { icon: Component; hint?: string; label?: string }> =
       hint: "双向测速与同一落地的中转对比",
     },
     "/subcription": { icon: IconSubs },
-    "/subcription/subs": { icon: IconLink, hint: "生成与分发订阅链接" },
+    "/subcription/subs": { icon: IconLink, label: "订阅管理", hint: "复制订阅链接或导入客户端" },
     "/subcription/diagnostic": {
       icon: IconGauge,
       hint: "定位 Reality / HY2 的连接故障",
@@ -78,7 +78,7 @@ const META: Record<string, { icon: Component; hint?: string; label?: string }> =
     "/template/builder": { icon: IconSliders, hint: "勾选规则、拖拽分组" },
     "/template/rules": { icon: IconBooks, hint: "规则源与规则目录" },
     "/my": { icon: IconUserCircle },
-    "/my/subscriptions": { icon: IconLink, hint: "分配给我的订阅与导入链接" },
+    "/my/subscriptions": { icon: IconLink, label: "订阅管理", hint: "分配给我的订阅与导入链接" },
     "/system": { icon: IconGear },
     "/system/users": { icon: IconUsers, hint: "账户、角色与订阅分配" },
     "/system/settings": { icon: IconGear, hint: "备份、API 令牌、审计与短链" },
@@ -146,6 +146,7 @@ const GROUPS = [
     label: "网络诊断",
     icon: IconGauge,
     paths: [
+      "/dashboard",
       "/test/index",
       "/network/traceroute",
       "/network/throughput",
@@ -162,7 +163,8 @@ export function organizeNavigation(items: NavigationItem[]): NavigationItem[] {
   const leaves = flattenNavigation(items);
   const used = new Set<string>();
   const result: NavigationItem[] = [];
-  const home = leaves.find((item) => item.path === "/dashboard");
+  const home = leaves.find((item) => item.path === "/subcription/subs")
+    || leaves.find((item) => item.path === "/my/subscriptions");
   if (home) {
     result.push(home);
     used.add(home.path);

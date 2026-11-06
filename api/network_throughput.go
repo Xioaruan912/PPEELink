@@ -21,6 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"ppeelink/agentversion"
 	"ppeelink/models"
 	"ppeelink/throughputcore"
 	"ppeelink/tracecore"
@@ -116,13 +117,14 @@ func NetworkThroughputSources(c *gin.Context) {
 		fresh := !cap.SeenAt.IsZero() && now.Sub(cap.SeenAt) < 2*time.Minute
 		reason := cap.Error
 		if !fresh {
-			reason = "请更新 Agent 并等待测速能力上报"
+			reason = "等待 Agent 上报测速能力，请检查服务器连接"
 		} else if !cap.Available || !cap.AuthSupported {
 			if reason == "" {
 				reason = "请准备支持安全认证的 iperf3 3.22 或更新版本"
 			}
 		}
-		items = append(items, gin.H{"id": s.ID, "name": s.Name, "publicHost": s.PublicHost, "available": fresh && cap.Available && cap.AuthSupported, "version": cap.Version, "path": cap.Path, "error": reason, "seenAt": cap.SeenAt, "prepareRequested": cap.PrepareRequested, "bidirSupported": cap.BidirSupported})
+		comparison, known := agentversion.Compare(s.AgentVersion, currentAgentReleaseVersion())
+		items = append(items, gin.H{"agentVersion": s.AgentVersion, "agentOutdated": known && comparison < 0, "preparing": fresh && cap.Preparing, "id": s.ID, "name": s.Name, "publicHost": s.PublicHost, "available": fresh && cap.Available && cap.AuthSupported, "version": cap.Version, "path": cap.Path, "error": reason, "seenAt": cap.SeenAt, "prepareRequested": cap.PrepareRequested, "bidirSupported": cap.BidirSupported})
 	}
 	throughputOK(c, items)
 }
@@ -421,9 +423,9 @@ func AgentThroughputCapabilities(c *gin.Context) {
 	}
 	throughputMu.Lock()
 	defer throughputMu.Unlock()
-	cap := models.ThroughputCapability{ServerID: server.ID, Path: req.Path, Available: req.Available, AuthSupported: req.AuthSupported, BidirSupported: req.BidirSupported, JSONStreamSupported: req.JSONStreamSupported, Version: req.Version, Error: req.Error, SeenAt: time.Now()}
+	cap := models.ThroughputCapability{ServerID: server.ID, Preparing: req.Preparing, Path: req.Path, Available: req.Available, AuthSupported: req.AuthSupported, BidirSupported: req.BidirSupported, JSONStreamSupported: req.JSONStreamSupported, Version: req.Version, Error: req.Error, SeenAt: time.Now()}
 	// Preserve an outstanding preparation request; role=prepare completion clears it.
-	if err := models.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}}, DoUpdates: clause.AssignmentColumns([]string{"path", "available", "auth_supported", "bidir_supported", "json_stream_supported", "version", "error", "seen_at"})}).Create(&cap).Error; err != nil {
+	if err := models.DB.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "server_id"}}, DoUpdates: clause.AssignmentColumns([]string{"path", "available", "auth_supported", "preparing", "bidir_supported", "json_stream_supported", "version", "error", "seen_at"})}).Create(&cap).Error; err != nil {
 		throughputError(c, 500, "保存能力失败")
 		return
 	}

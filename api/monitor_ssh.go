@@ -21,6 +21,8 @@ import (
 
 type monitorSSHTicket struct {
 	MonitorID uint
+	Owner     int
+	SessionID string
 	ExpiresAt time.Time
 }
 
@@ -104,7 +106,8 @@ func MonitorSSHSave(c *gin.Context) {
 // MonitorSSHTicket 管理端：签发一次性 WebSSH 票据，避免 JWT 出现在 WebSocket URL。
 func MonitorSSHTicket(c *gin.Context) {
 	var req struct {
-		ID uint `json:"id"`
+		ID        uint   `json:"id"`
+		SessionID string `json:"sessionId"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.ID == 0 {
 		c.JSON(400, gin.H{"code": "40000", "msg": "服务器 id 无效"})
@@ -119,13 +122,27 @@ func MonitorSSHTicket(c *gin.Context) {
 		c.JSON(409, gin.H{"code": "40900", "msg": "agent 未连接，请等待心跳恢复后重试"})
 		return
 	}
+	owner, err := terminalOwner(c)
+	if err != nil {
+		opsError(c, 403, err.Error())
+		return
+	}
+	if _, err := terminalOperation(*monitor.ProxyServerID, owner, "check", req.SessionID, ""); err != nil {
+		status := 409
+		if strings.Contains(err.Error(), "会话已结束") {
+			status = 410
+		}
+		opsError(c, status, err.Error())
+		return
+	}
+
 	raw := make([]byte, 24)
 	if _, err := rand.Read(raw); err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "生成票据失败"})
 		return
 	}
 	ticket := hex.EncodeToString(raw)
-	monitorSSHTickets.Store(ticket, monitorSSHTicket{MonitorID: monitor.ID, ExpiresAt: time.Now().Add(60 * time.Second)})
+	monitorSSHTickets.Store(ticket, monitorSSHTicket{MonitorID: monitor.ID, Owner: owner, SessionID: req.SessionID, ExpiresAt: time.Now().Add(60 * time.Second)})
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"ticket": ticket, "expiresIn": 60,
 	}, "msg": "WebSSH 票据"})

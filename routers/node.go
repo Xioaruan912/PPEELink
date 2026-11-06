@@ -22,6 +22,7 @@ func Nodes(r *gin.Engine) {
 		NodesGroup.GET("/map", api.NodeMap)
 		NodesGroup.GET("/countries", api.NodeCountries)
 		NodesGroup.POST("/unlock", api.NodeUnlock)
+		NodesGroup.GET("/unlock/services", api.NodeUnlockServices)
 		NodesGroup.POST("/diagnose", api.MonitorOperationsAdmin, api.NodeDiagnostic)
 		NodesGroup.POST("/egress", api.NodeEgress)
 		NodesGroup.GET("/egress-targets", api.EgressTargetList)

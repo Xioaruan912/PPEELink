@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// Both roles install the panel executable. Keep download, credentials, atomic
+// Both roles install the independent Agent artifact. Keep credentials, atomic
 // replacement and service restart in one template so upgrades cannot drift.
 func agentInstallScript(panel, token, role string) string {
 	auth, path := "Agent", "/agent/binary"

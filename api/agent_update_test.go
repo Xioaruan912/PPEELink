@@ -9,6 +9,7 @@ import (
 
 func TestAgentUpdateSpecAndAcknowledgement(t *testing.T) {
 	setupTestDB(t)
+	expectedHash := setupAgentRelease(t)
 	if err := models.DB.AutoMigrate(&models.ProxyServer{}, &models.ProxyInbound{}, &models.ProxyAccount{}, &models.ProxyTraffic{}, &models.Monitor{}, &models.MonitorMetric{}); err != nil {
 		t.Fatal(err)
 	}
@@ -27,13 +28,20 @@ func TestAgentUpdateSpecAndAcknowledgement(t *testing.T) {
 		t.Fatal(err)
 	}
 	models.DB.First(&server, server.ID)
+	if !server.AgentUpdateRequested {
+		t.Fatal("panel binary hash incorrectly acknowledged Agent update")
+	}
+	if err := ApplyServerReport(server, xraycore.Report{AgentHash: expectedHash}); err != nil {
+		t.Fatal(err)
+	}
+	models.DB.First(&server, server.ID)
 	if server.AgentUpdateRequested {
 		t.Fatal("matching agent hash must clear update request")
 	}
 	if server.AgentRevision != 1 {
 		t.Fatalf("successful update must increment revision, got %d", server.AgentRevision)
 	}
-	if err := ApplyServerReport(server, xraycore.Report{AgentHash: xraycore.ExecutableHash()}); err != nil {
+	if err := ApplyServerReport(server, xraycore.Report{AgentHash: expectedHash}); err != nil {
 		t.Fatal(err)
 	}
 	models.DB.First(&server, server.ID)

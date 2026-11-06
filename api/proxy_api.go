@@ -5,7 +5,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -28,8 +27,7 @@ type serverView struct {
 	TodayDown int64                 `json:"todayDown"`
 	Users     int                   `json:"users"`
 	Quota     serverQuotaState      `json:"quota"`
-	// AgentHash 是统一 Agent 实际运行程序的上报摘要，前端据此显示真实版本，
-	// 不再依赖已废弃的语义化版本号。
+	// AgentHash 用于校验程序完整性；展示版本使用实际上报的 AgentVersion。
 	AgentHash string `json:"agentHash"`
 }
 
@@ -204,6 +202,12 @@ func ProxyServerUpdateAgent(c *gin.Context) {
 		return
 	}
 	requested := c.Query("cancel") != "1"
+	if requested {
+		if _, err := loadAgentArtifact(server.Arch); err != nil {
+			c.JSON(503, gin.H{"code": "50300", "msg": err.Error()})
+			return
+		}
+	}
 	if err := models.DB.Model(&server).Update("agent_update_requested", requested).Error; err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "更新请求保存失败"})
 		return
@@ -661,7 +665,17 @@ func AgentSpec(c *gin.Context) {
 	if !ok {
 		return
 	}
-	spec, err := BuildServerSpec(*s)
+	selected := *s
+	if arch := c.Query("arch"); arch != "" {
+		switch arch {
+		case "amd64", "arm64", "arm":
+			selected.Arch = arch
+		default:
+			c.JSON(400, gin.H{"code": "40000", "msg": "不支持的 Agent 架构"})
+			return
+		}
+	}
+	spec, err := BuildServerSpec(selected)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "生成配置失败"})
 		return
@@ -701,22 +715,12 @@ func AgentInstallScript(c *gin.Context) {
 	c.Data(200, "text/x-shellscript; charset=utf-8", []byte(script))
 }
 
-// AgentBinary 下发面板自身的可执行文件（同一程序的 agent 子命令）。
+// AgentBinary serves the separately built Agent, never the panel executable.
 func AgentBinary(c *gin.Context) {
 	if _, ok := agentServer(c); !ok {
 		return
 	}
-	if arch := c.Query("arch"); arch != runtime.GOARCH {
-		c.JSON(400, gin.H{"code": "40000", "msg": fmt.Sprintf("面板程序为 %s 架构，无法下发 %s 版本", runtime.GOARCH, arch)})
-		return
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "找不到面板程序"})
-		return
-	}
-	c.Header("Content-Disposition", "attachment; filename=ppeelink-agent")
-	c.File(exe)
+	serveAgentArtifact(c, "ppeelink-agent")
 }
 
 // ---- 个人自建节点订阅（公开，按账户令牌） -----------------------------------------
