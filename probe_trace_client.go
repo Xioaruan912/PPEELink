@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"time"
 
-	"ppeelink/tracecore"
+	"github.com/Xioaruan912/PPEELink/tracecore"
 )
 
 type probeTraceJob struct {

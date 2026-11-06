@@ -7,8 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"ppeelink/monitorcore"
-	"ppeelink/relaycore"
+	"github.com/Xioaruan912/PPEELink/monitorcore"
+	"github.com/Xioaruan912/PPEELink/relaycore"
 )
 
 // DefaultVersion 默认安装的 xray-core 版本（官方 release，下载后校验 SHA2-256）。

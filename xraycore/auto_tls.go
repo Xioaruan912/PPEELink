@@ -13,7 +13,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
-	"ppeelink/certpin"
+	"github.com/Xioaruan912/PPEELink/certpin"
 	"regexp"
 	"time"
 )

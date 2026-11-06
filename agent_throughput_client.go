@@ -5,9 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/Xioaruan912/PPEELink/throughputcore"
 	"io"
 	"net/http"
-	"ppeelink/throughputcore"
 	"sync"
 	"time"
 )
@@ -46,6 +46,12 @@ func (r *throughputRunning) hasPending() bool {
 // Poll responses are desired state: disappearance cancels an active process.
 // Completed IDs remain acknowledged until removed, avoiding replay on slow polls.
 func runAgentThroughputLoop(ctx context.Context, client *http.Client, panel, token string) {
+	throughputcore.CleanupStaleAuthDirs(time.Now())
+	prepareInitialThroughput(ctx, client, panel, token, throughputcore.Inspect(ctx), throughputcore.Prepare)
+	runAgentThroughputJobs(ctx, client, panel, token, throughputcore.Run)
+}
+
+func runAgentThroughputJobs(ctx context.Context, client *http.Client, panel, token string, run func(context.Context, throughputcore.Job, func(throughputcore.Report))) {
 	active := map[string]*throughputRunning{}
 	finished := map[string]bool{}
 	defer func() {
@@ -56,9 +62,6 @@ func runAgentThroughputLoop(ctx context.Context, client *http.Client, panel, tok
 			<-r.done
 		}
 	}()
-	throughputcore.CleanupStaleAuthDirs(time.Now())
-	cap := throughputcore.Inspect(ctx)
-	_ = postAgentThroughput(ctx, client, panel, token, "capabilities", cap)
 	lastCapability := time.Now()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -119,7 +122,7 @@ func runAgentThroughputLoop(ctx context.Context, client *http.Client, panel, tok
 						report(throughputcore.Report{ID: j.ID, Role: j.Role, Status: status, Error: c.Error})
 						return
 					}
-					throughputcore.Run(jobCtx, j, report)
+					run(jobCtx, j, report)
 				}(j, r)
 			}
 		}
@@ -136,6 +139,16 @@ func runAgentThroughputLoop(ctx context.Context, client *http.Client, panel, tok
 		}
 	}
 }
+func prepareInitialThroughput(ctx context.Context, client *http.Client, panel, token string, cap throughputcore.Capability, prepare func(context.Context) throughputcore.Capability) {
+	if !cap.AuthSupported {
+		cap.Error = "正在自动准备测速工具，无需安装编译环境…"
+		cap.Preparing = true
+		_ = postAgentThroughput(ctx, client, panel, token, "capabilities", cap)
+		cap = prepare(ctx)
+	}
+	_ = postAgentThroughput(ctx, client, panel, token, "capabilities", cap)
+}
+
 func fetchAgentThroughputJobs(ctx context.Context, client *http.Client, panel, token string) ([]throughputcore.Job, error) {
 	reqCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()

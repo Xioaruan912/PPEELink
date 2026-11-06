@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"github.com/Xioaruan912/PPEELink/throughputcore"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"ppeelink/throughputcore"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,18 +43,6 @@ func TestThroughputReportRetriesTransientFailure(t *testing.T) {
 	}
 }
 func TestThroughputFinishedReportPersistsUntilAcknowledged(t *testing.T) {
-	dir := t.TempDir()
-	script := `#!/bin/sh
-case "$1" in
- --version) echo 'iperf 3.22';exit 0;;
- --help) echo '--rsa-private-key-path --rsa-public-key-path --authorized-users-path --bidir --json-stream';exit 0;;
-esac
-echo '{"event":"end","data":{"sum_received":{"bits_per_second":98000000,"bytes":100}}}'
-`
-	if e := os.WriteFile(filepath.Join(dir, "iperf3"), []byte(script), 0700); e != nil {
-		t.Fatal(e)
-	}
-	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	var completed, running atomic.Int32
 	received := make(chan struct{}, 1)
 	j := throughputcore.Job{ID: 9, Role: "client", Host: "127.0.0.1", Port: 35219, Protocol: "tcp", Direction: "forward", Family: 4, Duration: 5, Streams: 1, RateMbps: 100, Username: "runner", Password: "secret", PublicKey: "test", ExpiresAt: time.Now().Add(time.Minute)}
@@ -85,7 +73,13 @@ echo '{"event":"end","data":{"sum_received":{"bits_per_second":98000000,"bytes":
 	defer s.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { runAgentThroughputLoop(ctx, s.Client(), s.URL, "secret"); close(done) }()
+	go func() {
+		runAgentThroughputJobs(ctx, s.Client(), s.URL, "secret", func(ctx context.Context, j throughputcore.Job, report func(throughputcore.Report)) {
+			report(throughputcore.Report{ID: j.ID, Role: j.Role, Status: "running"})
+			report(throughputcore.Report{ID: j.ID, Role: j.Role, Status: "completed", Result: &throughputcore.Result{Forward: &throughputcore.DirectionResult{BitsPerSecond: 98000000, Bytes: 100}}})
+		})
+		close(done)
+	}()
 	select {
 	case <-received:
 	case <-time.After(6 * time.Second):
@@ -97,5 +91,32 @@ echo '{"event":"end","data":{"sum_received":{"bits_per_second":98000000,"bytes":
 	<-done
 	if running.Load() != 1 {
 		t.Fatalf("finished job executed %d times", running.Load())
+	}
+}
+
+func TestThroughputAutomaticallyPreparesMissingToolOnce(t *testing.T) {
+	for _, ready := range []bool{false, true} {
+		t.Run(fmt.Sprint(ready), func(t *testing.T) {
+			reports := []throughputcore.Capability{}
+			s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				var c throughputcore.Capability
+				json.NewDecoder(r.Body).Decode(&c)
+				reports = append(reports, c)
+				w.WriteHeader(200)
+			}))
+			defer s.Close()
+			calls := 0
+			prepareInitialThroughput(context.Background(), s.Client(), s.URL, "secret", throughputcore.Capability{AuthSupported: ready}, func(context.Context) throughputcore.Capability {
+				calls++
+				return throughputcore.Capability{Available: true, AuthSupported: true, Version: "3.22"}
+			})
+			if ready {
+				if calls != 0 || len(reports) != 1 {
+					t.Fatal("ready tool prepared again")
+				}
+			} else if calls != 1 || len(reports) != 2 || !reports[0].Preparing || reports[1].Preparing || !strings.Contains(reports[0].Error, "自动准备") || !reports[1].AuthSupported {
+				t.Fatalf("missing preparation: calls=%d reports=%+v", calls, reports)
+			}
+		})
 	}
 }

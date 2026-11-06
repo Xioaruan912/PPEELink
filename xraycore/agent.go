@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"ppeelink/monitorcore"
-	"ppeelink/relaycore"
+	"github.com/Xioaruan912/PPEELink/monitorcore"
+	"github.com/Xioaruan912/PPEELink/relaycore"
 )
 
 // Source 期望状态的来源与回报去向：面板本机直接读写数据库，远程 agent 走 HTTPS。
@@ -299,7 +299,7 @@ func (h *HTTPSource) do(ctx context.Context, method, path string, body any, out 
 
 func (h *HTTPSource) Spec(ctx context.Context) (Spec, error) {
 	var spec Spec
-	err := h.do(ctx, http.MethodGet, "/api/v1/agent/spec", nil, &spec)
+	err := h.do(ctx, http.MethodGet, "/api/v1/agent/spec?arch="+runtime.GOARCH, nil, &spec)
 	return spec, err
 }
 

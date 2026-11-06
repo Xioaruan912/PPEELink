@@ -17,7 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"ppeelink/certpin"
+	"github.com/Xioaruan912/PPEELink/certpin"
 	"strconv"
 	"strings"
 	"sync/atomic"

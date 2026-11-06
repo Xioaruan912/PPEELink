@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"ppeelink/tracecore"
+	"github.com/Xioaruan912/PPEELink/tracecore"
 )
 
 type agentTraceJob struct {
