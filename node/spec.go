@@ -126,6 +126,11 @@ func ParseOutbound(link string) (Outbound, error) {
 		v, err = DecodeTuicURL(link)
 		p.Spec = v
 		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
+	case "mierus":
+		var v Mieru
+		v, err = DecodeMieruURL(link)
+		p.Type, p.Spec = "mieru", v
+		p.Name, p.Server, p.Port = v.Name, v.Host, v.Port
 	case "anytls":
 		var v AnyTLS
 		v, err = DecodeAnyTLSURL(link)
@@ -197,6 +202,9 @@ func (p Outbound) ToLink() string {
 	case Tuic:
 		v.Name, v.Host, v.Port = name, p.Server, p.Port
 		return EncodeTuicURL(v)
+	case Mieru:
+		v.Name, v.Host, v.Port = name, p.Server, p.Port
+		return EncodeMieruURL(v)
 	case AnyTLS:
 		v.Name, v.Host, v.Port = name, p.Server, p.Port
 		return EncodeAnyTLSURL(v)

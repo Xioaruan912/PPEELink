@@ -10,7 +10,7 @@ import (
 	"ppeelink/certpin"
 )
 
-const CompatibilityRevision = "clients-2026-10-30-v1"
+const CompatibilityRevision = "clients-2026-11-03-mieru-v2"
 
 var ErrNoCompatibleNodes = errors.New("没有可供此客户端导出的节点，请在客户端兼容中查看原因")
 
@@ -96,7 +96,7 @@ func checkClient(p Outbound, client string) (string, string) {
 		}
 	}
 	if client == "stash" {
-		if p.Type == "vless" || p.Type == "anytls" || p.Type == "ssh" || p.Type == "snell" {
+		if p.Type == "vless" || p.Type == "anytls" || p.Type == "ssh" || p.Type == "snell" || p.Type == "mieru" {
 			return "unsupported", "当前 Stash 导出未适配该协议；请使用其他客户端"
 		}
 		client = "clash"
@@ -108,6 +108,26 @@ func checkClient(p Outbound, client string) (string, string) {
 		return "unsupported", "节点名称含配置分隔符，请先修改名称"
 	}
 	switch v := p.Spec.(type) {
+	case Mieru:
+		if client != "clash" {
+			return "unsupported", "当前客户端导出器未适配 Mieru，请使用 Mihomo"
+		}
+		q := v.url.Query()
+		// Mihomo exposes no MTU option and uses Mieru's default of 1400.
+		if mtu := q.Get("mtu"); mtu != "" && mtu != "1400" {
+			return "unsupported", "Mihomo 不支持自定义 Mieru MTU，仅可导出默认值 1400"
+		}
+		switch q.Get("multiplexing") {
+		case "", "MULTIPLEXING_OFF", "MULTIPLEXING_LOW", "MULTIPLEXING_MIDDLE", "MULTIPLEXING_HIGH":
+		default:
+			return "unsupported", "Mieru multiplexing 参数无效"
+		}
+		switch q.Get("handshake-mode") {
+		case "", "HANDSHAKE_STANDARD", "HANDSHAKE_NO_WAIT":
+		default:
+			return "unsupported", "Mieru handshake-mode 参数无效"
+		}
+		return "warning", "需要支持 Mieru 的新版 Mihomo 内核"
 	case VLESS:
 		if v.Uuid == "" {
 			return "unsupported", "VLESS 缺少账户凭据"

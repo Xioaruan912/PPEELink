@@ -43,3 +43,11 @@ coverage/
 .dsh-progress/
 **/.dsh-ops-update-*.lock
 /docs/deployment-*.md
+
+# Independently built Agent release inputs (source lives on branch agent)
+/agent-artifacts/*
+!/agent-artifacts/README.md
+/.agent-build/
+
+# Local browser validation state
+/.playwright-cli/

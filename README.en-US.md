@@ -286,3 +286,7 @@ db/           Runtime SQLite/config/cache data
 ## Acknowledgements
 
 Thanks to [gooaclok819/sublinkX](https://github.com/gooaclok819/sublinkX) for the early project foundation and ideas. PPEELink has since been continuously expanded and reworked around node-quality analytics, routing explanation, Rule Providers, persistent tasks, artifact rollback, safe publishing, security auditing, and operations.
+
+## Independent Agent development
+
+The [agent branch](https://github.com/Xioaruan912/PPEELink/tree/agent) owns the standalone runtime, module, tests and build pipeline. The panel distributes separate release artifacts instead of its own executable. See [Agent development](docs/agent-development.md).

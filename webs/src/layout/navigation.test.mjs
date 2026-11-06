@@ -53,7 +53,9 @@ test("groups permitted features by task while preserving every URL once", () => 
   const organized = organizeNavigation(original);
   assert.deepEqual(paths(organized).sort(), paths(original).sort());
   assert.equal(new Set(paths(organized)).size, paths(original).length);
-  assert.equal(organized[0].label, "总览");
+  assert.equal(organized[0].label, "订阅管理");
+  assert.equal(organized[0].path, "/subcription/subs");
+  assert.equal(organized[0].children.length, 0);
   assert.deepEqual(paths([organized.find((item) => item.label === "服务器")]), [
     "/monitor/index",
     "/subcription/servers",
@@ -63,7 +65,7 @@ test("groups permitted features by task while preserving every URL once", () => 
   ]);
   assert.deepEqual(
     paths([organized.find((item) => item.label === "网络诊断")]),
-    ["/test/index", "/network/traceroute", "/subcription/diagnostic"]
+    ["/dashboard", "/test/index", "/network/traceroute", "/subcription/diagnostic"]
   );
 });
 test("ordinary user routes never acquire admin links and hidden routes stay hidden", () => {
@@ -97,14 +99,12 @@ test("diagnostic belongs to network diagnosis and keeps its compatible URL", () 
       ]),
     ])
   );
-  assert.equal(items.length, 2);
-  assert.equal(items[0].label, "订阅与节点");
-  assert.deepEqual(paths([items[0]]), [
-    "/subcription/subs",
-    "/subcription/nodes",
-  ]);
-  assert.equal(items[1].label, "网络诊断");
-  assert.deepEqual(paths([items[1]]), ["/subcription/diagnostic"]);
+  assert.equal(items.length, 3);
+  assert.equal(items[0].label, "订阅管理");
+  assert.deepEqual(paths([items[0]]), ["/subcription/subs"]);
+  assert.deepEqual(paths([items[1]]), ["/subcription/nodes"]);
+  assert.equal(items[2].label, "网络诊断");
+  assert.deepEqual(paths([items[2]]), ["/subcription/diagnostic"]);
 });
 
 test("path and throughput are both children of network diagnosis",()=>{

@@ -16,7 +16,7 @@ const { handleAddSub } = provideSubscriptions();
     <SubscriptionHeader
       section="subscriptions"
       title="订阅管理"
-      description="管理节点来源，为设备生成对应客户端的订阅链接。"
+      description="选择客户端，复制订阅链接，或扫码导入你的设备。"
       ><template #actions
         ><UiButton variant="primary" :icon="Plus" @click="handleAddSub"
           >新建订阅</UiButton

@@ -7,8 +7,8 @@ require (
 	github.com/dop251/goja v0.0.0-20260915173639-b3fa02110dbd
 	github.com/gin-gonic/gin v1.10.1
 	github.com/glebarez/sqlite v1.11.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/oschwald/geoip2-golang v1.13.0
-	github.com/pkg/sftp v1.13.7
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sagernet/sing-box v1.11.12
 	golang.org/x/crypto v0.48.0
@@ -29,7 +29,6 @@ require (
 	github.com/caddyserver/certmagic v0.20.0 // indirect
 	github.com/cloudflare/circl v1.3.7 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/creack/pty v1.1.21 // indirect
 	github.com/cretz/bine v0.2.0 // indirect
 	github.com/dlclark/regexp2/v2 v2.5.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
@@ -53,7 +52,6 @@ require (
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20231101202521-4ca4178f5c7a // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/insomniacslk/dhcp v0.0.0-20250109001534-8abf58130905 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -62,7 +60,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
-	github.com/kr/fs v0.1.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/libdns/alidns v1.0.3 // indirect
 	github.com/libdns/cloudflare v0.1.1 // indirect

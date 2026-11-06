@@ -60,7 +60,8 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 	}
 	if server.Kind == models.ServerKindAgent {
 		spec.AgentUpdate = server.AgentUpdateRequested
-		spec.AgentHash = xraycore.ExecutableHash()
+		spec.AgentHash = agentArtifactHash(server.Arch)
+		spec.AgentUpdate = spec.AgentUpdate && spec.AgentHash != ""
 	}
 	// 本月流量超出上限：停止 xray，到重置日后下一轮拉取时自动恢复
 	if server.TrafficLimit > 0 && serverQuota(server, time.Now()).Over {
@@ -159,7 +160,7 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 			"proxy_features": report.ProxyFeatures, "running": report.Running, "last_error": report.Error, "last_seen_at": now,
 			"xray_ver": report.XrayVersion, "agent_version": report.AgentVersion, "arch": report.Arch, "applied_rev": report.Rev,
 		}
-		if server.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == xraycore.ExecutableHash() {
+		if server.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == agentArtifactHash(report.Arch) {
 			updates["agent_update_requested"] = false
 			updates["agent_revision"] = gorm.Expr("agent_revision + 1")
 		}

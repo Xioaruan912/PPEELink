@@ -17,8 +17,8 @@
             ? '正在检测服务'
             : result
               ? result.ok
-                ? '有可解锁服务'
-                : '无可解锁服务'
+                ? '有接口或页面通过'
+                : '检测完成，请查看各项依据'
               : '尚未检测'
         "
       />
@@ -63,7 +63,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { UnlockTest } from "@/api/subcription/node";
+import { requestNodeUnlock } from "./node-tests/nodeUnlock";
 import UnlockResults from "./node-tests/UnlockResults.vue";
 import type { UnlockResult } from "./node-tests/unlock";
 import { saveUnlock, getUnlock } from "@/utils/nodeTestStorage";
@@ -71,11 +71,7 @@ import UiDialog from "@/ui/UiDialog.vue";
 import UiButton from "@/ui/UiButton.vue";
 import StatusDot from "@/ui/StatusDot.vue";
 import EmptyState from "@/ui/EmptyState.vue";
-import {
-  token,
-  useNodeTestSession,
-  readEvents,
-} from "./node-tests/useNodeTestSession";
+import { useNodeTestSession } from "./node-tests/useNodeTestSession";
 const props = defineProps<{
   visible: boolean;
   nodeId: number;
@@ -84,98 +80,62 @@ const props = defineProps<{
 const emit = defineEmits<{ "update:visible": [value: boolean] }>();
 const result = ref<UnlockResult | null>(null);
 const streaming = ref(false);
-const { loading, run, abort, stop } = useNodeTestSession();
+const { loading, run, abort } = useNodeTestSession();
 async function startTest() {
   const nodeId = props.nodeId;
   const nodeName = props.nodeName;
   try {
-    await run(async (signal, current, setReader) => {
+    await run(async (signal, current) => {
       result.value = null;
-      streaming.value = false;
-      // JSON is the current Go contract. A compatible SSE response is read as
-      // genuine arrivals, with the same cancellation and node-version guards.
-      let json: any;
-      if (typeof fetch !== "function") {
-        const form = new FormData();
-        form.append("id", String(nodeId));
-        json = await UnlockTest(form);
-      } else {
-        const response = await fetch(
-          import.meta.env.VITE_APP_BASE_API + "/api/v1/nodes/unlock",
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/x-www-form-urlencoded",
-              Authorization: token(),
-            },
-            body: new URLSearchParams({ id: String(nodeId) }),
-            signal,
-          }
-        );
+      streaming.value = true;
+      const data = await requestNodeUnlock(nodeId, "", signal, (row) => {
         if (!current()) return;
-        if (!response.ok) {
-          json = await response.json().catch(() => null);
-          throw new Error(json?.msg || "解锁检测失败");
-        }
-        if (
-          response.headers.get("content-type")?.includes("text/event-stream")
-        ) {
-          streaming.value = true;
-          await readEvents(
-            response,
-            (type, payload) => {
-              if (
-                type === "error" ||
-                (payload?.code && payload.code !== "00000")
-              )
-                throw new Error(payload?.msg || "解锁检测失败");
-              const data = payload?.data ?? payload;
-              if (Array.isArray(data?.results)) {
-                result.value = { ...data, nodeName: data.nodeName || nodeName };
-              } else if (typeof data?.key === "string") {
-                const rows = new Map(
-                  (result.value?.results || []).map((row) => [row.key, row])
-                );
-                rows.set(data.key, data);
-                const results = [...rows.values()];
-                result.value = {
-                  nodeName,
-                  ok: results.some((row) => row.ok),
-                  results,
-                };
-              }
-            },
-            current,
-            setReader
-          );
-          if (current()) {
-            if (!result.value) throw new Error("未收到解锁检测结果");
-            saveUnlock(nodeId, result.value);
-          }
-          return;
-        }
-        json = await response.json();
-      }
-      if (json?.code !== "00000") throw new Error(json?.msg || "解锁检测失败");
+        const rows = new Map(
+          (result.value?.results || []).map((item) => [item.key, item])
+        );
+        rows.set(row.key, row);
+        const results = [...rows.values()];
+        result.value = {
+          source: "node",
+          nodeName,
+          complete: false,
+          ok: results.some((item) => item.ok),
+          results,
+        };
+      });
       if (current()) {
-        result.value = json.data;
-        saveUnlock(nodeId, json.data);
+        result.value = data;
+        if (data.complete && !data.error) saveUnlock(nodeId, data);
       }
     });
   } catch (cause: any) {
-    if (cause?.name !== "AbortError")
-      ElMessage.error(cause?.message || "解锁检测失败");
+    if (cause?.name !== "AbortError") {
+      const message = cause?.message || "解锁检测失败";
+      if (result.value) result.value.error = message;
+      ElMessage.error(message);
+    }
   }
 }
 async function stopTest() {
   try {
-    await stop();
+    abort();
+    if (result.value)
+      result.value = {
+        ...result.value,
+        complete: false,
+        error: "检测已停止，仅展示已完成项目。",
+      };
   } catch {
     ElMessage.error("停止失败，请稍后重试");
   }
 }
 function restore() {
-  result.value = getUnlock(props.nodeId) || null;
+  const stored = getUnlock(props.nodeId);
+  result.value = stored?.results?.every(
+    (row: { evidence?: string }) => !!row.evidence
+  )
+    ? stored
+    : null;
 }
 watch(
   () => props.nodeId,
@@ -187,7 +147,8 @@ watch(
 watch(
   () => props.visible,
   (visible) => {
-    if (visible && !loading.value) restore();
+    if (!visible) abort();
+    else if (!loading.value) restore();
   },
   { immediate: true }
 );

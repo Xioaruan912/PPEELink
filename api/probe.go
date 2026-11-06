@@ -3,8 +3,6 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"os"
-	"runtime"
 	"strings"
 	"time"
 
@@ -159,22 +157,12 @@ func ProbeResetToken(c *gin.Context) {
 	}, "msg": "令牌已重置"})
 }
 
-// ProbeBinary 下发与面板同架构的探针程序。
+// ProbeBinary serves the standalone Agent's compatible probe subcommand.
 func ProbeBinary(c *gin.Context) {
 	if _, ok := currentProbe(c); !ok {
 		return
 	}
-	if arch := c.Query("arch"); arch != "" && arch != runtime.GOARCH {
-		c.JSON(400, gin.H{"code": "40000", "msg": fmt.Sprintf("面板程序为 %s 架构，无法下发 %s 版本", runtime.GOARCH, arch)})
-		return
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "找不到面板程序"})
-		return
-	}
-	c.Header("Content-Disposition", "attachment; filename=ppeelink-probe")
-	c.File(exe)
+	serveAgentArtifact(c, "ppeelink-probe")
 }
 
 // ProbeJobs 探针拉取待检测节点。

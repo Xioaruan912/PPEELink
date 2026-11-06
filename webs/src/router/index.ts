@@ -27,7 +27,7 @@ export const constantRoutes: RouteRecordRaw[] = [
     path: "/",
     name: "/",
     component: Layout,
-    redirect: "/dashboard",
+    redirect: "/subcription/subs",
     children: [
       {
         path: "dashboard",

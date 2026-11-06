@@ -72,7 +72,9 @@ const selected = computed(() =>
   )
 );
 const notReady = computed(() =>
-  selected.value.filter((s) => !s.available || s.prepareRequested)
+  selected.value.filter(
+    (s) => !s.available || s.prepareRequested || s.preparing
+  )
 );
 const isRunning = computed(() => detail.value?.run.status === "running");
 const estimated = computed(() =>
@@ -163,11 +165,12 @@ function schedule() {
   clearTimer();
   if (
     visible &&
-    (isRunning.value || sources.value.some((s) => s.prepareRequested))
+    (isRunning.value ||
+      sources.value.some((s) => s.prepareRequested || s.preparing))
   )
     timer = setTimeout(() => {
       if (isRunning.value) void loadDetail();
-      if (sources.value.some((s) => s.prepareRequested))
+      if (sources.value.some((s) => s.prepareRequested || s.preparing))
         void loadSources(false);
     }, 2000);
 }
@@ -259,7 +262,7 @@ async function cancel() {
 }
 async function prepare() {
   const ids = notReady.value
-    .filter((s) => !s.prepareRequested)
+    .filter((s) => !(s.prepareRequested || s.preparing))
     .map((s) => s.id);
   if (!ids.length) return;
   preparing.value = true;
@@ -380,7 +383,7 @@ onBeforeUnmount(() => {
               <p v-for="s in notReady" :key="s.id">
                 <strong>{{ s.name }}</strong
                 >：{{
-                  s.prepareRequested
+                  s.prepareRequested || s.preparing
                     ? "正在准备测速工具…"
                     : s.error || "测速工具未就绪"
                 }}
@@ -388,10 +391,17 @@ onBeforeUnmount(() => {
               <UiButton
                 variant="ghost"
                 :loading="preparing"
-                :disabled="notReady.every((s) => s.prepareRequested)"
+                :disabled="
+                  notReady.every((s) => s.prepareRequested || s.preparing)
+                "
                 @click="prepare"
                 >准备测速工具</UiButton
-              ><small>旧 Agent 请先到“监控与 Agent”更新。</small>
+              ><small v-if="notReady.some((s) => s.agentOutdated)"
+                >部分 Agent 需要到“监控与
+                Agent”更新，更新后将自动准备工具。</small
+              ><small v-else
+                >首次使用会自动准备，无需手动安装依赖；失败后可点击重试。</small
+              >
             </div>
             <div class="settings-grid">
               <label

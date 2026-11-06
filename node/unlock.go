@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"ppeelink/utils"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,10 +23,17 @@ import (
 
 // UnlockService 一次解锁检测的目标服务
 type UnlockService struct {
-	Key   string `json:"key"`
-	Name  string `json:"name"`
-	Group string `json:"group"` // ai / video / forum
-	Check func(ctx context.Context, c *http.Client) (bool, string)
+	Key      string                                                `json:"key"`
+	Name     string                                                `json:"name"`
+	Group    string                                                `json:"group"`
+	Kind     string                                                `json:"kind"`
+	URL      string                                                `json:"url"`
+	ReachURL string                                                `json:"reachUrl,omitempty"`
+	Method   string                                                `json:"method,omitempty"`
+	Body     string                                                `json:"body,omitempty"`
+	Allow    string                                                `json:"allow,omitempty"`
+	Deny     string                                                `json:"deny,omitempty"`
+	Check    func(context.Context, *http.Client) UnlockCheckResult `json:"-"`
 }
 
 // UnlockCheckResult 单个服务解锁结果
@@ -36,33 +44,20 @@ type UnlockCheckResult struct {
 	Ok        bool      `json:"ok"`
 	Rtt       int       `json:"-"` // 毫秒，-1 表示失败；仅内部使用，不对外展示
 	Note      string    `json:"note"`
-	Status    string    `json:"status"` // available / blocked / unknown
+	Status    string    `json:"status"`   // available / blocked / inferred / region_blocked / reachable / unknown
+	Evidence  string    `json:"evidence"` // api / page / region / reach
 	Region    string    `json:"region,omitempty"`
 	CheckedAt time.Time `json:"checkedAt"`
 }
 
 // UnlockResult 节点解锁测试总结果
 type UnlockResult struct {
+	Source   string              `json:"source"`
+	Complete bool                `json:"complete"`
 	NodeName string              `json:"nodeName"`
 	Ok       bool                `json:"ok"`
 	Results  []UnlockCheckResult `json:"results"`
 	Error    string              `json:"error,omitempty"`
-}
-
-// 常见解锁检测目标（走节点访问，每个服务定制判定逻辑）
-var defaultUnlockServices = []UnlockService{
-	// AI
-	{Key: "openai", Name: "OpenAI / ChatGPT", Group: "ai", Check: checkOpenAI},
-	{Key: "claude", Name: "Claude", Group: "ai", Check: checkClaude},
-	{Key: "google-gemini", Name: "Google Gemini", Group: "ai", Check: checkGemini},
-	// 影视
-	{Key: "netflix", Name: "Netflix", Group: "video", Check: checkNetflix},
-	{Key: "youtube", Name: "YouTube", Group: "video", Check: checkYouTube},
-	{Key: "disney", Name: "Disney+", Group: "video", Check: checkDisney},
-	// 论坛 / 其它
-	{Key: "google", Name: "Google", Group: "forum", Check: checkGoogle},
-	{Key: "github", Name: "GitHub", Group: "forum", Check: checkGitHub},
-	{Key: "telegram", Name: "Telegram", Group: "forum", Check: checkTelegram},
 }
 
 var unlockRegistry = struct {
@@ -79,7 +74,7 @@ func init() {
 // RegisterUnlockService makes detectors independently extensible without
 // changing the runner. Re-registering a key safely replaces that detector.
 func RegisterUnlockService(service UnlockService) {
-	if service.Key == "" || service.Name == "" || service.Check == nil {
+	if service.Key == "" || service.Name == "" || (service.Check == nil && service.URL == "") {
 		return
 	}
 	unlockRegistry.Lock()
@@ -91,19 +86,49 @@ func ListUnlockServices() []UnlockService {
 	unlockRegistry.RLock()
 	defer unlockRegistry.RUnlock()
 	result := make([]UnlockService, 0, len(unlockRegistry.services))
-	for _, defaultService := range defaultUnlockServices {
-		if service, ok := unlockRegistry.services[defaultService.Key]; ok {
-			result = append(result, service)
+	seen := map[string]bool{}
+	for _, service := range defaultUnlockServices {
+		if v, ok := unlockRegistry.services[service.Key]; ok {
+			result = append(result, v)
+			seen[v.Key] = true
 		}
 	}
+	extra := []string{}
+	for key := range unlockRegistry.services {
+		if !seen[key] {
+			extra = append(extra, key)
+		}
+	}
+	sort.Strings(extra)
+	for _, key := range extra {
+		result = append(result, unlockRegistry.services[key])
+	}
 	return result
+}
+
+func SelectUnlockServices(service, group string) ([]UnlockService, error) {
+	if group != "" && group != "ai" && group != "video" && group != "forum" && group != "local" {
+		return nil, fmt.Errorf("未知检测类别")
+	}
+	result := []UnlockService{}
+	for _, s := range ListUnlockServices() {
+		if (service == "" || s.Key == service) && (group == "" || s.Group == group) {
+			result = append(result, s)
+		}
+	}
+	if len(result) == 0 {
+		return nil, fmt.Errorf("未知服务或服务不属于所选类别")
+	}
+	return result, nil
 }
 
 // UnlockTestConfig 一次解锁测试的配置
 type UnlockTestConfig struct {
 	Link          string
 	Timeout       time.Duration // 每个目标请求超时，默认 8s
-	ServiceFilter string        // 非空时只测试指定服务 Key（如 google-gemini）
+	ServiceFilter string        // 非空时只测试指定服务 Key
+	GroupFilter   string
+	OnResult      func(UnlockCheckResult)
 }
 
 var (
@@ -137,8 +162,14 @@ func getBoxContext() context.Context {
 // RunUnlockTest 对节点链接做真实解锁检测（通过 sing-box 走该节点）。
 // ctx 取消（客户端断开）时提前返回，及时释放锁。
 func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, error) {
+	targets, err := SelectUnlockServices(cfg.ServiceFilter, cfg.GroupFilter)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
 	timeout := cfg.Timeout
-	if timeout <= 0 {
+	if timeout <= 0 || timeout > 8*time.Second {
 		timeout = 8 * time.Second
 	}
 	// 解析节点链接
@@ -190,24 +221,27 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 		Timeout:   timeout,
 	}
 
-	// 是否过滤到指定服务（如仅测 Gemini）
-	targets := ListUnlockServices()
-	if cfg.ServiceFilter != "" {
-		filtered := make([]UnlockService, 0, 1)
-		for _, s := range targets {
-			if s.Key == cfg.ServiceFilter {
-				filtered = append(filtered, s)
-			}
-		}
-		targets = filtered
+	result := &UnlockResult{NodeName: nodeName, Source: "node"}
+	result.Results = runUnlockChecks(ctx, client, targets, timeout, cfg.OnResult)
+	result.Complete = ctx.Err() == nil
+	if ctx.Err() != nil {
+		result.Error = "检测已停止或超时，未完成项目无法判断"
 	}
+	for _, check := range result.Results {
+		if check.Ok {
+			result.Ok = true
+		}
+	}
+	return result, nil
+}
 
-	// 服务检测互不依赖。受控并发能把最坏耗时从 N×timeout 降到约 ceil(N/4)×timeout，
-	// 同时避免一次性向较弱节点发起过多连接。
-	result := &UnlockResult{NodeName: nodeName, Results: make([]UnlockCheckResult, len(targets))}
+func runUnlockChecks(ctx context.Context, client *http.Client, targets []UnlockService, timeout time.Duration, onResult func(UnlockCheckResult)) []UnlockCheckResult {
+	results := make([]UnlockCheckResult, len(targets))
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
+	var callbackMu sync.Mutex
 	for i, svc := range targets {
+		results[i] = UnlockCheckResult{Key: svc.Key, Name: svc.Name, Group: svc.Group, Status: "unknown", Evidence: unlockEvidence(svc.Kind), Note: "检测已停止或超时", CheckedAt: time.Now()}
 		wg.Add(1)
 		go func(i int, svc UnlockService) {
 			defer wg.Done()
@@ -218,33 +252,32 @@ func RunUnlockTest(ctx context.Context, cfg UnlockTestConfig) (*UnlockResult, er
 				return
 			}
 			defer func() { <-sem }()
-			checkCtx, checkCancel := context.WithTimeout(ctx, timeout)
-			defer checkCancel()
-			start := time.Now()
-			ok, note := svc.Check(checkCtx, client)
-			rtt := max(1, int(time.Since(start).Milliseconds()))
-			status := "blocked"
-			if ok {
-				status = "available"
-			} else if note == "连接失败" || note == "异常响应" {
-				status = "unknown"
+			if ctx.Err() != nil {
+				return
 			}
-			result.Results[i] = UnlockCheckResult{Key: svc.Key, Name: svc.Name, Group: svc.Group, Ok: ok, Rtt: rtt, Note: note, Status: status, CheckedAt: time.Now()}
+			checkCtx, cancel := context.WithTimeout(ctx, timeout)
+			defer cancel()
+			start := time.Now()
+			r := probeUnlock(checkCtx, client, svc)
+			r.Key = svc.Key
+			r.Name = svc.Name
+			r.Group = svc.Group
+			r.CheckedAt = time.Now()
+			r.Rtt = max(1, int(time.Since(start).Milliseconds()))
+			results[i] = r
+			if onResult != nil {
+				func() {
+					callbackMu.Lock()
+					defer callbackMu.Unlock()
+					if ctx.Err() == nil {
+						onResult(r)
+					}
+				}()
+			}
 		}(i, svc)
 	}
-	waitCh := make(chan struct{})
-	go func() { defer utils.RecoverPanic("unlock-wait"); wg.Wait(); close(waitCh) }()
-	select {
-	case <-waitCh:
-	case <-ctx.Done():
-		<-waitCh
-	}
-	for _, check := range result.Results {
-		if check.Ok {
-			result.Ok = true
-		}
-	}
-	return result, nil
+	wg.Wait()
+	return results
 }
 
 // parseOptions 将 JSON 配置解析为 option.Options（带注册上下文）

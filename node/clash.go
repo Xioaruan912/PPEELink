@@ -56,6 +56,11 @@ type Proxy struct {
 	Mtu                int                    `yaml:"mtu,omitempty"`
 	Reserved           []int                  `yaml:"reserved,omitempty"`
 	Dns                []string               `yaml:"dns,omitempty"`
+	PortRange          string                 `yaml:"port-range,omitempty"`
+	Transport          string                 `yaml:"transport,omitempty"`
+	Multiplexing       string                 `yaml:"multiplexing,omitempty"`
+	HandshakeMode      string                 `yaml:"handshake-mode,omitempty"`
+	TrafficPattern     string                 `yaml:"traffic-pattern,omitempty"`
 }
 
 type ProxyGroup struct {
@@ -142,6 +147,13 @@ func EncodeClashMinimal(urls []string, flags map[string]NodeFlags) ([]byte, erro
 // BuildClashProxies 将分享链接转换为 Clash 代理定义。
 func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlConfig) []Proxy {
 	urls, _ = FilterClientLinks(urls, "clash")
+	// Reserve input names before allocating names for expanded Mieru bindings.
+	reservedNames := make(map[string]bool, len(urls))
+	for _, link := range urls {
+		if p, err := ParseOutbound(link); err == nil {
+			reservedNames[p.Name] = true
+		}
+	}
 	// 传入urls，解析urls，生成proxys
 	// yamlfile 为模板文件
 	var proxys []Proxy
@@ -412,6 +424,37 @@ func BuildClashProxies(urls []string, flags map[string]NodeFlags, sqlconfig SqlC
 				Skip_cert_verify:   cert,
 			}
 			proxys = append(proxys, tuicproxy)
+		case Scheme == "mierus":
+			m, err := DecodeMieruURL(link)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			q := m.url.Query()
+			password, _ := m.url.User.Password()
+			for i, binding := range q["port"] {
+				proxy := Proxy{
+					Name: m.Name, Type: "mieru", Server: m.Host,
+					Username: m.url.User.Username(), Password: password,
+					Transport: q["protocol"][i], Multiplexing: q.Get("multiplexing"),
+					HandshakeMode: q.Get("handshake-mode"), TrafficPattern: q.Get("traffic-pattern"),
+					Udp: udp, Tfo: tfo,
+				}
+				if len(q["port"]) > 1 {
+					baseName := fmt.Sprintf("%s [%d]", m.Name, i+1)
+					proxy.Name = baseName
+					for suffix := 2; reservedNames[proxy.Name]; suffix++ {
+						proxy.Name = fmt.Sprintf("%s #%d", baseName, suffix)
+					}
+					reservedNames[proxy.Name] = true
+				}
+				if strings.Contains(binding, "-") {
+					proxy.PortRange = binding
+				} else {
+					proxy.Port, _ = strconv.Atoi(binding)
+				}
+				proxys = append(proxys, proxy)
+			}
 		case Scheme == "anytls":
 			a, err := DecodeAnyTLSURL(link)
 			if err != nil {

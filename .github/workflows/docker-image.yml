@@ -25,6 +25,24 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Checkout independent Agent source
+        uses: actions/checkout@v4
+        with:
+          ref: agent
+          path: .agent-build
+
+      - name: Set up Go for Agent artifacts
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .agent-build/go.mod
+          cache-dependency-path: .agent-build/go.sum
+
+      - name: Build independent Agent artifacts
+        run: |
+          cd .agent-build
+          ./build.sh
+          cp dist/* ../agent-artifacts/
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:

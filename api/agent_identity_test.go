@@ -13,6 +13,7 @@ import (
 )
 
 func setupUnifiedAgentDB(t *testing.T) {
+	setupAgentRelease(t)
 	t.Helper()
 	setupTestDB(t)
 	if err := models.DB.AutoMigrate(&models.ProxyServer{}, &models.ProxyInbound{}, &models.ProxyTraffic{}, &models.ProxyAccount{}, &models.Monitor{}, &models.MonitorMetric{}); err != nil {
@@ -72,7 +73,7 @@ func TestMonitorTokenUsesUnifiedAgentLifecycle(t *testing.T) {
 	if response.Code != 200 || !strings.Contains(response.Body.String(), `"agentUpdate":true`) {
 		t.Fatalf("disabled proxy lost update: %s", response.Body.String())
 	}
-	response = agentIdentityRequest(AgentReport, "monitor-secret", xraycore.Report{AgentVersion: "test-real-version", AgentHash: xraycore.ExecutableHash()})
+	response = agentIdentityRequest(AgentReport, "monitor-secret", xraycore.Report{AgentVersion: "test-real-version", AgentHash: agentArtifactHash("")})
 	if response.Code != 200 {
 		t.Fatalf("report: %s", response.Body.String())
 	}

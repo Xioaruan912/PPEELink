@@ -6,6 +6,7 @@ import (
 )
 
 type ThroughputCapability struct {
+	Preparing           bool       `json:"preparing"`
 	Path                string     `gorm:"size:512" json:"path"`
 	PrepareID           uint       `json:"-"`
 	ServerID            uint       `gorm:"primaryKey" json:"serverId"`

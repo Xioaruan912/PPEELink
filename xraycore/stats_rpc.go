@@ -64,7 +64,8 @@ func statsInvoke(ctx context.Context, conn *grpc.ClientConn, method string, requ
 	}
 	callCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	err = conn.Invoke(callCtx, "/xray.app.stats.command.StatsService/"+method, request, reply)
+	// A running systemd unit may not have opened the stats listener yet.
+	err = conn.Invoke(callCtx, "/xray.app.stats.command.StatsService/"+method, request, reply, grpc.WaitForReady(true))
 	return reply, err
 }
 func (r *Runner) closeStatsLocked() {

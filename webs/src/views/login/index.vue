@@ -133,7 +133,7 @@ async function handleLogin() {
       route.query.redirect.startsWith("/") &&
       !route.query.redirect.startsWith("//")
         ? route.query.redirect
-        : "/dashboard";
+        : "/";
     await router.push(redirect);
   } catch {
     loginError.value = "登录未成功，请检查账户、密码及服务连接后重试。";

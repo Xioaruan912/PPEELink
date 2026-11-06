@@ -150,11 +150,11 @@ const isDark = computed(() => settings.theme === ThemeEnum.DARK);
 const isAdmin = computed(() => user.user.roles.includes("ADMIN"));
 // 必须先改密码时只保留品牌与内容区，其余入口都会被拦截
 const locked = computed(() => !!user.user.mustChangePassword);
-// 普通用户没有仪表盘，首页入口换成“我的订阅”
+// 在组织菜单前移除普通用户的仪表盘入口。
 const navigation = computed(() =>
-  organizeNavigation(buildNavigation(permission.routes)).filter(
+  organizeNavigation(buildNavigation(permission.routes).filter(
     (item) => isAdmin.value || item.path !== "/dashboard"
-  )
+  ))
 );
 const activeGroup = computed(() => navigation.value.find(group =>
   group.children.length && group.children.some(item => item.path === route.path)

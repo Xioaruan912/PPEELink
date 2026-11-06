@@ -21,6 +21,7 @@ ENV TZ=Asia/Shanghai
 RUN apk add --no-cache ca-certificates tzdata \
     && mkdir -p /app/db /app/logs /app/template
 COPY --from=builder /out/ppeelink /app/ppeelink
+COPY agent-artifacts/ /app/downloads/agent/
 EXPOSE 8000
 VOLUME ["/app/db", "/app/template", "/app/logs"]
 ENTRYPOINT ["/app/ppeelink"]

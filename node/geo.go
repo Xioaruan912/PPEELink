@@ -118,6 +118,13 @@ func ExtractServerHost(link string) (string, int) {
 	if err != nil {
 		return "", 0
 	}
+	if u.Scheme == "mierus" {
+		m, err := DecodeMieruURL(link)
+		if err != nil {
+			return "", 0
+		}
+		return m.Host, m.Port
+	}
 	host := u.Hostname()
 	if host == "" {
 		// 兜底：去掉 scheme 后取 @ 后的部分

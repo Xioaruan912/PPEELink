@@ -1,5 +1,6 @@
 # Agent 1.13: collection performance and client compatibility
 
+> 历史实施记录：其中 `agents` 分支是当时的任务约定。当前运行时代码维护在独立 `agent` 分支，面板维护在 `main`；见 [独立开发说明](agent-development.md)。
 ## Scope
 
 Continue on branch `agents`. Replace per-tick Xray API subprocesses with a reused loopback gRPC connection. Bound online-IP lookup concurrency to four and the whole collection to15seconds; destructive/reset requests have no application retry. Close the connection on stop/restart/port changes, cache the binary version by size+mtime and service status for two seconds. Preserve existing reporting, quotas, node identities and proxy configuration.

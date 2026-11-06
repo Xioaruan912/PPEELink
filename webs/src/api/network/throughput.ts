@@ -1,5 +1,8 @@
 import request from "@/utils/request";
 export interface ThroughputSource {
+  preparing?: boolean;
+  agentVersion?: string;
+  agentOutdated?: boolean;
   id: number;
   name: string;
   publicHost: string;

@@ -6,15 +6,17 @@ import type { UserInfo } from "@/api/user/types";
 
 const PASSWORD_PAGE = "/system/user/set";
 const USER_HOME = "/my/subscriptions";
+const ADMIN_HOME = "/subcription/subs";
 
 /**
  * 账户状态决定的强制落点：必须改密码时只能停在改密页；
- * 普通用户没有仪表盘，首页改为“我的订阅”。返回空串表示不拦截。
+ * 首页按账户角色打开可用的订阅列表。返回空串表示不拦截。
  */
 function landingFor(user: UserInfo, path: string) {
   if (user.mustChangePassword && path !== PASSWORD_PAGE) return PASSWORD_PAGE;
   const admin = user.roles.includes("ADMIN");
-  if (!admin && (path === "/" || path === "/dashboard")) return USER_HOME;
+  if (path === "/") return admin ? ADMIN_HOME : USER_HOME;
+  if (!admin && (path === ADMIN_HOME || path === "/dashboard")) return USER_HOME;
   return "";
 }
 

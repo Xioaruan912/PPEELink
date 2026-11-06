@@ -145,10 +145,49 @@ export function saveMonitorSSH(data: {
   });
 }
 
-export function getMonitorSSHTicket(id: number) {
+export function getMonitorSSHTicket(id: number, sessionId: string) {
   return request<{ ticket: string; expiresIn: number }>({
     url: "/api/v1/monitors/ssh/ticket",
     method: "post",
-    data: { id },
+    data: { id, sessionId },
   });
 }
+
+export interface TerminalSession {
+  id: string;
+  name: string;
+  createdAt: number;
+  attached: number;
+}
+export const getTerminalSessions = (id: number) =>
+  request<{
+    supported: boolean;
+    ready: boolean;
+    error?: string;
+    sessions: TerminalSession[];
+  }>({
+    url: "/api/v1/monitors/ssh/sessions",
+    method: "get",
+    params: { id },
+    timeout: 15000,
+  });
+export const createTerminalSession = (id: number, name: string) =>
+  request<TerminalSession>({
+    url: "/api/v1/monitors/ssh/sessions",
+    method: "post",
+    params: { id },
+    data: { name },
+  });
+export const endTerminalSession = (id: number, sessionId: string) =>
+  request({
+    url: "/api/v1/monitors/ssh/sessions",
+    method: "delete",
+    params: { id, sessionId },
+  });
+export const prepareTerminal = (id: number) =>
+  request({
+    url: "/api/v1/monitors/ssh/prepare",
+    method: "post",
+    params: { id },
+    timeout: 250000,
+  });

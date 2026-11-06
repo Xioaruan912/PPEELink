@@ -299,7 +299,7 @@ func (h *HTTPSource) do(ctx context.Context, method, path string, body any, out 
 
 func (h *HTTPSource) Spec(ctx context.Context) (Spec, error) {
 	var spec Spec
-	err := h.do(ctx, http.MethodGet, "/api/v1/agent/spec", nil, &spec)
+	err := h.do(ctx, http.MethodGet, "/api/v1/agent/spec?arch="+runtime.GOARCH, nil, &spec)
 	return spec, err
 }
 

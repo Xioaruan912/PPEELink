@@ -50,7 +50,7 @@ const {
 const compatibilityOpen = ref(false);
 const compatibilityIds = ref<number[]>([]);
 function openCompatibility() {
-  compatibilityIds.value = selectedNodes.value.map((n) => n.ID);
+  compatibilityIds.value = selectedNodes.value.map((n) => n.id);
   compatibilityOpen.value = true;
 }
 const route = useRoute();

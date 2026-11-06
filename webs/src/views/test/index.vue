@@ -5,17 +5,24 @@ import IconLock from "~icons/ph/lock-key-open";
 import IconPulse from "~icons/ph/pulse";
 import UnlockTest from "./unlock.vue";
 import TcpTest from "./tcp.vue";
+import DeviceUnlock from "./DeviceUnlock.vue";
 
 /** 节点测试：解锁检测与国内可达性在一个页面，用顶部标签切换。 */
 defineOptions({ name: "NodeTest" });
 
-type TabKey = "unlock" | "tcp";
+type TabKey = "unlock" | "device" | "tcp";
 const tabs: { key: TabKey; label: string; hint: string; icon: Component }[] = [
   {
     key: "unlock",
-    label: "解锁检测",
-    hint: "AI 与流媒体可用性",
+    label: "指定节点",
+    hint: "通过所选节点检测",
     icon: IconLock,
+  },
+  {
+    key: "device",
+    label: "当前设备",
+    hint: "浏览器实际代理与分流",
+    icon: IconPulse,
   },
   {
     key: "tcp",
@@ -26,6 +33,7 @@ const tabs: { key: TabKey; label: string; hint: string; icon: Component }[] = [
 ];
 const views: Record<TabKey, Component> = {
   unlock: UnlockTest,
+  device: DeviceUnlock,
   tcp: TcpTest,
 };
 
@@ -120,8 +128,9 @@ const current = computed(() => views[active.value]);
 <style scoped>
 .test-tabs {
   position: relative;
+  overflow: hidden;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   margin-bottom: 28px;
   padding: 4px;

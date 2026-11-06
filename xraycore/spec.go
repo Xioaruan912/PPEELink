@@ -38,7 +38,7 @@ type Spec struct {
 	Monitor *MonitorSpec `json:"monitor,omitempty"`
 	// WebsiteTraffic meters only Xray-forwarded payload; disabled by default.
 	WebsiteTraffic *WebsiteTrafficSpec `json:"websiteTraffic,omitempty"`
-	// AgentUpdate 为面板主动请求 agent 自更新；AgentHash 是面板当前可执行文件的 SHA-256。
+	// AgentUpdate 为面板主动请求 agent 自更新；AgentHash 是已发布独立 Agent 产物的 SHA-256。
 	AgentUpdate bool   `json:"agentUpdate,omitempty"`
 	AgentHash   string `json:"agentHash,omitempty"`
 }
