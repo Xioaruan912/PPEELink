@@ -179,14 +179,20 @@ const tabCommands = computed(() =>
 );
 
 const availableCategories = computed(() => {
-  const seen = new Set<string>();
-  for (const command of tabCommands.value) seen.add(command.category);
-  return ["全部", ...seen];
+  const counts = new Map<string, number>();
+  for (const command of tabCommands.value) {
+    counts.set(command.category, (counts.get(command.category) || 0) + 1);
+  }
+  return [
+    ...[...counts.entries()].map(([name, count]) => ({ name, count })),
+    { name: "全部", count: tabCommands.value.length },
+  ];
 });
 
 function switchCommandTab(tab: "builtin" | "nodescripts") {
   commandTab.value = tab;
-  selectedCategory.value = "全部";
+  commandQuery.value = "";
+  selectedCategory.value = tab === "nodescripts" ? "测速与检测" : "全部";
 }
 
 const categories = computed(() => {
@@ -194,6 +200,7 @@ const categories = computed(() => {
   const map = new Map<string, QuickCommand[]>();
   for (const command of tabCommands.value) {
     if (
+      !q &&
       selectedCategory.value !== "全部" &&
       command.category !== selectedCategory.value
     )
@@ -659,7 +666,11 @@ async function executeDraft() {
         <header>
           <div class="command-head">
             <strong>快速指令</strong>
-            <small>点选填入草稿，确认后执行</small>
+            <small>{{
+              commandTab === "nodescripts"
+                ? "来源 nodescripts.net · 确认后执行"
+                : "点选填入草稿 · 确认后执行"
+            }}</small>
           </div>
           <div class="command-tabs" role="tablist" aria-label="指令来源">
             <button
@@ -689,25 +700,28 @@ async function executeDraft() {
             aria-label="搜索指令或脚本"
             :placeholder="
               commandTab === 'nodescripts'
-                ? '搜索 NodeScripts 脚本…'
+                ? '搜索全部 32 个脚本…'
                 : '搜索内置诊断指令…'
             "
           />
           <div class="category-pills" role="group" aria-label="分类筛选">
             <button
               v-for="cat in availableCategories"
-              :key="cat"
+              :key="cat.name"
               type="button"
               class="cat-pill"
-              :class="{ 'is-active': selectedCategory === cat }"
-              @click="selectedCategory = cat"
+              :class="{
+                'is-active': !commandQuery.trim() && selectedCategory === cat.name,
+              }"
+              @click="
+                commandQuery = '';
+                selectedCategory = cat.name;
+              "
             >
-              {{ cat }}
+              {{ cat.name }}
+              <span class="pill-count">{{ cat.count }}</span>
             </button>
           </div>
-          <p v-if="commandTab === 'nodescripts'" class="script-notice">
-            收录自 nodescripts.net 常用运维脚本，均来源于上游仓库，执行前请核对命令。
-          </p>
         </header>
         <div class="command-scroll">
           <p v-if="!categories.length" class="command-empty">
@@ -806,14 +820,17 @@ async function executeDraft() {
 
 .ssh-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-rows: minmax(0, 1fr);
   gap: 14px;
-  min-height: 540px;
-  max-height: 76vh;
+  height: clamp(540px, 74vh, 720px);
+  overflow: hidden;
 }
 .terminal-pane {
   display: flex;
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--c-line);
@@ -845,7 +862,8 @@ async function executeDraft() {
 }
 .terminal {
   flex: 1;
-  min-height: 420px;
+  min-height: 180px;
+  overflow: hidden;
   padding: 8px 6px 4px 10px;
 }
 .terminal-note {
@@ -865,6 +883,7 @@ async function executeDraft() {
 .command-pane {
   display: flex;
   min-height: 0;
+  height: 100%;
   flex-direction: column;
   border: 1px solid var(--c-line);
   border-radius: 14px;
@@ -872,6 +891,7 @@ async function executeDraft() {
   overflow: hidden;
 }
 .command-pane > header {
+  flex-shrink: 0;
   display: grid;
   gap: 8px;
   padding: 12px 14px;
@@ -940,6 +960,9 @@ async function executeDraft() {
   gap: 4px;
 }
 .cat-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 3px 8px;
   border: 1px solid var(--c-line);
   border-radius: 999px;
@@ -949,6 +972,11 @@ async function executeDraft() {
   cursor: pointer;
   transition: background var(--t-fast) var(--ease-expo), color var(--t-fast) var(--ease-expo), border-color var(--t-fast) var(--ease-expo);
 }
+.pill-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.65;
+}
 .cat-pill:hover {
   color: var(--c-ink);
   border-color: var(--c-ink);
@@ -957,6 +985,9 @@ async function executeDraft() {
   background: var(--c-ink);
   border-color: var(--c-ink);
   color: var(--c-surface);
+}
+.cat-pill.is-active .pill-count {
+  opacity: 0.85;
 }
 .script-notice {
   margin: 0;
@@ -1064,9 +1095,12 @@ async function executeDraft() {
 @media (max-width: 900px) {
   .ssh-shell {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(320px, 1fr) 260px;
+    height: min(82vh, 760px);
   }
   .command-pane {
-    max-height: 240px;
+    height: 100%;
+    max-height: 260px;
   }
 }
 
