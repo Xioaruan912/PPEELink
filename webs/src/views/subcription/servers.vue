@@ -86,7 +86,10 @@ onMounted(() => {
 onBeforeUnmount(() => clearInterval(timer));
 
 const todayTotal = computed(() =>
-  servers.value.reduce((s, x) => s + x.todayUp + x.todayDown, 0)
+  servers.value.reduce(
+    (s, x) => s + (Number(x.todayUp) || 0) + (Number(x.todayDown) || 0),
+    0
+  )
 );
 const onlineCount = computed(
   () =>
@@ -132,12 +135,24 @@ function status(s: ProxyServer) {
     ? { tone: "ok" as const, text: "运行中" }
     : { tone: "warn" as const, text: "未运行" };
 }
+const hasSpark = computed(() =>
+  traffic.value.some((r) => (Number(r.up) || 0) + (Number(r.down) || 0) > 0)
+);
 const templateLabel = (t: string) =>
-  t === "hysteria2"
-    ? "Hysteria2"
-    : t === "vless-xhttp-reality"
-      ? "XHTTP Reality"
-      : "Reality Vision";
+  (
+    ({
+      "vless-reality-vision": "Reality Vision",
+      "vless-xhttp-reality": "XHTTP Reality",
+      "vless-grpc-reality": "gRPC Reality",
+      "vless-ws-tls": "VLESS WS",
+      "vmess-ws-tls": "VMess WS",
+      "vmess-tcp": "VMess TCP",
+      "trojan-reality": "Trojan Reality",
+      "trojan-tls": "Trojan TLS",
+      "shadowsocks-2022": "SS-2022",
+      hysteria2: "Hysteria2",
+    }) as Record<string, string>
+  )[t] || t;
 
 // ---- 服务器编辑 ----
 const serverDialog = ref(false);
@@ -419,17 +434,20 @@ const usageRatio = (a: ProxyAccount) =>
         </div>
         <div class="tm tm-traffic">
           <span class="tm-label">今日流量</span>
-          <span class="tm-value mono"
-            >{{ todayParts[0] }}<small>{{ todayParts[1] }}</small></span
-          >
-          <svg
-            class="spark"
-            viewBox="0 0 70 24"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <polyline :points="spark" />
-          </svg>
+          <div class="tm-traffic-right">
+            <svg
+              v-if="hasSpark"
+              class="spark"
+              viewBox="0 0 70 24"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <polyline :points="spark" />
+            </svg>
+            <span class="tm-value mono"
+              >{{ todayParts[0] }}<small>{{ todayParts[1] }}</small></span
+            >
+          </div>
         </div>
       </section>
       <div ref="root" class="server-grid">
@@ -903,12 +921,16 @@ const usageRatio = (a: ProxyAccount) =>
     transform: scale(3);
   }
 }
+.tm-traffic-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
 .spark {
-  position: absolute;
-  right: 18px;
-  bottom: 16px;
-  width: 70px;
-  height: 24px;
+  position: static;
+  flex: none;
+  width: 56px;
+  height: 20px;
   overflow: visible;
 }
 .spark polyline {
