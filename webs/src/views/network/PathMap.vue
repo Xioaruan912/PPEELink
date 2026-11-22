@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { TraceHop, TraceView } from "@/api/network/trace";
 import { Close } from "@element-plus/icons-vue";
+import { loadWorldCountries, type CountryFeature } from "@/utils/worldGeo";
 
 const props = defineProps<{ views: TraceView[]; target: string; running?: boolean }>();
 
@@ -14,14 +15,16 @@ const colors = [
   "#0891b2",
 ];
 
+const latLines = [83.3, 166.7, 250, 333.3, 416.7];
+const lngLines = [166.7, 333.3, 500, 666.7, 833.3];
+
 const hidden = ref<number[]>([]);
 const selected = ref("");
-const land = ref("");
-const zoom = ref(1);
+const countries = ref<CountryFeature[]>([]);
+const zoom = ref(1.06);
 const offset = ref({ x: 0, y: 0 });
 const svg = ref<SVGSVGElement>();
 let disposed = false;
-const controller = new AbortController();
 
 interface Point {
   key: string;
@@ -83,7 +86,7 @@ const located = computed(() =>
 
 const transform = computed(
   () =>
-    `translate(${offset.value.x} ${offset.value.y}) translate(500 250) scale(${zoom.value}) translate(-500 -250)`
+    `translate(${offset.value.x} ${offset.value.y}) translate(500 240) scale(${zoom.value}) translate(-500 -240)`
 );
 
 const location = (h: TraceHop) =>
@@ -98,7 +101,7 @@ function toggle(id: number) {
 }
 
 function reset() {
-  zoom.value = 1;
+  zoom.value = 1.06;
   offset.value = { x: 0, y: 0 };
 }
 
@@ -115,7 +118,7 @@ function fit() {
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
   zoom.value = Math.max(
-    1,
+    1.06,
     Math.min(
       6,
       Math.min(
@@ -126,12 +129,16 @@ function fit() {
   );
   offset.value = {
     x: (500 - (minX + maxX) / 2) * zoom.value,
-    y: (250 - (minY + maxY) / 2) * zoom.value,
+    y: (240 - (minY + maxY) / 2) * zoom.value,
   };
 }
 
 function setZoom(delta: number) {
-  zoom.value = Math.max(1, Math.min(8, zoom.value + delta));
+  zoom.value = Math.max(1, Math.min(8, Number((zoom.value + delta).toFixed(2))));
+}
+
+function onWheel(e: WheelEvent) {
+  setZoom(e.deltaY < 0 ? 0.3 : -0.3);
 }
 
 function choose(key: string) {
@@ -203,52 +210,17 @@ function stopPan(e: PointerEvent) {
   panStart = undefined;
 }
 
-async function loadMap() {
+onMounted(async () => {
   try {
-    const response = await fetch(`${import.meta.env.BASE_URL}world.json`, {
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error();
-    const world = await response.json();
-    if (disposed) return;
-    land.value = world.features
-      .flatMap(
-        (f: {
-          geometry: {
-            type: string;
-            coordinates: number[][][] | number[][][][];
-          };
-        }) => {
-          const g = f.geometry;
-          const polygons =
-            g.type === "Polygon"
-              ? [g.coordinates as number[][][]]
-              : g.type === "MultiPolygon"
-                ? (g.coordinates as number[][][][])
-                : [];
-          return polygons.flatMap((poly) =>
-            poly.map(
-              (ring) =>
-                ring
-                  .map(
-                    ([lng, lat], i) =>
-                      `${i ? "L" : "M"}${(((lng + 180) / 360) * 1000).toFixed(1)},${(((90 - lat) / 180) * 500).toFixed(1)}`
-                  )
-                  .join("") + "Z"
-            )
-          );
-        }
-      )
-      .join("");
+    const list = await loadWorldCountries();
+    if (!disposed) countries.value = list;
   } catch {
     /* keep silent */
   }
-}
+});
 
-onMounted(() => void loadMap());
 onBeforeUnmount(() => {
   disposed = true;
-  controller.abort();
 });
 </script>
 
@@ -258,29 +230,102 @@ onBeforeUnmount(() => {
       <svg
         ref="svg"
         class="world"
-        :class="{ 'is-zoomed': zoom > 1 }"
-        viewBox="0 0 1000 500"
+        viewBox="0 15 1000 445"
+        preserveAspectRatio="xMidYMid slice"
         tabindex="0"
         role="group"
         aria-label="全球路由路径地图"
+        @wheel.prevent="onWheel"
         @pointerdown="startPan"
         @pointermove="pan"
         @pointerup="stopPan"
         @pointercancel="stopPan"
       >
         <defs>
-          <pattern
-            id="trace-land-dots"
-            width="5"
-            height="5"
-            patternUnits="userSpaceOnUse"
-          >
-            <circle class="land-dot" cx="2.5" cy="2.5" r="1.08" />
-          </pattern>
+          <radialGradient id="pm-ocean-light" cx="50%" cy="46%" r="68%">
+            <stop offset="0%" stop-color="#e3eef8" />
+            <stop offset="60%" stop-color="#d5e4f2" />
+            <stop offset="100%" stop-color="#c4d7ea" />
+          </radialGradient>
+          <radialGradient id="pm-ocean-dark" cx="50%" cy="46%" r="68%">
+            <stop offset="0%" stop-color="#112032" />
+            <stop offset="65%" stop-color="#0b1623" />
+            <stop offset="100%" stop-color="#070e17" />
+          </radialGradient>
+          <linearGradient id="pm-land-light" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#f7f5ee" />
+            <stop offset="55%" stop-color="#efeadd" />
+            <stop offset="100%" stop-color="#e4decb" />
+          </linearGradient>
+          <linearGradient id="pm-land-dark" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#223041" />
+            <stop offset="60%" stop-color="#1a2533" />
+            <stop offset="100%" stop-color="#141d28" />
+          </linearGradient>
+          <filter id="pm-relief" x="-5%" y="-5%" width="110%" height="112%">
+            <feDropShadow
+              dx="0"
+              dy="1.6"
+              stdDeviation="1.8"
+              flood-color="#1e3a5f"
+              flood-opacity="0.18"
+            />
+          </filter>
         </defs>
+
+        <rect x="0" y="0" width="1000" height="500" class="ocean-bg" />
+
         <g :transform="transform">
-          <path :d="land" class="land" />
-          <!-- Curved Kinetic Route Arcs -->
+          <g class="graticules" aria-hidden="true">
+            <line
+              v-for="y in latLines"
+              :key="`lat-${y}`"
+              x1="0"
+              :y1="y"
+              x2="1000"
+              :y2="y"
+              :class="{ 'is-equator': y === 250 }"
+              vector-effect="non-scaling-stroke"
+            />
+            <line
+              v-for="x in lngLines"
+              :key="`lng-${x}`"
+              :x1="x"
+              y1="0"
+              :x2="x"
+              y2="500"
+              vector-effect="non-scaling-stroke"
+            />
+          </g>
+
+          <g class="ocean-labels" aria-hidden="true">
+            <text x="148" y="290">PACIFIC OCEAN</text>
+            <text x="385" y="245">ATLANTIC OCEAN</text>
+            <text x="678" y="335">INDIAN OCEAN</text>
+          </g>
+
+          <g class="land-layer" filter="url(#pm-relief)">
+            <path
+              v-for="country in countries"
+              :key="country.name"
+              :d="country.d"
+              class="country"
+              vector-effect="non-scaling-stroke"
+            >
+              <title>{{ country.name }}</title>
+            </path>
+          </g>
+
+          <!-- Multi-layer Curved Kinetic Route Arcs -->
+          <path
+            v-for="line in lines"
+            :key="`glow-${line.key}`"
+            :d="line.path"
+            :transform="`translate(${line.shift} 0)`"
+            class="route-glow"
+            :stroke="line.color"
+            vector-effect="non-scaling-stroke"
+          />
           <path
             v-for="line in lines"
             :key="line.key"
@@ -291,7 +336,8 @@ onBeforeUnmount(() => {
             :stroke="line.color"
             vector-effect="non-scaling-stroke"
           />
-          <!-- Interactive Hop Dots -->
+
+          <!-- 3D-Elevated Hop Dots -->
           <g
             v-for="p in points"
             :key="p.key"
@@ -305,16 +351,16 @@ onBeforeUnmount(() => {
           >
             <title>{{ p.source }} #{{ p.hop.ttl }} {{ p.hop.ip }}</title>
             <circle :cx="p.x" :cy="p.y" :r="15 / zoom" class="hop-hit" />
-            <circle :cx="p.x" :cy="p.y" :r="9 / zoom" class="hop-halo" />
-            <circle :cx="p.x" :cy="p.y" :r="4.2 / zoom" class="hop-dot" />
+            <circle :cx="p.x" :cy="p.y" :r="9.5 / zoom" class="hop-halo" />
+            <circle :cx="p.x" :cy="p.y" :r="5 / zoom" class="hop-dot" />
           </g>
         </g>
       </svg>
 
       <!-- Floating Top-Right Controls -->
       <div class="floating-controls">
-        <button type="button" aria-label="放大" @click="setZoom(0.6)">+</button>
-        <button type="button" aria-label="缩小" @click="setZoom(-0.6)">−</button>
+        <button type="button" aria-label="放大" @click="setZoom(0.5)">+</button>
+        <button type="button" aria-label="缩小" @click="setZoom(-0.5)">−</button>
         <button type="button" aria-label="适应路径" @click="fit">适应</button>
         <button type="button" aria-label="重置" @click="reset">全图</button>
       </div>
@@ -359,7 +405,6 @@ onBeforeUnmount(() => {
       </Transition>
     </div>
 
-    <!-- Compact Source Legend Pills -->
     <div v-if="routes.length" class="legend-rail">
       <button
         v-for="v in routes"
@@ -398,7 +443,7 @@ onBeforeUnmount(() => {
   inset: 0;
   width: 24%;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgb(21 184 90 / 0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgb(21 184 90 / 0.16), transparent);
   animation: mapScan 2.2s linear infinite;
 }
 
@@ -407,37 +452,90 @@ onBeforeUnmount(() => {
   width: 100%;
   height: clamp(380px, 52dvh, 560px);
   cursor: grab;
-  touch-action: pan-y;
-}
-
-.world.is-zoomed {
   touch-action: none;
+  outline: none;
 }
 
 .world:active {
   cursor: grabbing;
 }
 
-.land {
-  fill: url(#trace-land-dots);
-  fill-rule: evenodd;
+.ocean-bg {
+  fill: url(#pm-ocean-light);
 }
 
-.land-dot {
-  fill: color-mix(in srgb, var(--c-muted) 56%, transparent);
+:global(html.dark) .ocean-bg {
+  fill: url(#pm-ocean-dark);
+}
+
+.graticules line {
+  stroke: rgb(30 64 115 / 0.08);
+  stroke-width: 0.7;
+  stroke-dasharray: 2 4;
+}
+
+.graticules line.is-equator {
+  stroke: rgb(30 64 115 / 0.16);
+  stroke-dasharray: none;
+}
+
+:global(html.dark) .graticules line {
+  stroke: rgb(148 184 230 / 0.08);
+}
+
+.ocean-labels text {
+  fill: rgb(42 82 130 / 0.28);
+  font-family: var(--font-display);
+  font-size: 9.5px;
+  font-style: italic;
+  letter-spacing: 0.24em;
+  user-select: none;
+  pointer-events: none;
+}
+
+:global(html.dark) .ocean-labels text {
+  fill: rgb(148 184 230 / 0.22);
+}
+
+.country {
+  fill: url(#pm-land-light);
+  stroke: #c6bfb0;
+  stroke-width: 0.65;
+  stroke-linejoin: round;
+  transition: fill 160ms ease-out;
+}
+
+.country:hover {
+  fill: #fbfaf5;
+}
+
+:global(html.dark) .country {
+  fill: url(#pm-land-dark);
+  stroke: #31445a;
+}
+
+:global(html.dark) .country:hover {
+  fill: #2a3c52;
+}
+
+.route-glow {
+  fill: none;
+  stroke-width: 5;
+  opacity: 0.2;
+  stroke-linecap: round;
 }
 
 .route-arc {
   fill: none;
-  stroke-width: 2;
+  stroke-width: 2.2;
   stroke-linecap: round;
-  opacity: 0.85;
+  opacity: 0.92;
   stroke-dasharray: 6 4;
   animation: arcFlow 1.8s linear infinite;
 }
 
 .route-arc.is-gap {
-  opacity: 0.45;
+  opacity: 0.5;
   stroke-dasharray: 3 6;
 }
 
@@ -453,21 +551,21 @@ onBeforeUnmount(() => {
 .hop-halo {
   fill: none;
   stroke: var(--hop-color);
-  stroke-width: 1.2;
-  opacity: 0.28;
+  stroke-width: 1.4;
+  opacity: 0.35;
   vector-effect: non-scaling-stroke;
 }
 
 .hop-dot {
   fill: var(--hop-color);
-  stroke: var(--c-surface);
-  stroke-width: 1.4;
+  stroke: #ffffff;
+  stroke-width: 1.8;
   vector-effect: non-scaling-stroke;
 }
 
 .map-hop.is-selected .hop-halo {
-  opacity: 0.85;
-  stroke-width: 2;
+  opacity: 0.9;
+  stroke-width: 2.2;
 }
 
 .floating-controls {
@@ -480,8 +578,9 @@ onBeforeUnmount(() => {
   border: 1px solid var(--c-line);
   border-radius: 12px;
   background: color-mix(in srgb, var(--c-surface) 90%, transparent);
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(16px);
   overflow: hidden;
+  box-shadow: 0 8px 20px -8px rgb(0 0 0 / 0.14);
 }
 
 .floating-controls button {
