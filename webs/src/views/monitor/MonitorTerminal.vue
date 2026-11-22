@@ -230,7 +230,7 @@ function createTerminal() {
     fontSize: 13,
     fontFamily:
       '"JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
-    scrollback: 2000,
+    scrollback: 5000,
     theme: {
       background: "#0b0b0e",
       foreground: "#f0f0ed",
@@ -249,6 +249,17 @@ function createTerminal() {
   fit = new FitAddon();
   term.loadAddon(fit);
   term.open(terminalHost.value);
+  term.attachCustomWheelEventHandler(() => {
+    // Prevent xterm.js alternate-screen fallback from sending Up/Down arrow keys
+    // (which cycles bash command history instead of scrolling terminal output).
+    if (
+      term?.buffer.active.type === "alternate" &&
+      term.modes.mouseTrackingMode === "none"
+    ) {
+      return false;
+    }
+    return true;
+  });
   term.onData((data) => {
     if (controlPressed.value) {
       controlPressed.value = false;
@@ -658,7 +669,7 @@ async function executeDraft() {
           </button>
         </div>
         <p class="terminal-note">
-          关闭窗口会保留会话。任务保护启用后，断线可恢复原会话；服务器重启会结束运行任务。
+          关闭窗口会保留会话；滚轮可上下翻看历史输出（按住 Shift 拖动可框选复制）。
         </p>
         <UiButton @click="visible = false">离开并保留会话</UiButton>
       </section>
