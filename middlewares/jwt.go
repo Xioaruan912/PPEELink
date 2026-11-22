@@ -1,11 +1,14 @@
 package middlewares
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"log"
 	"net/http"
 	"ppeelink/models"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
@@ -14,6 +17,71 @@ import (
 
 // Secret 在配置初始化完成后由 InitSecret 加载，避免包初始化阶段读到空配置。
 var Secret []byte
+
+var revokedTokens = struct {
+	sync.RWMutex
+	items map[string]time.Time
+}{items: map[string]time.Time{}}
+
+var tokenLastUsedWrite = struct {
+	sync.Mutex
+	items map[uint]time.Time
+}{items: map[uint]time.Time{}}
+
+func hashTokenKey(tokenString string) string {
+	sum := sha256.Sum256([]byte(tokenString))
+	return hex.EncodeToString(sum[:])
+}
+
+// RevokeToken invalidates a JWT until its natural expiration time.
+func RevokeToken(tokenString string, exp time.Time) {
+	tokenString = strings.TrimSpace(tokenString)
+	if tokenString == "" {
+		return
+	}
+	now := time.Now()
+	if exp.IsZero() || exp.Before(now) {
+		exp = now.Add(24 * time.Hour)
+	}
+	key := hashTokenKey(tokenString)
+	revokedTokens.Lock()
+	defer revokedTokens.Unlock()
+	if len(revokedTokens.items) >= 256 {
+		for k, until := range revokedTokens.items {
+			if now.After(until) {
+				delete(revokedTokens.items, k)
+			}
+		}
+	}
+	revokedTokens.items[key] = exp
+}
+
+func isTokenRevoked(tokenString string) bool {
+	key := hashTokenKey(tokenString)
+	revokedTokens.RLock()
+	until, ok := revokedTokens.items[key]
+	revokedTokens.RUnlock()
+	if !ok {
+		return false
+	}
+	if time.Now().After(until) {
+		revokedTokens.Lock()
+		delete(revokedTokens.items, key)
+		revokedTokens.Unlock()
+		return false
+	}
+	return true
+}
+
+func shouldTouchAPIToken(id uint, now time.Time) bool {
+	tokenLastUsedWrite.Lock()
+	defer tokenLastUsedWrite.Unlock()
+	if last, ok := tokenLastUsedWrite.items[id]; ok && now.Sub(last) < time.Minute {
+		return false
+	}
+	tokenLastUsedWrite.items[id] = now
+	return true
+}
 
 // InitSecret 加载 JWT 密钥；密钥为空时终止启动，避免用空密钥签发/校验 token。
 func InitSecret() {
@@ -58,11 +126,18 @@ func AuthorToken(c *gin.Context) {
 		return
 	}
 	if strings.Count(credential, ".") == 2 {
+		if isTokenRevoked(credential) {
+			c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "msg": "登录态已失效，请重新登录"})
+			c.Abort()
+			return
+		}
 		if mc, err := ParseToken(credential); err == nil {
 			if !AuthorizeUser(c, mc.Username) {
 				c.Abort()
 				return
 			}
+			c.Set("jwtToken", credential)
+			c.Set("jwtExp", time.Unix(mc.ExpiresAt, 0))
 			c.Next()
 			return
 		}
@@ -85,7 +160,9 @@ func AuthorToken(c *gin.Context) {
 		return
 	}
 	now := time.Now()
-	_ = models.DB.Model(&apiToken).Update("last_used_at", &now).Error
+	if shouldTouchAPIToken(apiToken.ID, now) {
+		_ = models.DB.Model(&apiToken).Update("last_used_at", &now).Error
+	}
 	c.Set("username", "api-token:"+apiToken.Name)
 	c.Set("authType", "api-token")
 	c.Set("apiTokenId", apiToken.ID)

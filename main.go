@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"embed"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"ppeelink/api"
 	"ppeelink/middlewares"
 	"ppeelink/models"
@@ -15,6 +18,7 @@ import (
 	"ppeelink/settings"
 	"ppeelink/utils"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -51,7 +55,7 @@ func Templateinit() {
 	// 创建template目录
 	_, err = os.Stat("./template")
 	if os.IsNotExist(err) {
-		err = os.Mkdir("./template", 0666)
+		err = os.Mkdir("./template", 0o750)
 		if err != nil {
 			log.Println(err)
 			return
@@ -67,7 +71,7 @@ func Templateinit() {
 				log.Println(err)
 				continue
 			}
-			err = os.WriteFile("./template/"+entry.Name(), data, 0666)
+			err = os.WriteFile("./template/"+entry.Name(), data, 0o640)
 			if err != nil {
 				log.Println(err)
 			}
@@ -131,6 +135,9 @@ func main() {
 func Run(port int) {
 	// 加载 JWT 密钥（必须在配置初始化之后，避免读到空密钥）
 	middlewares.InitSecret()
+	if version != "dev" && os.Getenv("GIN_MODE") == "" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	// 初始化gin框架
 	r := gin.Default()
 	// Do not trust arbitrary X-Forwarded-For by default. Operators behind a
@@ -150,8 +157,9 @@ func Run(port int) {
 	// 初始化模板
 	Templateinit()
 	// 安装中间件
-	r.Use(middlewares.AuthorToken) // jwt验证token
-	r.Use(middlewares.AuditTrail)  // 管理写操作审计（不记录请求体）
+	r.Use(middlewares.SecurityHeaders) // 安全响应头与 API 禁缓存
+	r.Use(middlewares.AuthorToken)     // jwt验证token
+	r.Use(middlewares.AuditTrail)      // 管理写操作审计（不记录请求体）
 	// 设置静态资源路径（自定义 handler，支持 gzip + 正确 Content-Length）
 	staticFiles, err := fs.Sub(embeddedFiles, "webs/dist")
 	if err != nil {
@@ -170,15 +178,15 @@ func Run(port int) {
 	r.HEAD("/", func(c *gin.Context) {
 		c.Status(http.StatusOK)
 	})
-	// 设置模板路径
+	// 设置模板路径（禁用 index.html 缓存，发版后浏览器自动加载最新前端）
 	r.GET("/", func(c *gin.Context) {
 		data, err := fs.ReadFile(staticFiles, "index.html")
 		if err != nil {
 			c.Error(err)
 			return
-
 		}
-		c.Data(200, "text/html", data)
+		c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+		c.Data(http.StatusOK, "text/html; charset=utf-8", data)
 	})
 	// 注册路由
 	routers.User(r)
@@ -213,9 +221,37 @@ func Run(port int) {
 		Where("ssh_password_enc <> '' OR ssh_host <> '' OR ssh_user <> ''").
 		Updates(map[string]any{"ssh_host": "", "ssh_port": 22, "ssh_user": "", "ssh_password_enc": ""}).Error
 	// 启动后台定时测活任务 (Cron)
-	StartCronTasks()
+	cronScheduler := StartCronTasks()
 	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步
 
-	// 启动服务
-	r.Run(fmt.Sprintf("0.0.0.0:%d", port))
+	srv := &http.Server{
+		Addr:              fmt.Sprintf("0.0.0.0:%d", port),
+		Handler:           r,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20, // 1 MiB
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	go func() {
+		log.Printf("[主程序] HTTP 服务启动于 %s (version=%s)", srv.Addr, version)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("[主程序] HTTP 服务异常退出: %v", err)
+		}
+	}()
+
+	<-ctx.Done()
+	log.Println("[主程序] 收到退出信号，开始优雅停机...")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("[主程序] HTTP 优雅停机超时: %v", err)
+	}
+	if cronScheduler != nil {
+		cronScheduler.Stop()
+	}
+	models.CloseSqlite()
+	log.Println("[主程序] 已安全退出")
 }

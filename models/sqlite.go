@@ -21,8 +21,8 @@ func InitSqlite() {
 	if err := os.MkdirAll("./db", 0o755); err != nil {
 		log.Println("创建数据库目录失败:", err)
 	}
-	// WAL + busy_timeout 缓解并发写入导致的 SQLITE_BUSY
-	dsn := "./db/ppeelink.db?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)"
+	// WAL + busy_timeout + 32MB page cache + 128MB mmap + memory temp_store
+	dsn := "./db/ppeelink.db?_pragma=busy_timeout(8000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=cache_size(-32000)&_pragma=temp_store(MEMORY)&_pragma=mmap_size(134217728)"
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("连接数据库失败: %v", err)
@@ -70,4 +70,24 @@ func InitSqlite() {
 	// 设置初始化标志为 true
 	isInitialized = true
 	log.Println("数据库初始化成功") // 只有在没有任何错误时才会打印这个日志
+}
+
+// OptimizeSqlite runs SQLite's query planner statistics refresh.
+func OptimizeSqlite() {
+	if DB == nil {
+		return
+	}
+	_ = DB.Exec("PRAGMA optimize").Error
+}
+
+// CloseSqlite checkpoints the WAL file cleanly and closes the database pool on shutdown.
+func CloseSqlite() {
+	if DB == nil {
+		return
+	}
+	_ = DB.Exec("PRAGMA optimize").Error
+	_ = DB.Exec("PRAGMA wal_checkpoint(TRUNCATE)").Error
+	if sqlDB, err := DB.DB(); err == nil {
+		_ = sqlDB.Close()
+	}
 }
