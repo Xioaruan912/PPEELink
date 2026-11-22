@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 180" width="1120" height="180" fill="none">
+  <defs>
+    <style>
+      .card { fill: #0f131c; stroke: rgba(255,255,255,0.1); stroke-width: 1; }
+      .t { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Inter", sans-serif; fill: #f8fafc; font-size: 15px; font-weight: 600; }
+      .s { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #94a3b8; font-size: 11.5px; }
+      .lbl { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; fill: #64748b; font-size: 11px; }
+      .wire { stroke: rgba(148,163,184,0.32); stroke-width: 1.5; stroke-dasharray: 4 5; animation: move 10s linear infinite; }
+      @keyframes move { to { stroke-dashoffset: -90; } }
+    </style>
+  </defs>
+
+  <rect width="1120" height="180" rx="16" fill="#090c12"/>
+  <rect x="0.5" y="0.5" width="1119" height="179" rx="15.5" stroke="rgba(255,255,255,0.06)"/>
+
+  <!-- Connectors -->
+  <path id="w1" d="M310,90 L430,90" class="wire"/>
+  <path id="w2" d="M690,90 L810,90" class="wire"/>
+
+  <circle r="3.5" fill="#10b981">
+    <animateMotion dur="2.2s" repeatCount="indefinite"><mpath href="#w1"/></animateMotion>
+  </circle>
+  <circle r="3.5" fill="#38bdf8">
+    <animateMotion dur="2.2s" repeatCount="indefinite" begin="0.7s"><mpath href="#w2"/></animateMotion>
+  </circle>
+
+  <text x="342" y="76" class="lbl">WS RPC / Spec</text>
+  <text x="716" y="76" class="lbl">Sub / Clash / HY2</text>
+
+  <!-- Box 1: Panel -->
+  <g transform="translate(50, 38)">
+    <rect width="260" height="104" rx="12" class="card"/>
+    <circle cx="24" cy="30" r="4.5" fill="#10b981"/>
+    <text x="38" y="35" class="t">PPEELink Panel</text>
+    <text x="20" y="64" class="s">Go + Gin + SQLite (WAL)</text>
+    <text x="20" y="84" class="s">订阅渲染 · 规则去重 · 审计</text>
+  </g>
+
+  <!-- Box 2: Agent Fleet -->
+  <g transform="translate(430, 38)">
+    <rect width="260" height="104" rx="12" class="card"/>
+    <circle cx="24" cy="30" r="4.5" fill="#38bdf8"/>
+    <text x="38" y="35" class="t">Agent v1.18 (独立分支)</text>
+    <text x="20" y="64" class="s">Xray-core · 10 协议 3x-ui</text>
+    <text x="20" y="84" class="s">节点直测 TCP Ping · NextTrace</text>
+  </g>
+
+  <!-- Box 3: Clients -->
+  <g transform="translate(810, 38)">
+    <rect width="260" height="104" rx="12" class="card"/>
+    <circle cx="24" cy="30" r="4.5" fill="#a78bfa"/>
+    <text x="38" y="35" class="t">多端订阅下发</text>
+    <text x="20" y="64" class="s">Mihomo · sing-box · Surge</text>
+    <text x="20" y="84" class="s">Loon · Shadowrocket · v2rayN</text>
+  </g>
+</svg>
