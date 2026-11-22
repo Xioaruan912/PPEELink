@@ -190,6 +190,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { ElMessage } from "element-plus";
 import gsap from "gsap";
 import { getNodeMap } from "@/api/total";
 import { getNodeOverview, getNodeQualitySummary } from "@/api/subcription/node";
@@ -254,19 +255,49 @@ function togglePoint(pt: MapPoint) {
   }
 }
 
+async function copyTextSafe(text: string): Promise<boolean> {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      /* fall through to execCommand */
+    }
+  }
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.setAttribute("readonly", "");
+  ta.style.position = "fixed";
+  ta.style.top = "-9999px";
+  ta.style.left = "-9999px";
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  let ok = false;
+  try {
+    ok = document.execCommand("copy");
+  } catch {
+    ok = false;
+  } finally {
+    document.body.removeChild(ta);
+  }
+  return ok;
+}
+
 async function copyActiveLink() {
   const link = activeNode.value?.link;
   const name = selectedPoint.value?.name;
   if (!link || !name) return;
-  try {
-    await navigator.clipboard.writeText(link);
+  const ok = await copyTextSafe(link);
+  if (ok) {
     copiedName.value = name;
+    ElMessage.success("已复制节点链接");
     if (copyTimer) clearTimeout(copyTimer);
     copyTimer = setTimeout(() => {
       copiedName.value = "";
     }, 1800);
-  } catch {
-    /* ignore clipboard permission error */
+  } else {
+    ElMessage.warning("复制失败，请检查浏览器剪贴板权限");
   }
 }
 
