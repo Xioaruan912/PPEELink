@@ -99,7 +99,7 @@ func (m *Manager) Prepare(ctx context.Context, install bool) error {
 		case <-time.After(40 * time.Millisecond):
 		}
 	}
-	for _, option := range [][]string{{"history-limit", "5000"}, {"prefix", "None"}, {"prefix2", "None"}} {
+	for _, option := range [][]string{{"history-limit", "5000"}, {"prefix", "None"}, {"prefix2", "None"}, {"mouse", "on"}, {"set-clipboard", "on"}} {
 		if _, err = m.command(ctx, append([]string{"set-option", "-g"}, option...)...); err != nil {
 			return err
 		}
@@ -261,6 +261,9 @@ func (m *Manager) Attach(ctx context.Context, owner int, id string, cols, rows i
 	if err := m.Exists(ctx, owner, id); err != nil {
 		return nil, err
 	}
+	// Ensure existing long-lived tmux servers also enable mouse wheel scrollback.
+	_, _ = m.command(ctx, "set-option", "-g", "mouse", "on")
+	_, _ = m.command(ctx, "set-option", "-g", "set-clipboard", "on")
 	if cols < 10 || cols > 500 {
 		cols = 100
 	}
