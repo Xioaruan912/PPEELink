@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import DomainRouteFields from "./DomainRouteFields.vue";
 import IconShuffle from "~icons/ph/shuffle";
 import IconCheck from "~icons/ph/seal-check";
@@ -11,7 +12,8 @@ import {
   type DomainRoute,
   type TargetCheck,
 } from "@/api/proxy";
-import { UiButton, UiDrawer, UiSegmented } from "@/ui";
+import { UiButton, UiDrawer } from "@/ui";
+import KineticNotice from "@/ui/KineticNotice.vue";
 
 const props = defineProps<{
   serverId: number;
@@ -21,14 +23,60 @@ const props = defineProps<{
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ saved: [] }>();
 
-// 常用伪装目标：需支持 TLS 1.3 与 h2，建议选与服务器同地区的站点
+// 精选非 Cloudflare CDN 伪装目标（TLS 1.3 + h2，已排除 CF CDN 防止被用于攻击）
 const targets = [
-  "www.apple.com",
-  "dl.google.com",
-  "www.amazon.com",
-  "www.tesla.com",
-  "addons.mozilla.org",
+  { host: "www.amd.com", tag: "AMD · 推荐" },
+  { host: "www.apple.com", tag: "Apple" },
+  { host: "dl.google.com", tag: "Google" },
+  { host: "www.amazon.com", tag: "Amazon" },
+  { host: "www.tesla.com", tag: "Tesla" },
+  { host: "addons.mozilla.org", tag: "Mozilla" },
 ];
+
+const protocolCards: {
+  value: ProxyInbound["template"];
+  title: string;
+  desc: string;
+}[] = [
+  {
+    value: "vless-reality-vision",
+    title: "VLESS Reality",
+    desc: "兼容性最佳，主流客户端通用",
+  },
+  {
+    value: "vless-xhttp-reality",
+    title: "XHTTP Reality",
+    desc: "直连 TLS 伪装，需客户端支持 XHTTP",
+  },
+  {
+    value: "hysteria2",
+    title: "Hysteria2",
+    desc: "UDP 高速传输，免域名自动签发证书",
+  },
+];
+
+const listenOptions = [
+  { label: "双栈监听", value: "" },
+  { label: "仅 IPv4", value: "0.0.0.0" },
+  { label: "仅 IPv6", value: "::" },
+];
+
+const fingerprints = [
+  "chrome",
+  "firefox",
+  "safari",
+  "ios",
+  "android",
+  "edge",
+  "randomized",
+];
+
+const hy2Modes: { value: "self-signed" | "auto" | "manual"; label: string }[] = [
+  { value: "self-signed", label: "免证书自签" },
+  { value: "auto", label: "指纹校验" },
+  { value: "manual", label: "已有证书" },
+];
+
 const randomPort = () => 20000 + Math.floor(Math.random() * 30000);
 const blank = () => ({
   id: 0,
@@ -37,7 +85,7 @@ const blank = () => ({
   remark: "Reality",
   template: "vless-reality-vision" as ProxyInbound["template"],
   port: randomPort(),
-  target: "www.apple.com:443",
+  target: "www.amd.com:443",
   listen: "",
   fingerprint: "chrome",
   spiderX: "/",
@@ -47,42 +95,50 @@ const blank = () => ({
   tlsMode: "self-signed" as "auto" | "manual" | "self-signed",
   tlsCertFile: "",
   tlsKeyFile: "",
-  sni: "www.apple.com",
+  sni: "www.amd.com",
   path: "",
   enabled: true,
   regenerateKey: false,
 });
+
 const form = reactive(blank());
 const importKey = ref(false);
-
 const identityLocked = computed(() => !!props.requireEgress && form.id > 0);
+
 watch(
   () => form.template,
   (template) => {
     if (template === "hysteria2" && props.inbound?.template !== "hysteria2") {
-      if (form.sni === "www.apple.com") form.sni = "";
+      if (form.sni === "www.amd.com" || form.sni === "www.apple.com") {
+        form.sni = "";
+      }
       if (form.remark === "Reality") form.remark = "Hysteria2";
     }
   }
 );
+
 const saving = ref(false);
 const exitOptions = ref<{ id: number; name: string }[]>([]);
 const exitError = ref("");
 let exitRequest = 0;
+
 async function loadExitOptions() {
   const request = ++exitRequest;
   exitError.value = "";
   try {
     const response = await getProxyEgressOptions();
-    if (request === exitRequest && visible.value)
+    if (request === exitRequest && visible.value) {
       exitOptions.value = response.data;
+    }
   } catch {
     if (request === exitRequest) exitError.value = "出口节点加载失败";
   }
 }
+
 const error = ref("");
 const check = ref<TargetCheck | null>(null);
 const checking = ref(false);
+
 watch(visible, (open) => {
   if (!open) {
     exitRequest++;
@@ -117,19 +173,26 @@ watch(visible, (open) => {
   );
   if (props.requireEgress && !props.inbound) form.remark = "";
 });
+
 function pickTarget(host: string) {
   form.target = `${host}:443`;
   form.sni = host;
   check.value = null;
+  error.value = "";
 }
+
 async function runCheck() {
   checking.value = true;
+  error.value = "";
   try {
     check.value = (await checkRealityTarget(form.target, form.sni)).data;
+  } catch (e: any) {
+    error.value = e?.message || "检测失败";
   } finally {
     checking.value = false;
   }
 }
+
 async function save() {
   if (props.requireEgress && !form.remark.trim()) {
     error.value = "请填写网关节点名称。";
@@ -137,6 +200,10 @@ async function save() {
   }
   if (props.requireEgress && !form.egressNodeId) {
     error.value = "请选择落地出口，固定入口网关不能使用当前服务器直连。";
+    return;
+  }
+  if (form.template !== "hysteria2" && check.value?.cloudflare) {
+    error.value = "当前伪装目标使用 Cloudflare CDN，已排除，请更换非 CF 站点（如 www.amd.com）。";
     return;
   }
   saving.value = true;
@@ -177,6 +244,7 @@ async function save() {
   }
 }
 </script>
+
 <template>
   <UiDrawer
     v-model="visible"
@@ -189,492 +257,761 @@ async function save() {
           ? '编辑入站'
           : '添加入站'
     "
-    size="min(560px, 100vw)"
+    size="min(680px, 100vw)"
   >
-    <div class="deployment-baseline">
-      <strong>x-ui 节点部署</strong>
-      <p class="hint">
-        Reality 参数与 x-ui 一致。HY2 可由 Agent
-        自动生成证书，无需申请域名或上传证书。
+    <div class="inbound-editor">
+      <p v-if="identityLocked" class="lock-banner">
+        入口地址与认证参数已锁定；如需更换端口或协议，请新建网关。
       </p>
-    </div>
-    <p v-if="identityLocked" class="hint identity-hint">
-      入口地址与认证保持不变，需要更改入口请新建网关
-    </p>
-    <el-form label-position="top" @submit.prevent="save">
-      <el-form-item label="协议模板">
-        <UiSegmented
-          v-model="form.template"
-          label="协议模板"
-          :options="[
-            {
-              label: 'VLESS Reality / Vision',
-              value: 'vless-reality-vision',
-              disabled: identityLocked,
-            },
-            {
-              label: 'XHTTP Reality',
-              value: 'vless-xhttp-reality',
-              disabled: identityLocked,
-            },
-            {
-              label: 'Hysteria2',
-              value: 'hysteria2',
-              disabled: identityLocked,
-            },
-          ]"
-        />
-        <p class="hint">
-          {{
-            form.template === "hysteria2"
-              ? "使用 UDP，支持 x-ui 自签名方式、证书指纹或已有证书。"
-              : form.template === "vless-reality-vision"
-                ? "兼容性最好，Clash Meta、Shadowrocket、sing-box 等主流客户端都支持。"
-                : "XHTTP Reality 使用直连 TLS 伪装，需要支持 XHTTP 的客户端；不用于 CDN TLS 终止。"
-          }}
-        </p>
-      </el-form-item>
-      <div class="grid">
-        <el-form-item
-          :label="props.requireEgress ? '节点名称' : '备注'"
-          :required="props.requireEgress"
-        >
-          <el-input
-            v-model="form.remark"
-            :placeholder="
-              props.requireEgress ? '请输入节点名称' : '显示在节点名里'
-            "
-          />
-        </el-form-item>
-        <el-form-item label="端口">
-          <div class="port-row">
-            <el-input-number
-              v-model="form.port"
+
+      <KineticNotice :raw="error" />
+
+      <el-form label-position="top" class="inbound-form" @submit.prevent="save">
+        <!-- 1. Protocol Selector Cards -->
+        <section class="form-block">
+          <header class="block-head">
+            <h3 class="block-title">协议类型</h3>
+          </header>
+          <div class="proto-grid" role="radiogroup" aria-label="协议模板">
+            <button
+              v-for="p in protocolCards"
+              :key="p.value"
+              type="button"
+              role="radio"
+              class="proto-card"
+              :class="{ 'is-active': form.template === p.value }"
+              :aria-checked="form.template === p.value"
               :disabled="identityLocked"
-              :min="1024"
-              :max="65535"
-              controls-position="right"
+              @click="form.template = p.value"
+            >
+              <strong class="proto-title">{{ p.title }}</strong>
+              <span class="proto-desc">{{ p.desc }}</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- 2. Basic Info (Name & Port) -->
+        <section class="form-block">
+          <div class="two-col">
+            <el-form-item
+              :label="props.requireEgress ? '节点名称' : '备注名称'"
+              :required="props.requireEgress"
+            >
+              <el-input
+                v-model="form.remark"
+                :placeholder="
+                  props.requireEgress ? '输入网关节点名称' : '显示在节点列表中'
+                "
+              />
+            </el-form-item>
+
+            <el-form-item label="监听端口">
+              <div class="port-row">
+                <el-input-number
+                  v-model="form.port"
+                  :disabled="identityLocked"
+                  :min="1024"
+                  :max="65535"
+                  controls-position="right"
+                />
+                <UiButton
+                  v-if="!identityLocked"
+                  variant="ghost"
+                  :icon="IconShuffle"
+                  aria-label="随机端口"
+                  @click="form.port = randomPort()"
+                />
+              </div>
+            </el-form-item>
+          </div>
+        </section>
+
+        <!-- 3A. Reality Camouflage -->
+        <section v-if="form.template !== 'hysteria2'" class="form-block">
+          <header class="block-head">
+            <div>
+              <h3 class="block-title">伪装目标（Reality）</h3>
+              <p class="block-sub">
+                仅选用非 Cloudflare CDN 的 TLS 1.3 站点，避免被用于 CDN 反射攻击
+              </p>
+            </div>
+            <span class="shield-pill">已排除 CF CDN</span>
+          </header>
+
+          <div v-if="!identityLocked" class="target-chips">
+            <button
+              v-for="item in targets"
+              :key="item.host"
+              type="button"
+              class="target-chip"
+              :class="{ 'is-active': form.target === `${item.host}:443` }"
+              @click="pickTarget(item.host)"
+            >
+              <span class="mono">{{ item.host }}</span>
+              <em v-if="item.host === 'www.amd.com'" class="chip-tag">推荐</em>
+            </button>
+          </div>
+
+          <div class="two-col">
+            <el-form-item label="目标地址（host:443）">
+              <el-input
+                v-model="form.target"
+                :readonly="identityLocked"
+                placeholder="www.amd.com:443"
+                @input="check = null"
+              />
+            </el-form-item>
+
+            <el-form-item label="SNI 握手域名">
+              <el-input
+                v-model="form.sni"
+                :readonly="identityLocked"
+                placeholder="默认与伪装目标相同"
+                @input="check = null"
+              />
+            </el-form-item>
+          </div>
+
+          <el-form-item
+            v-if="form.template === 'vless-xhttp-reality'"
+            label="XHTTP 路径"
+          >
+            <el-input
+              v-model="form.path"
+              :readonly="identityLocked"
+              placeholder="留空自动生成随机路径"
             />
+          </el-form-item>
+
+          <div class="check-bar">
             <UiButton
               variant="ghost"
-              :icon="IconShuffle"
-              v-if="!identityLocked"
-              aria-label="随机端口"
-              @click="form.port = randomPort()"
-            />
+              :icon="IconCheck"
+              :loading="checking"
+              @click="runCheck"
+            >
+              检测目标可用性 & CF 校验
+            </UiButton>
+            <Transition name="pop">
+              <span
+                v-if="check"
+                class="check-pill"
+                :class="
+                  check.cloudflare
+                    ? 'is-bad'
+                    : check.ok
+                      ? check.h2
+                        ? 'is-ok'
+                        : 'is-warn'
+                      : 'is-bad'
+                "
+              >
+                {{ check.message }}
+              </span>
+            </Transition>
           </div>
-        </el-form-item>
-      </div>
-      <el-form-item
-        v-if="form.template !== 'hysteria2'"
-        label="伪装目标（Reality target）"
-      >
-        <el-input
-          v-model="form.target"
-          :readonly="identityLocked"
-          placeholder="www.apple.com:443"
-          @input="check = null"
-        />
-        <div v-if="!identityLocked" class="chips">
-          <button
-            v-for="h in targets"
-            :key="h"
-            type="button"
-            class="chip"
-            :class="{ on: form.target === `${h}:443` }"
-            @click="pickTarget(h)"
-          >
-            {{ h }}
-          </button>
-        </div>
-      </el-form-item>
-      <el-form-item v-if="form.template === 'hysteria2'" label="部署方式">
-        <UiSegmented
-          v-model="form.tlsMode"
-          label="部署方式"
-          :options="[
-            {
-              label: '无需证书配置',
-              value: 'self-signed',
-              disabled: identityLocked,
-            },
-            {
-              label: '证书指纹校验',
-              value: 'auto',
-              disabled: identityLocked,
-            },
-            {
-              label: '使用已有证书',
-              value: 'manual',
-              disabled: identityLocked,
-            },
-          ]"
-        />
-      </el-form-item>
-      <div
-        v-if="form.template === 'hysteria2' && form.tlsMode === 'self-signed'"
-        class="auto-tls-info"
-      >
-        <strong>按 x-ui 方式部署 HY2</strong>
-        <p class="hint">
-          无需域名、无需填写证书路径。Agent
-          自动生成并保管证书，订阅和分享链接会明确携带“跳过证书验证”。
-        </p>
-        <p class="hint">
-          可用于支持 HY2 的 Mihomo、sing-box、Loon 等客户端。服务器必须放行所选
-          UDP 端口；TLS 仍然启用。
-        </p>
-      </div>
-      <div
-        v-if="form.template === 'hysteria2' && form.tlsMode === 'auto'"
-        class="auto-tls-info"
-      >
-        <strong>服务器 IP 直连，无需域名或 Cloudflare</strong>
-        <p class="hint">
-          Agent 自动生成并保管证书，订阅携带证书指纹。服务器连接地址需填写
-          IP，并放行所选 UDP 端口。
-        </p>
-        <p class="hint">
-          推荐 Mihomo / sing-box 完整配置。官方 HY2 分享链接需使用支持 pinSHA256
-          的客户端；Surge / Loon
-          格式不下发此节点，通用链接导入需确认客户端支持指纹校验。
-        </p>
-        <p
-          v-if="
-            props.inbound?.tlsMode === 'auto' && props.inbound?.tlsFingerprint
-          "
-          class="certificate-state"
-        >
-          证书已就绪 · SHA-256<br /><code>{{
-            props.inbound.tlsFingerprint
-          }}</code>
-        </p>
-        <p v-else class="hint">
-          {{
-            form.id
-              ? "等待 Agent 部署并回传证书，完成后自动加入订阅。"
-              : "点击部署后自动加入订阅，无需填写证书路径。"
-          }}
-        </p>
-      </div>
-      <el-form-item
-        v-if="form.template !== 'hysteria2' || form.tlsMode === 'manual'"
-        label="SNI（客户端握手用的域名）"
-      >
-        <el-input
-          v-model="form.sni"
-          :readonly="identityLocked"
-          :placeholder="
-            form.template === 'hysteria2'
-              ? '证书对应域名，如 proxy.example.com'
-              : '默认与伪装目标相同'
-          "
-          @input="check = null"
-        />
-      </el-form-item>
-      <div v-if="form.template !== 'hysteria2'" class="check-row">
-        <UiButton :icon="IconCheck" :loading="checking" @click="runCheck"
-          >检测伪装目标</UiButton
-        >
-        <Transition name="pop">
-          <span
-            v-if="check"
-            class="check-result"
-            :class="check.ok ? (check.h2 ? 'is-ok' : 'is-warn') : 'is-bad'"
-          >
-            {{ check.message }}
-          </span>
-        </Transition>
-      </div>
-      <p v-if="form.template !== 'hysteria2' && !identityLocked" class="hint">
-        检测在面板所在机器上进行；同一站点在不同地区表现可能不同，保存后若节点不通，换一个目标再试。
-      </p>
-      <el-form-item
-        v-if="form.template === 'vless-xhttp-reality'"
-        label="XHTTP 路径"
-      >
-        <el-input
-          v-model="form.path"
-          :readonly="identityLocked"
-          placeholder="留空自动生成随机路径"
-        />
-      </el-form-item>
-      <template
-        v-if="form.template === 'hysteria2' && form.tlsMode === 'manual'"
-      >
-        <el-form-item label="证书文件路径" required
-          ><el-input
-            v-model="form.tlsCertFile"
-            :readonly="identityLocked"
-            placeholder="/etc/ssl/proxy/fullchain.pem"
-        /></el-form-item>
-        <el-form-item label="私钥文件路径" required
-          ><el-input
-            v-model="form.tlsKeyFile"
-            :readonly="identityLocked"
-            placeholder="/etc/ssl/proxy/privkey.pem"
-        /></el-form-item>
-        <p class="hint">
-          SNI 填写证书对应域名。请先放行所选 UDP 端口；证书内容不会上传到面板。
-        </p>
-      </template>
-      <el-form-item label="监听地址"
-        ><el-select
-          v-model="form.listen"
-          :disabled="identityLocked"
-          style="width: 100%"
-          ><el-option label="双栈监听（x-ui 默认）" value="" /><el-option
-            label="仅 IPv4"
-            value="0.0.0.0" /><el-option label="仅 IPv6" value="::" /><el-option
-            v-if="form.listen && !['0.0.0.0', '::'].includes(form.listen)"
-            :label="form.listen"
-            :value="form.listen" /></el-select
-      ></el-form-item>
-      <details v-if="form.template !== 'hysteria2'" class="reality-advanced">
-        <summary>Reality 参数（x-ui）</summary>
-        <el-form-item label="客户端指纹"
-          ><el-select
-            v-model="form.fingerprint"
-            :disabled="identityLocked"
-            style="width: 100%"
-            ><el-option
-              v-for="fp in [
-                'chrome',
-                'firefox',
-                'safari',
-                'ios',
-                'android',
-                'edge',
-                'randomized',
-              ]"
-              :key="fp"
-              :label="fp"
-              :value="fp" /></el-select></el-form-item
-        ><el-form-item label="Short ID"
-          ><el-input
-            v-model="form.shortId"
-            :readonly="identityLocked"
-            placeholder="新建时自动生成；多个值用逗号分隔"
+        </section>
+
+        <!-- 3B. Hysteria2 TLS Mode -->
+        <section v-else class="form-block">
+          <header class="block-head">
+            <h3 class="block-title">证书与部署方式</h3>
+          </header>
+
+          <div class="pill-rail" role="radiogroup" aria-label="HY2 部署方式">
+            <button
+              v-for="m in hy2Modes"
+              :key="m.value"
+              type="button"
+              role="radio"
+              class="pill-btn"
+              :class="{ 'is-active': form.tlsMode === m.value }"
+              :aria-checked="form.tlsMode === m.value"
+              :disabled="identityLocked"
+              @click="form.tlsMode = m.value"
+            >
+              {{ m.label }}
+            </button>
+          </div>
+
+          <p v-if="form.tlsMode === 'self-signed'" class="mode-note">
+            Agent 自动生成并托管自签证书，无需域名，服务器需放行对应 UDP 端口。
+          </p>
+
+          <div v-else-if="form.tlsMode === 'auto'" class="mode-note-box">
+            <p class="mode-note">
+              IP 直连并携带 SHA-256 证书指纹（推荐 Mihomo / sing-box），无需域名或 Cloudflare。
+            </p>
+            <code
+              v-if="
+                props.inbound?.tlsMode === 'auto' &&
+                props.inbound?.tlsFingerprint
+              "
+              class="fp-code mono"
+            >
+              SHA-256: {{ props.inbound.tlsFingerprint }}
+            </code>
+          </div>
+
+          <template v-else>
+            <div class="two-col">
+              <el-form-item label="证书文件路径" required>
+                <el-input
+                  v-model="form.tlsCertFile"
+                  :readonly="identityLocked"
+                  placeholder="/etc/ssl/proxy/fullchain.pem"
+                />
+              </el-form-item>
+              <el-form-item label="私钥文件路径" required>
+                <el-input
+                  v-model="form.tlsKeyFile"
+                  :readonly="identityLocked"
+                  placeholder="/etc/ssl/proxy/privkey.pem"
+                />
+              </el-form-item>
+            </div>
+            <el-form-item label="SNI 域名">
+              <el-input
+                v-model="form.sni"
+                :readonly="identityLocked"
+                placeholder="证书对应域名，如 proxy.example.com"
+              />
+            </el-form-item>
+          </template>
+        </section>
+
+        <!-- 4. Egress & Routing -->
+        <section class="form-block has-divider">
+          <header class="block-head">
+            <h3 class="block-title">出口与分流</h3>
+          </header>
+
+          <el-form-item label="默认服务端出口">
+            <el-select v-model="form.egressNodeId" filterable class="full">
+              <el-option
+                v-if="!props.requireEgress"
+                :value="0"
+                label="当前服务器直接访问"
+              />
+              <el-option
+                v-for="item in exitOptions"
+                :key="item.id"
+                :value="item.id"
+                :label="item.name"
+              />
+            </el-select>
+            <p v-if="exitError" class="err-inline">
+              {{ exitError }}
+              <button type="button" class="retry-link" @click="loadExitOptions">
+                重试
+              </button>
+            </p>
+          </el-form-item>
+
+          <DomainRouteFields
+            v-model="form.domainRoutes"
+            :exits="exitOptions"
+            :default-exit="form.egressNodeId"
           />
-          <p class="hint">
-            每项为偶数位十六进制，最长16位。分享链接使用第一个值；修改后需更新订阅。
-          </p></el-form-item
-        ><el-form-item label="SpiderX"
-          ><el-input
-            v-model="form.spiderX"
-            :readonly="identityLocked"
-            placeholder="/" /></el-form-item
-        ><el-form-item v-if="form.publicKey" label="Reality 公钥"
-          ><el-input :model-value="form.publicKey" readonly /></el-form-item
-        ><template v-if="!identityLocked"
-          ><label class="import-key-toggle"
-            ><el-switch v-model="importKey" /> 使用已有 x-ui 私钥</label
-          ><el-form-item v-if="importKey" label="x-ui Private Key"
-            ><el-input
-              v-model="form.privateKey"
-              type="password"
-              show-password
-              autocomplete="new-password"
-              placeholder="粘贴 x-ui 的 X25519 私钥"
-            />
-            <p class="hint">
-              公钥由私钥自动推导；不会把私钥写入分享链接。
-            </p></el-form-item
-          ></template
-        >
-      </details>
-      <el-form-item label="默认服务端出口">
-        <el-select v-model="form.egressNodeId" filterable style="width: 100%"
-          ><el-option
-            v-if="!props.requireEgress"
-            :value="0"
-            label="当前服务器直接访问" /><el-option
-            v-for="item in exitOptions"
-            :key="item.id"
-            :value="item.id"
-            :label="item.name"
-        /></el-select>
-        <p class="hint">
-          未命中网站规则的 TCP / UDP 流量使用此出口。支持 Reality TCP / XHTTP 与
-          HY2；出口失效时不会改为直连。保存前需升级 Agent。
-        </p>
-        <p v-if="exitError" class="error">
-          {{ exitError }} <UiButton @click="loadExitOptions">重试</UiButton>
-        </p>
-      </el-form-item>
-      <DomainRouteFields
-        v-model="form.domainRoutes"
-        :exits="exitOptions"
-        :default-exit="form.egressNodeId"
-      />
-      <div class="switches">
-        <label><el-switch v-model="form.enabled" /> 启用</label>
-        <label
-          v-if="
-            form.id &&
-            form.template !== 'hysteria2' &&
-            !props.requireEgress &&
-            !importKey
-          "
-          ><el-switch v-model="form.regenerateKey" />
-          重新生成密钥（所有客户端需更新订阅）</label
-        >
-      </div>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
-    </el-form>
+        </section>
+
+        <!-- 5. Collapsible Advanced & Listen Settings -->
+        <details class="adv-disclosure">
+          <summary class="adv-summary">
+            <span>高级与监听参数</span>
+            <span class="adv-hint mono">
+              {{
+                form.listen === "0.0.0.0"
+                  ? "IPv4"
+                  : form.listen === "::"
+                    ? "IPv6"
+                    : "双栈"
+              }}
+              <template v-if="form.template !== 'hysteria2'">
+                · {{ form.fingerprint }}
+              </template>
+            </span>
+          </summary>
+
+          <div class="adv-body">
+            <div class="adv-field">
+              <span class="adv-label">监听地址</span>
+              <div class="pill-rail">
+                <button
+                  v-for="opt in listenOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="pill-btn"
+                  :class="{ 'is-active': form.listen === opt.value }"
+                  :disabled="identityLocked"
+                  @click="form.listen = opt.value"
+                >
+                  {{ opt.label }}
+                </button>
+              </div>
+            </div>
+
+            <template v-if="form.template !== 'hysteria2'">
+              <div class="adv-field">
+                <span class="adv-label">客户端指纹（uTLS）</span>
+                <div class="pill-rail">
+                  <button
+                    v-for="fp in fingerprints"
+                    :key="fp"
+                    type="button"
+                    class="pill-btn mono"
+                    :class="{ 'is-active': form.fingerprint === fp }"
+                    :disabled="identityLocked"
+                    @click="form.fingerprint = fp"
+                  >
+                    {{ fp }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="two-col">
+                <el-form-item label="Short ID">
+                  <el-input
+                    v-model="form.shortId"
+                    :readonly="identityLocked"
+                    placeholder="留空自动生成（逗号分隔多值）"
+                  />
+                </el-form-item>
+                <el-form-item label="SpiderX">
+                  <el-input
+                    v-model="form.spiderX"
+                    :readonly="identityLocked"
+                    placeholder="/"
+                  />
+                </el-form-item>
+              </div>
+
+              <el-form-item v-if="form.publicKey" label="Reality 公钥">
+                <el-input :model-value="form.publicKey" readonly />
+              </el-form-item>
+
+              <template v-if="!identityLocked">
+                <label class="switch-inline">
+                  <el-switch v-model="importKey" />
+                  <span>导入已有 x-ui X25519 私钥</span>
+                </label>
+                <el-form-item v-if="importKey" label="x-ui Private Key">
+                  <el-input
+                    v-model="form.privateKey"
+                    type="password"
+                    show-password
+                    autocomplete="new-password"
+                    placeholder="粘贴 X25519 私钥（公钥自动推导）"
+                  />
+                </el-form-item>
+              </template>
+            </template>
+          </div>
+        </details>
+
+        <!-- 6. Switches -->
+        <div class="bottom-switches">
+          <label class="switch-inline">
+            <el-switch v-model="form.enabled" />
+            <span>启用此入站</span>
+          </label>
+          <label
+            v-if="
+              form.id &&
+              form.template !== 'hysteria2' &&
+              !props.requireEgress &&
+              !importKey
+            "
+            class="switch-inline"
+          >
+            <el-switch v-model="form.regenerateKey" />
+            <span>重新生成密钥（需更新订阅）</span>
+          </label>
+        </div>
+      </el-form>
+    </div>
+
     <template #footer>
-      <UiButton @click="visible = false">取消</UiButton>
-      <UiButton variant="primary" :loading="saving" @click="save">{{
-        form.template === "hysteria2" && form.tlsMode !== "manual" && !form.id
-          ? "部署 HY2"
-          : "保存"
-      }}</UiButton>
+      <div class="drawer-footer">
+        <UiButton :disabled="saving" @click="visible = false">取消</UiButton>
+        <UiButton variant="primary" :loading="saving" @click="save">
+          {{
+            form.template === "hysteria2" && form.tlsMode !== "manual" && !form.id
+              ? "部署 HY2"
+              : "保存入站"
+          }}
+        </UiButton>
+      </div>
     </template>
   </UiDrawer>
 </template>
+
 <style scoped>
-.deployment-baseline {
-  padding: 12px 14px;
-  margin-bottom: 18px;
-  border-radius: 12px;
-  background: var(--c-surface-2);
-}
-.deployment-baseline strong {
-  font-size: 14px;
-}
-.reality-advanced {
-  padding: 12px 0;
-  margin-bottom: 14px;
-  border-block: 1px solid var(--c-line);
-}
-.reality-advanced summary {
-  font-size: 13px;
-  cursor: pointer;
-  margin-bottom: 14px;
-}
-.import-key-toggle {
+.inbound-editor {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 20px;
+  padding-bottom: 16px;
 }
 
-.identity-hint {
-  padding: 12px 14px;
-  margin-bottom: 18px;
-  border-radius: 10px;
-  background: var(--c-surface-2);
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
-.auto-tls-info {
-  padding: 14px;
-  margin-bottom: 18px;
-  background: var(--c-surface-2);
-  border-radius: 12px;
-}
-.auto-tls-info strong {
-  font-size: 14px;
-}
-.certificate-state {
-  font-size: 12px;
-  margin-top: 10px;
-}
-.certificate-state code {
-  word-break: break-all;
-  color: var(--c-muted);
-}
-.grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 12px;
-}
-.port-row {
-  display: flex;
-  gap: 6px;
+
+.full,
+.inbound-form :deep(.el-select) {
   width: 100%;
 }
+
+.lock-banner {
+  margin: 0;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  font-size: 13px;
+  color: var(--c-muted);
+}
+
+.inbound-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.form-block {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-block.has-divider {
+  padding-top: 20px;
+  border-top: 1px solid var(--c-line);
+}
+
+.block-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.block-title {
+  margin: 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.block-sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--c-muted);
+}
+
+.shield-pill {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #10b981 12%, transparent);
+  color: #059669;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+/* Protocol Cards */
+.proto-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.proto-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease;
+}
+
+.proto-card:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--c-ink) 32%, transparent);
+}
+
+.proto-card.is-active {
+  border-color: var(--c-ink);
+  background: color-mix(in srgb, var(--c-ink) 4%, var(--c-surface));
+}
+
+.proto-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.proto-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.proto-desc {
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--c-muted);
+}
+
+/* Two-col & Port */
+.two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.port-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
 .port-row :deep(.el-input-number) {
   flex: 1;
 }
-.hint {
-  margin-top: 6px;
-  color: var(--c-muted);
-  font-size: 12px;
-  line-height: 1.6;
-}
-.chips {
+
+/* Target Chips */
+.target-chips {
   display: flex;
   flex-wrap: wrap;
+  gap: 8px;
+}
+
+.target-chip {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  margin-top: 8px;
-}
-.chip {
-  padding: 3px 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-pill);
-  font-size: 12px;
+  background: var(--c-surface);
+  font-size: 12.5px;
   color: var(--c-muted);
-  transition:
-    border-color var(--duration-fast),
-    color var(--duration-fast),
-    background-color var(--duration-fast);
+  cursor: pointer;
+  transition: all 0.16s ease;
 }
-.chip:hover,
-.chip.on {
-  border-color: var(--c-focus);
+
+.target-chip:hover {
   color: var(--c-ink);
-  background: var(--c-selected);
+  border-color: color-mix(in srgb, var(--c-ink) 32%, transparent);
 }
-.check-row {
+
+.target-chip.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.chip-tag {
+  font-style: normal;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #10b981 18%, transparent);
+  color: #059669;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.target-chip.is-active .chip-tag {
+  background: rgba(255, 255, 255, 0.2);
+  color: var(--c-surface);
+}
+
+/* Check Bar */
+.check-bar {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
 }
-.check-result {
-  padding: 4px 10px;
-  border-radius: var(--radius-pill);
+
+.check-pill {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.check-pill.is-ok {
+  background: color-mix(in srgb, #10b981 14%, transparent);
+  color: #059669;
+}
+
+.check-pill.is-warn {
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+  color: #b45309;
+}
+
+.check-pill.is-bad {
+  background: color-mix(in srgb, #ef4444 14%, transparent);
+  color: #dc2626;
+}
+
+/* Pills */
+.pill-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pill-btn {
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  font-size: 12.5px;
+  color: var(--c-muted);
+  cursor: pointer;
+  transition: all 0.16s ease;
+}
+
+.pill-btn:hover:not(:disabled) {
+  color: var(--c-ink);
+  border-color: color-mix(in srgb, var(--c-ink) 30%, transparent);
+}
+
+.pill-btn.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.pill-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.mode-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--c-muted);
+}
+
+.mode-note-box {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fp-code {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  font-size: 11.5px;
+  word-break: break-all;
+  color: var(--c-ink);
+}
+
+/* Advanced Disclosure */
+.adv-disclosure {
+  border-top: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+  padding: 14px 0;
+}
+
+.adv-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--c-ink);
+  cursor: pointer;
+  list-style: none;
+}
+
+.adv-summary::-webkit-details-marker {
+  display: none;
+}
+
+.adv-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--c-muted);
+}
+
+.adv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+.adv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.adv-label {
   font-size: 13px;
+  color: var(--c-muted);
 }
-.is-ok {
-  background: color-mix(in srgb, var(--c-ok) 14%, transparent);
-  color: var(--c-ok);
+
+/* Switches & Footer */
+.bottom-switches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
 }
-.is-warn {
-  background: color-mix(in srgb, var(--c-warn) 16%, transparent);
-  color: var(--c-warn-ink);
+
+.switch-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--c-ink);
 }
-.is-bad {
-  background: color-mix(in srgb, var(--c-bad) 14%, transparent);
-  color: var(--c-bad);
+
+.err-inline {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: #dc2626;
 }
+
+.retry-link {
+  margin-left: 8px;
+  border: none;
+  background: transparent;
+  color: var(--c-ink);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.drawer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .pop-enter-active {
-  transition:
-    opacity var(--duration-fast),
-    transform var(--duration-medium) var(--ease-spring);
+  transition: opacity 0.16s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
+
 .pop-enter-from {
   opacity: 0;
-  transform: scale(0.85);
+  transform: scale(0.92);
 }
-.switches {
-  display: grid;
-  gap: 6px;
-  margin-top: 14px;
-}
-.switches label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-}
-.error {
-  margin-top: 12px;
-  color: var(--c-bad);
-  font-size: 13px;
-}
-@media (max-width: 599px) {
-  .grid {
+
+@media (max-width: 640px) {
+  .proto-grid,
+  .two-col {
     grid-template-columns: minmax(0, 1fr);
   }
 }

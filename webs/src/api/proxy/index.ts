@@ -82,6 +82,7 @@ export interface TargetCheck {
   ok: boolean;
   tls13: boolean;
   h2: boolean;
+  cloudflare?: boolean;
   latency: number;
   message: string;
 }

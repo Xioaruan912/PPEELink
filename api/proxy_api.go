@@ -449,6 +449,10 @@ func ProxyInboundSave(c *gin.Context) {
 			c.JSON(400, gin.H{"code": "40000", "msg": normalizeErr.Error()})
 			return
 		}
+		if xraycore.IsCloudflareTarget(target, sni, 2*time.Second) {
+			c.JSON(400, gin.H{"code": "40000", "msg": "已排除使用 Cloudflare CDN 的伪装目标（存在被用于攻击的风险），请更换非 CF 站点（如 www.amd.com）"})
+			return
+		}
 		req.Target, req.SNI = target, sni
 		if req.ShortID != nil {
 			in.ShortID = shortID
