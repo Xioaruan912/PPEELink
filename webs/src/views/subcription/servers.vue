@@ -153,10 +153,16 @@ const serverForm = reactive({
   websiteTrafficEnabled: false,
 });
 const GB = 1024 ** 3;
+const QUOTA_PRESETS = [
+  { label: "不限", gb: 0 },
+  { label: "500 GB", gb: 500 },
+  { label: "1 TB", gb: 1024 },
+  { label: "2 TB", gb: 2048 },
+];
 const savingServer = ref(false);
 const install = ref<{ name: string; command: string } | null>(null);
 const serverDialogTitle = computed(() =>
-  serverForm.id ? "编辑服务器" : "添加远程服务器"
+  serverForm.id ? "编辑代理节点" : "添加代理节点"
 );
 function openServer(s?: ProxyServer) {
   Object.assign(
@@ -345,17 +351,39 @@ const usageRatio = (a: ProxyAccount) =>
 </script>
 <template>
   <div class="servers-page server-experience">
-    <PageHeader
+    <header class="servers-masthead" aria-labelledby="servers-title">
+      <div class="masthead-left">
+        <div class="title-cluster">
+          <h1 id="servers-title" class="gallery-title">自建实例</h1>
+          <dl v-if="servers.length" class="inline-metrics mono" aria-label="实例概览">
+            <div>
+              <dt>在线</dt>
+              <dd class="is-ok">{{ onlineCount }}/{{ servers.length }}</dd>
+            </div>
+            <div>
+              <dt>入站</dt>
+              <dd>{{ inboundCount }}</dd>
+            </div>
+            <div>
+              <dt>今日流量</dt>
+              <dd>{{ todayParts[0] }} {{ todayParts[1] }}</dd>
+            </div>
+          </dl>
+        </div>
+        <p class="gallery-lead">
+          在自有 VPS 上运行 xray-core，按账户发放代理节点并统计流量。
+        </p>
+      </div>
 
-      title="自建节点"
-      description="在自己的服务器上运行 xray-core，按账户发放节点、统计流量。"
-    >
-      <template v-if="servers.length" #actions>
-        <UiButton variant="primary" :icon="IconPlus" @click="openServer()"
-          >添加服务器</UiButton
-        >
-      </template>
-    </PageHeader>
+      <div class="masthead-actions">
+        <UiButton variant="primary" :icon="IconPlus" @click="openServer()">
+          添加代理节点
+        </UiButton>
+        <UiButton variant="ghost" :icon="IconRefresh" :loading="loading" @click="load()">
+          刷新
+        </UiButton>
+      </div>
+    </header>
 
     <EmptyState
       v-if="loadError"
@@ -617,76 +645,147 @@ const usageRatio = (a: ProxyAccount) =>
       </UiPanel>
     </div>
 
-    <UiDialog v-model="serverDialog" :title="serverDialogTitle" width="480px">
-      <el-form label-position="top" @submit.prevent="submitServer">
-        <el-form-item label="名称"
-          ><el-input v-model="serverForm.name" placeholder="例如 东京 1"
-        /></el-form-item>
-        <el-form-item label="代理 IP / 域名">
-          <el-input
-            v-model="serverForm.publicHost"
-            placeholder="客户端连接节点时使用的 IP 或域名"
-          />
-        </el-form-item>
-        <el-form-item label="月流量上限（GB，0 为不限）">
-          <div class="quota-fields">
-            <el-input-number
-              v-model="serverForm.trafficLimitGb"
-              :min="0"
-              :step="100"
-              controls-position="right"
-            />
-            <span>每月</span>
-            <el-input-number
-              v-model="serverForm.resetDay"
-              :min="1"
-              :max="28"
-              controls-position="right"
-            />
-            <span>号重置</span>
+    <UiDialog
+      v-model="serverDialog"
+      :title="serverDialogTitle"
+      width="580px"
+      class="node-modal"
+    >
+      <el-form
+        class="proxy-node-form"
+        label-position="top"
+        @submit.prevent="submitServer"
+      >
+        <section class="modal-section">
+          <header class="modal-section-head">
+            <h3>基础连接</h3>
+            <p>填写节点识别名称与客户端实际连接的公网入口地址。</p>
+          </header>
+          <div class="modal-grid-2">
+            <el-form-item label="节点名称" required>
+              <el-input
+                v-model="serverForm.name"
+                placeholder="例如：东京主力 01"
+              />
+            </el-form-item>
+            <el-form-item label="代理 IP / 域名" required>
+              <el-input
+                v-model="serverForm.publicHost"
+                class="mono-input"
+                placeholder="jp.example.com 或公网 IP"
+              />
+            </el-form-item>
           </div>
-          <p class="field-hint">
-            按面板统计的上下行合计。用完后停止
-            xray、节点暂不下发，到重置日自动恢复。
-          </p>
-        </el-form-item>
-        <el-form-item label="网站流量统计">
-          <div class="monitor-toggle">
-            <el-switch
-              v-model="serverForm.websiteTrafficEnabled"
-              aria-label="网站流量统计"
-            />
-            <span
-              >默认关闭以减少采集。升级 Agent
-              并开启后，仅采集代理转发的域名与载荷字节，不采集
-              URL；不回填历史。</span
+        </section>
+
+        <section class="modal-section">
+          <header class="modal-section-head">
+            <h3>月度流量配额</h3>
+            <p>
+              按面板统计的上下行合计；超额后自动暂停下发，并在每月重置日恢复。
+            </p>
+          </header>
+
+          <div class="quota-presets" role="group" aria-label="快捷流量配额">
+            <button
+              v-for="preset in QUOTA_PRESETS"
+              :key="preset.gb"
+              type="button"
+              class="quota-preset-pill mono"
+              :class="{ 'is-active': serverForm.trafficLimitGb === preset.gb }"
+              @click="serverForm.trafficLimitGb = preset.gb"
             >
+              {{ preset.label }}
+            </button>
           </div>
-        </el-form-item>
-        <el-form-item label="服务器监控">
-          <div class="monitor-toggle">
-            <el-switch v-model="serverForm.monitorEnabled" />
-            <span
-              >复用现有 agent 上报
-              CPU、内存、磁盘与网络，无需再装监控服务。</span
+
+          <div class="quota-controls">
+            <div class="quota-field">
+              <span class="quota-field-label">上限（GB）</span>
+              <el-input-number
+                v-model="serverForm.trafficLimitGb"
+                :min="0"
+                :step="100"
+                controls-position="right"
+              />
+            </div>
+            <div class="quota-field">
+              <span class="quota-field-label">重置日（每月）</span>
+              <div class="reset-day-wrap">
+                <el-input-number
+                  v-model="serverForm.resetDay"
+                  :min="1"
+                  :max="28"
+                  controls-position="right"
+                />
+                <span>号</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="modal-section is-last">
+          <header class="modal-section-head">
+            <h3>附加采集能力</h3>
+            <p>复用同一份 Agent 进程，按需开启监控与流量排行。</p>
+          </header>
+
+          <div class="capability-toggles">
+            <label
+              class="capability-row"
+              :class="{ 'is-on': serverForm.monitorEnabled }"
             >
+              <div class="capability-copy">
+                <strong>服务器硬件监控</strong>
+                <small>上报 CPU、内存、磁盘与实时网速，无需额外部署监控服务。</small>
+              </div>
+              <el-switch
+                v-model="serverForm.monitorEnabled"
+                aria-label="服务器硬件监控"
+              />
+            </label>
+
+            <label
+              class="capability-row"
+              :class="{ 'is-on': serverForm.websiteTrafficEnabled }"
+            >
+              <div class="capability-copy">
+                <strong>网站流量统计</strong>
+                <small>仅记录代理转发的域名与字节数，不采集完整 URL，默认关闭。</small>
+              </div>
+              <el-switch
+                v-model="serverForm.websiteTrafficEnabled"
+                aria-label="网站流量统计"
+              />
+            </label>
           </div>
-        </el-form-item>
+        </section>
       </el-form>
+
       <template #footer>
-        <UiButton @click="serverDialog = false">取消</UiButton>
-        <UiButton
-          variant="primary"
-          :loading="savingServer"
-          @click="submitServer"
-          >保存</UiButton
-        >
+        <div class="modal-footer-bar">
+          <span class="modal-footer-tip">
+            {{ serverForm.id ? "修改将在 Agent 下次心跳生效" : "保存后将生成一次性 Agent 安装命令" }}
+          </span>
+          <div class="modal-footer-btns">
+            <UiButton variant="ghost" @click="serverDialog = false">
+              取消
+            </UiButton>
+            <UiButton
+              variant="primary"
+              :loading="savingServer"
+              @click="submitServer"
+            >
+              {{ serverForm.id ? "保存修改" : "创建并生成命令" }}
+            </UiButton>
+          </div>
+        </div>
       </template>
     </UiDialog>
 
     <UiDialog
       :model-value="!!install"
-      title="在远程服务器上安装 agent"
+      title="在代理节点上安装 Agent"
       width="620px"
       @update:model-value="install = null"
     >
@@ -1104,6 +1203,229 @@ const usageRatio = (a: ProxyAccount) =>
   color: var(--c-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+.servers-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--c-ink);
+  margin-bottom: 20px;
+}
+.masthead-left {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.title-cluster {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.gallery-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
+}
+.inline-metrics {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  margin: 0;
+}
+.inline-metrics > div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.inline-metrics dt {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.inline-metrics dd {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+.inline-metrics dd.is-ok {
+  color: var(--c-ok);
+}
+.gallery-lead {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--c-muted);
+}
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Refactored Proxy Node Modal */
+.proxy-node-form {
+  display: grid;
+  gap: 20px;
+}
+.modal-section {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--c-line);
+}
+.modal-section.is-last {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+.modal-section-head {
+  display: grid;
+  gap: 3px;
+}
+.modal-section-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--c-ink);
+}
+.modal-section-head p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-muted);
+  line-height: 1.5;
+}
+.modal-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.modal-grid-2 :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+.mono-input :deep(input) {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.quota-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.quota-preset-pill {
+  padding: 6px 13px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+.quota-preset-pill:hover {
+  color: var(--c-ink);
+  border-color: var(--c-ink);
+}
+.quota-preset-pill.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
+}
+.quota-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.quota-field {
+  display: grid;
+  gap: 6px;
+}
+.quota-field-label {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.quota-field :deep(.el-input-number) {
+  width: 100%;
+}
+.reset-day-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-muted);
+  font-size: 13px;
+}
+.capability-toggles {
+  display: grid;
+  gap: 10px;
+}
+.capability-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-canvas);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out);
+}
+.capability-row:hover {
+  border-color: var(--c-ink);
+}
+.capability-row.is-on {
+  border-color: var(--c-ok);
+  background: color-mix(in srgb, var(--c-ok) 5%, var(--c-surface));
+}
+.capability-copy {
+  display: grid;
+  gap: 3px;
+}
+.capability-copy strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+.capability-copy small {
+  font-size: 12px;
+  color: var(--c-muted);
+  line-height: 1.5;
+}
+.modal-footer-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.modal-footer-tip {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+.modal-footer-btns {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 600px) {
+  .modal-grid-2,
+  .quota-controls {
+    grid-template-columns: 1fr;
+  }
 }
 .dialog-hint {
   margin-bottom: 12px;

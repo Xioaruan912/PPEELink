@@ -1,285 +1,275 @@
 <template>
-  <div class="network-overview" :aria-busy="loading">
-    <PageHeader title="网络总览" :description="greeting">
-      <template #actions>
-        <UiButton :icon="Refresh" :loading="loading" @click="loadOverview">
-          {{ loading ? "同步中" : "刷新" }}
-        </UiButton>
-        <UiButton
-          variant="primary"
-          :icon="TopRight"
-          @click="router.push('/subcription/nodes')"
-          >管理节点</UiButton
+  <div ref="rootEl" class="dash-cinema" :aria-busy="loading">
+    <!-- Compact Single-Screen Top Bar -->
+    <header class="dash-masthead" aria-labelledby="dash-title">
+      <div class="masthead-left">
+        <div class="title-mask">
+          <h1 id="dash-title" class="gallery-title" data-title-reveal>
+            运行态势
+          </h1>
+        </div>
+        <span
+          v-if="!loading"
+          class="live-status mono"
+          :class="{ 'is-warn': summary.invalid > 0 }"
         >
-      </template>
-    </PageHeader>
+          <i aria-hidden="true"></i>
+          {{ summary.valid }}/{{ summary.total }} 在线 · {{ validRate }}%
+        </span>
+      </div>
+
+      <div class="masthead-actions">
+        <UiButton
+          variant="ghost"
+          :icon="Refresh"
+          :loading="loading"
+          @click="loadOverview"
+        >
+          刷新
+        </UiButton>
+      </div>
+    </header>
+
+    <span class="top-rule" data-top-rule aria-hidden="true"></span>
 
     <div v-if="loadError" class="overview-notice" role="alert">
       <StatusDot state="warn" :label="loadError" />
-      <UiButton variant="ghost" :disabled="loading" @click="loadOverview"
-        >重新加载</UiButton
-      >
+      <UiButton variant="ghost" :disabled="loading" @click="loadOverview">
+        重新加载
+      </UiButton>
     </div>
 
-    <div class="stat-strip">
-      <div class="stat-card">
-        <span>节点总数</span>
-        <strong>{{ loading ? "—" : summary.total }}</strong>
-        <small>分布在 {{ countries.length }} 个地区</small>
-      </div>
-      <div class="stat-card">
-        <span>有效节点</span>
-        <strong class="stat-ok">{{ loading ? "—" : summary.valid }}</strong>
-        <small>有效率 {{ loading ? "—" : `${validRate}%` }}</small>
-      </div>
-      <div class="stat-card">
-        <span>订阅</span>
-        <strong>{{ loading ? "—" : subTotal }}</strong>
-        <small>{{ expiring.length }} 个已设置到期</small>
-      </div>
-      <div class="stat-card">
-        <span>所在地区</span>
-        <strong>{{ loading ? "—" : countries.length }}</strong>
-        <small>{{ summary.invalid }} 个节点无效</small>
-      </div>
-    </div>
-
-    <section class="task-hub" aria-label="常用功能">
-      <div class="task-hub-heading"><h2>常用功能</h2><p>从服务器接入到订阅分发，按任务进入。</p></div>
-      <div class="task-groups">
-        <section v-for="group in taskGroups" :key="group.path" class="task-group">
-          <h3><component :is="group.icon" aria-hidden="true" />{{ group.label }}</h3>
-          <RouterLink v-for="item in group.children" :key="item.path" :to="item.path">
-            <strong>{{ item.label }}</strong><small>{{ item.hint }}</small>
-          </RouterLink>
-        </section>
-      </div>
-    </section>
-
-    <div class="dashboard-grid">
+    <!-- Flex-Filling Interactive Global Topology Canvas -->
+    <section class="map-hero-wrap" aria-label="全球节点交互地图">
       <WorldMap
-        class="dash-map"
+        class="dash-hero-map"
         :points="mapPoints"
         :loading="loading"
+        :selected-name="selectedPoint?.name"
+        @select="onMapSelect"
         @refresh="loadOverview"
       />
 
-      <aside class="side-stack">
-        <section class="dash-panel side-panel" aria-label="节点状态">
-          <header class="dash-head">
-            <div>
-              <h2>节点状态</h2>
-              <p>{{ summary.total }} 个节点</p>
-            </div>
-          </header>
-          <HealthStrip
-            :summary="summary"
-            :loading="loading"
-            :rate="validRate"
-          />
-        </section>
-
-        <section class="dash-panel side-panel" aria-label="订阅到期">
-          <header class="dash-head">
-            <div>
-              <h2>订阅到期</h2>
-              <p>{{ expiring.length }} 个已设置到期时间</p>
-            </div>
-            <UiButton variant="ghost" @click="router.push('/subcription/subs')"
-              >全部</UiButton
-            >
-          </header>
-          <UiSkeleton v-if="loading" :lines="2" height="32px" />
-          <ul v-else-if="expiring.length" class="expiry-list">
-            <li v-for="sub in expiring" :key="sub.ID">
-              <span class="expiry-name">{{ sub.Name }}</span>
-              <span
-                class="expiry-days mono"
-                :class="{ 'is-soon': daysLeft(sub.ExpiresAt) <= 7 }"
-                >{{ expiryLabel(sub.ExpiresAt) }}</span
-              >
-            </li>
-          </ul>
-          <EmptyState
-            v-else
-            size="inline"
-            title="没有到期时间"
-            description="在订阅详情里设置后显示在这里。"
-          />
-        </section>
-
-        <section class="dash-panel side-panel" aria-label="所在地区">
-          <header class="dash-head">
-            <div>
-              <h2>所在地区</h2>
-              <p>{{ countries.length }} 个地区</p>
-            </div>
-          </header>
-          <UiSkeleton v-if="loading" :lines="3" height="24px" />
-          <ol v-else-if="countries.length" class="region-list">
-            <li v-for="country in countries.slice(0, 5)" :key="country.name">
-              <span class="region-name">{{ country.name }}</span>
-              <span class="region-count mono">{{ country.count }}</span>
-              <span class="region-bar" aria-hidden="true"
-                ><i
-                  :style="{
-                    transform: `scaleX(${country.count / (countries[0]?.count || 1)})`,
-                  }"
-                ></i
-              ></span>
-            </li>
-          </ol>
-          <EmptyState
-            v-else
-            size="inline"
-            title="暂无地区"
-            description="节点定位后显示在这里。"
-          />
-        </section>
-      </aside>
-    </div>
-
-    <section class="dash-panel nodes-panel" aria-label="节点列表">
-      <header class="dash-head nodes-head">
-        <div>
-          <h2>节点</h2>
-          <p>最近检测状态与探针结果</p>
+      <!-- Subtle Hint When No Node Is Selected -->
+      <Transition name="inspector-pop">
+        <div
+          v-if="!selectedPoint && mapPoints.length && !loading"
+          class="map-hint"
+        >
+          <i aria-hidden="true"></i>
+          <span>点击地图圆点查看节点卡片</span>
         </div>
-        <UiButton variant="ghost" @click="router.push('/subcription/nodes')"
-          >管理全部</UiButton
+      </Transition>
+
+      <!-- Floating Frosted Glass Node Card (In-Place, No Route Jump) -->
+      <Transition name="inspector-pop" mode="out-in">
+        <aside
+          v-if="selectedPoint && !loading"
+          :key="selectedPoint.name"
+          class="map-inspector"
+          aria-live="polite"
         >
-      </header>
-      <UiSkeleton v-if="loading" class="node-loading" :lines="3" height="40px" />
-      <div v-else-if="!nodes.length" class="node-empty">
-        <EmptyState
-          size="inline"
-          title="还没有节点"
-          description="添加第一个节点后，这里显示可用性与探针结果。"
-        />
-      </div>
-      <div v-else class="node-table">
-        <RouterLink
-          v-for="node in nodes.slice(0, 6)"
-          :key="node.id"
-          to="/subcription/nodes"
-          class="node-row"
-        >
-          <span
-            class="node-dot"
-            :class="{ 'is-bad': !node.valid }"
-            :aria-label="node.valid ? '有效' : '无效'"
-          ></span>
-          <div class="node-main">
-            <strong>{{ node.name }}</strong>
-            <small>{{ node.groups?.join(" · ") || "未分组" }}</small>
+          <div class="inspector-top">
+            <div class="inspector-badges">
+              <span class="inspector-region">
+                {{ selectedPoint.country || "未识别地区" }}
+              </span>
+              <span v-if="activeProtocol" class="inspector-proto mono">
+                {{ activeProtocol }}
+              </span>
+            </div>
+
+            <div class="inspector-right">
+              <span
+                class="inspector-state"
+                :class="{
+                  'is-blocked': activeNode?.blocked,
+                  'is-bad': activeNode && !activeNode.blocked && !activeNode.valid,
+                }"
+              >
+                <i aria-hidden="true"></i>
+                {{
+                  activeNode?.blocked
+                    ? "暂不下发"
+                    : activeNode && !activeNode.valid
+                      ? "无效"
+                      : "运行正常"
+                }}
+              </span>
+              <button
+                type="button"
+                class="inspector-close"
+                aria-label="关闭节点卡片"
+                @click="selectedPoint = undefined"
+              >
+                <el-icon><Close /></el-icon>
+              </button>
+            </div>
           </div>
-          <span class="node-country">{{ node.country || "未识别" }}</span>
-          <span class="node-probes mono">
-            {{
-              node.probes?.length
-                ? `${node.probes.filter((probe) => probe.success).length}/${node.probes.length}`
-                : "—"
-            }}
-          </span>
-          <span class="node-valid" :class="{ 'is-bad': !node.valid }">{{
-            node.blocked ? "暂不下发" : node.valid ? "有效" : "无效"
-          }}</span>
-        </RouterLink>
-      </div>
+
+          <h2 class="inspector-name">{{ selectedPoint.name }}</h2>
+
+          <p
+            v-if="activeNode?.server || selectedPoint.server"
+            class="inspector-host mono"
+          >
+            {{ activeNode?.server || selectedPoint.server }}
+          </p>
+
+          <dl v-if="activeNode" class="inspector-meta">
+            <div>
+              <dt>所属分组</dt>
+              <dd>{{ activeNode.groups?.join(" · ") || "未分组" }}</dd>
+            </div>
+            <div>
+              <dt>探针检测</dt>
+              <dd class="mono">
+                {{
+                  activeNode.probes?.length
+                    ? `${activeNode.probes.filter((p) => p.success).length}/${activeNode.probes.length} 通过`
+                    : "未测"
+                }}
+              </dd>
+            </div>
+            <div>
+              <dt>UDP 转发</dt>
+              <dd>{{ activeNode.udp ? "已启用" : "未开启" }}</dd>
+            </div>
+            <div>
+              <dt>TCP Fast Open</dt>
+              <dd>{{ activeNode.tfo ? "已启用" : "未开启" }}</dd>
+            </div>
+          </dl>
+
+          <div v-if="activeNode?.link" class="inspector-foot">
+            <button
+              type="button"
+              class="inspector-copy"
+              :class="{ 'is-done': copiedName === selectedPoint.name }"
+              @click="copyActiveLink"
+            >
+              <el-icon><Check v-if="copiedName === selectedPoint.name" /><CopyDocument v-else /></el-icon>
+              <span>{{ copiedName === selectedPoint.name ? "已复制链接" : "复制节点链接" }}</span>
+            </button>
+          </div>
+        </aside>
+      </Transition>
     </section>
+
+    <!-- Always-Visible Node Quick Selector Strip -->
+    <nav
+      v-if="mapPoints.length && !loading"
+      class="node-pill-rail"
+      aria-label="快速定位地图节点"
+    >
+      <button
+        v-for="pt in mapPoints"
+        :key="pt.name"
+        type="button"
+        class="map-node-pill"
+        :class="{ 'is-active': selectedPoint?.name === pt.name }"
+        @click="togglePoint(pt)"
+      >
+        <i
+          class="pill-dot"
+          :class="{
+            'is-blocked': nodeByName(pt.name)?.blocked,
+            'is-bad':
+              nodeByName(pt.name) &&
+              !nodeByName(pt.name)?.blocked &&
+              !nodeByName(pt.name)?.valid,
+          }"
+          aria-hidden="true"
+        ></i>
+        <span>{{ pt.name }}</span>
+        <small>{{ pt.country || "未知" }}</small>
+      </button>
+    </nav>
   </div>
 </template>
+
 <script setup lang="ts">
-import { useRouter } from "vue-router";
-import { computed, ref, onMounted } from "vue";
-import { getSubTotal, getNodeMap } from "@/api/total";
-import { getNodeOverview } from "@/api/subcription/node";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import gsap from "gsap";
+import { getNodeMap } from "@/api/total";
+import { getNodeOverview, getNodeQualitySummary } from "@/api/subcription/node";
 import type { OverviewItem } from "@/views/subcription/nodes/useNodes";
-import { getNodeQualitySummary } from "@/api/subcription/node";
-import { getSubs } from "@/api/subcription/subs";
-import { Refresh, TopRight } from "@element-plus/icons-vue";
-import {
-  PageHeader,
-  UiButton,
-  UiSkeleton,
-  StatusDot,
-  EmptyState,
-} from "@/ui";
+import { Check, Close, CopyDocument, Refresh } from "@element-plus/icons-vue";
+import { UiButton, StatusDot } from "@/ui";
 import WorldMap from "./components/WorldMap.vue";
-import HealthStrip from "./components/HealthStrip.vue";
-import { usePermissionStore } from "@/store";
-import { buildNavigation, organizeNavigation } from "@/layout/navigation";
-const permission = usePermissionStore();
-const taskGroups = computed(() => organizeNavigation(buildNavigation(permission.routes))
-  .filter(group => ["服务器", "订阅与节点", "配置与规则", "网络诊断"].includes(group.label)));
-const router = useRouter();
+
 defineOptions({ name: "Dashboard", inheritAttrs: false });
-const loading = ref(true),
-  loadError = ref(""),
-  subTotal = ref(0);
-const summary = ref({
-  total: 0,
-  valid: 0,
-  invalid: 0,
-});
-const mapPoints = ref<
-  { lat: number; lng: number; name: string; country: string }[]
->([]);
+
+interface MapPoint {
+  lat: number;
+  lng: number;
+  name: string;
+  country: string;
+  server?: string;
+}
+
+const rootEl = ref<HTMLElement>();
+let gsapCtx: gsap.Context | null = null;
+
+const loading = ref(true);
+const loadError = ref("");
+const summary = ref({ total: 0, valid: 0, invalid: 0 });
+const mapPoints = ref<MapPoint[]>([]);
 const nodes = ref<OverviewItem[]>([]);
-type SubSummary = { ID: number; Name: string; ExpiresAt: string | null };
-const subs = ref<SubSummary[]>([]);
-const expiring = computed(() =>
-  subs.value
-    .filter((sub) => !!sub.ExpiresAt)
-    .sort(
-      (a, b) =>
-        new Date(a.ExpiresAt || 0).getTime() -
-        new Date(b.ExpiresAt || 0).getTime()
-    )
-    .slice(0, 4)
-);
-function daysLeft(value: string | null) {
-  if (!value) return Number.POSITIVE_INFINITY;
-  return Math.ceil((new Date(value).getTime() - Date.now()) / 86400000);
-}
-function expiryLabel(value: string | null) {
-  const days = daysLeft(value);
-  if (!Number.isFinite(days)) return "";
-  if (days < 0) return "已过期";
-  if (days === 0) return "今天到期";
-  return `${days} 天后`;
-}
-const validRatio = computed(() =>
-  summary.value.total ? summary.value.valid / summary.value.total : 0
-);
-const greeting = computed(() => {
-  const hour = new Date().getHours();
-  const part =
-    hour < 6
-      ? "夜深了"
-      : hour < 12
-        ? "早上好"
-        : hour < 18
-          ? "下午好"
-          : "晚上好";
-  return `${part}，网络运行概况如下。`;
-});
+const selectedPoint = ref<MapPoint | undefined>(undefined);
+const copiedName = ref("");
+let copyTimer: ReturnType<typeof setTimeout> | null = null;
+
 const validRate = computed(() => {
   const { total, invalid: offline } = summary.value;
   return total
     ? Math.round((Math.max(total - offline, 0) / total) * 1000) / 10
     : 0;
 });
-const countries = computed(() => {
-  const groups = new Map<string, number>();
-  mapPoints.value.forEach((p) => {
-    const name = p.country || "未识别地区";
-    groups.set(name, (groups.get(name) || 0) + 1);
-  });
-  return [...groups]
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count);
+
+function nodeByName(name: string) {
+  return nodes.value.find((n) => n.name === name);
+}
+
+const activeNode = computed(() =>
+  selectedPoint.value ? nodeByName(selectedPoint.value.name) : undefined
+);
+
+const activeProtocol = computed(() => {
+  const link = activeNode.value?.link || "";
+  const match = link.match(/^([a-zA-Z0-9+.-]+):\/\//);
+  return match ? match[1].toUpperCase() : "";
 });
+
+function onMapSelect(pt: MapPoint | undefined) {
+  if (!pt) return;
+  selectedPoint.value = pt;
+}
+
+function togglePoint(pt: MapPoint) {
+  if (selectedPoint.value?.name === pt.name) {
+    selectedPoint.value = undefined;
+  } else {
+    selectedPoint.value = pt;
+  }
+}
+
+async function copyActiveLink() {
+  const link = activeNode.value?.link;
+  const name = selectedPoint.value?.name;
+  if (!link || !name) return;
+  try {
+    await navigator.clipboard.writeText(link);
+    copiedName.value = name;
+    if (copyTimer) clearTimeout(copyTimer);
+    copyTimer = setTimeout(() => {
+      copiedName.value = "";
+    }, 1800);
+  } catch {
+    /* ignore clipboard permission error */
+  }
+}
+
 let inFlight = false;
 async function loadOverview() {
   if (inFlight) return;
@@ -287,53 +277,147 @@ async function loadOverview() {
   loading.value = true;
   loadError.value = "";
   const results = await Promise.allSettled([
-    getSubTotal(),
     getNodeQualitySummary(),
     getNodeMap(),
-    getSubs(),
     getNodeOverview(),
   ]);
-  const [subsCount, quality, map, subList, overview] = results;
-  if (subList.status === "fulfilled")
-    subs.value = Array.isArray(subList.value.data) ? subList.value.data : [];
-  if (subsCount.status === "fulfilled")
-    subTotal.value = Number(subsCount.value.data) || 0;
+  const [quality, map, overview] = results;
   if (quality.status === "fulfilled")
     summary.value = { ...summary.value, ...quality.value.data };
-  if (map.status === "fulfilled")
+  if (map.status === "fulfilled") {
     mapPoints.value = Array.isArray(map.value.data) ? map.value.data : [];
+    if (
+      selectedPoint.value &&
+      !mapPoints.value.some((p) => p.name === selectedPoint.value?.name)
+    ) {
+      selectedPoint.value = undefined;
+    }
+  }
   if (overview.status === "fulfilled")
     nodes.value = Array.isArray(overview.value.data) ? overview.value.data : [];
   if (results.some((r) => r.status === "rejected"))
-    loadError.value = "部分网络数据暂时无法加载，请检查服务状态后重试。";
+    loadError.value = "部分网络数据暂时无法加载，请稍后重试。";
   loading.value = false;
   inFlight = false;
 }
-onMounted(loadOverview);
-</script>
-<style scoped>
-.task-hub { padding: 18px; border: 1px solid var(--c-line); border-radius: 14px; background: var(--c-surface); }
-.task-hub-heading { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
-.task-hub-heading h2 { margin: 0; font-size: 15px; }
-.task-hub-heading p { margin: 0; color: var(--c-muted); font-size: 12px; }
-.task-groups { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
-.task-group { min-width: 0; }
-.task-group h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; color: var(--c-muted); }
-.task-group h3 svg { width: 17px; height: 17px; }
-.task-group a { display: grid; gap: 3px; padding: 8px; margin: 0 -8px; border-radius: 8px; color: var(--c-ink); }
-.task-group a:hover { background: var(--c-surface-2); }
-.task-group a:focus-visible { outline: 2px solid var(--c-signal); outline-offset: 2px; }
-.task-group strong { font-size: 13px; font-weight: 500; }
-.task-group small { color: var(--c-muted); font-size: 11px; overflow-wrap: anywhere; }
-@media (max-width: 1000px) { .task-groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .task-groups { grid-template-columns: 1fr; gap: 14px; } .task-group + .task-group { border-top: 1px solid var(--c-line); padding-top: 12px; } }
 
-.network-overview {
-  min-width: 0;
-  display: grid;
+onMounted(() => {
+  void loadOverview();
+  if (rootEl.value) {
+    gsapCtx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+        tl.from("[data-title-reveal]", {
+          yPercent: 108,
+          duration: 0.62,
+          clearProps: "transform",
+        }).from(
+          "[data-top-rule]",
+          {
+            scaleX: 0,
+            duration: 0.68,
+            clearProps: "transform",
+          },
+          "-=0.45"
+        );
+      });
+    }, rootEl.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (copyTimer) clearTimeout(copyTimer);
+  gsapCtx?.revert();
+  gsapCtx = null;
+});
+</script>
+
+<style scoped>
+.dash-cinema {
+  display: flex;
+  flex-direction: column;
   gap: 14px;
+  height: calc(100dvh - 176px);
+  min-height: 460px;
+  max-height: 820px;
+  max-width: 1280px;
+  min-width: 0;
 }
+
+.dash-masthead {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.masthead-left {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.title-mask {
+  overflow: hidden;
+  padding-bottom: 4px;
+  margin-bottom: -4px;
+}
+
+.gallery-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 2.6vw, 34px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
+}
+
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 12px;
+  color: var(--c-ink);
+}
+
+.live-status i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-ok);
+  box-shadow: 0 0 0 3px rgb(21 184 90 / 0.16);
+}
+
+.live-status.is-warn i {
+  background: var(--c-warn);
+  box-shadow: 0 0 0 3px rgb(180 83 9 / 0.16);
+}
+
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-rule {
+  flex: none;
+  display: block;
+  height: 1px;
+  background: var(--c-ink);
+  transform-origin: left;
+}
+
 .overview-notice {
+  flex: none;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -343,249 +427,351 @@ onMounted(loadOverview);
   border-radius: 12px;
   background: var(--c-surface);
 }
-.stat-strip {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
-}
-.stat-card {
-  display: grid;
-  gap: 1px;
-  padding: 12px 14px;
-  border: 1px solid var(--c-line);
-  border-radius: 14px;
-  background: var(--c-surface);
-}
-.stat-card span {
-  color: var(--c-muted);
-  font-size: 11.5px;
-}
-.stat-card strong {
-  font: 600 28px/1.25 var(--font-ui);
-  letter-spacing: -0.03em;
-}
-.stat-card strong.stat-ok {
-  color: var(--c-ok);
-}
-.stat-card small {
-  overflow: hidden;
-  color: var(--c-subtle);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 8fr) minmax(0, 4fr);
-  gap: 14px;
-  align-items: start;
-}
-.dash-panel {
+
+/* Flex-Filling Hero Map Canvas */
+.map-hero-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
   min-width: 0;
-  border: 1px solid var(--c-line);
-  border-radius: 16px;
-  background: var(--c-surface);
-  box-shadow: var(--shadow-panel), var(--edge-highlight);
 }
-.dash-map {
-  min-height: 380px;
+
+.dash-hero-map {
+  height: 100%;
+  border-radius: 20px;
+  overflow: hidden;
 }
-.dash-map :deep(.map-stage),
-.dash-map :deep(.world-map) {
-  min-height: 260px;
-}
-.dash-map :deep(.map-selector),
-.dash-map :deep(.map-location) {
+
+.dash-hero-map :deep(.ui-panel__header) {
   display: none;
 }
-.dash-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 0 12px;
-}
-.dash-head h2 {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-.dash-head p {
-  margin: 2px 0 0;
-  color: var(--c-muted);
-  font-size: 11.5px;
-}
-.side-stack {
-  display: grid;
-  gap: 12px;
-  align-content: start;
-}
-.side-panel {
-  padding: 14px 16px;
-}
-.side-panel .dash-head {
-  padding-bottom: 8px;
-}
-.dash-map {
-  min-height: 340px;
-}
-.expiry-list {
-  display: grid;
-  gap: 6px;
-}
-.expiry-list li {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 5px 0;
-  border-bottom: 1px solid var(--c-line);
-}
-.expiry-list li:last-child {
-  border-bottom: 0;
-}
-.expiry-name {
-  overflow: hidden;
-  font-size: 12.5px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.expiry-days {
-  flex: none;
-  color: var(--c-muted);
-  font-size: 11.5px;
-}
-.expiry-days.is-soon {
-  color: var(--c-warn);
-}
-.region-list {
-  display: grid;
-  gap: 8px;
-}
-.region-list li {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 5px 10px;
-}
-.region-name {
-  font-size: 12.5px;
-}
-.region-count {
-  color: var(--c-muted);
-  font-size: 11.5px;
-}
-.region-bar {
-  grid-column: 1 / -1;
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--c-surface-2);
-}
-.region-bar i {
-  display: block;
+
+.dash-hero-map :deep(.ui-panel__body) {
   height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--c-signal), var(--c-data));
-  transform-origin: left;
-  transition: transform var(--duration-slow) var(--ease-out);
+  padding: 0;
 }
-.nodes-panel {
-  overflow: hidden;
+
+.dash-hero-map :deep(.map-stage) {
+  height: 100%;
+  min-height: 0;
 }
-.nodes-head {
-  padding: 14px 16px 10px;
+
+.dash-hero-map :deep(.world-map) {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
-.node-loading {
-  padding: 12px 16px;
+
+.dash-hero-map :deep(.map-selector),
+.dash-hero-map :deep(.map-location) {
+  display: none;
 }
-.node-empty {
-  padding: 4px 16px 16px;
+
+.dash-hero-map :deep(.node-hit) {
+  cursor: pointer;
+  fill: transparent;
 }
-.node-table {
-  display: grid;
+
+.dash-hero-map :deep(.map-node.is-selected .node-mark) {
+  fill: var(--c-ok);
 }
-.node-dot {
-  width: 8px;
-  height: 8px;
+
+.dash-hero-map :deep(.map-node.is-selected .node-halo) {
+  stroke: var(--c-ok);
+}
+
+/* Subtle Hint Pill When Closed */
+.map-hint {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-surface) 88%, transparent);
+  backdrop-filter: blur(16px);
+  font-size: 12px;
+  color: var(--c-muted);
+  pointer-events: none;
+}
+
+.map-hint i {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--c-ok);
 }
-.node-dot.is-bad {
-  border-radius: 0;
-  background: var(--c-bad);
-  transform: rotate(45deg);
-}
-.node-row {
+
+/* Floating Frosted Glass Node Card */
+.map-inspector {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 12;
+  width: min(336px, calc(100% - 40px));
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
   display: grid;
-  grid-template-columns: 10px minmax(0, 1.6fr) minmax(0, 1fr) 70px 76px;
+  gap: 10px;
+  padding: 18px 20px;
+  border: 1px solid var(--c-line);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  backdrop-filter: blur(22px) saturate(160%);
+  box-shadow: 0 24px 56px -18px rgb(0 0 0 / 0.18);
+}
+
+.inspector-top {
+  display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 16px;
-  border-top: 1px solid var(--c-line);
-  color: var(--c-ink);
-  text-decoration: none;
-  transition: background var(--duration-fast);
+  justify-content: space-between;
+  gap: 8px;
 }
-.node-row:hover {
-  background: var(--c-surface-2);
+
+.inspector-badges,
+.inspector-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.node-main {
-  display: grid;
-  min-width: 0;
-  gap: 1px;
-}
-.node-main strong {
-  overflow: hidden;
-  font-size: 12.5px;
+
+.inspector-region {
+  font-size: 11.5px;
   font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.node-main small {
-  overflow: hidden;
   color: var(--c-muted);
+}
+
+.inspector-proto {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--c-surface-muted);
+  color: var(--c-ink);
   font-size: 10.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-weight: 600;
+  letter-spacing: 0.04em;
 }
-.node-country,
-.node-probes {
-  overflow: hidden;
-  color: var(--c-muted);
+
+.inspector-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 11.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.node-valid {
+  font-weight: 500;
   color: var(--c-ok);
-  font-size: 11.5px;
-  text-align: right;
 }
-.node-valid.is-bad {
+
+.inspector-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.inspector-state.is-blocked {
+  color: var(--c-warn);
+}
+
+.inspector-state.is-bad {
   color: var(--c-bad);
 }
-@media (max-width: 1199px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
-  }
-  .side-stack {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+
+.inspector-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--c-muted);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
-@media (max-width: 767px) {
-  .stat-strip {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+
+.inspector-close:hover {
+  background: var(--c-surface-muted);
+  color: var(--c-ink);
+}
+
+.inspector-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--c-ink);
+}
+
+.inspector-host {
+  margin: -4px 0 0;
+  font-size: 11.5px;
+  color: var(--c-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 12px;
+  margin: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.inspector-meta dt {
+  font-size: 11px;
+  color: var(--c-muted);
+  margin-bottom: 2px;
+}
+
+.inspector-meta dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inspector-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.inspector-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.inspector-copy:hover {
+  border-color: var(--c-ink);
+  background: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.inspector-copy.is-done {
+  border-color: var(--c-ok);
+  color: var(--c-ok);
+}
+
+.inspector-pop-enter-active,
+.inspector-pop-leave-active {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+
+.inspector-pop-enter-from,
+.inspector-pop-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+/* Always-Visible Node Quick Selector Strip */
+.node-pill-rail {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.map-node-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.map-node-pill:hover {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+
+.map-node-pill.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
+}
+
+.map-node-pill small {
+  font-size: 11px;
+  opacity: 0.65;
+}
+
+.pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-ok);
+  flex: none;
+}
+
+.pill-dot.is-blocked {
+  background: var(--c-warn);
+}
+
+.pill-dot.is-bad {
+  background: var(--c-bad);
+}
+
+@media (max-width: 780px) {
+  .dash-cinema {
+    height: auto;
+    min-height: 0;
+    max-height: none;
   }
-  .side-stack {
-    grid-template-columns: 1fr;
+  .map-hero-wrap {
+    flex: none;
   }
-  .node-row {
-    grid-template-columns: 10px minmax(0, 1fr) 68px;
+  .dash-hero-map {
+    height: 360px;
   }
-  .node-country,
-  .node-probes {
+  .map-hint {
     display: none;
+  }
+  .map-inspector {
+    position: static;
+    width: 100%;
+    max-height: none;
+    margin-top: 12px;
   }
 }
 </style>

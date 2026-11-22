@@ -8,7 +8,7 @@ import {
   watch,
 } from "vue";
 import { useRouter } from "vue-router";
-import PageHeader from "@/ui/PageHeader.vue";
+import gsap from "gsap";
 import InboundDrawer from "./servers/InboundDrawer.vue";
 import { getNodes } from "@/api/subcription/node";
 import {
@@ -34,20 +34,29 @@ import IconPlus from "~icons/ph/plus";
 import IconRefresh from "~icons/ph/arrows-clockwise";
 
 defineOptions({ name: "ProxyRelays" });
+
 const router = useRouter();
-const mode = ref("port");
+const mode = ref<"port" | "gateway">("port");
+
 const modes = [
   {
-    value: "port",
-    title: "纯端口转发",
-    text: "入口只转发 TCP / UDP，保留落地的协议与凭据。",
+    value: "port" as const,
+    title: "端口转发",
+    badge: "极简透传",
+    summary: "像直连网线一样把入口端口原样转发到落地，开销最小。",
+    flow: ["设备", "入口端口", "落地节点"],
+    traits: ["延迟最低", "保留原协议", "换落地需更新订阅"],
   },
   {
-    value: "gateway",
-    title: "固定入口网关",
-    text: "入口凭据保持不变，在面板切换落地出口。",
+    value: "gateway" as const,
+    title: "智能中转网关",
+    badge: "固定入口",
+    summary: "客户端始终连接固定入口，后台随时切换落地，无需更新订阅。",
+    flow: ["设备", "固定入口", "随时换落地"],
+    traits: ["换落地免更新", "支持按网站分流", "支持账户配额"],
   },
 ];
+
 const servers = ref<ProxyServer[]>([]);
 const rules = ref<ProxyRelay[]>([]);
 const targets = ref<RelayTarget[]>([]);
@@ -57,10 +66,14 @@ const loading = ref(true);
 const loadError = ref("");
 const actionError = ref("");
 const busy = ref("");
+
+const rootEl = ref<HTMLElement>();
+let gsapCtx: gsap.Context | null = null;
 let timer: ReturnType<typeof setInterval> | undefined;
 let loadGeneration = 0;
 let disposed = false;
 let loadingRequest = false;
+
 async function load(quiet = false) {
   if (quiet && loadingRequest) return;
   const generation = ++loadGeneration;
@@ -96,17 +109,44 @@ async function load(quiet = false) {
     }
   }
 }
+
 onMounted(() => {
   void load();
   timer = setInterval(() => {
     if (!document.hidden) void load(true);
   }, 20000);
+
+  if (rootEl.value) {
+    gsapCtx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+        tl.from("[data-title-reveal]", {
+          yPercent: 108,
+          duration: 0.62,
+          clearProps: "transform",
+        }).from(
+          "[data-top-rule]",
+          {
+            scaleX: 0,
+            duration: 0.68,
+            clearProps: "transform",
+          },
+          "-=0.45"
+        );
+      });
+    }, rootEl.value);
+  }
 });
+
 onBeforeUnmount(() => {
   disposed = true;
   loadGeneration++;
   clearInterval(timer);
+  gsapCtx?.revert();
+  gsapCtx = null;
 });
+
 const agents = computed(() =>
   servers.value.filter((s) => s.kind === "agent" && !s.removing)
 );
@@ -123,11 +163,13 @@ const gateways = computed(() =>
       .map((inbound) => ({ server, inbound }))
   )
 );
+
 const serverById = (id: number) => servers.value.find((s) => s.id === id);
 const targetName = (id: number) =>
   targets.value.find((t) => t.id === id)?.name ||
   egressOptions.value.find((t) => t.id === id)?.name ||
   "落地节点已删除";
+
 function ruleStatus(rule: ProxyRelay) {
   const server = serverById(rule.serverId);
   if (!server?.online) return { text: "入口离线", tone: "neutral" as const };
@@ -142,6 +184,7 @@ function ruleStatus(rule: ProxyRelay) {
     ? { text: "运行中", tone: "ok" as const }
     : { text: "等待运行", tone: "warn" as const };
 }
+
 function gatewayStatus(server: ProxyServer, inbound: ProxyInbound) {
   if (!server.online && server.kind === "agent")
     return { text: "入口离线", tone: "neutral" as const };
@@ -149,9 +192,10 @@ function gatewayStatus(server: ProxyServer, inbound: ProxyInbound) {
   if (!inbound.enabled || !server.enabled)
     return { text: "已停用", tone: "neutral" as const };
   return server.running
-    ? { text: "服务器运行中", tone: "ok" as const }
-    : { text: "等待服务器应用", tone: "warn" as const };
+    ? { text: "运行中", tone: "ok" as const }
+    : { text: "等待应用", tone: "warn" as const };
 }
+
 function diagnose(id: number) {
   if (id)
     void router.push({
@@ -159,6 +203,7 @@ function diagnose(id: number) {
       query: { id: String(id) },
     });
 }
+
 function gatewayNodeId(server: ProxyServer, inbound: ProxyInbound) {
   const host = server.publicHost.replace(/^\[|\]$/g, "").toLowerCase();
   return (
@@ -175,6 +220,7 @@ function gatewayNodeId(server: ProxyServer, inbound: ProxyInbound) {
     })?.ID || 0
   );
 }
+
 async function upgrade(server: ProxyServer) {
   try {
     await ElMessageBox.confirm(
@@ -192,7 +238,7 @@ async function upgrade(server: ProxyServer) {
   busy.value = `upgrade-${server.id}`;
   try {
     await requestAgentUpdate(server.id);
-    ElMessage.success("已下发更新请求，等待 Agent 心跳与能力回报");
+    ElMessage.success("已下发更新请求");
     await load(true);
   } catch (e: any) {
     actionError.value = e?.message || "更新请求失败";
@@ -216,12 +262,14 @@ const form = reactive<RelaySave>(blank());
 const selectedTarget = computed(() =>
   targets.value.find((t) => t.id === form.targetNodeId)
 );
+
 watch(
   () => form.targetNodeId,
   () => {
     if (selectedTarget.value) form.network = selectedTarget.value.network;
   }
 );
+
 function editRule(rule?: ProxyRelay) {
   Object.assign(
     form,
@@ -241,25 +289,26 @@ function editRule(rule?: ProxyRelay) {
   formError.value = "";
   editor.value = true;
 }
+
 async function submitRule() {
   formError.value = "";
   if (!form.name.trim() || !form.serverId || !form.targetNodeId) {
-    formError.value = "请填写线路名称，并选择入口 Agent 和物理落地节点。";
+    formError.value = "请填写线路名称，并选择入口服务器与落地节点。";
     return;
   }
   if ((serverById(form.serverId)?.proxyFeatures || 0) < 5) {
-    formError.value = "入口 Agent 尚未具备端口转发能力，请先升级并等待回报。";
+    formError.value = "入口 Agent 版本过旧，请先升级。";
     return;
   }
   if (form.listenPort < 1024 || form.listenPort > 65535) {
-    formError.value = "监听端口需在 1024 到 65535 之间。";
+    formError.value = "监听端口需在 1024 – 65535 之间。";
     return;
   }
   saving.value = true;
   try {
     await saveProxyRelay({ ...form, name: form.name.trim() });
     editor.value = false;
-    ElMessage.success("规则已保存，等待 Agent 应用与回报");
+    ElMessage.success("规则已保存，等待 Agent 应用");
     await load(true);
   } catch (e: any) {
     formError.value = e?.message || "保存失败";
@@ -267,6 +316,7 @@ async function submitRule() {
     saving.value = false;
   }
 }
+
 async function toggleRule(rule: ProxyRelay) {
   busy.value = `relay-${rule.id}`;
   actionError.value = "";
@@ -280,7 +330,7 @@ async function toggleRule(rule: ProxyRelay) {
       targetNodeId: rule.targetNodeId,
       enabled: !rule.enabled,
     });
-    ElMessage.success("已保存，等待 Agent 应用与回报");
+    ElMessage.success(rule.enabled ? "已停用转发" : "已启用转发");
     await load(true);
   } catch (e: any) {
     actionError.value = e?.message || "保存失败";
@@ -288,10 +338,11 @@ async function toggleRule(rule: ProxyRelay) {
     busy.value = "";
   }
 }
+
 async function removeRule(rule: ProxyRelay) {
   try {
     await ElMessageBox.confirm(
-      `删除「${rule.name}」？该入口转发和对应订阅节点将移除。`,
+      `删除「${rule.name}」？对应的中转订阅节点也会移除。`,
       "删除端口转发",
       {
         confirmButtonText: "删除",
@@ -305,6 +356,7 @@ async function removeRule(rule: ProxyRelay) {
   busy.value = `relay-${rule.id}`;
   try {
     await deleteProxyRelay(rule.id);
+    ElMessage.success("已删除转发规则");
     await load(true);
   } catch (e: any) {
     actionError.value = e?.message || "删除失败";
@@ -312,21 +364,25 @@ async function removeRule(rule: ProxyRelay) {
     busy.value = "";
   }
 }
+
 const entryDialog = ref(false);
 const entryServer = ref<number>();
 const inboundDrawer = ref(false);
 const inboundServer = ref(0);
 const editingInbound = ref<ProxyInbound | null>(null);
+
 function chooseGateway() {
   entryServer.value = agents.value.find((s) => s.enabled)?.id;
   entryDialog.value = true;
 }
+
 function openGateway(serverId: number, inbound: ProxyInbound | null = null) {
   inboundServer.value = serverId;
   editingInbound.value = inbound;
   entryDialog.value = false;
   inboundDrawer.value = true;
 }
+
 async function toggleGateway(inbound: ProxyInbound) {
   busy.value = `gateway-${inbound.id}`;
   try {
@@ -335,6 +391,7 @@ async function toggleGateway(inbound: ProxyInbound) {
       enabled: !inbound.enabled,
       regenerateKey: false,
     });
+    ElMessage.success(inbound.enabled ? "已停用网关" : "已启用网关");
     await load(true);
   } catch (e: any) {
     actionError.value = e?.message || "保存失败";
@@ -342,11 +399,12 @@ async function toggleGateway(inbound: ProxyInbound) {
     busy.value = "";
   }
 }
+
 async function removeGateway(inbound: ProxyInbound) {
   try {
     await ElMessageBox.confirm(
-      `删除网关「${inbound.remark || inbound.port}」？对应的自建节点会一起移除。`,
-      "删除固定入口网关",
+      `删除网关「${inbound.remark || inbound.port}」？对应的节点会一起移除。`,
+      "删除智能中转网关",
       {
         confirmButtonText: "删除",
         cancelButtonText: "取消",
@@ -359,6 +417,7 @@ async function removeGateway(inbound: ProxyInbound) {
   busy.value = `gateway-${inbound.id}`;
   try {
     await deleteProxyInbound(inbound.id);
+    ElMessage.success("已删除中转网关");
     await load(true);
   } catch (e: any) {
     actionError.value = e?.message || "删除失败";
@@ -366,383 +425,490 @@ async function removeGateway(inbound: ProxyInbound) {
     busy.value = "";
   }
 }
+
+function handlePrimaryCreate() {
+  if (mode.value === "port") editRule();
+  else chooseGateway();
+}
 </script>
 
 <template>
-  <div class="relays-page server-experience">
-    <PageHeader
+  <div ref="rootEl" class="relays-gallery">
+    <!-- Compact Editorial Masthead -->
+    <header class="relays-masthead" aria-labelledby="relays-title">
+      <div class="masthead-left">
+        <div class="title-cluster">
+          <div class="title-mask">
+            <h1 id="relays-title" class="gallery-title" data-title-reveal>
+              中转网关
+            </h1>
+          </div>
+          <dl class="inline-metrics mono" aria-label="中转线路概览">
+            <div>
+              <dt>端口转发</dt>
+              <dd>{{ loading ? "—" : rules.length }}</dd>
+            </div>
+            <div>
+              <dt>智能网关</dt>
+              <dd>{{ loading ? "—" : gateways.length }}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
 
-      title="中转设置"
-      description="按需选择连接方式，设备连接入口，网站看到落地出口。"
-    >
-      <template #actions
-        ><UiButton :icon="IconRefresh" :loading="loading" @click="load()"
-          >刷新状态</UiButton
-        ></template
-      >
-    </PageHeader>
-    <nav class="mode-picker" aria-label="中转方式">
+      <div class="masthead-actions">
+        <UiButton
+          v-if="mode === 'port'"
+          variant="ghost"
+          @click="
+            router.push({
+              path: '/subcription/nodes',
+              query: { group: 'Agent 中转' },
+            })
+          "
+        >
+          查看中转节点
+        </UiButton>
+        <UiButton
+          variant="primary"
+          :icon="IconPlus"
+          :disabled="
+            mode === 'port'
+              ? !capableAgents.length || !targets.length
+              : !agents.some((s) => s.enabled)
+          "
+          @click="handlePrimaryCreate"
+        >
+          {{ mode === "port" ? "新建端口转发" : "新建智能网关" }}
+        </UiButton>
+        <UiButton
+          variant="ghost"
+          :icon="IconRefresh"
+          :loading="loading"
+          @click="load()"
+        >
+          刷新
+        </UiButton>
+      </div>
+    </header>
+
+    <span class="top-rule" data-top-rule aria-hidden="true"></span>
+
+    <!-- Clear 2-Mode Visual Comparison Cards -->
+    <nav class="mode-compare" aria-label="选择中转模式">
       <button
         v-for="item in modes"
         :key="item.value"
         type="button"
-        class="mode-option"
-        :class="{ active: mode === item.value }"
+        class="mode-card"
+        :class="{ 'is-active': mode === item.value }"
         :aria-pressed="mode === item.value"
         @click="mode = item.value"
       >
-        <strong>{{ item.title }}</strong
-        ><span>{{ item.text }}</span>
+        <div class="mode-head">
+          <div class="mode-title-group">
+            <strong>{{ item.title }}</strong>
+            <span class="mode-badge">{{ item.badge }}</span>
+          </div>
+          <span class="mode-count mono">
+            {{ item.value === "port" ? rules.length : gateways.length }} 条
+          </span>
+        </div>
+
+        <p class="mode-summary">{{ item.summary }}</p>
+
+        <div class="mode-flow mono" aria-hidden="true">
+          <span>{{ item.flow[0] }}</span>
+          <i>→</i>
+          <span>{{ item.flow[1] }}</span>
+          <i>→</i>
+          <span class="is-end">{{ item.flow[2] }}</span>
+        </div>
+
+        <ul class="mode-traits">
+          <li v-for="trait in item.traits" :key="trait">{{ trait }}</li>
+        </ul>
       </button>
     </nav>
+
     <p v-if="actionError" class="error-banner" role="alert">
       {{ actionError }}
     </p>
+
     <EmptyState
       v-if="loadError"
       title="无法加载中转设置"
       :description="loadError"
     >
-      <template #action><UiButton @click="load()">重新加载</UiButton></template>
+      <template #action>
+        <UiButton @click="load()">重新加载</UiButton>
+      </template>
     </EmptyState>
-    <UiSkeleton v-else-if="loading" :lines="4" height="100px" />
-    <template v-else>
-      <section
-        v-if="mode === 'port'"
-        class="relay-section"
-        aria-labelledby="port-title"
-      >
-        <header class="section-heading">
-          <div>
-            <h2 id="port-title">
-              纯端口转发 <small>{{ rules.length }} 条线路</small>
-            </h2>
-            <p>
-              设备 → 入口 Agent 固定端口 → 物理落地。客户端无需设置链式代理。
-            </p>
-          </div>
-          <UiButton
-            @click="router.push({ path: '/subcription/nodes', query: { group: 'Agent 中转' } })"
-            >查看中转节点</UiButton
-          >
-          <UiButton
-            variant="primary"
-            :icon="IconPlus"
-            :disabled="!capableAgents.length || !targets.length"
-            @click="editRule()"
-            >添加转发</UiButton
-          >
-        </header>
-        <div class="explain">
-          <p>
-            订阅使用入口地址，并保留落地的协议、认证和证书校验。更换凭据不同的落地后，需要更新客户端订阅。
-          </p>
-          <p>
-            线路流量为原始转发字节，无法区分账户或网站。
-          </p>
-        </div>
-        <div v-if="olderAgents.length" class="upgrade-list">
-          <p>部分 Agent 需要升级后才能添加端口转发；以新能力回报为准。</p>
+
+    <UiSkeleton v-else-if="loading" :lines="4" height="84px" />
+
+    <!-- Mode 1: Port Forwarding List -->
+    <section
+      v-else-if="mode === 'port'"
+      class="relay-ledger"
+      aria-label="端口转发列表"
+    >
+      <div v-if="olderAgents.length" class="upgrade-strip">
+        <span>以下节点需升级 Agent 后才支持端口转发：</span>
+        <div class="upgrade-chips">
           <div
             v-for="server in olderAgents"
             :key="server.id"
-            class="upgrade-row"
+            class="upgrade-chip"
           >
-            <span
-              >{{ server.name }} · {{ server.online ? "在线" : "离线" }}</span
-            >
+            <strong>{{ server.name }}</strong>
             <UiButton
+              size="sm"
+              variant="ghost"
               :disabled="!server.online || server.agentUpdateRequested"
               :loading="busy === `upgrade-${server.id}`"
               @click="upgrade(server)"
-              >{{
-                server.agentUpdateRequested ? "等待更新回报" : "更新 Agent"
-              }}</UiButton
             >
+              {{ server.agentUpdateRequested ? "升级中" : "升级 Agent" }}
+            </UiButton>
           </div>
         </div>
-        <p v-if="!agents.length" class="empty-note">
-          先在「自建节点」添加入口服务器并连接 Agent，即可配置服务端转发。
-        </p>
-        <p v-else-if="!targets.length" class="empty-note">
-          暂无可用物理落地。请先在节点列表添加有效的 Reality 或 HY2 节点。
-        </p>
-        <p v-else-if="!rules.length" class="empty-note">
-          暂无转发线路。选择入口与落地后，保存的规则将等待 Agent 应用。
-        </p>
-        <div class="line-grid">
-          <article v-for="rule in rules" :key="rule.id" class="line-card">
-            <header class="line-heading">
-              <h3>{{ rule.name }}</h3>
-              <UiTag :tone="ruleStatus(rule).tone">{{
-                ruleStatus(rule).text
-              }}</UiTag>
-            </header>
-            <div class="path">
-              <div>
-                <span>入口 · {{ rule.network.toUpperCase() }}</span
-                ><strong>{{
-                  serverById(rule.serverId)?.name || "入口已删除"
-                }}</strong
-                ><small
-                  >{{ serverById(rule.serverId)?.publicHost }}:{{
-                    rule.listenPort
-                  }}</small
-                >
-              </div>
-              <b aria-hidden="true">→</b>
-              <div>
-                <span>物理落地</span
-                ><strong>{{ targetName(rule.targetNodeId) }}</strong>
-              </div>
-            </div>
-            <dl class="line-stats">
-              <div>
-                <dt>上行</dt>
-                <dd>{{ formatBytes(rule.up || 0) }}</dd>
-              </div>
-              <div>
-                <dt>下行</dt>
-                <dd>{{ formatBytes(rule.down || 0) }}</dd>
-              </div>
-              <div>
-                <dt>TCP 连接 / UDP 会话</dt>
-                <dd>
-                  {{ rule.tcpConnections || 0 }} / {{ rule.udpSessions || 0 }}
-                </dd>
-              </div>
-            </dl>
-            <p class="last-report">
-              最近回报：{{
-                rule.lastSeenAt ? formatDateTime(rule.lastSeenAt) : "尚未回报"
-              }}
-            </p>
-            <p v-if="rule.lastError" class="line-error">{{ rule.lastError }}</p>
-            <footer class="line-actions">
-              <el-switch
-                :model-value="rule.enabled"
-                :disabled="busy === `relay-${rule.id}`"
-                :aria-label="`${rule.name} 启用`"
-                @change="toggleRule(rule)"
-              /><UiButton
-                :disabled="!rule.nodeId"
-                @click="diagnose(rule.nodeId)"
-                >诊断入口</UiButton
-              ><UiButton @click="editRule(rule)">修改</UiButton
-              ><UiButton
-                :disabled="busy === `relay-${rule.id}`"
-                @click="removeRule(rule)"
-                >删除</UiButton
-              >
-            </footer>
-          </article>
-        </div>
-        <p class="footnote">
-          保存不代表已运行。等待 Agent
-          的运行与版本回报；修改落地仅影响新连接，已有连接按原路径继续。诊断沿生成的入口节点实际访问目标。
-        </p>
-      </section>
-      <section
-        v-else-if="mode === 'gateway'"
-        class="relay-section"
-        aria-labelledby="gateway-title"
+      </div>
+
+      <EmptyState
+        v-if="!agents.length"
+        size="section"
+        title="还没有可用的入口节点"
+        description="请先在「自建实例」添加代理节点并连接 Agent。"
       >
-        <header class="section-heading">
-          <div>
-            <h2 id="gateway-title">
-              固定入口网关 <small>{{ gateways.length }} 条线路</small>
-            </h2>
-            <p>
-              设备 → 固定入口入站 → Reality / HY2
-              落地。沿用自建节点的账户、配额与网站分流。
-            </p>
+        <template #action>
+          <UiButton
+            variant="primary"
+            @click="router.push('/subcription/servers')"
+          >
+            前往自建实例
+          </UiButton>
+        </template>
+      </EmptyState>
+
+      <EmptyState
+        v-else-if="!targets.length"
+        size="section"
+        title="还没有可用的落地节点"
+        description="请先在「节点资产」添加有效的 Reality 或 Hysteria2 节点。"
+      >
+        <template #action>
+          <UiButton variant="primary" @click="router.push('/subcription/nodes')">
+            前往节点资产
+          </UiButton>
+        </template>
+      </EmptyState>
+
+      <EmptyState
+        v-else-if="!rules.length"
+        size="section"
+        title="暂无端口转发线路"
+        description="将入口端口直接透传至落地节点。"
+      >
+        <template #action>
+          <UiButton variant="primary" :icon="IconPlus" @click="editRule()">
+            新建端口转发
+          </UiButton>
+        </template>
+      </EmptyState>
+
+      <div v-else class="relay-list">
+        <article v-for="rule in rules" :key="rule.id" class="relay-row">
+          <div class="row-main">
+            <div class="row-head">
+              <h3>{{ rule.name }}</h3>
+              <UiTag :tone="ruleStatus(rule).tone">
+                {{ ruleStatus(rule).text }}
+              </UiTag>
+              <span class="proto-pill mono">{{
+                rule.network.toUpperCase()
+              }}</span>
+            </div>
+
+            <div class="route-pipe mono">
+              <span>
+                {{ serverById(rule.serverId)?.name || "入口已删除" }}
+                <em>:{{ rule.listenPort }}</em>
+              </span>
+              <i aria-hidden="true">→</i>
+              <strong>{{ targetName(rule.targetNodeId) }}</strong>
+            </div>
+
+            <p v-if="rule.lastError" class="row-error">{{ rule.lastError }}</p>
           </div>
+
+          <dl class="row-stats mono">
+            <div>
+              <dt>上行 / 下行</dt>
+              <dd>
+                {{ formatBytes(rule.up || 0) }} /
+                {{ formatBytes(rule.down || 0) }}
+              </dd>
+            </div>
+            <div>
+              <dt>活跃连接</dt>
+              <dd>
+                {{ rule.tcpConnections || 0 }} TCP ·
+                {{ rule.udpSessions || 0 }} UDP
+              </dd>
+            </div>
+          </dl>
+
+          <div class="row-actions">
+            <el-switch
+              :model-value="rule.enabled"
+              :disabled="busy === `relay-${rule.id}`"
+              :aria-label="`${rule.name} 启用`"
+              @change="toggleRule(rule)"
+            />
+            <UiButton
+              size="sm"
+              variant="ghost"
+              :disabled="!rule.nodeId"
+              @click="diagnose(rule.nodeId)"
+            >
+              诊断
+            </UiButton>
+            <UiButton size="sm" variant="ghost" @click="editRule(rule)">
+              编辑
+            </UiButton>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              :disabled="busy === `relay-${rule.id}`"
+              @click="removeRule(rule)"
+            >
+              <span class="danger">删除</span>
+            </UiButton>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Mode 2: Smart Fixed-Entry Gateway List -->
+    <section
+      v-else
+      class="relay-ledger"
+      aria-label="智能中转网关列表"
+    >
+      <EmptyState
+        v-if="!gateways.length"
+        size="section"
+        title="暂无智能中转网关"
+        description="固定客户端入口，后续切换落地或分流规则时无需更新订阅。"
+      >
+        <template #action>
           <UiButton
             variant="primary"
             :icon="IconPlus"
             :disabled="!agents.some((s) => s.enabled)"
             @click="chooseGateway"
-            >添加网关</UiButton
           >
-        </header>
-        <div class="explain">
-          <p>
-            首次需要把香港等入口节点导入客户端一次；之后仅在面板修改默认服务端出口，入口的密钥、短标识、账户凭据和自动证书身份保持不变。
-          </p>
-          <p>
-            账户用量沿用「自建节点」统计；此处不把服务器总流量当作单条网关流量。
-          </p>
-        </div>
-        <p v-if="!gateways.length" class="empty-note">
-          暂无固定入口网关。先选择入口服务器，再配置入站协议和落地出口。
-        </p>
-        <div class="line-grid">
-          <article
-            v-for="{ server, inbound } in gateways"
-            :key="inbound.id"
-            class="line-card"
-          >
-            <header class="line-heading">
-              <h3>{{ inbound.remark || "固定入口网关" }}</h3>
-              <UiTag :tone="gatewayStatus(server, inbound).tone">{{
-                gatewayStatus(server, inbound).text
-              }}</UiTag>
-            </header>
-            <div class="path">
-              <div>
-                <span>固定入口</span><strong>{{ server.name }}</strong
-                ><small>{{ server.publicHost }}:{{ inbound.port }}</small>
-              </div>
-              <b aria-hidden="true">→</b>
-              <div>
-                <span>默认落地</span
-                ><strong>{{ targetName(inbound.egressNodeId || 0) }}</strong>
-              </div>
+            新建智能网关
+          </UiButton>
+        </template>
+      </EmptyState>
+
+      <div v-else class="relay-list">
+        <article
+          v-for="{ server, inbound } in gateways"
+          :key="inbound.id"
+          class="relay-row"
+        >
+          <div class="row-main">
+            <div class="row-head">
+              <h3>{{ inbound.remark || "智能中转网关" }}</h3>
+              <UiTag :tone="gatewayStatus(server, inbound).tone">
+                {{ gatewayStatus(server, inbound).text }}
+              </UiTag>
+              <span class="proto-pill mono">
+                {{
+                  inbound.template === "hysteria2"
+                    ? "HY2"
+                    : inbound.template === "vless-xhttp-reality"
+                      ? "XHTTP"
+                      : "Reality"
+                }}
+              </span>
             </div>
-            <p class="last-report">
-              {{
-                inbound.template === "hysteria2"
-                  ? "Hysteria2"
-                  : inbound.template === "vless-xhttp-reality"
-                    ? "XHTTP Reality"
-                    : "Reality Vision"
-              }}
-              · {{ inbound.domainRoutes?.length || 0 }} 条网站分流 · 最近回报
-              {{
-                server.lastSeenAt
-                  ? formatDateTime(server.lastSeenAt)
-                  : "尚未回报"
-              }}
-            </p>
-            <p v-if="server.lastError" class="line-error">
+
+            <div class="route-pipe mono">
+              <span>
+                {{ server.name }}
+                <em>:{{ inbound.port }}</em>
+              </span>
+              <i aria-hidden="true">→</i>
+              <strong>{{ targetName(inbound.egressNodeId || 0) }}</strong>
+            </div>
+
+            <p v-if="server.lastError" class="row-error">
               {{ server.lastError }}
             </p>
-            <p v-if="!gatewayNodeId(server, inbound)" class="last-report">
-              入口节点尚未生成；请确认已开通账户并等待 Agent 部署。
-            </p>
-            <footer class="line-actions">
-              <el-switch
-                :model-value="inbound.enabled"
-                :disabled="busy === `gateway-${inbound.id}`"
-                :aria-label="`${inbound.remark} 启用`"
-                @change="toggleGateway(inbound)"
-              /><UiButton
-                :disabled="!gatewayNodeId(server, inbound)"
-                @click="diagnose(gatewayNodeId(server, inbound))"
-                >诊断入口</UiButton
-              ><UiButton @click="openGateway(server.id, inbound)"
-                >修改落地与规则</UiButton
-              ><UiButton
-                :disabled="busy === `gateway-${inbound.id}`"
-                @click="removeGateway(inbound)"
-                >删除</UiButton
-              >
-            </footer>
-          </article>
-        </div>
-        <p class="footnote">
-          修改落地时保留入口身份。节点是否可用请运行入口诊断，服务器运行状态不等同于线路连通性通过。
-        </p>
-      </section>
-    </template>
+          </div>
 
+          <dl class="row-stats mono">
+            <div>
+              <dt>网站分流</dt>
+              <dd>{{ inbound.domainRoutes?.length || 0 }} 条规则</dd>
+            </div>
+            <div>
+              <dt>最近回报</dt>
+              <dd>
+                {{
+                  server.lastSeenAt
+                    ? formatDateTime(server.lastSeenAt).slice(5)
+                    : "待回报"
+                }}
+              </dd>
+            </div>
+          </dl>
+
+          <div class="row-actions">
+            <el-switch
+              :model-value="inbound.enabled"
+              :disabled="busy === `gateway-${inbound.id}`"
+              :aria-label="`${inbound.remark} 启用`"
+              @change="toggleGateway(inbound)"
+            />
+            <UiButton
+              size="sm"
+              variant="ghost"
+              :disabled="!gatewayNodeId(server, inbound)"
+              @click="diagnose(gatewayNodeId(server, inbound))"
+            >
+              诊断
+            </UiButton>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              @click="openGateway(server.id, inbound)"
+            >
+              切换落地
+            </UiButton>
+            <UiButton
+              size="sm"
+              variant="ghost"
+              :disabled="busy === `gateway-${inbound.id}`"
+              @click="removeGateway(inbound)"
+            >
+              <span class="danger">删除</span>
+            </UiButton>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- Port Forward Editor Dialog -->
     <UiDialog
       v-model="editor"
-      :title="form.id ? '修改端口转发' : '添加端口转发'"
+      :title="form.id ? '编辑端口转发' : '新建端口转发'"
       width="540px"
     >
       <el-form label-position="top" @submit.prevent="submitRule">
-        <el-form-item label="线路名称" required
-          ><el-input
+        <el-form-item label="线路名称" required>
+          <el-input
             v-model="form.name"
             maxlength="80"
-            placeholder="例如 香港入口 → 东京落地"
-        /></el-form-item>
-        <el-form-item label="入口 Agent" required
-          ><el-select
-            v-model="form.serverId"
-            :disabled="!!form.id"
-            class="full"
-            placeholder="选择入口服务器"
-            ><el-option
-              v-for="server in agents"
-              :key="server.id"
-              :value="server.id"
-              :label="`${server.name}${(server.proxyFeatures || 0) < 5 ? ' · 需要升级 Agent' : !server.enabled ? ' · 已停用' : !server.online ? ' · 离线' : ''}`"
-              :disabled="!server.enabled || (server.proxyFeatures || 0) < 5"
-          /></el-select>
-          <p v-if="form.id" class="field-note">更换入口请新建线路</p>
-        </el-form-item>
-        <el-form-item label="入口监听端口" required
-          ><el-input-number
-            v-model="form.listenPort"
-            :min="1024"
-            :max="65535"
-            controls-position="right"
-            class="full"
+            placeholder="例如：香港入口 → 东京落地"
           />
-          <p class="field-note">
-            请先放行对应端口，不能与入口已有入站冲突。
-          </p></el-form-item
-        >
-        <el-form-item label="物理落地节点" required
-          ><el-select
+        </el-form-item>
+
+        <div class="dialog-grid-2">
+          <el-form-item label="入口服务器" required>
+            <el-select
+              v-model="form.serverId"
+              :disabled="!!form.id"
+              class="full"
+              placeholder="选择入口"
+            >
+              <el-option
+                v-for="server in agents"
+                :key="server.id"
+                :value="server.id"
+                :label="`${server.name}${(server.proxyFeatures || 0) < 5 ? '（需升级）' : !server.online ? '（离线）' : ''}`"
+                :disabled="!server.enabled || (server.proxyFeatures || 0) < 5"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="入口监听端口" required>
+            <el-input-number
+              v-model="form.listenPort"
+              :min="1024"
+              :max="65535"
+              controls-position="right"
+              class="full"
+            />
+          </el-form-item>
+        </div>
+
+        <el-form-item label="目标落地节点" required>
+          <el-select
             v-model="form.targetNodeId"
             filterable
             class="full"
-            placeholder="选择 Reality 或 HY2 节点"
-            ><el-option
+            placeholder="选择 Reality 或 Hysteria2 节点"
+          >
+            <el-option
               v-for="target in targets"
               :key="target.id"
               :value="target.id"
-              :label="`${target.name} · ${target.protocol} / ${target.network.toUpperCase()}`" /></el-select
-        ></el-form-item>
-        <p class="field-note">
-          传输：{{
-            selectedTarget
-              ? selectedTarget.network.toUpperCase()
-              : "由落地协议确定"
-          }}。只使用该节点的原始物理连接；不会沿用客户端中转关系。
-        </p>
-        <label class="enabled-label"
-          ><el-switch v-model="form.enabled" />启用转发</label
-        >
-        <p v-if="formError" class="line-error" role="alert">{{ formError }}</p>
+              :label="`${target.name} · ${target.protocol} / ${target.network.toUpperCase()}`"
+            />
+          </el-select>
+        </el-form-item>
+
+        <label class="enabled-toggle">
+          <span>启用此转发规则</span>
+          <el-switch v-model="form.enabled" />
+        </label>
+
+        <p v-if="formError" class="row-error" role="alert">{{ formError }}</p>
       </el-form>
-      <template #footer
-        ><UiButton @click="editor = false">取消</UiButton
-        ><UiButton variant="primary" :loading="saving" @click="submitRule"
-          >保存，等待应用</UiButton
-        ></template
-      >
+      <template #footer>
+        <UiButton variant="ghost" @click="editor = false">取消</UiButton>
+        <UiButton variant="primary" :loading="saving" @click="submitRule">
+          保存规则
+        </UiButton>
+      </template>
     </UiDialog>
-    <UiDialog v-model="entryDialog" title="选择固定入口服务器" width="480px">
-      <el-form label-position="top"
-        ><el-form-item label="入口 Agent"
-          ><el-select
+
+    <!-- Smart Gateway Entry Picker -->
+    <UiDialog v-model="entryDialog" title="选择智能网关入口" width="460px">
+      <el-form label-position="top">
+        <el-form-item label="入口服务器" required>
+          <el-select
             v-model="entryServer"
             class="full"
-            placeholder="选择入口服务器"
-            ><el-option
+            placeholder="选择一台在线的代理节点"
+          >
+            <el-option
               v-for="server in agents"
               :key="server.id"
               :value="server.id"
               :label="server.name"
-              :disabled="!server.enabled" /></el-select></el-form-item
-      ></el-form>
-      <p class="field-note">
-        下一步配置入口入站与落地出口。后续修改落地时，客户端继续使用同一入口。
-      </p>
-      <template #footer
-        ><UiButton @click="entryDialog = false">取消</UiButton
-        ><UiButton
+              :disabled="!server.enabled"
+            />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <UiButton variant="ghost" @click="entryDialog = false">取消</UiButton>
+        <UiButton
           variant="primary"
           :disabled="!entryServer"
           @click="entryServer && openGateway(entryServer)"
-          >配置网关</UiButton
-        ></template
-      >
+        >
+          下一步配置落地
+        </UiButton>
+      </template>
     </UiDialog>
+
     <InboundDrawer
       v-model="inboundDrawer"
       :server-id="inboundServer"
@@ -754,270 +920,405 @@ async function removeGateway(inbound: ProxyInbound) {
 </template>
 
 <style scoped>
-.relays-page {
+.relays-gallery {
+  display: grid;
+  gap: 20px;
+  max-width: 1180px;
   min-width: 0;
+  padding-bottom: 56px;
 }
-.mode-picker {
+
+.relays-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.masthead-left {
+  display: grid;
+  gap: 4px;
+}
+
+.title-cluster {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.title-mask {
+  overflow: hidden;
+  padding-bottom: 4px;
+  margin-bottom: -4px;
+}
+
+.gallery-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
+}
+
+.inline-metrics {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  margin: 0;
+}
+
+.inline-metrics > div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.inline-metrics dt {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.inline-metrics dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.top-rule {
+  display: block;
+  height: 1px;
+  background: var(--c-ink);
+  transform-origin: left;
+}
+
+/* 2-Mode Visual Comparison Cards */
+.mode-compare {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin: 22px 0;
+  gap: 14px;
 }
-.mode-option {
-  min-width: 0;
-  text-align: left;
-  padding: 18px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  background: var(--c-surface);
+
+.mode-card {
   display: grid;
-  gap: 8px;
-}
-.mode-option strong {
-  color: var(--c-ink);
-  font-size: 15px;
-}
-.mode-option span {
-  color: var(--c-muted);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.mode-option.active {
-  border-color: var(--c-focus);
-  background: var(--c-selected);
-  box-shadow: inset 0 0 0 1px var(--c-focus);
-}
-.mode-option.active strong {
-  color: var(--c-signal-text);
-}
-.mode-option:focus-visible {
-  outline: 2px solid var(--c-focus);
-  outline-offset: 3px;
-}
-.relay-section {
-  min-width: 0;
-  padding: 24px;
+  gap: 12px;
+  padding: 20px 22px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
+  color: var(--c-ink);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
 }
-.section-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
+
+.mode-card:hover {
+  border-color: var(--c-ink);
 }
-.section-heading h2 {
-  margin: 0 0 8px;
-  font-size: 21px;
-  font-weight: 600;
+
+.mode-card.is-active {
+  border-color: var(--c-ink);
+  box-shadow: inset 0 0 0 1px var(--c-ink);
 }
-.section-heading h2 small {
-  color: var(--c-muted);
-  font-size: 12px;
-  font-weight: 400;
-  margin-left: 8px;
-}
-.section-heading p,
-.explain,
-.footnote,
-.empty-note,
-.field-note {
-  color: var(--c-muted);
-  font-size: 13px;
-  line-height: 1.8;
-}
-.section-heading p {
-  margin: 0;
-}
-.explain {
-  padding: 14px 16px;
-  background: var(--c-canvas);
-  border-radius: 10px;
-  margin-bottom: 20px;
-}
-.explain p {
-  margin: 0;
-}
-.explain p + p {
-  margin-top: 5px;
-}
-.empty-note {
-  padding: 24px 0;
-  margin: 0;
-}
-.upgrade-list {
-  padding: 14px 16px;
-  border: 1px solid var(--c-line);
-  border-radius: 10px;
-  margin: 16px 0;
-}
-.upgrade-list > p {
-  margin: 0 0 8px;
-  color: var(--c-muted);
-  font-size: 12px;
-}
-.upgrade-row {
+
+.mode-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding-block: 5px;
-  font-size: 13px;
 }
-.line-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 390px), 1fr));
-  gap: 14px;
-}
-.line-card {
-  min-width: 0;
-  padding: 18px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  background: var(--c-surface);
-}
-.line-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  justify-content: space-between;
-  margin-bottom: 18px;
-}
-.line-heading h3 {
-  margin: 0;
-  font-size: 16px;
-  overflow-wrap: anywhere;
-}
-.path {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
-  gap: 12px;
-  align-items: center;
-}
-.path > div {
-  min-width: 0;
-  display: grid;
-  gap: 5px;
-}
-.path span,
-.path small {
-  color: var(--c-muted);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.path strong {
-  font-size: 14px;
-  overflow-wrap: anywhere;
-  font-weight: 600;
-}
-.path b {
-  color: var(--c-muted);
-  font-weight: 400;
-}
-.line-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 24px;
-  margin: 18px 0 12px;
-  padding-top: 14px;
-  border-top: 1px solid var(--c-line);
-}
-.line-stats dt {
-  color: var(--c-muted);
-  font-size: 11px;
-}
-.line-stats dd {
-  margin: 4px 0 0;
-  font-size: 13px;
-  font-family: var(--font-mono);
-}
-.last-report {
-  color: var(--c-muted);
-  font-size: 11px;
-  margin-top: 12px;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
-}
-.line-actions {
-  display: flex;
-  flex-wrap: wrap;
+
+.mode-title-group {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  border-top: 1px solid var(--c-line);
-  padding-top: 14px;
-  margin-top: 16px;
 }
-.line-actions :deep(.el-switch) {
-  margin-right: auto;
+
+.mode-title-group strong {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
-.line-error,
+
+.mode-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.mode-card.is-active .mode-badge {
+  background: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.mode-count {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.mode-summary {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--c-muted);
+}
+
+.mode-flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-canvas);
+  font-size: 12px;
+  color: var(--c-ink);
+}
+
+.mode-flow i {
+  font-style: normal;
+  color: var(--c-muted);
+}
+
+.mode-flow .is-end {
+  color: var(--c-ok);
+  font-weight: 500;
+}
+
+.mode-traits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mode-traits li {
+  padding: 3px 9px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
 .error-banner {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid rgb(223 41 41 / 0.25);
+  border-radius: 12px;
+  background: rgb(223 41 41 / 0.06);
   color: var(--c-bad);
   font-size: 13px;
-  line-height: 1.7;
-  overflow-wrap: anywhere;
 }
-.error-banner {
+
+.upgrade-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
   padding: 12px 16px;
+  margin-bottom: 14px;
+  border: 1px solid rgb(180 83 9 / 0.25);
+  border-radius: 12px;
+  background: rgb(180 83 9 / 0.05);
+  font-size: 13px;
+  color: var(--c-warn);
+}
+
+.upgrade-chips {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.upgrade-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.relay-list {
+  display: grid;
+  border-top: 1px solid var(--c-line);
+}
+
+.relay-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.9fr) auto;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 8px;
+  margin: 0 -8px;
+  border-bottom: 1px solid var(--c-line);
+  transition: opacity 260ms var(--ease-out);
+}
+
+.relay-row::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: -1px;
+  height: 1px;
+  background: var(--c-ink);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 320ms var(--ease-out);
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .relay-list:hover .relay-row:not(:hover) {
+    opacity: 0.5;
+  }
+  .relay-row:hover::after {
+    transform: scaleX(1);
+  }
+}
+
+.row-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.row-head h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--c-ink);
+}
+
+.proto-pill {
+  padding: 2px 7px;
   border: 1px solid var(--c-line);
-  border-radius: 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--c-muted);
 }
-.footnote {
-  margin: 18px 0 0;
-  font-size: 12px;
+
+.route-pipe {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--c-muted);
 }
+
+.route-pipe em {
+  font-style: normal;
+  color: var(--c-ink);
+}
+
+.route-pipe i {
+  font-style: normal;
+  color: var(--c-ok);
+}
+
+.route-pipe strong {
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.row-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.row-stats dt {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  color: var(--c-muted);
+  margin-bottom: 3px;
+}
+
+.row-stats dd {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-ink);
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.row-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-bad);
+}
+
+.danger {
+  color: var(--c-bad);
+}
+
+.dialog-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
 .full {
   width: 100%;
 }
-.field-note {
-  margin: 8px 0 0;
-  font-size: 12px;
-}
-.enabled-label {
+
+.enabled-toggle {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 18px;
-  font-size: 13px;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-canvas);
+  font-size: 13.5px;
+  color: var(--c-ink);
+  cursor: pointer;
 }
-@media (max-width: 767px) {
-  .mode-picker {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-    margin: 16px 0;
+
+@media (max-width: 900px) {
+  .mode-compare,
+  .relay-row {
+    grid-template-columns: 1fr;
   }
-  .mode-option {
-    padding: 14px 16px;
-    gap: 4px;
-  }
-  .relay-section {
-    padding: 18px;
-  }
-  .section-heading {
-    flex-direction: column;
-  }
-  .section-heading > :deep(button) {
-    width: 100%;
-  }
-  .line-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .line-card {
-    padding: 14px;
-  }
-  .path {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
-  }
-  .path b {
-    transform: rotate(90deg);
-    justify-self: start;
-  }
-  .upgrade-row {
-    flex-wrap: wrap;
+  .dialog-grid-2 {
+    grid-template-columns: 1fr;
   }
 }
 </style>

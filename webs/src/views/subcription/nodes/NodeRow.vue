@@ -5,9 +5,10 @@ import RowIconButton from "@/ui/RowIconButton.vue";
 import CountryFlag from "@/ui/CountryFlag.vue";
 import { formatDateTime } from "@/utils/date";
 import { useNodes, validState, validText, type OverviewItem } from "./useNodes";
+
 defineProps<{ node: OverviewItem }>();
 const emit = defineEmits<{ inspect: [id: number] }>();
-// 暂不下发标签：原因的简称 + 预计恢复日期
+
 const probeTitle = (node: OverviewItem) =>
   (node.probes || [])
     .map(
@@ -17,6 +18,7 @@ const probeTitle = (node: OverviewItem) =>
         }`
     )
     .join("\n");
+
 const policyLabel = (policy?: string) =>
   policy === "any"
     ? "任一 Agent"
@@ -25,6 +27,7 @@ const policyLabel = (policy?: string) =>
       : policy === "manual"
         ? "手动有效"
         : "";
+
 const blockLabel = (node: OverviewItem) => {
   const b = node.blocked!;
   const short =
@@ -37,6 +40,7 @@ const blockLabel = (node: OverviewItem) => {
           : "连续检测无效";
   return b.until ? `${short}，${b.until.slice(5, 10)} 恢复` : short;
 };
+
 const {
   selectedIds,
   toggleSelect,
@@ -49,6 +53,7 @@ const {
   checking,
 } = useNodes();
 </script>
+
 <template>
   <article
     class="node-row"
@@ -62,48 +67,69 @@ const {
       />
       <CountryFlag :code="node.countryCode" :label="node.country" />
       <div class="node-name">
-        <button :title="node.name" :aria-label="`查看 ${node.name} 详情`" @click="emit('inspect', node.id)">
-          {{ node.name }}
-        </button>
-        <span class="host mono" :title="node.server">{{
-          node.server || "主机未知"
-        }}</span>
-        <span class="membership" :title="(node.groups || []).join(' / ')"
-          ><span
+        <div class="name-line">
+          <button
+            type="button"
+            class="name-trigger"
+            :title="node.name"
+            :aria-label="`查看 ${node.name} 详情`"
+            @click="emit('inspect', node.id)"
+          >
+            {{ node.name }}
+          </button>
+          <span
             v-if="node.blocked"
-            class="block-badge"
-            :class="`block-${node.blocked.kind}`"
+            class="meta-pill is-warn"
             :title="node.blocked.reason"
-            >暂不下发 · {{ blockLabel(node) }}</span
-          ><span
+          >
+            暂不下发 · {{ blockLabel(node) }}
+          </span>
+          <span
             v-if="node.forceDeliver"
-            class="force-badge"
+            class="meta-pill is-ink"
             title="检测无效时也不会从订阅中排除"
-            >始终下发</span
-          ><span
+          >
+            始终下发
+          </span>
+          <span
             v-if="node.probes?.length"
-            class="probe-badge"
+            class="meta-pill mono"
             :class="{ 'is-bad': !node.probes.some((probe) => probe.success) }"
             :title="probeTitle(node)"
-            >检测 {{ node.probes.filter((probe) => probe.success).length }}/{{
+          >
+            探针 {{ node.probes.filter((probe) => probe.success).length }}/{{
               node.probes.length
-            }}</span
-          ><span
+            }}
+          </span>
+          <span
             v-if="node.probePolicy && node.probePolicy !== 'panel'"
-            class="policy-badge"
+            class="meta-pill"
             :title="`检测策略：${policyLabel(node.probePolicy)}`"
-            >{{ policyLabel(node.probePolicy) }}</span
-          >{{ node.country || "国家未知" }} ·
-          {{ (node.groups || []).join(" / ") || "未分组" }}</span
-        >
+          >
+            {{ policyLabel(node.probePolicy) }}
+          </span>
+        </div>
+
+        <p class="node-subline">
+          <span class="host mono" :title="node.server">{{
+            node.server || "主机未知"
+          }}</span>
+          <span class="sep" aria-hidden="true">·</span>
+          <span>{{ node.country || "地区未知" }}</span>
+          <span class="sep" aria-hidden="true">·</span>
+          <span>{{ (node.groups || []).join(" / ") || "未分组" }}</span>
+        </p>
       </div>
     </div>
+
     <div class="row-protocol mono">
-      <span class="mobile-label">协议</span>{{ protocol(node) }}
+      <span class="mobile-label">协议</span>
+      <span>{{ protocol(node) }}</span>
     </div>
+
     <div class="latency" :class="`latency--${validState(node)}`">
-      <span class="mobile-label">状态</span
-      ><StatusDot
+      <span class="mobile-label">状态</span>
+      <StatusDot
         :state="validState(node)"
         :running="checking"
         :title="
@@ -111,12 +137,14 @@ const {
             ? `检测于 ${formatDateTime(node.checkedAt)}`
             : undefined
         "
-        ><span>{{ validText(node) }}</span></StatusDot
       >
+        <span>{{ validText(node) }}</span>
+      </StatusDot>
     </div>
+
     <div class="row-visibility">
-      <span class="mobile-label">下发</span
-      ><el-tooltip
+      <span class="mobile-label">下发</span>
+      <el-tooltip
         :trigger="['hover', 'focus']"
         :trigger-keys="[]"
         :content="
@@ -135,6 +163,7 @@ const {
         />
       </el-tooltip>
     </div>
+
     <div class="row-actions">
       <RowIconButton
         :icon="Edit"
@@ -151,17 +180,21 @@ const {
         @command="(command: string) => nodeCommand(command, node)"
       >
         <RowIconButton :icon="MoreFilled" :label="`${node.name} 更多操作`" />
-        <template #dropdown
-          ><el-dropdown-menu>
-            <el-dropdown-item command="tcp">国内可达性</el-dropdown-item>
-            <el-dropdown-item command="unlock">解锁检测</el-dropdown-item>
-            <el-dropdown-item command="temp">临时订阅</el-dropdown-item>
+        <template #dropdown>
+          <el-dropdown-menu>
+            <el-dropdown-item command="tcp">国内可达性检测</el-dropdown-item>
+            <el-dropdown-item command="unlock">流媒体 / AI 解锁</el-dropdown-item>
+            <el-dropdown-item command="temp">生成临时订阅</el-dropdown-item>
             <el-dropdown-item command="probe-policy"
               >检测策略…</el-dropdown-item
             >
-            <el-dropdown-item command="deliver">{{
-              node.forceDeliver ? "恢复按检测结果下发" : "始终下发（忽略检测）"
-            }}</el-dropdown-item>
+            <el-dropdown-item command="deliver">
+              {{
+                node.forceDeliver
+                  ? "恢复按检测结果下发"
+                  : "始终下发（忽略检测）"
+              }}
+            </el-dropdown-item>
             <el-dropdown-item
               v-if="node.blocked?.kind === 'paused'"
               command="resume"
@@ -177,290 +210,241 @@ const {
             <el-dropdown-item v-if="activeGroup !== '全部'" command="unbind"
               >移出当前分组</el-dropdown-item
             >
-            <el-dropdown-item command="delete" divided :disabled="busy"
-              ><span class="danger">删除节点</span></el-dropdown-item
-            >
-          </el-dropdown-menu></template
-        >
+            <el-dropdown-item command="delete" divided :disabled="busy">
+              <span class="danger">删除节点</span>
+            </el-dropdown-item>
+          </el-dropdown-menu>
+        </template>
       </el-dropdown>
     </div>
   </article>
 </template>
+
 <style scoped>
 .node-row {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px 116px 68px 136px;
+  grid-template-columns: minmax(0, 1fr) 88px 110px 64px 124px;
   align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
-  min-height: 82px;
-  background: var(--c-surface);
+  gap: 16px;
+  padding: 18px 10px;
+  margin: 0 -10px;
   border-bottom: 1px solid var(--c-line);
-  overflow: hidden;
+  background: transparent;
+  transition: opacity 280ms var(--ease-out);
 }
+
 .node-row::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: var(--c-surface-2);
+  border-radius: 10px;
+  background: rgb(10 10 10 / 0.028);
   transform: scaleX(0);
-  transform-origin: right center;
-  transition: transform var(--duration-slow) var(--ease-out);
+  transform-origin: left;
+  transition: transform 360ms var(--ease-out);
   pointer-events: none;
   z-index: 0;
 }
+
+.node-row::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: -1px;
+  height: 1px;
+  background: var(--c-ink);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 340ms var(--ease-out);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.node-row.is-selected::before {
+  transform: scaleX(1);
+  background: rgb(10 10 10 / 0.045);
+}
+
 .node-row > * {
   position: relative;
   z-index: 1;
 }
-@media (hover: hover) and (pointer: fine) {
-  .node-row:hover::before {
-    transform: scaleX(1);
-    transform-origin: left center;
-  }
-}
-.is-selected {
-  background: var(--c-selected);
-}
+
 .node-identity {
   display: flex;
   align-items: center;
+  gap: 12px;
   min-width: 0;
-  gap: 8px;
 }
-.node-identity :deep(.el-checkbox) {
-  margin: 0;
-  flex-shrink: 0;
-}
+
 .node-name {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  gap: 5px;
   min-width: 0;
-  gap: 0;
+  flex: 1;
 }
-.node-name button {
+
+.name-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.name-trigger {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-ink);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
   text-align: left;
-  font-size: 14px;
-  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  transition: transform 240ms var(--ease-out);
 }
-.node-name button,
-.host,
-.membership {
+
+.meta-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.meta-pill.is-warn {
+  border-color: rgb(180 83 9 / 0.25);
+  background: rgb(180 83 9 / 0.07);
+  color: var(--c-warn);
+  font-weight: 500;
+}
+
+.meta-pill.is-bad {
+  border-color: rgb(223 41 41 / 0.25);
+  background: rgb(223 41 41 / 0.07);
+  color: var(--c-bad);
+}
+
+.meta-pill.is-ink {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+
+.node-subline {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--c-muted);
+  min-width: 0;
+}
+
+.host {
+  max-width: 240px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.host,
-.membership {
-  color: var(--c-muted);
-  font-size: 12px;
-  line-height: 1.5;
+
+.sep {
+  opacity: 0.45;
 }
-.block-badge {
-  display: inline-block;
-  margin-right: 6px;
-  padding: 0 6px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--c-warn) 16%, transparent);
-  color: var(--c-warn-ink);
-  font-size: 12px;
-}
-.block-badge.block-health {
-  background: color-mix(in srgb, var(--c-bad) 12%, transparent);
-  color: var(--c-bad);
-}
-.relay-badge {
-  margin-right: 6px;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--c-signal) 18%, transparent);
-  color: var(--c-signal-text);
-  font-size: 12px;
-}
-.probe-badge,
-.policy-badge {
-  margin-right: 6px;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-}
-.probe-badge {
-  background: color-mix(in srgb, var(--c-ok) 14%, transparent);
-  color: var(--c-ok);
-}
-.probe-badge.is-bad {
-  background: color-mix(in srgb, var(--c-bad) 12%, transparent);
-  color: var(--c-bad);
-}
-.policy-badge {
-  background: var(--c-surface-2);
-  color: var(--c-muted);
-}
-.force-badge {
-  margin-right: 6px;
-  padding: 1px 8px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--c-data) 15%, transparent);
-  color: var(--c-data);
-  font-size: 12px;
-}
-.host.mono {
-  font-size: 12px;
-}
-.mono {
-  font: 400 14px/1.6 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
+
 .row-protocol {
+  font-size: 12px;
   color: var(--c-muted);
-  overflow-wrap: anywhere;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
-.row-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+
+.latency {
+  font-size: 12.5px;
 }
+
 .row-visibility {
   display: flex;
   align-items: center;
 }
-.latency :deep(.status-dot),
-.latency :deep(.status-dot span) {
-  color: inherit;
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  transition:
+    opacity 240ms var(--ease-out),
+    transform 240ms var(--ease-out);
 }
-.latency {
-  transition: color var(--duration-medium);
+
+.mobile-label {
+  display: none;
+  font-size: 11px;
   color: var(--c-muted);
 }
-.latency--ok {
-  color: var(--c-ok);
-}
-.latency--warn {
-  color: var(--c-warn);
-}
-.latency--bad,
+
 .danger {
   color: var(--c-bad);
 }
-.mobile-label {
-  display: none;
-}
-@media (max-width: 1199px) {
-  .node-row {
-    grid-template-columns: minmax(0, 1fr) 65px 100px 44px 132px;
-    gap: 8px;
+
+@media (hover: hover) and (pointer: fine) {
+  .node-row:hover::before,
+  .node-row:focus-within::before,
+  .node-row:hover::after,
+  .node-row:focus-within::after {
+    transform: scaleX(1);
+  }
+  .node-row:hover .name-trigger {
+    transform: translateX(3px);
+  }
+  .row-actions {
+    opacity: 0.34;
+    transform: translateX(6px);
+  }
+  .node-row:hover .row-actions,
+  .node-row:focus-within .row-actions,
+  .node-row.is-selected .row-actions {
+    opacity: 1;
+    transform: translateX(0);
   }
 }
-@media (max-width: 767px) {
+
+@media (max-width: 960px) {
   .node-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    padding: 12px 0;
-    gap: 10px;
+    grid-template-columns: 1fr auto;
+    gap: 12px 16px;
+    padding: 16px 0;
+    margin: 0;
+  }
+  .node-row::after {
+    left: 0;
+    right: 0;
   }
   .node-identity {
     grid-column: 1 / -1;
   }
-  .row-protocol {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .row-protocol .mobile-label,
-  .row-visibility .mobile-label {
+  .mobile-label {
     display: inline;
-    font: 400 14px/1.6 var(--font-ui);
-    color: var(--c-muted);
-  }
-  .latency {
-    justify-self: end;
-  }
-  .row-visibility {
-    gap: 10px;
+    margin-right: 6px;
   }
   .row-actions {
-    justify-self: end;
-  }
-}
-</style>
-
-<style scoped>
-.node-name {
-  gap: 3px;
-}
-.node-name button {
-  font-weight: 560;
-  color: var(--c-ink);
-  transition: color var(--duration-fast) ease;
-}
-@media (hover: hover) and (pointer: fine) {
-  .node-name button:hover {
-    color: var(--c-signal-text);
-  }
-}
-.node-name button:focus-visible {
-  outline: 2px solid var(--c-focus);
-  outline-offset: 2px;
-}
-.membership {
-  font-size: 12px;
-}
-.row-protocol {
-  font-size: 12px;
-  font-family: var(--font-ui);
-  font-weight: 500;
-}
-.is-selected {
-  box-shadow: inset 3px 0 var(--c-signal-text);
-}
-@media (max-width: 767px) {
-  .node-row {
-    padding: 16px;
-    border-bottom: 0;
-    border-radius: var(--radius-panel);
-    margin-bottom: 10px;
-    background: var(--c-surface-2);
-    gap: 14px 10px;
-  }
-  .node-identity {
-    align-items: flex-start;
-  }
-  .node-name button,
-  .host,
-  .membership {
-    white-space: normal;
-    overflow-wrap: anywhere;
-    text-overflow: clip;
-  }
-  .node-name button {
-    font-size: 15px;
-  }
-  .membership {
-    line-height: 1.7;
-  }
-  .host {
-    font-size: 11px;
-  }
-  .row-protocol {
-    font-size: 12px;
-  }
-  .row-actions :deep(button) {
-    min-width: 44px;
-    min-height: 44px;
-  }
-  .row-visibility :deep(.el-switch) {
-    min-height: 44px;
-  }
-  .row-visibility .mobile-label,
-  .row-protocol .mobile-label {
-    font-size: 12px;
-  }
-  .node-identity :deep(.el-checkbox) {
-    min-height: 32px;
-  }
-  .node-row.is-selected {
-    border-color: var(--c-signal-text);
-    background: var(--c-selected);
+    grid-column: 1 / -1;
+    justify-content: flex-end;
   }
 }
 </style>

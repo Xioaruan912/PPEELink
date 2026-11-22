@@ -1,179 +1,476 @@
 <script setup lang="ts">
-import { Delete, Plus } from "@element-plus/icons-vue";
-import { UiButton } from "@/ui";
+import { computed, ref } from "vue";
+import { Delete, Plus, Setting } from "@element-plus/icons-vue";
+import { UiButton, UiDrawer } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { useTemplateBuilder } from "./useTemplateBuilder";
 import GroupBoard from "./GroupBoard.vue";
 import RulePicker from "./RulePicker.vue";
+
 defineProps<{ step: string | number }>();
 const { form, rulesText, addRP, removeRP, router } = useTemplateBuilder();
+
+const showPortEditor = ref(false);
+const customRulesDrawer = ref(false);
+
+const modes = [
+  { label: "规则分流 (Rule)", value: "rule", desc: "按规则集智能分流国内外流量" },
+  { label: "全局代理 (Global)", value: "global", desc: "所有连接统一走主策略组" },
+  { label: "全局直连 (Direct)", value: "direct", desc: "所有流量直接连接不走代理" },
+];
+
+const capabilities = computed(() => [
+  { key: "allow_lan", label: "局域网共享", desc: "允许同局域网设备接入" },
+  { key: "ipv6", label: "IPv6 支持", desc: "解析并转发 IPv6 流量" },
+  { key: "udp", label: "UDP 转发", desc: "支持 QUIC / 游戏与语音" },
+  { key: "tun_enable", label: "TUN 虚拟网卡", desc: "接管系统全局三层流量" },
+  { key: "sniffer_enable", label: "TLS 域名嗅探", desc: "还原纯 IP 连接真实域名" },
+  { key: "tcp_concurrent", label: "TCP 并发连接", desc: "多 IP 并发择优握手" },
+] as const);
+
+const ruleLineCount = computed(
+  () =>
+    rulesText.value
+      .split("\n")
+      .filter((l) => l.trim() && !l.trim().startsWith("#")).length
+);
 </script>
+
 <template>
-  <el-form label-position="top" class="builder-form">
-    <!-- 端口区块 -->
+  <div class="clash-stage">
+    <!-- Stage 01: 基础配置（零滚轮单屏架构） -->
+    <section v-if="step === 0" class="stage-panel">
+      <div class="block-group">
+        <span class="block-label">运行模式</span>
+        <div class="mode-grid">
+          <button
+            v-for="m in modes"
+            :key="m.value"
+            type="button"
+            class="mode-card"
+            :class="{ 'is-active': form.mode === m.value }"
+            @click="form.mode = m.value"
+          >
+            <div class="mode-top">
+              <strong>{{ m.label }}</strong>
+              <span class="mode-dot"></span>
+            </div>
+            <small>{{ m.desc }}</small>
+          </button>
+        </div>
+      </div>
 
-    <section v-show="step === 0" class="builder-section">
-      <h2>端口配置</h2>
-      <el-row :gutter="12">
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="HTTP 端口"
-            ><el-input-number
-              v-model="form.port"
-              :min="1"
-              :max="65535"
-              class="full" /></el-form-item
-        ></el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="SOCKS 端口"
-            ><el-input-number
-              v-model="form.socks_port"
-              :min="1"
-              :max="65535"
-              class="full" /></el-form-item
-        ></el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="Mixed 端口"
-            ><el-input-number
-              v-model="form.mixed_port"
-              :min="1"
-              :max="65535"
-              class="full" /></el-form-item
-        ></el-col>
-      </el-row>
-      <el-row :gutter="12">
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="Redir 端口"
-            ><el-input-number
-              v-model="form.redir_port"
-              :min="1"
-              :max="65535"
-              class="full" /></el-form-item
-        ></el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="TProxy 端口"
-            ><el-input-number
-              v-model="form.tproxy_port"
-              :min="1"
-              :max="65535"
-              class="full" /></el-form-item
-        ></el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="DNS 端口"
-            ><el-input-number
-              v-model="form.dns_listen_port"
-              :min="1"
-              :max="65535"
-              class="full" /></el-form-item
-        ></el-col>
-      </el-row>
-      <el-form-item label="外部控制">
-        <el-input
-          v-model="form.external_controller"
-          placeholder="127.0.0.1:9090"
-          class="full"
-        />
-      </el-form-item>
-      <el-form-item label="端口偏移联动">
-        <el-switch v-model="form.port_offset" />
-        <span class="field-hint"
-          >开启后修改主端口，mixed/redir/tproxy/socks 端口自动偏移</span
+      <div class="block-group">
+        <span class="block-label">核心网络特性</span>
+        <div class="cap-grid">
+          <button
+            v-for="cap in capabilities"
+            :key="cap.key"
+            type="button"
+            class="cap-card"
+            :class="{ 'is-on': form[cap.key] }"
+            @click="form[cap.key] = !form[cap.key]"
+          >
+            <div class="cap-copy">
+              <strong>{{ cap.label }}</strong>
+              <small>{{ cap.desc }}</small>
+            </div>
+            <span class="cap-indicator">
+              {{ form[cap.key] ? "已开启" : "关闭" }}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Compact Port Summary Bar + On-Demand Inline Editor -->
+      <div class="port-strip">
+        <div class="port-summary mono">
+          <span>HTTP <strong>{{ form.port }}</strong></span>
+          <span>SOCKS <strong>{{ form.socks_port }}</strong></span>
+          <span>Mixed <strong>{{ form.mixed_port }}</strong></span>
+          <span>DNS <strong>{{ form.dns_listen_port }}</strong></span>
+          <span>控制面板 <strong>{{ form.external_controller }}</strong></span>
+        </div>
+        <button
+          type="button"
+          class="port-toggle"
+          @click="showPortEditor = !showPortEditor"
         >
-      </el-form-item>
+          <el-icon><Setting /></el-icon>
+          <span>{{ showPortEditor ? "收起端口" : "微调端口" }}</span>
+        </button>
+      </div>
+
+      <div v-if="showPortEditor" class="port-editor">
+        <label>
+          <span>HTTP 端口</span>
+          <el-input-number v-model="form.port" :min="1" :max="65535" controls-position="right" />
+        </label>
+        <label>
+          <span>SOCKS 端口</span>
+          <el-input-number v-model="form.socks_port" :min="1" :max="65535" controls-position="right" />
+        </label>
+        <label>
+          <span>Mixed 端口</span>
+          <el-input-number v-model="form.mixed_port" :min="1" :max="65535" controls-position="right" />
+        </label>
+        <label>
+          <span>Redir 端口</span>
+          <el-input-number v-model="form.redir_port" :min="1" :max="65535" controls-position="right" />
+        </label>
+        <label>
+          <span>TProxy 端口</span>
+          <el-input-number v-model="form.tproxy_port" :min="1" :max="65535" controls-position="right" />
+        </label>
+        <label>
+          <span>DNS 端口</span>
+          <el-input-number v-model="form.dns_listen_port" :min="1" :max="65535" controls-position="right" />
+        </label>
+        <label class="is-wide">
+          <span>外部控制器 (external-controller)</span>
+          <el-input v-model="form.external_controller" placeholder="127.0.0.1:9090" />
+        </label>
+      </div>
     </section>
 
-    <section v-show="step === 0" class="builder-section">
-      <h2>基础配置</h2>
-      <el-row :gutter="12">
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="允许局域网"
-            ><el-switch v-model="form.allow_lan" /></el-form-item
-        ></el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="IPv6"
-            ><el-switch v-model="form.ipv6" /></el-form-item
-        ></el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="UDP"
-            ><el-switch v-model="form.udp" /></el-form-item
-        ></el-col>
-      </el-row>
-      <el-row :gutter="12">
-        <el-col :span="8" :xs="24" :sm="12">
-          <el-form-item label="模式">
-            <el-select v-model="form.mode" class="full">
-              <el-option label="Rule（规则）" value="rule" />
-              <el-option label="Global（全局）" value="global" />
-              <el-option label="Direct（直连）" value="direct" />
-            </el-select>
-          </el-form-item>
-        </el-col>
-        <el-col :span="8" :xs="24" :sm="12"
-          ><el-form-item label="日志级别"
-            ><el-select v-model="form.log_level" class="full"
-              ><el-option label="info" value="info" /><el-option
-                label="debug"
-                value="debug" /><el-option
-                label="warning"
-                value="warning" /><el-option
-                label="error"
-                value="error" /></el-select></el-form-item
-        ></el-col>
-      </el-row>
-    </section>
-
-    <section v-show="step === 2" class="builder-section">
-      <GroupBoard />
-    </section>
-
-    <section v-show="step === 1" class="builder-section">
+    <!-- Stage 02: 分流规则（全屏点选 + 自定义规则抽屉） -->
+    <section v-else-if="step === 1" class="stage-panel">
       <RulePicker />
-      <!-- 规则集 -->
-      <el-form-item label="规则集 (rule-providers)">
-        <div class="group-list">
-          <div v-for="(rp, i) in form.rule_providers" :key="i" class="rp-row">
+
+      <div class="custom-rule-bar">
+        <span class="mono">
+          当前包含 <strong>{{ form.rule_providers.length }}</strong> 个远程规则集 ·
+          <strong>{{ ruleLineCount }}</strong> 条分流规则
+        </span>
+        <div class="custom-actions">
+          <UiButton variant="ghost" @click="router.push('/template/rules')">
+            前往规则仓库
+          </UiButton>
+          <UiButton variant="ghost" :icon="Setting" @click="customRulesDrawer = true">
+            高级自定义规则
+          </UiButton>
+        </div>
+      </div>
+
+      <UiDrawer
+        v-model="customRulesDrawer"
+        title="自定义规则集与分流规则"
+        size="min(620px, 100vw)"
+      >
+        <div class="drawer-stack">
+          <div class="drawer-block">
+            <div class="drawer-head">
+              <strong>远程规则集 (rule-providers)</strong>
+              <UiButton size="sm" :icon="Plus" @click="addRP">添加规则集</UiButton>
+            </div>
+            <div class="rp-list">
+              <div v-for="(rp, i) in form.rule_providers" :key="i" class="rp-row">
+                <el-input v-model="rp.name" placeholder="名称（如 AI）" />
+                <el-input v-model="rp.url" placeholder="规则集 URL" />
+                <RowIconButton
+                  :icon="Delete"
+                  :label="`删除 ${rp.name || i + 1}`"
+                  @click="removeRP(i)"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div class="drawer-block">
+            <strong>分流规则行 (rules)</strong>
             <el-input
-              v-model="rp.name"
-              aria-label="规则集名称"
-              placeholder="名称（如 AI）"
-              class="rp-name"
-            />
-            <el-input
-              v-model="rp.url"
-              aria-label="规则集 URL"
-              placeholder="规则集 URL"
-              class="rp-url"
-            />
-            <el-select
-              v-model="rp.behavior"
-              aria-label="规则集行为"
-              class="rp-behavior"
-            >
-              <el-option label="classical" value="classical" />
-              <el-option label="domain" value="domain" />
-              <el-option label="ipcidr" value="ipcidr" />
-            </el-select>
-            <RowIconButton
-              :icon="Delete"
-              :label="`删除规则集 ${rp.name || i + 1}`"
-              @click="removeRP(i)"
+              v-model="rulesText"
+              type="textarea"
+              :rows="10"
+              placeholder="每行一条规则，如：RULE-SET,AI,AI / GEOIP,CN,DIRECT"
             />
           </div>
-          <UiButton :icon="Plus" @click="addRP">添加规则集</UiButton>
-          <UiButton variant="ghost" @click="router.push('/template/rules')"
-            >从规则中心添加</UiButton
-          >
         </div>
-      </el-form-item>
+        <template #footer>
+          <UiButton variant="primary" @click="customRulesDrawer = false">
+            完成
+          </UiButton>
+        </template>
+      </UiDrawer>
+    </section>
 
-      <!-- 规则文本 -->
-      <el-form-item label="规则 (rules)">
-        <el-input
-          v-model="rulesText"
-          type="textarea"
-          :rows="8"
-          placeholder="每行一条规则，如：RULE-SET,AI,AI / GEOIP,CN,DIRECT / MATCH,日常使用"
-        />
-      </el-form-item></section
-  ></el-form>
+    <!-- Stage 03: 策略分组（100% 全宽编排画布） -->
+    <section v-else-if="step === 2" class="stage-panel">
+      <GroupBoard />
+    </section>
+  </div>
 </template>
-<style scoped lang="scss" src="./fields.scss"></style>
+
+<style scoped>
+.clash-stage,
+.stage-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.block-group {
+  display: grid;
+  gap: 7px;
+}
+
+.block-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--c-muted);
+}
+
+/* 3-Column Mode Cards */
+.mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.mode-card {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 100ms ease-out,
+    border-color 180ms var(--ease-out),
+    background 180ms var(--ease-out);
+}
+
+.mode-card:hover {
+  border-color: var(--c-ink);
+}
+
+.mode-card:active {
+  transform: scale(0.98);
+}
+
+.mode-card.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.mode-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.mode-top strong {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+}
+
+.mode-card.is-active .mode-dot {
+  background: var(--c-ok);
+  border-color: var(--c-ok);
+}
+
+.mode-card small {
+  font-size: 12px;
+  opacity: 0.72;
+}
+
+/* 3x2 Tactile Capability Cards */
+.cap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.cap-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 100ms ease-out,
+    border-color 180ms var(--ease-out),
+    background 180ms var(--ease-out);
+}
+
+.cap-card:active {
+  transform: scale(0.98);
+}
+
+.cap-card.is-on {
+  border-color: var(--c-ink);
+  background: color-mix(in srgb, var(--c-ok) 5%, var(--c-surface));
+}
+
+.cap-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cap-copy strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.cap-copy small {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.cap-indicator {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--c-surface-muted);
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.cap-card.is-on .cap-indicator {
+  background: rgb(21 184 90 / 0.14);
+  color: var(--c-ok);
+  font-weight: 600;
+}
+
+/* Compact Port Bar */
+.port-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface);
+  flex-wrap: wrap;
+}
+
+.port-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.port-summary strong {
+  color: var(--c-ink);
+}
+
+.port-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.port-toggle:hover {
+  border-color: var(--c-ink);
+}
+
+.port-editor {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface);
+}
+
+.port-editor label {
+  display: grid;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.port-editor .is-wide {
+  grid-column: 1 / -1;
+}
+
+/* Custom Rule Bar */
+.custom-rule-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface);
+  font-size: 12.5px;
+  color: var(--c-muted);
+  flex-wrap: wrap;
+}
+
+.custom-rule-bar strong {
+  color: var(--c-ink);
+}
+
+.custom-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.drawer-stack {
+  display: grid;
+  gap: 20px;
+}
+
+.drawer-block {
+  display: grid;
+  gap: 10px;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rp-list {
+  display: grid;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.rp-row {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 820px) {
+  .mode-grid,
+  .cap-grid,
+  .port-editor {
+    grid-template-columns: 1fr;
+  }
+}
+</style>

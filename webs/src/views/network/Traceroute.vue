@@ -8,39 +8,55 @@ import {
   ref,
   watch,
 } from "vue";
-import { useRoute, useRouter } from "vue-router";
-import { Refresh, Position } from "@element-plus/icons-vue";
-import { PageHeader, UiButton, UiPanel, EmptyState, UiSkeleton } from "@/ui";
+import { useRoute } from "vue-router";
+import gsap from "gsap";
+import { Download, Position, Refresh } from "@element-plus/icons-vue";
+import { UiButton } from "@/ui";
+import KineticNotice from "@/ui/KineticNotice.vue";
+import { getNodeOverview } from "@/api/subcription/node";
 import {
   getTraceSources,
-  getTraceHistory,
   getTraceDetail,
   createTrace,
   cancelTrace,
   prepareTraceAgents,
   type TraceSources,
-  type TraceRun,
   type TraceDetail,
-  type TraceView,
 } from "@/api/network/trace";
-import PathTopology from "./PathTopology.vue";
 import PathMap from "./PathMap.vue";
-const displayMode = ref<"map" | "hops">("map");
-import { formatDateTime } from "@/utils/date";
-const router = useRouter();
+
+defineOptions({ name: "NetworkTraceroute" });
+
 const route = useRoute();
-const target = ref("");
-const landingId = ref("");
+const rootEl = ref<HTMLElement>();
+let gsapCtx: gsap.Context | null = null;
+
+const target = ref("1.1.1.1");
 const includePanel = ref(true);
 const agentIds = ref<number[]>([]);
 const probeIds = ref<number[]>([]);
 const protocol = ref<"icmp" | "tcp" | "udp">("icmp");
 const port = ref(443);
 const family = ref<"auto" | "4" | "6">("4");
+
+const cnPresets = [
+  { label: "百度", host: "baidu.com" },
+  { label: "阿里 DNS", host: "223.5.5.5" },
+  { label: "腾讯", host: "qq.com" },
+  { label: "广州电信", host: "gd.189.cn" },
+];
+const globalPresets = [
+  { label: "Cloudflare", host: "1.1.1.1" },
+  { label: "Google", host: "8.8.8.8" },
+  { label: "GitHub", host: "github.com" },
+  { label: "OpenAI", host: "api.openai.com" },
+];
+
 const legacyOptions = computed(
   () =>
     protocol.value === "udp" && port.value === 33434 && family.value === "auto"
 );
+
 function supportsOptions(source: {
   available: boolean;
   optionsSupported?: boolean;
@@ -52,9 +68,10 @@ function supportsOptions(source: {
     (source.optionsSupported || legacyOptions.value)
   );
 }
+
 function prefill() {
   const q = route.query;
-  if (typeof q.target === "string") target.value = q.target;
+  if (typeof q.target === "string" && q.target.trim()) target.value = q.target;
   const raw = q.sourceAgentId || q.agentId || q.agentIds;
   if (typeof raw === "string") {
     agentIds.value = raw
@@ -66,10 +83,12 @@ function prefill() {
   if (q.family === "4" || q.family === "6") family.value = q.family;
 }
 watch(() => route.query, prefill, { immediate: true });
+
 watch(protocol, (value) => {
   if (value === "tcp") port.value = 443;
   if (value === "udp") port.value = 33434;
 });
+
 watch([protocol, port, family], () => {
   agentIds.value = agentIds.value.filter((id) =>
     sources.value.agents.some((a) => a.id === id && supportsOptions(a))
@@ -78,62 +97,82 @@ watch([protocol, port, family], () => {
     sources.value.probes.some((p) => p.id === id && supportsOptions(p))
   );
 });
+
 const sources = ref<TraceSources>({ panelTool: "", probes: [], agents: [] });
-const history = ref<TraceRun[]>([]);
+const panelNodes = ref<{ id: number; name: string; server: string }[]>([]);
 const detail = ref<TraceDetail | null>(null);
 const selectedId = ref<number>();
-const loading = ref(true),
-  starting = ref(false),
-  cancelling = ref(false),
-  detailLoading = ref(false);
-const sourceError = ref(""),
-  detailError = ref(""),
-  historyError = ref("");
+const loading = ref(true);
+const starting = ref(false);
+const cancelling = ref(false);
+const sourceError = ref("");
+const detailError = ref("");
 const preparingId = ref<number>();
+
 let prepareTimer: ReturnType<typeof setTimeout> | undefined;
+let timer: ReturnType<typeof setTimeout> | undefined;
+let visible = true;
+let detailSequence = 0;
+
 function clearPrepareTimer() {
   if (prepareTimer) clearTimeout(prepareTimer);
   prepareTimer = undefined;
 }
+
 function schedulePreparation() {
   clearPrepareTimer();
   if (visible && sources.value.agents.some((a) => a.preparing))
     prepareTimer = setTimeout(() => void refreshPreparation(), 3000);
 }
+
 async function refreshPreparation() {
   try {
     const res = await getTraceSources();
     sources.value = res.data;
   } catch {
-    detailError.value = "准备状态读取失败，请刷新来源重试。";
+    /* ignore */
   } finally {
     schedulePreparation();
   }
 }
+
 async function prepareAgent(id: number) {
   preparingId.value = id;
   detailError.value = "";
   try {
     await prepareTraceAgents([id]);
+    ElMessage.success("已下发 NextTrace 安装任务");
     await refreshPreparation();
   } catch {
-    detailError.value = "无法安排准备 NextTrace，请确认 agent 已更新并在线。";
+    ElMessage.error("无法下发安装任务，请确认 Agent 在线");
   } finally {
     preparingId.value = undefined;
   }
 }
-let visible = true;
-let timer: ReturnType<typeof setTimeout> | undefined;
-let detailSequence = 0;
+
+function installPanelTool() {
+  const cmd = "curl -sL nxtrace.org/nt | bash";
+  navigator.clipboard
+    .writeText(cmd)
+    .then(() =>
+      ElMessage.info("后端暂未开放面板端自动安装；已复制 NextTrace 一键安装命令")
+    )
+    .catch(() =>
+      ElMessage.info("后端暂未开放面板端自动安装，请在服务器运行：curl -sL nxtrace.org/nt | bash")
+    );
+}
+
 const running = computed(
   () =>
     detail.value?.views.some(
       (v) => v.status === "queued" || v.status === "running"
     ) || false
 );
+
 const remoteCount = computed(
   () => agentIds.value.length + probeIds.value.length
 );
+
 const canStart = computed(
   () =>
     !loading.value &&
@@ -143,94 +182,85 @@ const canStart = computed(
     target.value.trim().length > 0 &&
     (includePanel.value || remoteCount.value > 0)
 );
-const landings = computed(() =>
-  sources.value.agents.filter((agent) => agent.publicHost?.trim())
-);
-function chooseLanding() {
-  const landing = sources.value.agents.find(
-    (agent) => String(agent.id) === landingId.value
-  );
-  if (landing?.publicHost) {
-    target.value = landing.publicHost;
-    if (landing.publicHost.includes(":")) family.value = "6";
-    else if (/^\d{1,3}(\.\d{1,3}){3}$/.test(landing.publicHost))
-      family.value = "4";
+
+function toggleAgent(id: number) {
+  if (agentIds.value.includes(id)) {
+    agentIds.value = agentIds.value.filter((x) => x !== id);
+  } else if (remoteCount.value < 8) {
+    agentIds.value = [...agentIds.value, id];
   }
 }
-watch(target, (value) => {
-  const landing = sources.value.agents.find(
-    (agent) => String(agent.id) === landingId.value
-  );
-  if (landing?.publicHost !== value) landingId.value = "";
-});
-const statusText: Record<TraceView["status"], string> = {
-  queued: "等待来源执行",
-  running: "追踪中",
-  completed: "追踪结束",
-  failed: "执行失败",
-  timeout: "等待超时",
-  cancelled: "已取消",
-  unsupported: "来源未就绪",
-};
+
+function toggleProbe(id: number) {
+  if (probeIds.value.includes(id)) {
+    probeIds.value = probeIds.value.filter((x) => x !== id);
+  } else if (remoteCount.value < 8) {
+    probeIds.value = [...probeIds.value, id];
+  }
+}
+
 function clearTimer() {
   if (timer) clearTimeout(timer);
   timer = undefined;
 }
+
 function schedule() {
   clearTimer();
   if (visible && running.value)
-    timer = setTimeout(() => void loadDetail(false), 2000);
+    timer = setTimeout(() => void loadDetail(), 2000);
 }
+
 async function loadSources() {
   loading.value = true;
   sourceError.value = "";
-  historyError.value = "";
-  const [s, h] = await Promise.allSettled([
-    getTraceSources(),
-    getTraceHistory(),
-  ]);
-  if (s.status === "fulfilled") {
-    sources.value = s.value.data;
-    agentIds.value = agentIds.value.filter((id) =>
-      sources.value.agents.some((a) => a.id === id && supportsOptions(a))
-    );
-    probeIds.value = probeIds.value.filter((id) =>
-      sources.value.probes.some((p) => p.id === id && supportsOptions(p))
-    );
-    if (!sources.value.panelTool) includePanel.value = false;
-  } else sourceError.value = "无法读取追踪来源，请检查连接后重试。";
-  if (h.status === "fulfilled") history.value = h.value.data || [];
-  else historyError.value = "历史记录暂时无法加载。";
-  loading.value = false;
-  schedulePreparation();
+  try {
+    const [srcRes, nodeRes] = await Promise.allSettled([
+      getTraceSources(),
+      getNodeOverview(),
+    ]);
+    if (srcRes.status === "fulfilled") {
+      sources.value = srcRes.value.data;
+      agentIds.value = agentIds.value.filter((id) =>
+        sources.value.agents.some((a) => a.id === id && supportsOptions(a))
+      );
+      probeIds.value = probeIds.value.filter((id) =>
+        sources.value.probes.some((p) => p.id === id && supportsOptions(p))
+      );
+      if (!agentIds.value.length) {
+        const firstReady = sources.value.agents.find((a) => supportsOptions(a));
+        if (firstReady) agentIds.value = [firstReady.id];
+      }
+      includePanel.value = !agentIds.value.length && Boolean(sources.value.panelTool);
+    } else {
+      sourceError.value = "无法读取追踪来源";
+    }
+    if (nodeRes.status === "fulfilled") {
+      panelNodes.value = (nodeRes.value.data || [])
+        .filter((n: any) => n.server)
+        .map((n: any) => ({ id: n.id, name: n.name, server: n.server }));
+    }
+  } finally {
+    loading.value = false;
+    schedulePreparation();
+  }
 }
-async function loadDetail(showLoading = true) {
+
+async function loadDetail() {
   if (!selectedId.value) return;
-  const id = selectedId.value,
-    sequence = ++detailSequence;
-  if (showLoading) detailLoading.value = true;
+  const id = selectedId.value;
+  const seq = ++detailSequence;
   detailError.value = "";
   try {
     const res = await getTraceDetail(id);
-    if (sequence !== detailSequence || id !== selectedId.value) return;
+    if (seq !== detailSequence || id !== selectedId.value) return;
     detail.value = res.data;
   } catch {
-    if (sequence === detailSequence)
-      detailError.value = "追踪详情读取失败；已收到的结果仍保留，可重试。";
+    if (seq === detailSequence) detailError.value = "追踪结果读取失败";
   } finally {
-    if (sequence === detailSequence) {
-      detailLoading.value = false;
-      schedule();
-    }
+    if (seq === detailSequence) schedule();
   }
 }
-async function chooseRun(id: number | undefined) {
-  clearTimer();
-  detailSequence++;
-  selectedId.value = id;
-  detail.value = null;
-  if (id) await loadDetail();
-}
+
 async function start() {
   if (!canStart.value) return;
   starting.value = true;
@@ -245,27 +275,54 @@ async function start() {
       port: protocol.value === "icmp" ? 0 : port.value,
       family: family.value,
     });
-    history.value = [res.data, ...history.value].slice(0, 30);
-    await chooseRun(res.data.id);
+    clearTimer();
+    detailSequence++;
+    selectedId.value = res.data.id;
+    detail.value = null;
+    await loadDetail();
   } catch {
-    detailError.value = "无法创建追踪，请检查目标与来源后重试。";
+    detailError.value = "发起追踪失败，请确认目标与来源";
   } finally {
     starting.value = false;
   }
 }
+
 async function cancel() {
   if (!selectedId.value) return;
   cancelling.value = true;
   try {
     await cancelTrace(selectedId.value);
-    await loadDetail(false);
-  } catch {
-    detailError.value = "取消失败，请重试。";
+    await loadDetail();
   } finally {
     cancelling.value = false;
   }
 }
-onMounted(() => void loadSources());
+
+onMounted(() => {
+  void loadSources();
+  if (rootEl.value) {
+    gsapCtx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+        tl.from("[data-title-reveal]", {
+          yPercent: 108,
+          duration: 0.62,
+          clearProps: "transform",
+        }).from(
+          "[data-top-rule]",
+          {
+            scaleX: 0,
+            duration: 0.68,
+            clearProps: "transform",
+          },
+          "-=0.45"
+        );
+      });
+    }, rootEl.value);
+  }
+});
+
 onActivated(() => {
   visible = true;
   schedule();
@@ -281,655 +338,467 @@ onBeforeUnmount(() => {
   detailSequence++;
   clearTimer();
   clearPrepareTimer();
+  gsapCtx?.revert();
+  gsapCtx = null;
 });
 </script>
+
 <template>
-  <div class="trace-page">
-    <PageHeader
-      title="路径地图"
-      description="在世界地图上对比不同 VPS 到落地的逐跳路径与网络位置。"
-    >
-      <template #actions
-        ><UiButton :icon="Refresh" :loading="loading" @click="loadSources"
-          >刷新来源</UiButton
-        ></template
-      >
-    </PageHeader>
-    <div class="trace-layout">
-      <aside class="trace-side">
-        <UiPanel
-          title="发起追踪"
-          description="域名或 IPv4 / IPv6 地址，最多 24 跳。"
+  <div ref="rootEl" class="trace-gallery">
+    <!-- Pure Gallery Masthead -->
+    <header class="trace-masthead">
+      <div class="title-mask">
+        <h1 class="gallery-title" data-title-reveal>路由追踪</h1>
+      </div>
+
+      <div class="masthead-actions">
+        <UiButton
+          variant="ghost"
+          :icon="Refresh"
+          :loading="loading"
+          @click="loadSources"
         >
-          <form class="trace-form" @submit.prevent="start">
-            <label for="trace-target">目标地址</label>
-            <el-input
-              id="trace-target"
-              v-model="target"
-              placeholder="example.com 或 1.1.1.1"
-              maxlength="253"
-              :disabled="starting"
-            />
-            <template v-if="landings.length"
-              ><label for="trace-landing">选择已有落地（可选）</label
-              ><select
-                id="trace-landing"
-                v-model="landingId"
-                class="landing-select"
-                @change="chooseLanding"
-              >
-                <option value="">选择服务器以填写目标地址</option>
-                <option
-                  v-for="landing in landings"
-                  :key="landing.id"
-                  :value="String(landing.id)"
-                >
-                  {{ landing.name }} · {{ landing.publicHost }}
-                </option>
-              </select></template
-            >
-            <div class="trace-options">
-              <label
-                >探测协议<el-select v-model="protocol" aria-label="探测协议"
-                  ><el-option label="ICMP" value="icmp" /><el-option
-                    label="TCP"
-                    value="tcp" /><el-option
-                    label="UDP"
-                    value="udp" /></el-select
-              ></label>
-              <label
-                >IP 版本<el-select v-model="family" aria-label="IP 版本"
-                  ><el-option label="IPv4" value="4" /><el-option
-                    label="IPv6"
-                    value="6" /><el-option
-                    label="自动"
-                    value="auto" /></el-select
-              ></label>
-            </div>
-            <label v-if="protocol !== 'icmp'"
-              >目标端口<el-input-number
-                v-model="port"
-                :min="1"
-                :max="65535"
-                controls-position="right"
-                aria-label="目标端口"
-            /></label>
-            <div class="source-heading">
-              <strong>追踪来源</strong><span>最多 8 个远程来源</span>
-            </div>
-            <UiSkeleton v-if="loading" :lines="3" height="28px" />
-            <div v-else-if="sourceError" class="inline-error" role="alert">
-              {{ sourceError
-              }}<UiButton variant="ghost" @click="loadSources">重试</UiButton>
-            </div>
-            <div v-else class="sources">
-              <label class="source-row"
-                ><input
-                  v-model="includePanel"
-                  type="checkbox"
-                  :disabled="!sources.panelTool"
-                /><span
-                  ><strong>面板服务器</strong
-                  ><small>{{
-                    sources.panelTool || "未安装追踪工具"
-                  }}</small></span
-                ></label
-              >
-              <template v-if="sources.agents.length"
-                ><p class="source-group">自建服务器 agent</p>
-                <label
-                  v-for="agent in sources.agents"
-                  :key="`agent-${agent.id}`"
-                  class="source-row"
-                  ><input
-                    v-model="agentIds"
-                    :value="agent.id"
-                    type="checkbox"
-                    :disabled="
-                      !supportsOptions(agent) ||
-                      (remoteCount >= 8 && !agentIds.includes(agent.id))
-                    "
-                  /><span
-                    ><strong>{{ agent.name }}</strong
-                    ><small>{{
-                      !agent.available
-                        ? agent.reason
-                        : !supportsOptions(agent)
-                          ? "需要更新 agent 以选择协议、端口和 IP 版本"
-                          : agent.tool
-                    }}</small
-                    ><small
-                      v-if="agent.prepareError"
-                      class="inline-error"
-                      role="status"
-                      >{{ agent.prepareError }}</small
-                    ><UiButton
-                      v-if="agent.optionsSupported && !agent.enriched"
-                      variant="ghost"
-                      type="button"
-                      :loading="agent.preparing || preparingId === agent.id"
-                      :disabled="!!agent.preparing || preparingId !== undefined"
-                      @click.prevent.stop="prepareAgent(agent.id)"
-                      >{{
-                        agent.preparing ? "准备 NextTrace 中" : "准备 NextTrace"
-                      }}</UiButton
-                    ></span
-                  ></label
-                ></template
-              >
-              <template v-if="sources.probes.length"
-                ><p class="source-group">检测探针</p>
-                <label
-                  v-for="probe in sources.probes"
-                  :key="`probe-${probe.id}`"
-                  class="source-row"
-                  ><input
-                    v-model="probeIds"
-                    :value="probe.id"
-                    type="checkbox"
-                    :disabled="
-                      !supportsOptions(probe) ||
-                      (remoteCount >= 8 && !probeIds.includes(probe.id))
-                    "
-                  /><span
-                    ><strong>{{ probe.name }}</strong
-                    ><small>{{
-                      !probe.available
-                        ? probe.reason
-                        : !supportsOptions(probe)
-                          ? "需要更新探针以选择协议、端口和 IP 版本"
-                          : probe.tool
-                    }}</small></span
-                  ></label
-                ></template
-              >
-              <p v-if="!sources.agents.length" class="muted">
-                尚未接入自建服务器 agent。可以先使用面板来源。
-              </p>
-            </div>
-            <p class="help">
-              NextTrace v{{ sources.nextTraceVersion || "1.7.4" }} 提供
-              ASN、运营商与位置。面板{{
-                sources.panelEnriched ? "已就绪" : "尚未安装匹配版本"
-              }}；可点击来源的“准备 NextTrace”，由 agent 下载并校验官方 SHA256
-              后安装（Linux amd64 / arm64）；traceroute / tracepath
-              仍可追踪，tracepath 仅支持 UDP。旧版来源可选择 UDP / 33434 /
-              自动，或更新后使用完整选项。
-            </p>
-            <UiButton
-              variant="ghost"
-              type="button"
-              @click="router.push('/system/settings')"
-              >管理检测探针</UiButton
-            >
-            <UiButton
-              variant="primary"
-              :icon="Position"
-              :loading="starting"
-              :disabled="!canStart"
-              type="submit"
-              >开始追踪</UiButton
-            >
-            <p v-if="!canStart && !starting" class="help">
-              {{
-                running
-                  ? "请等待当前追踪结束，或先取消。"
-                  : "填写目标并选择至少一个已就绪的来源。"
-              }}
-            </p>
-          </form>
-        </UiPanel>
-        <UiPanel title="最近追踪" description="保留 7 天，显示最近 30 次。">
-          <p v-if="historyError" class="inline-error" role="status">
-            {{ historyError }}
-          </p>
-          <EmptyState
-            v-if="!loading && !history.length"
-            size="inline"
-            description="尚无追踪记录。"
+          刷新来源
+        </UiButton>
+        <UiButton
+          v-if="running"
+          variant="danger"
+          :loading="cancelling"
+          @click="cancel"
+        >
+          取消追踪
+        </UiButton>
+        <UiButton
+          variant="primary"
+          :icon="Position"
+          :loading="starting || running"
+          :disabled="!canStart"
+          @click="start"
+        >
+          {{ running ? "追踪中…" : "开始追踪" }}
+        </UiButton>
+      </div>
+    </header>
+
+    <span class="top-rule" data-top-rule aria-hidden="true"></span>
+
+    <!-- Compact Target + Protocol + Quick Presets Deck -->
+    <section class="control-deck">
+      <div class="target-row">
+        <div class="target-input-wrap">
+          <el-input
+            v-model="target"
+            placeholder="输入目标域名或 IP（或点击下方预设）"
+            maxlength="253"
+            :disabled="starting"
+            @keyup.enter="start"
           />
-          <div class="history-list">
-            <button
-              v-for="run in history"
-              :key="run.id"
-              :class="{ 'is-active': selectedId === run.id }"
-              @click="chooseRun(run.id)"
-            >
-              <strong>{{ run.target }}</strong
-              ><small>{{ formatDateTime(run.createdAt) }}</small>
-            </button>
-          </div>
-        </UiPanel>
-      </aside>
-      <section
-        class="trace-results"
-        aria-label="路由追踪结果"
-        :aria-busy="detailLoading"
-      >
-        <div v-if="detailError" class="result-error" role="alert">
-          <span>{{ detailError }}</span
-          ><UiButton v-if="selectedId" @click="loadDetail()">重试</UiButton>
         </div>
-        <div class="view-switch" role="group" aria-label="路径展示模式">
+
+        <div class="pill-group" role="group" aria-label="探测协议">
           <button
-            :aria-pressed="displayMode === 'map'"
-            :class="{ active: displayMode === 'map' }"
-            @click="displayMode = 'map'"
+            v-for="p in (['icmp', 'tcp', 'udp'] as const)"
+            :key="p"
+            type="button"
+            class="seg-pill mono"
+            :class="{ 'is-active': protocol === p }"
+            @click="protocol = p"
           >
-            地图模式</button
-          ><button
-            :aria-pressed="displayMode === 'hops'"
-            :class="{ active: displayMode === 'hops' }"
-            @click="displayMode = 'hops'"
-          >
-            逐跳模式
+            {{ p.toUpperCase() }}
           </button>
         </div>
-        <UiSkeleton v-if="detailLoading && !detail" :lines="5" height="48px" />
-        <template v-else-if="!detail"
-          ><PathMap
-            v-if="displayMode === 'map'"
-            :views="[]"
-            :target="target" /><UiPanel v-else title="路径对比"
-            ><EmptyState
-              size="section"
-              title="从不同网络看同一条路"
-              description="填写目标并选择来源后，各来源会独立追踪。结果逐步返回，也可打开历史记录。" /></UiPanel
-        ></template>
-        <template v-else>
-          <div class="result-heading">
-            <div>
-              <h2>{{ detail.run.target }}</h2>
-              <p>
-                {{ formatDateTime(detail.run.createdAt) }} ·
-                {{ detail.views.length }} 个来源 ·
-                {{ (detail.run.protocol || "udp").toUpperCase()
-                }}{{ detail.run.port ? ` / ${detail.run.port}` : "" }} ·
-                {{
-                  detail.run.family === "4"
-                    ? "IPv4"
-                    : detail.run.family === "6"
-                      ? "IPv6"
-                      : "自动 IP 版本"
-                }}
-              </p>
-            </div>
-            <UiButton v-if="running" :loading="cancelling" @click="cancel"
-              >取消追踪</UiButton
-            ><UiButton v-else :icon="Refresh" @click="loadDetail()"
-              >刷新结果</UiButton
-            >
-          </div>
-          <p class="interpretation">
-            “无应答”只代表该跳未返回探测响应，不等于链路断开或业务丢包。追踪结束也不保证到达目标；请结合最后跳点与原始输出判断。取消后远程命令最多等待
-            75 秒停止，结果不会再写入。
-          </p>
-          <PathMap
-            v-if="displayMode === 'map'"
-            :views="detail.views"
-            :target="detail.run.target"
-          />
-          <div class="result-grid">
-            <UiPanel
-              v-for="view in detail.views"
-              :key="view.id"
-              :title="view.sourceName"
-              :description="view.tool || '来源环境检查'"
-            >
-              <template #actions
-                ><span
-                  class="trace-status"
-                  :class="view.status"
-                  role="status"
-                  >{{ statusText[view.status] }}</span
-                ></template
-              >
-              <p v-if="view.error" class="inline-error">{{ view.error }}</p>
-              <p
-                v-if="
-                  view.tool === 'nexttrace' &&
-                  view.hops.some((h) => h.responded) &&
-                  !view.hops.some((h) => h.asn)
-                "
-                class="muted"
-              >
-                该来源未返回 ASN / 位置信息，路径仍可查看。
-              </p>
-              <p
-                v-if="view.status === 'queued' || view.status === 'running'"
-                class="muted"
-              >
-                {{
-                  view.status === "queued"
-                    ? "等待来源领取任务…"
-                    : "正在逐跳探测，结果完成后返回…"
-                }}
-              </p>
-              <PathTopology
-                v-if="displayMode === 'hops' && view.hops.length"
-                :source="view.sourceName"
-                :source-id="view.id"
-                :hops="view.hops"
-              />
-              <p
-                v-else-if="!view.hops.length && view.status === 'completed'"
-                class="muted"
-              >
-                未解析到标准跳点，请展开原始输出。
-              </p>
-              <p
-                v-else-if="displayMode === 'map' && view.hops.length"
-                class="muted"
-              >
-                {{ view.hops.length }} 个跳点 · 可切换逐跳模式查看完整列表。
-              </p>
-              <details v-if="view.output" class="raw-output">
-                <summary>原始输出</summary>
-                <pre>{{ view.output }}</pre>
-              </details>
-            </UiPanel>
-          </div>
-        </template>
-      </section>
-    </div>
+
+        <div class="pill-group" role="group" aria-label="IP 版本">
+          <button
+            type="button"
+            class="seg-pill mono"
+            :class="{ 'is-active': family === '4' }"
+            @click="family = '4'"
+          >
+            IPv4
+          </button>
+          <button
+            type="button"
+            class="seg-pill mono"
+            :class="{ 'is-active': family === '6' }"
+            @click="family = '6'"
+          >
+            IPv6
+          </button>
+        </div>
+      </div>
+
+      <!-- 1-Click Domestic & Global Standard Target Presets -->
+      <div class="preset-row">
+        <span class="row-label">国内</span>
+        <button
+          v-for="item in cnPresets"
+          :key="item.host"
+          type="button"
+          class="preset-chip"
+          :class="{ 'is-active': target === item.host }"
+          @click="target = item.host"
+        >
+          <span>{{ item.label }}</span>
+          <small class="mono">{{ item.host }}</small>
+        </button>
+
+        <span class="row-sep" aria-hidden="true"></span>
+
+        <span class="row-label">国外</span>
+        <button
+          v-for="item in globalPresets"
+          :key="item.host"
+          type="button"
+          class="preset-chip"
+          :class="{ 'is-active': target === item.host }"
+          @click="target = item.host"
+        >
+          <span>{{ item.label }}</span>
+          <small class="mono">{{ item.host }}</small>
+        </button>
+      </div>
+
+      <!-- My Nodes Quick Targets -->
+      <div v-if="panelNodes.length" class="preset-row">
+        <span class="row-label">我的节点</span>
+        <button
+          v-for="n in panelNodes"
+          :key="n.id"
+          type="button"
+          class="preset-chip"
+          :class="{ 'is-active': target === n.server }"
+          @click="target = n.server"
+        >
+          <span>{{ n.name }}</span>
+          <small class="mono">{{ n.server }}</small>
+        </button>
+      </div>
+
+      <!-- Trace Sources Strip (Remote Agents & Probes, NOT Panel Server First) -->
+      <div class="sources-row">
+        <span class="row-label">追踪节点</span>
+
+        <!-- Remote Agents -->
+        <div
+          v-for="agent in sources.agents"
+          :key="`agent-${agent.id}`"
+          class="source-chip"
+          :class="{ 'is-selected': agentIds.includes(agent.id) }"
+        >
+          <button
+            type="button"
+            class="source-main"
+            :disabled="!supportsOptions(agent)"
+            @click="toggleAgent(agent.id)"
+          >
+            <i class="s-dot" :class="supportsOptions(agent) ? 'is-ok' : 'is-off'"></i>
+            <span>{{ agent.name }}</span>
+            <small v-if="agent.tool" class="mono">{{ agent.tool }}</small>
+          </button>
+          <button
+            v-if="(!agent.available || !agent.enriched) && agent.optionsSupported"
+            type="button"
+            class="install-btn"
+            :disabled="!!agent.preparing || preparingId === agent.id"
+            @click="prepareAgent(agent.id)"
+          >
+            <el-icon><Download /></el-icon>
+            <span>{{ agent.preparing || preparingId === agent.id ? "安装中…" : "安装 NextTrace" }}</span>
+          </button>
+        </div>
+
+        <!-- Remote Probes -->
+        <div
+          v-for="probe in sources.probes"
+          :key="`probe-${probe.id}`"
+          class="source-chip"
+          :class="{ 'is-selected': probeIds.includes(probe.id) }"
+        >
+          <button
+            type="button"
+            class="source-main"
+            :disabled="!supportsOptions(probe)"
+            @click="toggleProbe(probe.id)"
+          >
+            <i class="s-dot" :class="supportsOptions(probe) ? 'is-ok' : 'is-off'"></i>
+            <span>{{ probe.name }}</span>
+          </button>
+        </div>
+
+        <span v-if="!sources.agents.length && !sources.probes.length && !loading" class="muted-source">
+          尚未接入远程 Agent 服务器
+          <button
+            v-if="!sources.panelTool"
+            type="button"
+            class="install-inline-btn"
+            @click="installPanelTool"
+          >
+            <el-icon><Download /></el-icon>
+            <span>安装 NextTrace</span>
+          </button>
+        </span>
+      </div>
+    </section>
+
+    <KineticNotice :raw="detailError || sourceError" />
+
+    <!-- Full-Width Upgraded Dot-Matrix World Route Map -->
+    <PathMap
+      :views="detail?.views || []"
+      :target="detail?.run.target || target"
+      :running="running"
+    />
   </div>
 </template>
+
 <style scoped>
-.trace-page {
+.trace-gallery {
+  display: grid;
+  gap: 18px;
+  max-width: 1220px;
   min-width: 0;
 }
-.view-switch {
+
+.trace-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title-mask {
+  overflow: hidden;
+  padding-bottom: 4px;
+  margin-bottom: -4px;
+}
+
+.gallery-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 2.8vw, 36px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
+}
+
+.masthead-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px;
-  width: fit-content;
-  max-width: 100%;
-  border: 1px solid var(--c-line);
-  border-radius: 999px;
-  background: var(--c-surface-2);
+  gap: 8px;
 }
-.view-switch button {
-  padding: 8px 14px;
-  font-size: 12px;
-  border-radius: 999px;
-  color: var(--c-muted);
-  min-height: 36px;
+
+.top-rule {
+  display: block;
+  height: 1px;
+  background: var(--c-ink);
+  transform-origin: left;
 }
-.view-switch button.active {
-  background: var(--c-surface);
-  color: var(--c-data);
-  box-shadow: 0 1px 3px rgb(0 0 0/0.08);
-}
-.trace-layout {
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 14px;
-  align-items: start;
-}
-.trace-side,
-.trace-results {
-  min-width: 0;
+
+/* Compact Control Deck */
+.control-deck {
   display: grid;
   gap: 12px;
 }
-.trace-form {
-  display: grid;
+
+.target-row {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
-.landing-select {
-  width: 100%;
+
+.target-input-wrap {
+  flex: 1 1 280px;
   min-width: 0;
-  max-width: 100%;
-  padding: 8px 10px;
+}
+
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
   border: 1px solid var(--c-line);
-  border-radius: 8px;
+  border-radius: 999px;
+  background: var(--c-surface);
+}
+
+.seg-pill {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.seg-pill.is-active {
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
+}
+
+.preset-row,
+.sources-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row-label {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--c-muted);
+  margin-right: 2px;
+}
+
+.row-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--c-line);
+  margin: 0 4px;
+}
+
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
   background: var(--c-surface);
   color: var(--c-ink);
   font-size: 12px;
-  min-height: 36px;
-  text-overflow: ellipsis;
-}
-.trace-options {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-}
-.trace-options label {
-  display: grid;
-  gap: 6px;
-  min-width: 0;
-  font-size: 12px;
-}
-.trace-form .el-input-number {
-  max-width: 100%;
-  display: flex;
-  margin-top: 6px;
-}
-.trace-form > label,
-.source-heading strong {
-  font-size: 13px;
-  font-weight: 500;
-}
-.source-heading {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 4px;
-  margin-top: 4px;
-}
-.source-heading > span {
-  font-size: 11px;
-  color: var(--c-muted);
-}
-.source-group {
-  margin: 4px 0 0;
-  color: var(--c-muted);
-  font-size: 11px;
-}
-.sources {
-  display: grid;
-  gap: 8px;
-}
-.source-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  padding: 8px;
-  border: 1px solid var(--c-line);
-  border-radius: 10px;
-}
-.source-row input {
-  margin-top: 4px;
-  accent-color: var(--c-signal-text);
-  width: 16px;
-  height: 16px;
-  flex-shrink: 0;
-}
-.source-row span {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-.source-row strong {
-  font-size: 13px;
-  font-weight: 500;
-  overflow-wrap: anywhere;
-}
-.source-row small,
-.help,
-.muted {
-  color: var(--c-muted);
-  font-size: 12px;
-  line-height: 1.7;
-}
-.source-row em {
-  font-size: 11px;
-  color: var(--c-muted);
-  font-style: normal;
-  margin-left: 6px;
-}
-.help,
-.muted {
-  margin: 0;
-}
-.inline-error {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--c-warn-ink);
-  overflow-wrap: anywhere;
-}
-.result-error {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  background: var(--c-surface);
-}
-.history-list {
-  display: grid;
-  max-height: 300px;
-  overflow: auto;
-  gap: 4px;
-}
-.history-list button {
-  display: grid;
-  text-align: left;
-  gap: 2px;
-  padding: 8px;
-  border-radius: 8px;
-  min-width: 0;
-}
-.history-list button:hover,
-.history-list button.is-active {
-  background: var(--c-selected);
-}
-.history-list strong {
-  font-size: 13px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.history-list small {
-  font-size: 11px;
-  color: var(--c-muted);
-}
-button:focus-visible,
-summary:focus-visible {
-  outline: 2px solid var(--c-focus);
-  outline-offset: 2px;
-}
-.result-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.result-heading h2 {
-  font-size: 18px;
-  overflow-wrap: anywhere;
-  margin: 0;
-}
-.result-heading p {
-  font-size: 12px;
-  color: var(--c-muted);
-  margin: 3px 0 0;
-}
-.interpretation {
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--c-muted);
-  margin: 0;
-}
-.result-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: 12px;
-  align-items: start;
-}
-.trace-status {
-  font-size: 12px;
-  color: var(--c-muted);
-}
-.trace-status.running,
-.trace-status.queued {
-  color: var(--c-data);
-}
-.trace-status.failed,
-.trace-status.timeout,
-.trace-status.unsupported {
-  color: var(--c-warn-ink);
-}
-.trace-status.completed {
-  color: var(--c-ok);
-}
-.hop-table {
-  display: grid;
-  min-width: 0;
-  margin-top: 8px;
-}
-.hop-head,
-.hop-row {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 78px;
-  gap: 8px;
-  align-items: start;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--c-line);
-  font-size: 12px;
-}
-.hop-head {
-  color: var(--c-muted);
-}
-.hop-row code {
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.hop-row > span:last-child {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.raw-output {
-  margin-top: 12px;
-  font-size: 12px;
-}
-.raw-output summary {
   cursor: pointer;
-  color: var(--c-muted);
-  padding: 4px 0;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
 }
-.raw-output pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  background: var(--c-surface-2);
-  border-radius: 8px;
-  padding: 10px;
-  max-height: 260px;
-  overflow: auto;
+
+.preset-chip small {
   font-size: 11px;
+  color: var(--c-muted);
 }
-@media (max-width: 1000px) {
-  .trace-layout {
-    grid-template-columns: 1fr;
-  }
-  .trace-side {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+
+.preset-chip:hover {
+  border-color: var(--c-ink);
 }
-@media (max-width: 600px) {
-  .trace-side {
-    grid-template-columns: 1fr;
-  }
-  .result-heading {
-    align-items: flex-start;
-  }
-  .trace-layout {
-    gap: 12px;
-  }
+
+.preset-chip.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.preset-chip.is-active small {
+  color: color-mix(in srgb, var(--c-surface) 72%, transparent);
+}
+
+/* Source Chips + One-Click Install */
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  overflow: hidden;
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.source-chip.is-selected {
+  border-color: var(--c-ink);
+  background: var(--c-ink);
+}
+
+.source-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.source-chip.is-selected .source-main {
+  color: var(--c-surface);
+}
+
+.source-main:disabled {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.source-main small {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.s-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.s-dot.is-ok {
+  background: var(--c-ok);
+}
+
+.s-dot.is-off {
+  background: var(--c-warn);
+}
+
+.install-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 11px;
+  border: 0;
+  border-left: 1px solid var(--c-line);
+  background: var(--c-surface-muted);
+  color: var(--c-ink);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.install-btn:hover,
+.install-inline-btn:hover {
+  background: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.muted-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.install-inline-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.inline-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-bad);
 }
 </style>

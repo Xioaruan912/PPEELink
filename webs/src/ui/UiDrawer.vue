@@ -2,6 +2,7 @@
   <el-drawer
     v-bind="$attrs"
     class="workspace-drawer"
+    append-to-body
     :model-value="modelValue"
     :title="title"
     :size="size"

@@ -1,28 +1,28 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import type { TraceHop, TraceView } from "@/api/network/trace";
-import { UiButton } from "@/ui";
-const props = defineProps<{ views: TraceView[]; target: string }>();
+import { Close } from "@element-plus/icons-vue";
+
+const props = defineProps<{ views: TraceView[]; target: string; running?: boolean }>();
+
 const colors = [
+  "#15b85a",
   "#2563eb",
-  "#0d9488",
   "#9333ea",
-  "#dc6b20",
-  "#d43672",
-  "#4f46e5",
-  "#528113",
-  "#087f9c",
-  "#805a38",
+  "#ea580c",
+  "#db2777",
+  "#0891b2",
 ];
-const hidden = ref<number[]>([]),
-  selected = ref(""),
-  land = ref(""),
-  mapError = ref("");
-const zoom = ref(1),
-  offset = ref({ x: 0, y: 0 });
+
+const hidden = ref<number[]>([]);
+const selected = ref("");
+const land = ref("");
+const zoom = ref(1);
+const offset = ref({ x: 0, y: 0 });
 const svg = ref<SVGSVGElement>();
 let disposed = false;
 const controller = new AbortController();
+
 interface Point {
   key: string;
   viewId: number;
@@ -33,6 +33,7 @@ interface Point {
   color: string;
   index: number;
 }
+
 function positioned(h: TraceHop): boolean {
   return (
     h.responded &&
@@ -45,6 +46,7 @@ function positioned(h: TraceHop): boolean {
     (h.latitude !== 0 || h.longitude !== 0)
   );
 }
+
 const routes = computed(() =>
   props.views.map((view, i) => ({
     ...view,
@@ -67,55 +69,58 @@ const routes = computed(() =>
     ),
   }))
 );
+
 const visibleRoutes = computed(() =>
   routes.value.filter((v) => !hidden.value.includes(v.id))
 );
 const points = computed(() => visibleRoutes.value.flatMap((v) => v.points));
-const current = computed(
-  () => points.value.find((p) => p.key === selected.value) || points.value[0]
+const current = computed(() =>
+  selected.value ? points.value.find((p) => p.key === selected.value) : undefined
 );
 const located = computed(() =>
   routes.value.reduce((sum, v) => sum + v.points.length, 0)
 );
-const total = computed(() =>
-  props.views.reduce((sum, v) => sum + v.hops.length, 0)
-);
+
 const transform = computed(
   () =>
     `translate(${offset.value.x} ${offset.value.y}) translate(500 250) scale(${zoom.value}) translate(-500 -250)`
 );
+
 const location = (h: TraceHop) =>
   [h.country, h.province, h.city]
     .filter((v, i, a) => v && a.indexOf(v) === i)
     .join(" · ");
+
 function toggle(id: number) {
   hidden.value = hidden.value.includes(id)
     ? hidden.value.filter((v) => v !== id)
     : [...hidden.value, id];
 }
+
 function reset() {
   zoom.value = 1;
   offset.value = { x: 0, y: 0 };
 }
+
 function fit() {
   const ps = points.value;
   if (!ps.length) {
     reset();
     return;
   }
-  const xs = ps.map((p) => p.x),
-    ys = ps.map((p) => p.y);
-  const minX = Math.min(...xs),
-    maxX = Math.max(...xs),
-    minY = Math.min(...ys),
-    maxY = Math.max(...ys);
+  const xs = ps.map((p) => p.x);
+  const ys = ps.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
   zoom.value = Math.max(
     1,
     Math.min(
-      7,
+      6,
       Math.min(
-        820 / Math.max(110, maxX - minX),
-        340 / Math.max(65, maxY - minY)
+        820 / Math.max(120, maxX - minX),
+        340 / Math.max(70, maxY - minY)
       )
     )
   );
@@ -124,12 +129,15 @@ function fit() {
     y: (250 - (minY + maxY) / 2) * zoom.value,
   };
 }
+
 function setZoom(delta: number) {
-  zoom.value = Math.max(1, Math.min(10, zoom.value + delta));
+  zoom.value = Math.max(1, Math.min(8, zoom.value + delta));
 }
+
 function choose(key: string) {
-  selected.value = key;
+  selected.value = selected.value === key ? "" : key;
 }
+
 function segment(
   a: Point,
   b: Point
@@ -139,7 +147,7 @@ function segment(
   if (diff > 500) end -= 1000;
   else if (diff < -500) end += 1000;
   const mid = (a.x + end) / 2;
-  const bend = Math.min(34, Math.max(7, Math.abs(end - a.x) * 0.1));
+  const bend = Math.min(36, Math.max(8, Math.abs(end - a.x) * 0.12));
   const path = `M${a.x},${a.y} Q${mid},${(a.y + b.y) / 2 - bend} ${end},${b.y}`;
   const result = [{ path, shift: 0, gap: b.index - a.index > 1 }];
   if (end < 0) result.push({ path, shift: 1000, gap: b.index - a.index > 1 });
@@ -147,6 +155,7 @@ function segment(
     result.push({ path, shift: -1000, gap: b.index - a.index > 1 });
   return result;
 }
+
 const lines = computed(() =>
   visibleRoutes.value.flatMap((v) =>
     v.points
@@ -160,6 +169,7 @@ const lines = computed(() =>
       )
   )
 );
+
 watch(
   () => props.views,
   (next, old) => {
@@ -170,10 +180,7 @@ watch(
     }
   }
 );
-watch(points, (ps) => {
-  if (!ps.some((p) => p.key === selected.value))
-    selected.value = ps[0]?.key || "";
-});
+
 let panStart: { x: number; y: number; pointer: number } | undefined;
 function startPan(e: PointerEvent) {
   if ((e.target as Element).closest(".map-hop")) return;
@@ -195,23 +202,7 @@ function stopPan(e: PointerEvent) {
   if (el.hasPointerCapture(e.pointerId)) el.releasePointerCapture(e.pointerId);
   panStart = undefined;
 }
-function onKey(e: KeyboardEvent) {
-  const keys: Record<string, [number, number]> = {
-    ArrowLeft: [24, 0],
-    ArrowRight: [-24, 0],
-    ArrowUp: [0, 24],
-    ArrowDown: [0, -24],
-  };
-  if (keys[e.key]) {
-    e.preventDefault();
-    const [x, y] = keys[e.key];
-    offset.value = { x: offset.value.x + x, y: offset.value.y + y };
-  } else if (["+", "=", "-", "Home"].includes(e.key)) {
-    e.preventDefault();
-    if (e.key === "Home") fit();
-    else setZoom(e.key === "-" ? -0.5 : 0.5);
-  }
-}
+
 async function loadMap() {
   try {
     const response = await fetch(`${import.meta.env.BASE_URL}world.json`, {
@@ -250,33 +241,20 @@ async function loadMap() {
       )
       .join("");
   } catch {
-    if (!disposed)
-      mapError.value = "地图轮廓暂时无法加载，已定位跳点仍会显示。";
+    /* keep silent */
   }
 }
+
 onMounted(() => void loadMap());
 onBeforeUnmount(() => {
   disposed = true;
   controller.abort();
 });
 </script>
+
 <template>
-  <section class="path-map" aria-label="路由地理地图">
-    <div class="map-toolbar">
-      <div>
-        <strong>世界路径地图</strong
-        ><span>{{ located }} / {{ total }} 跳已定位</span>
-      </div>
-      <div class="map-actions">
-        <UiButton variant="ghost" aria-label="缩小地图" @click="setZoom(-0.5)"
-          >−</UiButton
-        ><UiButton variant="ghost" aria-label="放大地图" @click="setZoom(0.5)"
-          >+</UiButton
-        ><UiButton variant="ghost" @click="fit">适应路径</UiButton
-        ><UiButton variant="ghost" @click="reset">世界全图</UiButton>
-      </div>
-    </div>
-    <div class="map-stage">
+  <section class="studio-map" aria-label="全球路由路径地图">
+    <div class="map-stage" :class="{ 'is-running': running }">
       <svg
         ref="svg"
         class="world"
@@ -284,8 +262,7 @@ onBeforeUnmount(() => {
         viewBox="0 0 1000 500"
         tabindex="0"
         role="group"
-        aria-label="路由世界地图，可拖动，使用方向键平移、加减键缩放、Home 适应路径"
-        @keydown="onKey"
+        aria-label="全球路由路径地图"
         @pointerdown="startPan"
         @pointermove="pan"
         @pointerup="stopPan"
@@ -293,33 +270,28 @@ onBeforeUnmount(() => {
       >
         <defs>
           <pattern
-            id="route-map-grid"
-            width="83.333"
-            height="83.333"
+            id="trace-land-dots"
+            width="5"
+            height="5"
             patternUnits="userSpaceOnUse"
           >
-            <path d="M83.333 0H0V83.333" class="graticule" />
+            <circle class="land-dot" cx="2.5" cy="2.5" r="1.08" />
           </pattern>
         </defs>
         <g :transform="transform">
-          <rect
-            x="0"
-            y="0"
-            width="1000"
-            height="500"
-            fill="url(#route-map-grid)"
-          />
           <path :d="land" class="land" />
+          <!-- Curved Kinetic Route Arcs -->
           <path
             v-for="line in lines"
             :key="line.key"
             :d="line.path"
             :transform="`translate(${line.shift} 0)`"
-            class="route-line"
-            :class="{ gap: line.gap }"
+            class="route-arc"
+            :class="{ 'is-gap': line.gap }"
             :stroke="line.color"
             vector-effect="non-scaling-stroke"
           />
+          <!-- Interactive Hop Dots -->
           <g
             v-for="p in points"
             :key="p.key"
@@ -328,320 +300,393 @@ onBeforeUnmount(() => {
             :style="{ '--hop-color': p.color }"
             tabindex="0"
             role="button"
-            :aria-label="`${p.source}第${p.hop.ttl}跳，${p.hop.ip}，${location(p.hop) || '位置未知'}`"
             @click.stop="choose(p.key)"
             @keydown.enter.prevent="choose(p.key)"
-            @keydown.space.stop.prevent="choose(p.key)"
           >
-            <title>
-              {{ p.source }} · 第 {{ p.hop.ttl }} 跳 · {{ p.hop.ip }} ·
-              {{ location(p.hop) }}
-            </title>
-            <circle :cx="p.x" :cy="p.y" :r="14 / zoom" class="hop-hit" />
-            <circle :cx="p.x" :cy="p.y" :r="5 / zoom" class="hop-circle" />
-            <text
-              :x="p.x"
-              :y="p.y - 10 / zoom"
-              :font-size="12 / zoom"
-              text-anchor="middle"
-              class="hop-label"
-            >
-              {{ p.hop.ttl }}
-            </text>
+            <title>{{ p.source }} #{{ p.hop.ttl }} {{ p.hop.ip }}</title>
+            <circle :cx="p.x" :cy="p.y" :r="15 / zoom" class="hop-hit" />
+            <circle :cx="p.x" :cy="p.y" :r="9 / zoom" class="hop-halo" />
+            <circle :cx="p.x" :cy="p.y" :r="4.2 / zoom" class="hop-dot" />
           </g>
         </g>
       </svg>
-      <div v-if="!located" class="map-empty">
-        <strong>{{
-          total ? "本次追踪尚无可定位跳点" : "先追踪一条线路"
-        }}</strong
-        ><span>{{
-          total
-            ? "需要 NextTrace 返回地理坐标。未定位的跳点仍可在逐跳模式查看。"
-            : "选择落地和来源，路径将在地图上展开。"
-        }}</span>
+
+      <!-- Floating Top-Right Controls -->
+      <div class="floating-controls">
+        <button type="button" aria-label="放大" @click="setZoom(0.6)">+</button>
+        <button type="button" aria-label="缩小" @click="setZoom(-0.6)">−</button>
+        <button type="button" aria-label="适应路径" @click="fit">适应</button>
+        <button type="button" aria-label="重置" @click="reset">全图</button>
       </div>
+
+      <!-- Subtle Hint When No Hop Selected -->
+      <div v-if="!current && !located" class="map-hint">
+        <i aria-hidden="true"></i>
+        <span>{{ running ? "正在追踪全球路由跳点…" : "选择目标并点击开始追踪" }}</span>
+      </div>
+      <div v-else-if="!current && located" class="map-hint">
+        <i aria-hidden="true"></i>
+        <span>点击地图跳点查看 IP / ASN / 延迟</span>
+      </div>
+
+      <!-- Floating Frosted Glass Hop Card -->
+      <Transition name="hop-pop" mode="out-in">
+        <aside v-if="current" :key="current.key" class="hop-card">
+          <div class="hop-card-top">
+            <span class="hop-ttl mono">
+              <i :style="{ background: current.color }"></i>
+              #{{ current.hop.ttl }} · {{ current.source }}
+            </span>
+            <button
+              type="button"
+              class="hop-close"
+              aria-label="关闭跳点卡片"
+              @click="selected = ''"
+            >
+              <el-icon><Close /></el-icon>
+            </button>
+          </div>
+          <strong class="hop-loc">{{ location(current.hop) || "未知地区" }}</strong>
+          <code class="hop-ip mono">{{ current.hop.ip }}</code>
+          <div class="hop-meta mono">
+            <span>{{ current.hop.asn ? `AS${current.hop.asn.replace(/^AS/i, "")}` : "—" }}</span>
+            <span>{{ current.hop.owner || current.hop.isp || "—" }}</span>
+            <strong class="hop-rtt">
+              {{ current.hop.rtt === null ? "—" : `${current.hop.rtt.toFixed(1)} ms` }}
+            </strong>
+          </div>
+        </aside>
+      </Transition>
     </div>
-    <div v-if="routes.length" class="map-legend" aria-label="显示的追踪来源">
+
+    <!-- Compact Source Legend Pills -->
+    <div v-if="routes.length" class="legend-rail">
       <button
         v-for="v in routes"
         :key="v.id"
-        :aria-pressed="!hidden.includes(v.id)"
-        :class="{ muted: hidden.includes(v.id) }"
+        type="button"
+        class="legend-pill"
+        :class="{ 'is-muted': hidden.includes(v.id) }"
         @click="toggle(v.id)"
       >
-        <i :style="{ background: v.color }" /><span>{{ v.sourceName }}</span
-        ><small>{{ v.points.length }} 跳定位</small>
+        <i :style="{ background: v.color }"></i>
+        <span>{{ v.sourceName }}</span>
+        <small class="mono">{{ v.points.length }} 跳</small>
       </button>
     </div>
-    <div v-if="points.length" class="map-inspector">
-      <label for="map-hop-select"
-        >查看跳点<select id="map-hop-select" v-model="selected">
-          <option v-for="p in points" :key="p.key" :value="p.key">
-            {{ p.source }} · 第 {{ p.hop.ttl }} 跳 · {{ p.hop.ip }}
-          </option>
-        </select></label
-      >
-      <div v-if="current" class="hop-detail">
-        <strong>{{ location(current.hop) || "位置未知" }}</strong
-        ><code>{{ current.hop.ip }}</code
-        ><span
-          >{{
-            current.hop.asn ? `AS${current.hop.asn.replace(/^AS/i, "")}` : ""
-          }}
-          {{ current.hop.owner || current.hop.isp || "" }}</span
-        ><span
-          >第 {{ current.hop.ttl }} 跳 ·
-          {{
-            current.hop.rtt === null
-              ? "未返回耗时"
-              : `${current.hop.rtt.toFixed(2)} ms`
-          }}</span
-        >
-      </div>
-    </div>
-    <p v-if="mapError" class="map-notice" role="status">{{ mapError }}</p>
-    <p class="map-note">
-      位置来自 IP
-      地理信息，连线按跳数顺序绘制，不代表实际光缆。虚线表示中间有未定位跳点；未定位跳点不会被放到地图上的虚构位置。
-    </p>
   </section>
 </template>
+
 <style scoped>
-.path-map {
+.studio-map {
+  display: grid;
+  gap: 12px;
   min-width: 0;
-  overflow: hidden;
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 16px;
 }
-.map-toolbar {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--c-line);
-  flex-wrap: wrap;
-}
-.map-toolbar > div:first-child {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.map-toolbar strong {
-  font-size: 14px;
-}
-.map-toolbar span {
-  font-size: 12px;
-  color: var(--c-muted);
-}
-.map-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-.map-actions :deep(.ui-button) {
-  min-height: 32px;
-  padding: 6px 9px;
-  font-size: 12px;
-}
+
 .map-stage {
   position: relative;
-  background: color-mix(in srgb, var(--c-data) 4%, var(--c-surface));
+  border: 1px solid var(--c-line);
+  border-radius: 22px;
+  background: var(--c-surface);
   overflow: hidden;
 }
+
+.map-stage.is-running::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 24%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgb(21 184 90 / 0.12), transparent);
+  animation: mapScan 2.2s linear infinite;
+}
+
 .world {
   display: block;
   width: 100%;
-  height: clamp(300px, 38vw, 500px);
+  height: clamp(380px, 52dvh, 560px);
   cursor: grab;
   touch-action: pan-y;
-  outline-offset: -3px;
 }
+
 .world.is-zoomed {
   touch-action: none;
 }
+
 .world:active {
   cursor: grabbing;
 }
-.graticule {
-  fill: none;
-  stroke: color-mix(in srgb, var(--c-data) 10%, transparent);
-  stroke-width: 0.5;
-}
+
 .land {
-  fill: color-mix(in srgb, var(--c-data) 10%, var(--c-surface-2));
-  stroke: color-mix(in srgb, var(--c-muted) 40%, var(--c-line));
-  stroke-width: 0.45;
+  fill: url(#trace-land-dots);
   fill-rule: evenodd;
 }
-.route-line {
+
+.land-dot {
+  fill: color-mix(in srgb, var(--c-muted) 56%, transparent);
+}
+
+.route-arc {
   fill: none;
-  stroke-width: 2.2;
+  stroke-width: 2;
   stroke-linecap: round;
-  opacity: 0.8;
+  opacity: 0.85;
+  stroke-dasharray: 6 4;
+  animation: arcFlow 1.8s linear infinite;
 }
-.route-line.gap {
-  stroke-dasharray: 5 5;
+
+.route-arc.is-gap {
+  opacity: 0.45;
+  stroke-dasharray: 3 6;
 }
+
 .map-hop {
   cursor: pointer;
   outline: none;
 }
+
 .hop-hit {
   fill: transparent;
 }
-.hop-circle {
-  fill: var(--hop-color);
-  stroke: var(--c-surface);
-  stroke-width: 1;
+
+.hop-halo {
+  fill: none;
+  stroke: var(--hop-color);
+  stroke-width: 1.2;
+  opacity: 0.28;
   vector-effect: non-scaling-stroke;
 }
-.hop-label {
-  fill: var(--c-ink);
-  paint-order: stroke;
+
+.hop-dot {
+  fill: var(--hop-color);
   stroke: var(--c-surface);
-  stroke-width: 3;
-  stroke-linejoin: round;
-  font-weight: 600;
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.map-hop.is-selected .hop-halo {
+  opacity: 0.85;
+  stroke-width: 2;
+}
+
+.floating-controls {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 8;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--c-surface) 90%, transparent);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.floating-controls button {
+  padding: 6px 11px;
+  border: 0;
+  border-left: 1px solid var(--c-line);
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.floating-controls button:first-child {
+  border-left: 0;
+}
+
+.floating-controls button:hover {
+  background: var(--c-surface-muted);
+}
+
+.map-hint {
+  position: absolute;
+  left: 20px;
+  bottom: 20px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-surface) 90%, transparent);
+  backdrop-filter: blur(14px);
+  font-size: 12px;
+  color: var(--c-muted);
   pointer-events: none;
 }
-.map-hop:hover .hop-circle,
-.map-hop:focus-visible .hop-circle,
-.map-hop.is-selected .hop-circle {
-  stroke: var(--hop-color);
-  stroke-width: 4;
+
+.map-hint i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-ok);
 }
-.map-empty {
+
+.hop-card {
   position: absolute;
-  inset: 0;
+  left: 20px;
+  bottom: 20px;
+  z-index: 10;
+  width: min(320px, calc(100% - 40px));
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--c-surface) 92%, transparent);
+  backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 20px 44px -16px rgb(0 0 0 / 0.18);
+}
+
+.hop-card-top {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.hop-ttl {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.hop-ttl i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.hop-close {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  padding: 24px;
-  pointer-events: none;
-  text-align: center;
-  background: color-mix(in srgb, var(--c-surface) 50%, transparent);
-}
-.map-empty strong {
-  font-size: 16px;
-}
-.map-empty span {
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--c-muted);
-  max-width: 340px;
-}
-.map-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  padding: 12px 16px;
-  border-top: 1px solid var(--c-line);
-}
-.map-legend button {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  max-width: 100%;
-  font-size: 12px;
-  padding: 5px 0;
-}
-.map-legend button > span {
-  overflow-wrap: anywhere;
-}
-.map-legend i {
-  height: 8px;
-  width: 8px;
+  width: 24px;
+  height: 24px;
+  border: 0;
   border-radius: 50%;
-  flex-shrink: 0;
-}
-.map-legend small {
+  background: transparent;
   color: var(--c-muted);
-  white-space: nowrap;
+  cursor: pointer;
 }
-.map-legend .muted {
-  opacity: 0.45;
-}
-.map-inspector {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px;
-  padding: 14px 16px;
-  border-top: 1px solid var(--c-line);
-  align-items: start;
-}
-.map-inspector label {
-  display: grid;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--c-muted);
-  min-width: 0;
-}
-.map-inspector select {
-  width: 100%;
-  min-width: 0;
-  max-width: 100%;
-  padding: 8px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 8px;
-  font-size: 12px;
+
+.hop-close:hover {
+  background: var(--c-surface-muted);
   color: var(--c-ink);
 }
-.hop-detail {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
+
+.hop-loc {
+  font-size: 15.5px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.hop-ip {
   font-size: 12px;
-  overflow-wrap: anywhere;
-}
-.hop-detail code {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.hop-detail span {
-  font-size: 11px;
   color: var(--c-muted);
 }
-.map-note,
-.map-notice {
-  font-size: 11px;
-  line-height: 1.7;
+
+.hop-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--c-line);
+  font-size: 11.5px;
   color: var(--c-muted);
-  padding: 0 16px 12px;
-  margin: 0;
 }
-.map-notice {
-  color: var(--c-warn-ink);
+
+.hop-rtt {
+  color: var(--c-ok);
 }
-.map-legend button:focus-visible,
-.map-inspector select:focus-visible {
-  outline: 2px solid var(--c-focus);
-  outline-offset: 2px;
+
+.legend-rail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
-@media (max-width: 600px) {
-  .map-toolbar {
-    padding: 12px;
+
+.legend-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 12px;
+  color: var(--c-ink);
+  cursor: pointer;
+}
+
+.legend-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.legend-pill small {
+  color: var(--c-muted);
+  font-size: 11px;
+}
+
+.legend-pill.is-muted {
+  opacity: 0.45;
+}
+
+.hop-pop-enter-active,
+.hop-pop-leave-active {
+  transition: opacity 200ms var(--ease-out), transform 200ms var(--ease-out);
+}
+
+.hop-pop-enter-from,
+.hop-pop-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@keyframes arcFlow {
+  to {
+    stroke-dashoffset: -20;
   }
-  .map-inspector {
-    grid-template-columns: 1fr;
-    padding: 12px;
+}
+
+@keyframes mapScan {
+  from {
+    transform: translateX(-100%);
   }
+  to {
+    transform: translateX(460%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-arc,
+  .map-stage.is-running::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 760px) {
   .world {
     height: 300px;
   }
-  .map-legend {
-    padding: 10px 12px;
-  }
-  .map-note,
-  .map-notice {
-    padding-inline: 12px;
+  .hop-card {
+    position: static;
+    width: 100%;
+    border-radius: 0;
+    border-width: 1px 0 0;
+    box-shadow: none;
   }
 }
 </style>

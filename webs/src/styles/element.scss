@@ -167,41 +167,108 @@
 .el-dropdown-menu,
 .el-select-dropdown,
 .el-picker-panel {
-  background: var(--c-surface);
+  background: color-mix(in srgb, var(--c-surface) 96%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
   color: var(--c-ink);
-  border-radius: var(--radius-control);
+  border-radius: 14px;
+  padding: 6px;
 }
 .el-dropdown-menu__item,
 .el-select-dropdown__item {
   min-height: 36px;
-  font-size: 14px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13.5px;
+  color: var(--c-ink);
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+.el-dropdown-menu__item:hover,
+.el-dropdown-menu__item:focus,
+.el-select-dropdown__item.is-hovering,
+.el-select-dropdown__item:hover {
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+}
+.el-select-dropdown__item.is-selected {
+  color: var(--c-ink);
+  font-weight: 600;
+  background: var(--c-tray);
+}
+.el-dropdown-menu__item--divided {
+  margin-top: 6px;
+  border-top-color: var(--c-line);
 }
 .el-popper {
-  --el-popper-border-radius: var(--radius-control);
-  box-shadow: var(--shadow-overlay);
-  font-size: 14px;
+  --el-popper-border-radius: 14px;
+  border-color: var(--c-line) !important;
+  box-shadow: 0 18px 44px -12px rgb(0 0 0 / 0.14), 0 0 0 1px rgb(0 0 0 / 0.04);
+  font-size: 13.5px;
 }
 .el-popper.is-dark {
   color: var(--c-surface);
   background: var(--c-ink);
-  border-color: var(--c-ink);
+  border-color: var(--c-ink) !important;
 }
 .el-popper.is-dark .el-popper__arrow::before {
   background: var(--c-ink);
   border-color: var(--c-ink);
 }
-.el-message,
+.el-message {
+  background: color-mix(in srgb, var(--c-surface) 94%, transparent) !important;
+  backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid var(--c-line) !important;
+  border-radius: 999px !important;
+  padding: 10px 18px !important;
+  box-shadow: 0 18px 42px -14px rgb(0 0 0 / 0.18), inset 0 1px 0 rgb(255 255 255 / 0.6);
+  max-width: calc(100vw - 32px);
+}
+.el-message--success .el-message__icon {
+  color: var(--c-ok) !important;
+}
+.el-message--error .el-message__icon {
+  color: var(--c-bad) !important;
+}
+.el-message--warning .el-message__icon {
+  color: var(--c-warn) !important;
+}
 .el-notification {
-  background: var(--c-surface);
+  background: color-mix(in srgb, var(--c-surface) 95%, transparent);
+  backdrop-filter: blur(18px);
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
+  border-radius: 16px;
   box-shadow: var(--shadow-overlay);
   max-width: calc(100vw - 32px);
 }
 .el-message__content,
 .el-notification__content {
+  color: var(--c-ink) !important;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.el-message-box {
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: 20px;
+  padding: 22px 24px;
+  box-shadow: 0 28px 70px -18px rgb(0 0 0 / 0.24);
+}
+.el-message-box__title {
   color: var(--c-ink);
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.el-message-box__message {
+  color: var(--c-muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+.el-input__inner:focus,
+.el-input__inner:focus-visible,
+.el-textarea__inner:focus,
+.el-textarea__inner:focus-visible {
+  outline: none !important;
 }
 .el-tag {
   min-height: 28px;

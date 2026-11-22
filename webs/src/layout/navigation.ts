@@ -46,8 +46,8 @@ const META: Record<string, { icon: Component; hint?: string; label?: string }> =
     },
     "/monitor/workspace": {
       icon: IconFiles,
-      label: "容器与文件",
-      hint: "文件管理与 Docker 容器运维",
+      label: "服务器管理",
+      hint: "WebShell 终端、远程文件与 Docker 容器管理",
     },
     "/network": { icon: IconNodes },
     "/network/traceroute": {
@@ -163,15 +163,15 @@ export function flattenNavigation(items: NavigationItem[]): NavigationItem[] {
   );
 }
 
-// Rewritten 5-domain IA ordered by operator frequency: Distribution → Compute → Diagnostics → Telemetry → Policy.
+// 6-domain IA: 订阅 → 服务器 → 网络测试 → 概览 → 模板分组 → 系统设置.
 const GROUPS = [
   {
-    label: "分发中心",
+    label: "订阅",
     icon: IconSubs,
     paths: ["/subcription/subs", "/my/subscriptions", "/subcription/nodes"],
   },
   {
-    label: "算力与网络",
+    label: "服务器",
     icon: IconServer,
     paths: [
       "/subcription/servers",
@@ -181,7 +181,7 @@ const GROUPS = [
     ],
   },
   {
-    label: "诊断实验室",
+    label: "网络测试",
     icon: IconFlask,
     paths: [
       "/subcription/diagnostic",
@@ -191,20 +191,19 @@ const GROUPS = [
     ],
   },
   {
-    label: "态势总览",
+    label: "概览",
     icon: IconChartLine,
     paths: ["/dashboard", "/monitor/website"],
   },
   {
-    label: "策略与系统",
+    label: "模板分组",
+    icon: IconCode,
+    paths: ["/template/builder", "/template/list", "/template/rules"],
+  },
+  {
+    label: "系统设置",
     icon: IconGear,
-    paths: [
-      "/template/builder",
-      "/template/list",
-      "/template/rules",
-      "/system/users",
-      "/system/settings",
-    ],
+    paths: ["/system/users", "/system/settings"],
   },
 ];
 

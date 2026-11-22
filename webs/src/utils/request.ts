@@ -1,6 +1,18 @@
 import axios, { InternalAxiosRequestConfig, AxiosResponse } from "axios";
 import { useUserStoreHook } from "@/store/modules/user";
 
+function friendlyToast(msg?: string): string {
+  if (!msg) return "系统出错";
+  const lower = msg.toLowerCase();
+  if (lower.includes("with_quic") || lower.includes("quic is not included"))
+    return "当前环境暂不支持 QUIC / HY2 探测";
+  if (lower.includes("with_utls") || lower.includes("utls is not included"))
+    return "当前环境暂不支持 uTLS 指纹探测";
+  if (lower.includes("initialize outbound") || lower.includes("sing-box"))
+    return "节点链路初始化失败，请检查协议配置";
+  return msg;
+}
+
 // 创建 axios 实例
 const service = axios.create({
   baseURL: import.meta.env.VITE_APP_BASE_API,
@@ -58,7 +70,7 @@ service.interceptors.response.use(
           });
         });
       } else {
-        ElMessage.error(msg || "系统出错");
+        ElMessage.error(friendlyToast(msg));
       }
     }
     return Promise.reject(error);

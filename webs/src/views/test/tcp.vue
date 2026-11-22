@@ -1,292 +1,95 @@
-<template>
-  <div class="test-page tcp-page">
-    <PageHeader
-      title="国内可达性"
-      description="经节点连接国内各省三大运营商的服务器。连不上通常说明节点 IP 被墙或线路异常；只检测 IP 是否可达，不代表某个端口或协议没被干扰。"
-      ><template #actions
-        ><UiButton
-          v-if="loading"
-          variant="danger"
-          :icon="Close"
-          @click="abortTest"
-          >停止检测</UiButton
-        ><UiButton
-          variant="primary"
-          :icon="VideoPlay"
-          :loading="loading"
-          :disabled="!selectedNodeId || nodesLoading"
-          @click="startTest"
-          >{{ loading ? "正在检测" : "开始检测" }}</UiButton
-        ></template
-      ></PageHeader
-    >
-    <div v-if="error" class="test-notice" role="alert">
-      <span>{{ error }}</span
-      ><UiButton v-if="!nodes.length" variant="ghost" @click="loadNodes"
-        >重试节点</UiButton
-      >
-    </div>
-    <section class="tcp-controls" aria-label="检测设置" data-enter>
-      <div class="node-field">
-        <label class="field-label" for="tcp-node">检测节点</label
-        ><el-select
-          id="tcp-node"
-          v-model="selectedNodeId"
-          aria-label="检测节点"
-          filterable
-          :loading="nodesLoading"
-          :disabled="loading || nodesLoading"
-          placeholder="选择节点"
-          @change="restoreCache"
-          ><el-option
-            v-for="node in nodes"
-            :key="node.id"
-            :label="node.name"
-            :value="node.id"
-            ><span class="node-option"
-              ><span>{{ node.name }}</span></span
-            ></el-option
-          ></el-select
-        >
-      </div>
-      <div>
-        <label class="field-label" for="tcp-provinces">省份 · 默认全部</label
-        ><el-select
-          id="tcp-provinces"
-          v-model="filterProvinces"
-          aria-label="检测省份"
-          multiple
-          filterable
-          collapse-tags
-          collapse-tags-tooltip
-          :disabled="loading"
-          ><el-option
-            v-for="province in provinceList"
-            :key="province"
-            :label="province"
-            :value="province"
-        /></el-select>
-      </div>
-      <div>
-        <label class="field-label" for="tcp-isps">运营商 · 默认全部</label
-        ><el-select
-          id="tcp-isps"
-          v-model="filterIsps"
-          aria-label="检测运营商"
-          multiple
-          collapse-tags
-          collapse-tags-tooltip
-          :disabled="loading"
-          ><el-option
-            v-for="isp in ispList"
-            :key="isp"
-            :label="isp"
-            :value="isp"
-        /></el-select>
-      </div>
-      <div>
-        <label class="field-label" for="tcp-port">zstaticcdn 端口</label
-        ><el-select
-          id="tcp-port"
-          v-model="zstaticPort"
-          aria-label="zstaticcdn 端口"
-          :disabled="loading"
-          ><el-option label="443 · HTTPS" value="443" /><el-option
-            label="80 · HTTP"
-            value="80"
-        /></el-select>
-      </div>
-    </section>
-    <div class="tcp-meta" role="status">
-      <StatusDot
-        :state="loading ? 'warn' : targets.length ? 'ok' : 'idle'"
-        :label="loading ? `已返回 ${provinceGroups.length} 个省份` : status"
-      /><span v-if="cachedAt && !loading"
-        >更新于 {{ formatDateTime(cachedAt) }}</span
-      >
-    </div>
-    <div class="tcp-stage" data-enter>
-      <section class="tcp-map-section" aria-labelledby="tcp-map-title">
-        <header class="section-heading">
-          <h2 id="tcp-map-title">可达分布</h2>
-          <span class="muted"
-            >{{ reachable }} / {{ filteredTargets.length }} 个目标可达</span
-          >
-        </header>
-        <div class="tcp-map-wrap" :class="{ 'is-running': loading }">
-          <ChinaTcpMap :groups="provinceGroups" />
-        </div>
-        <div class="latency-legend" aria-label="图例">
-          <span v-for="(label, index) in reachLegend" :key="label"
-            ><i :class="`reach-band-${index}`"></i>{{ label }}</span
-          >
-        </div>
-        <div v-if="zstaticResults.length" class="zstatic-results">
-          <h3>zstaticcdn</h3>
-          <span
-            v-for="item in zstaticResults"
-            :key="item.port"
-            :class="`reach-text-${item.ok ? 0 : 2}`"
-            >端口 {{ item.port }} · {{ item.ok ? "可达" : "不可达" }}</span
-          >
-        </div>
-      </section>
-      <aside class="tcp-rankings" aria-labelledby="ranking-title">
-        <header class="section-heading">
-          <h2 id="ranking-title">按地区</h2>
-          <UiSegmented
-            v-model="ranking"
-            label="排行类型"
-            :options="[
-              { label: '省份', value: 'province' },
-              { label: '运营商', value: 'isp' },
-            ]"
-          />
-        </header>
-        <TransitionGroup
-          appear
-          name="tcp-result"
-          tag="div"
-          class="ranking-list"
-          :css="!reduced"
-          @enter="enter"
-          @leave="leave"
-          ><article
-            v-for="(group, index) in rankGroups"
-            :key="group.name"
-            class="ranking-row"
-            :data-index="index"
-          >
-            <div class="ranking-summary">
-              <span class="rank-index mono">{{
-                String(index + 1).padStart(2, "0")
-              }}</span
-              ><strong>{{ group.name }}</strong
-              ><span
-                class="rank-rtt"
-                :class="`reach-text-${reachBand(group.okCount, group.items.length)}`"
-                >{{
-                  reachLegend[reachBand(group.okCount, group.items.length)]
-                }}</span
-              >
-            </div>
-            <p>{{ group.okCount }} / {{ group.items.length }} 可达</p>
-            <div class="target-cells">
-              <div
-                v-for="item in group.items"
-                :key="`${item.ip}:${item.port}`"
-                class="target-cell"
-              >
-                <span
-                  >{{ ranking === "province" ? item.city : item.province }} ·
-                  {{ ranking === "province" ? item.isp : item.city }}</span
-                ><b :class="`reach-text-${item.ok ? 0 : 2}`">{{
-                  item.ok ? "可达" : "不可达"
-                }}</b>
-              </div>
-            </div>
-          </article></TransitionGroup
-        >
-        <EmptyState
-          v-if="!rankGroups.length"
-          size="section"
-          :title="loading ? '等待省份返回' : '暂无检测结果'"
-          description="地图和列表会随检测结果逐省更新。"
-          ><template #action
-            ><UiButton
-              v-if="!loading"
-              :disabled="!selectedNodeId"
-              @click="startTest"
-              >开始检测</UiButton
-            ></template
-          ></EmptyState
-        >
-      </aside>
-    </div>
-  </div>
-</template>
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { Close, VideoPlay } from "@element-plus/icons-vue";
-import { PageHeader, UiButton, UiSegmented, StatusDot, EmptyState } from "@/ui";
+import { EmptyState, UiButton } from "@/ui";
+import KineticNotice from "@/ui/KineticNotice.vue";
+import { translateFriendlyError } from "@/utils/friendlyError";
 import { getNodeOverview } from "@/api/subcription/node";
 import { getTcp, saveTcp } from "@/utils/nodeTestStorage";
-import { formatDateTime } from "@/utils/date";
-import { usePrefersReducedMotion } from "@/motion";
-import { useResultMotion } from "@/components/node-tests/useNodeTestSession";
 import {
   normalizeTarget,
-  reachBand,
-  reachLegend,
   type ChinaTarget,
 } from "@/components/node-tests/reach";
 import ChinaTcpMap from "@/components/node-tests/ChinaTcpMap.vue";
 import { useTestStream } from "./useTestStream";
+
 defineOptions({ name: "TcpTest" });
+
 type NodeItem = { id: number; name: string; valid: boolean };
-const nodes = ref<NodeItem[]>([]),
-  nodesLoading = ref(true),
-  selectedNodeId = ref<number>();
-const targets = ref<ChinaTarget[]>([]),
-  zstaticResults = ref<{ port: number; ok: boolean }[]>([]);
-const filterProvinces = ref<string[]>([]),
-  filterIsps = ref<string[]>([]),
-  zstaticPort = ref("443");
-const ranking = ref("province"),
-  error = ref(""),
-  status = ref("等待开始"),
-  cachedAt = ref(0);
+interface ZStaticItem {
+  port: number;
+  ok: boolean;
+  rtt?: number;
+}
+
+const nodes = ref<NodeItem[]>([]);
+const nodesLoading = ref(true);
+const selectedNodeId = ref<number>();
+const targets = ref<ChinaTarget[]>([]);
+const zstaticResults = ref<ZStaticItem[]>([]);
+const selectedIsp = ref<string>("all");
+const zstaticPort = ref("443");
+const ranking = ref<"province" | "isp">("province");
+const error = ref("");
+const status = ref("等待开始");
+const cachedAt = ref(0);
+
 const { loading, run, cancel } = useTestStream();
-const reduced = usePrefersReducedMotion();
-const { enter, leave } = useResultMotion();
 let disposed = false;
 let runVersion = 0;
-const provinceList = [
-  "北京",
-  "天津",
-  "上海",
-  "重庆",
-  "河北",
-  "山西",
-  "辽宁",
-  "吉林",
-  "黑龙江",
-  "江苏",
-  "浙江",
-  "安徽",
-  "福建",
-  "江西",
-  "山东",
-  "河南",
-  "湖北",
-  "湖南",
-  "广东",
-  "海南",
-  "四川",
-  "贵州",
-  "云南",
-  "陕西",
-  "甘肃",
-  "青海",
-  "内蒙古",
-  "广西",
-  "西藏",
-  "宁夏",
-  "新疆",
+
+const ispOptions = [
+  { label: "全部运营商", value: "all" },
+  { label: "电信", value: "电信" },
+  { label: "联通", value: "联通" },
+  { label: "移动", value: "移动" },
 ];
-const ispList = ["电信", "联通", "移动"];
+
 const filteredTargets = computed(() =>
   targets.value.filter(
-    (item) =>
-      (!filterProvinces.value.length ||
-        filterProvinces.value.includes(item.province)) &&
-      (!filterIsps.value.length || filterIsps.value.includes(item.isp))
+    (item) => selectedIsp.value === "all" || item.isp === selectedIsp.value
   )
 );
+
 const reachable = computed(
   () => filteredTargets.value.filter((item) => item.ok).length
 );
+
+const validRtts = computed(() =>
+  filteredTargets.value
+    .filter((t) => t.ok && typeof t.rtt === "number" && t.rtt >= 0)
+    .map((t) => t.rtt as number)
+);
+
+const latencyStats = computed(() => {
+  const arr = validRtts.value;
+  if (!arr.length) return { min: null, avg: null, max: null };
+  const min = Math.min(...arr);
+  const max = Math.max(...arr);
+  const avg = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
+  return { min, avg, max };
+});
+
+function rttTone(rtt?: number, ok?: boolean) {
+  if (!ok || (typeof rtt === "number" && rtt < 0)) return "bad";
+  if (typeof rtt !== "number") return "ok";
+  if (rtt <= 80) return "ok";
+  if (rtt <= 160) return "warn";
+  return "slow";
+}
+
+function formatRtt(rtt?: number, ok?: boolean) {
+  if (!ok || (typeof rtt === "number" && rtt < 0)) return "超时";
+  if (typeof rtt === "number") return `${rtt} ms`;
+  return "可达";
+}
+
+function rttBarWidth(rtt?: number | null) {
+  if (rtt === null || rtt === undefined || rtt < 0) return 100;
+  return Math.min(100, Math.max(8, Math.round((rtt / 260) * 100)));
+}
+
 function aggregate(key: "province" | "isp") {
   const groups = new Map<string, ChinaTarget[]>();
   filteredTargets.value.forEach((item) => {
@@ -295,25 +98,35 @@ function aggregate(key: "province" | "isp") {
     groups.set(item[key], items);
   });
   return [...groups].map(([name, items]) => {
+    const okItems = items.filter((i) => i.ok);
+    const rtts = okItems
+      .filter((i) => typeof i.rtt === "number" && i.rtt >= 0)
+      .map((i) => i.rtt as number);
+    const avgRtt = rtts.length
+      ? Math.round(rtts.reduce((a, b) => a + b, 0) / rtts.length)
+      : null;
     return {
       name,
       province: name,
       items,
-      okCount: items.filter((item) => item.ok).length,
+      okCount: okItems.length,
+      avgRtt,
     };
   });
 }
+
 const provinceGroups = computed(() => aggregate("province"));
 const rankGroups = computed(() =>
   (ranking.value === "province" ? provinceGroups.value : aggregate("isp"))
     .slice()
-    // 有问题的地区排前面：可达比例低的在上
-    .sort(
-      (a, b) =>
-        a.okCount / a.items.length - b.okCount / b.items.length ||
-        a.name.localeCompare(b.name, "zh")
-    )
+    .sort((a, b) => {
+      if (a.avgRtt !== null && b.avgRtt !== null) return a.avgRtt - b.avgRtt;
+      if (a.avgRtt !== null) return -1;
+      if (b.avgRtt !== null) return 1;
+      return a.name.localeCompare(b.name, "zh");
+    })
 );
+
 function persist(id: number) {
   if (!targets.value.length && !zstaticResults.value.length) return;
   cachedAt.value = Date.now();
@@ -321,30 +134,31 @@ function persist(id: number) {
     targets: targets.value,
     zstatic: zstaticResults.value,
     zstaticPort: zstaticPort.value,
-    provinces: filterProvinces.value,
-    isps: filterIsps.value,
+    provinces: [],
+    isps: selectedIsp.value === "all" ? [] : [selectedIsp.value],
     updatedAt: cachedAt.value,
     status: status.value,
   });
 }
+
 function restoreCache() {
   const cached = selectedNodeId.value ? getTcp(selectedNodeId.value) : null;
   targets.value = (cached?.targets || []).map(normalizeTarget);
-  zstaticResults.value = (cached?.zstatic || []).map((z: any) => ({
-    port: z.port,
-    ok: typeof z.ok === "boolean" ? z.ok : Number(z.rtt) >= 0,
-  }));
+  zstaticResults.value = (cached?.zstatic || []).map((z: any) => {
+    const rawRtt = typeof z.rtt === "number" ? z.rtt : Number(z.rtt);
+    const hasRtt = Number.isFinite(rawRtt);
+    return {
+      port: z.port,
+      rtt: hasRtt ? rawRtt : undefined,
+      ok: typeof z.ok === "boolean" ? z.ok : hasRtt && rawRtt >= 0,
+    };
+  });
   cachedAt.value = cached?.updatedAt || 0;
-  status.value = cached
-    ? cached.status === "检测中"
-      ? "上次检测未完成"
-      : cached.status || "已恢复缓存"
-    : "等待开始";
+  status.value = cached ? cached.status || "已恢复缓存" : "等待开始";
   error.value = "";
   if (cached?.zstaticPort) zstaticPort.value = cached.zstaticPort;
-  filterProvinces.value = cached?.provinces || [];
-  filterIsps.value = cached?.isps || [];
 }
+
 async function loadNodes() {
   nodesLoading.value = true;
   error.value = "";
@@ -359,11 +173,12 @@ async function loadNodes() {
     selectedNodeId.value ||= nodes.value[0]?.id;
     restoreCache();
   } catch {
-    if (!disposed) error.value = "节点读取失败，请重试。";
+    if (!disposed) error.value = "节点列表读取失败";
   } finally {
     if (!disposed) nodesLoading.value = false;
   }
 }
+
 async function startTest() {
   if (loading.value) return;
   const id = selectedNodeId.value;
@@ -374,16 +189,15 @@ async function startTest() {
   targets.value = [];
   zstaticResults.value = [];
   error.value = "";
-  status.value = "检测中";
+  status.value = "TCP Ping 测速中";
   cachedAt.value = 0;
+
   const payload = new URLSearchParams({
     id: String(id),
     zstatic_port: zstaticPort.value,
   });
-  if (filterProvinces.value.length)
-    payload.append("provinces", filterProvinces.value.join(","));
-  if (filterIsps.value.length)
-    payload.append("isps", filterIsps.value.join(","));
+  if (selectedIsp.value !== "all") payload.append("isps", selectedIsp.value);
+
   const ownVersion = ++runVersion;
   let completed = false;
   try {
@@ -400,14 +214,18 @@ async function startTest() {
         persist(id);
       }
       if (type === "zstatic") {
-        zstaticResults.value = data.zstatic || [];
+        zstaticResults.value = (data.zstatic || []).map((z: any) => ({
+          port: z.port,
+          rtt: typeof z.rtt === "number" ? z.rtt : undefined,
+          ok: typeof z.ok === "boolean" ? z.ok : Number(z.rtt) >= 0,
+        }));
         persist(id);
       }
       if (type === "done") {
         completed = true;
-        status.value = "检测完成";
+        status.value = "测速完成";
         persist(id);
-        ElMessage.success("国内可达性检测完成");
+        ElMessage.success("TCP Ping 测速完成");
       }
     });
     if (
@@ -417,255 +235,583 @@ async function startTest() {
       status.value !== "已停止"
     ) {
       status.value = "连接中断";
-      error.value = "检测结果流提前结束，请重试。";
+      error.value = "测速流提前结束，请重试";
     }
   } catch (cause: any) {
     if (disposed || ownVersion !== runVersion) return;
-    error.value = cause.message || "检测失败";
-    status.value = "检测失败";
-    ElMessage.error(error.value);
+    error.value = cause.message || "测速失败";
+    status.value = "测速失败";
+    ElMessage.warning(translateFriendlyError(error.value).title);
   } finally {
     if (!disposed && ownVersion === runVersion) persist(id);
   }
 }
+
 function abortTest() {
   runVersion++;
   cancel();
   status.value = "已停止";
   if (selectedNodeId.value) persist(selectedNodeId.value);
 }
+
 onMounted(loadNodes);
 onBeforeUnmount(() => {
-  if (status.value === "检测中" && selectedNodeId.value) {
+  if (status.value === "TCP Ping 测速中" && selectedNodeId.value) {
     status.value = "已停止";
     persist(selectedNodeId.value);
   }
   disposed = true;
 });
 </script>
-<style lang="scss" scoped>
-@use "./test-page.scss";
-.tcp-controls {
+
+<template>
+  <div class="tcp-itdog">
+    <!-- Single-Row Control Bar -->
+    <section class="tcp-bar">
+      <div class="node-select-wrap">
+        <el-select
+          v-model="selectedNodeId"
+          filterable
+          :loading="nodesLoading"
+          :disabled="loading || nodesLoading"
+          placeholder="选择待测节点"
+          style="width: 100%"
+          @change="restoreCache"
+        >
+          <el-option
+            v-for="node in nodes"
+            :key="node.id"
+            :label="node.name"
+            :value="node.id"
+          />
+        </el-select>
+      </div>
+
+      <div class="pill-group" role="group" aria-label="运营商筛选">
+        <button
+          v-for="opt in ispOptions"
+          :key="opt.value"
+          type="button"
+          class="seg-pill"
+          :class="{ 'is-active': selectedIsp === opt.value }"
+          :disabled="loading"
+          @click="selectedIsp = opt.value"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
+
+      <div class="pill-group" role="group" aria-label="zstaticcdn 端口">
+        <button
+          type="button"
+          class="seg-pill mono"
+          :class="{ 'is-active': zstaticPort === '443' }"
+          :disabled="loading"
+          @click="zstaticPort = '443'"
+        >
+          :443
+        </button>
+        <button
+          type="button"
+          class="seg-pill mono"
+          :class="{ 'is-active': zstaticPort === '80' }"
+          :disabled="loading"
+          @click="zstaticPort = '80'"
+        >
+          :80
+        </button>
+      </div>
+
+      <div class="bar-actions">
+        <UiButton
+          v-if="loading"
+          variant="danger"
+          :icon="Close"
+          @click="abortTest"
+        >
+          停止
+        </UiButton>
+        <UiButton
+          variant="primary"
+          :icon="VideoPlay"
+          :loading="loading"
+          :disabled="!selectedNodeId || nodesLoading"
+          @click="startTest"
+        >
+          {{ loading ? "TCP Ping 中…" : "开始测速" }}
+        </UiButton>
+      </div>
+    </section>
+
+    <KineticNotice :raw="error" />
+
+    <!-- itdog-Style Live Telemetry KPI Strip -->
+    <dl v-if="filteredTargets.length || zstaticResults.length" class="ping-kpis">
+      <div class="kpi-cell">
+        <dt>最快延迟</dt>
+        <dd class="mono tone-ok">
+          {{ latencyStats.min !== null ? `${latencyStats.min} ms` : "—" }}
+        </dd>
+      </div>
+      <div class="kpi-cell">
+        <dt>平均延迟</dt>
+        <dd class="mono">
+          {{ latencyStats.avg !== null ? `${latencyStats.avg} ms` : "—" }}
+        </dd>
+      </div>
+      <div class="kpi-cell">
+        <dt>最慢延迟</dt>
+        <dd class="mono tone-warn">
+          {{ latencyStats.max !== null ? `${latencyStats.max} ms` : "—" }}
+        </dd>
+      </div>
+      <div class="kpi-cell">
+        <dt>三网可达</dt>
+        <dd class="mono">
+          {{ reachable }} / {{ filteredTargets.length }}
+        </dd>
+      </div>
+      <div class="kpi-cell">
+        <dt>zstaticcdn TCP</dt>
+        <dd class="mono">
+          <template v-if="zstaticResults.length">
+            <span
+              v-for="z in zstaticResults"
+              :key="z.port"
+              :class="`tone-${rttTone(z.rtt, z.ok)}`"
+            >
+              :{{ z.port }} · {{ formatRtt(z.rtt, z.ok) }}
+            </span>
+          </template>
+          <span v-else>—</span>
+        </dd>
+      </div>
+    </dl>
+
+    <!-- Map + itdog-Style Real-Time Latency Board -->
+    <div class="tcp-stage">
+      <section class="map-col">
+        <div class="tcp-map-wrap" :class="{ 'is-running': loading }">
+          <ChinaTcpMap :groups="provinceGroups" />
+        </div>
+        <div class="legend-strip mono">
+          <span><i class="dot-ok"></i>≤ 80ms 极快</span>
+          <span><i class="dot-warn"></i>80–160ms 良好</span>
+          <span><i class="dot-slow"></i>&gt; 160ms 偏高</span>
+          <span><i class="dot-bad"></i>超时 / 不可达</span>
+        </div>
+      </section>
+
+      <aside class="board-col">
+        <div class="board-head">
+          <strong class="board-title">TCP Ping 延迟排行</strong>
+          <div class="pill-group">
+            <button
+              type="button"
+              class="seg-pill"
+              :class="{ 'is-active': ranking === 'province' }"
+              @click="ranking = 'province'"
+            >
+              按省份
+            </button>
+            <button
+              type="button"
+              class="seg-pill"
+              :class="{ 'is-active': ranking === 'isp' }"
+              @click="ranking = 'isp'"
+            >
+              按运营商
+            </button>
+          </div>
+        </div>
+
+        <div v-if="rankGroups.length" class="ping-list">
+          <article
+            v-for="group in rankGroups"
+            :key="group.name"
+            class="ping-row"
+          >
+            <div class="ping-row-head">
+              <strong>{{ group.name }}</strong>
+              <span
+                class="ping-avg mono"
+                :class="`tone-${rttTone(group.avgRtt ?? -1, group.okCount > 0)}`"
+              >
+                {{
+                  group.avgRtt !== null
+                    ? `${group.avgRtt} ms`
+                    : group.okCount > 0
+                      ? "可达"
+                      : "超时"
+                }}
+              </span>
+            </div>
+
+            <div class="ping-bar-track" aria-hidden="true">
+              <i
+                :class="`bar-${rttTone(group.avgRtt ?? -1, group.okCount > 0)}`"
+                :style="{ width: `${rttBarWidth(group.avgRtt)}%` }"
+              ></i>
+            </div>
+
+            <div class="city-chips">
+              <span
+                v-for="item in group.items"
+                :key="`${item.ip}:${item.port}`"
+                class="city-chip mono"
+                :class="`tone-${rttTone(item.rtt, item.ok)}`"
+              >
+                {{ ranking === "province" ? `${item.city} ${item.isp}` : `${item.province} ${item.city}` }}
+                <b>{{ formatRtt(item.rtt, item.ok) }}</b>
+              </span>
+            </div>
+          </article>
+        </div>
+
+        <EmptyState
+          v-else
+          size="section"
+          :title="loading ? '正在逐省返回 TCP Ping 延迟…' : '暂无测速数据'"
+        >
+          <template #action>
+            <UiButton
+              v-if="!loading"
+              variant="primary"
+              :disabled="!selectedNodeId"
+              @click="startTest"
+            >
+              开始测速
+            </UiButton>
+          </template>
+        </EmptyState>
+      </aside>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.tcp-itdog {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1fr) minmax(
-      0,
-      1fr
-    );
-  gap: 16px;
-  margin-bottom: 16px;
-  padding: 14px 16px;
+  gap: 18px;
+}
+
+.tcp-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.node-select-wrap {
+  width: min(280px, 100%);
+  flex: 1 1 220px;
+}
+
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px;
   border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
+  border-radius: 999px;
   background: var(--c-surface);
 }
-.tcp-controls > div {
-  min-width: 0;
-}
-.tcp-meta {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 24px;
+
+.seg-pill {
+  padding: 5px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
   color: var(--c-muted);
-  font-size: 14px;
+  font-size: 12px;
+  cursor: pointer;
 }
+
+.seg-pill.is-active {
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
+}
+
+.bar-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.inline-error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-bad);
+}
+
+/* itdog KPI Strip */
+.ping-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin: 0;
+  padding: 14px 0;
+  border-top: 1px solid var(--c-line);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.kpi-cell {
+  display: grid;
+  gap: 4px;
+  padding: 0 16px;
+  border-left: 1px solid var(--c-line);
+}
+
+.kpi-cell:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.kpi-cell dt {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.kpi-cell dd {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--c-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.tone-ok {
+  color: var(--c-ok);
+}
+.tone-warn {
+  color: var(--c-warn);
+}
+.tone-slow {
+  color: #ea580c;
+}
+.tone-bad {
+  color: var(--c-bad);
+}
+
+/* Main Stage */
 .tcp-stage {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  grid-template-columns: minmax(0, 6.5fr) minmax(0, 5.5fr);
   gap: 24px;
+  align-items: start;
 }
-.tcp-map-section,
-.tcp-rankings {
-  min-width: 0;
+
+.map-col {
+  display: grid;
+  gap: 12px;
 }
-.muted {
-  color: var(--c-muted);
-  font-size: 14px;
-}
+
 .tcp-map-wrap {
   position: relative;
   overflow: hidden;
-  border-radius: 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 20px;
+  background: var(--c-surface);
 }
+
 .tcp-map-wrap :deep(.china-map) {
-  height: 520px;
+  height: 480px;
 }
+
 .tcp-map-wrap.is-running::after {
   content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 25%;
+  inset: 0;
+  width: 26%;
   pointer-events: none;
   background: linear-gradient(
     90deg,
     transparent,
-    color-mix(in srgb, var(--c-data) 8%, transparent),
+    rgb(21 184 90 / 0.14),
     transparent
   );
-  animation: tcp-scan 2.4s linear infinite;
+  animation: tcpScan 2s linear infinite;
 }
-.latency-legend {
+
+.legend-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 16px;
+  gap: 14px;
+  font-size: 11.5px;
   color: var(--c-muted);
-  font: 400 14px var(--font-mono);
 }
-.latency-legend > span {
-  display: flex;
+
+.legend-strip span {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
-.latency-legend i {
-  display: inline-block;
-  width: 16px;
-  height: 2px;
+
+.legend-strip i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
 }
-.reach-band-0 {
+
+.dot-ok {
   background: var(--c-ok);
 }
-.reach-band-1 {
+.dot-warn {
   background: var(--c-warn);
 }
-.reach-band-2 {
+.dot-slow {
+  background: #ea580c;
+}
+.dot-bad {
   background: var(--c-bad);
 }
-.reach-text-0 {
-  color: var(--c-ok);
+
+/* itdog-style Latency Board */
+.board-col {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
 }
-.reach-text-1 {
-  color: var(--c-warn-ink);
+
+.board-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
-.reach-text-2 {
-  color: var(--c-bad);
+
+.board-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-ink);
 }
-.ranking-list {
-  position: relative;
-  max-height: 680px;
-  overflow: auto;
-  padding-right: 8px;
+
+.ping-list {
+  display: grid;
+  max-height: 520px;
+  overflow-y: auto;
+  border-top: 1px solid var(--c-line);
+  padding-right: 4px;
 }
-.ranking-row {
-  padding: 16px 0;
+
+.ping-row {
+  display: grid;
+  gap: 8px;
+  padding: 13px 0;
   border-bottom: 1px solid var(--c-line);
 }
-.ranking-row:first-child {
-  padding-top: 0;
-}
-.ranking-summary {
+
+.ping-row-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
 }
-.rank-index {
-  color: var(--c-muted);
+
+.ping-row-head strong {
   font-size: 14px;
-}
-.ranking-summary strong {
-  font-size: 15px;
   font-weight: 500;
+  color: var(--c-ink);
 }
-.rank-rtt {
-  margin-left: auto;
-  font-size: 15px;
+
+.ping-avg {
+  font-size: 13.5px;
+  font-weight: 600;
 }
-.ranking-row p {
-  color: var(--c-muted);
-  font-size: 14px;
-  margin: 8px 0 12px 34px;
+
+.ping-bar-track {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--c-line);
+  overflow: hidden;
 }
-.target-cells {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
+
+.ping-bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 360ms var(--ease-out);
 }
-.target-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 8px 0;
-  font-size: 14px;
-  overflow-wrap: anywhere;
+
+.bar-ok {
+  background: var(--c-ok);
 }
-.target-cell > span {
-  color: var(--c-muted);
-  font-size: 14px;
+.bar-warn {
+  background: var(--c-warn);
 }
-.target-cell b {
-  font-weight: 400;
-  transition: color var(--duration-medium);
+.bar-slow {
+  background: #ea580c;
 }
-.zstatic-results {
+.bar-bad {
+  background: var(--c-bad);
+  opacity: 0.4;
+}
+
+.city-chips {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+}
+
+.city-chip {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-  font-size: 14px;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-surface);
+  font-size: 11px;
+  color: var(--c-muted);
 }
-.zstatic-results h3 {
-  font-size: 14px;
-  margin: 0;
+
+.city-chip b {
+  font-weight: 600;
+  color: inherit;
 }
-.tcp-result-move {
-  transition: transform var(--duration-slow) var(--ease-spring);
+
+.city-chip.tone-ok b {
+  color: var(--c-ok);
 }
-.tcp-result-leave-active {
-  position: absolute;
-  width: 100%;
+.city-chip.tone-warn b {
+  color: var(--c-warn);
 }
-@keyframes tcp-scan {
+.city-chip.tone-slow b {
+  color: #ea580c;
+}
+.city-chip.tone-bad b {
+  color: var(--c-bad);
+}
+
+@keyframes tcpScan {
   from {
     transform: translateX(-100%);
   }
   to {
-    transform: translateX(500%);
+    transform: translateX(420%);
   }
 }
-@media (max-width: 1023px) {
-  .tcp-controls {
-    grid-template-columns: 1fr 1fr;
-  }
-  .tcp-stage {
-    gap: 16px;
-  }
-}
-@media (max-width: 767px) {
-  .tcp-controls {
-    grid-template-columns: 1fr;
+
+@media (max-width: 960px) {
+  .ping-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
+  .kpi-cell {
+    padding: 0;
+    border-left: 0;
+  }
   .tcp-stage {
     grid-template-columns: 1fr;
-    gap: 24px;
   }
   .tcp-map-wrap :deep(.china-map) {
-    height: 330px;
-  }
-  .tcp-meta {
-    margin-bottom: 20px;
-  }
-  .ranking-list {
-    max-height: none;
-    padding: 0;
+    height: 340px;
   }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .tcp-map-wrap.is-running::after {
     display: none;
   }
-  .tcp-result-move {
-    transition: none;
-  }
-}
-:global(html[data-motion="reduced"]) .tcp-map-wrap.is-running::after {
-  display: none;
-}
-:global(html[data-motion="reduced"]) .tcp-result-move {
-  transition: none;
 }
 </style>

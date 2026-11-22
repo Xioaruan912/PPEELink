@@ -30,7 +30,7 @@ const steps = [
     </div>
 
     <div class="copy">
-      <h2 id="onboard-title">接入第一台服务器</h2>
+      <h2 id="onboard-title">接入第一个代理节点</h2>
       <ol class="steps">
         <li v-for="(s, i) in steps" :key="s.title" :style="{ '--i': i }">
           <span class="num mono">0{{ i + 1 }}</span>
@@ -46,7 +46,7 @@ const steps = [
       <button type="button" class="choice is-primary" @click="emit('add')">
         <IconCloud class="c-icon" />
         <span
-          ><strong>添加远程服务器</strong
+          ><strong>添加代理节点</strong
           ><small>在 VPS 上一行命令安装 agent</small></span
         >
         <IconArrow class="c-go" />

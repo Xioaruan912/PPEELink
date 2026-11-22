@@ -6,6 +6,7 @@ export interface ChinaTarget {
   ip: string;
   port: number;
   ok: boolean;
+  rtt?: number;
   lat: number;
   lng: number;
 }
@@ -17,9 +18,12 @@ export interface ProvinceGroup {
 
 /** 兼容旧缓存：早期结果只有 rtt（-1 表示失败）。 */
 export function normalizeTarget(item: any): ChinaTarget {
+  const rawRtt = typeof item.rtt === "number" ? item.rtt : Number(item.rtt);
+  const hasRtt = Number.isFinite(rawRtt);
   return {
     ...item,
-    ok: typeof item.ok === "boolean" ? item.ok : Number(item.rtt) >= 0,
+    rtt: hasRtt ? rawRtt : undefined,
+    ok: typeof item.ok === "boolean" ? item.ok : hasRtt && rawRtt >= 0,
   };
 }
 

@@ -57,11 +57,11 @@ test("groups permitted features into 5 intent-driven domains while preserving ev
   const organized = organizeNavigation(original);
   assert.deepEqual(paths(organized).sort(), paths(original).sort());
   assert.equal(new Set(paths(organized)).size, paths(original).length);
-  assert.equal(organized[0].label, "分发中心");
+  assert.equal(organized[0].label, "订阅");
   assert.equal(organized[0].path, "/subcription/subs");
   assert.equal(organized[0].children[0].label, "订阅链接");
   assert.deepEqual(
-    paths([organized.find((item) => item.label === "算力与网络")]),
+    paths([organized.find((item) => item.label === "服务器")]),
     [
       "/subcription/servers",
       "/subcription/relays",
@@ -70,7 +70,7 @@ test("groups permitted features into 5 intent-driven domains while preserving ev
     ]
   );
   assert.deepEqual(
-    paths([organized.find((item) => item.label === "诊断实验室")]),
+    paths([organized.find((item) => item.label === "网络测试")]),
     [
       "/subcription/diagnostic",
       "/test/index",
@@ -79,7 +79,7 @@ test("groups permitted features into 5 intent-driven domains while preserving ev
     ]
   );
   assert.deepEqual(
-    paths([organized.find((item) => item.label === "态势总览")]),
+    paths([organized.find((item) => item.label === "概览")]),
     ["/dashboard", "/monitor/website"]
   );
 });
@@ -117,12 +117,12 @@ test("diagnostic belongs to diagnostics lab and keeps its compatible URL", () =>
     ])
   );
   assert.equal(items.length, 2);
-  assert.equal(items[0].label, "分发中心");
+  assert.equal(items[0].label, "订阅");
   assert.deepEqual(paths([items[0]]), [
     "/subcription/subs",
     "/subcription/nodes",
   ]);
-  assert.equal(items[1].label, "诊断实验室");
+  assert.equal(items[1].label, "网络测试");
   assert.deepEqual(paths([items[1]]), ["/subcription/diagnostic"]);
 });
 
@@ -135,8 +135,33 @@ test("path and throughput are both children of diagnostics lab", () => {
       ]),
     ])
   );
-  assert.deepEqual(paths([items.find((i) => i.label === "诊断实验室")]), [
+  assert.deepEqual(paths([items.find((i) => i.label === "网络测试")]), [
     "/network/traceroute",
     "/network/throughput",
+  ]);
+});
+
+test("templates are split into 模板分组 while users and settings remain in 系统设置", () => {
+  const items = organizeNavigation(
+    buildNavigation([
+      route("/template", "template", [
+        route("builder", "builder"),
+        route("list", "list"),
+        route("rules", "rules"),
+      ]),
+      route("/system", "system", [
+        route("users", "users"),
+        route("settings", "settings"),
+      ]),
+    ])
+  );
+  assert.deepEqual(paths([items.find((i) => i.label === "模板分组")]), [
+    "/template/builder",
+    "/template/list",
+    "/template/rules",
+  ]);
+  assert.deepEqual(paths([items.find((i) => i.label === "系统设置")]), [
+    "/system/users",
+    "/system/settings",
   ]);
 });

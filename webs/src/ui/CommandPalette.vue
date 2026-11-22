@@ -171,11 +171,13 @@ onBeforeUnmount(() => window.removeEventListener("keydown", shortcut));
   display: flex;
   align-items: center;
   gap: 12px;
-  padding-bottom: 16px;
+  padding: 2px 0 14px;
   border-bottom: 1px solid var(--c-line);
 }
 .command-search svg {
-  width: 20px;
+  width: 18px;
+  height: 18px;
+  color: var(--c-subtle);
   flex: 0 0 auto;
 }
 .command-search input {
@@ -183,52 +185,98 @@ onBeforeUnmount(() => window.removeEventListener("keydown", shortcut));
   min-width: 0;
   min-height: 36px;
   border: 0;
+  outline: none;
   color: var(--c-ink);
   background: transparent;
-  font-size: 14px;
+  font-size: 15px;
+  letter-spacing: -0.01em;
 }
 .command-search input::placeholder {
-  color: var(--c-muted);
+  color: var(--c-subtle);
 }
 kbd {
+  padding: 3px 7px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-surface-2);
   color: var(--c-muted);
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1;
 }
 .command-results {
   list-style: none;
-  padding: 8px 0;
+  padding: 10px 0 4px;
   margin: 0;
-  max-height: 45dvh;
+  max-height: 46dvh;
   overflow-y: auto;
+  display: grid;
+  gap: 2px;
 }
 .command-results button {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 10px 12px;
-  min-height: 56px;
-  border: 0;
-  border-radius: var(--radius-control);
+  padding: 10px 14px;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: 10px;
   background: transparent;
+  color: var(--c-ink);
+  cursor: pointer;
   text-align: left;
+  transition:
+    background var(--t-fast) var(--ease-expo),
+    border-color var(--t-fast) var(--ease-expo),
+    transform var(--t-fast) var(--ease-expo);
 }
 .command-results button.selected {
-  background: var(--c-selected);
+  background: var(--c-surface-2);
+  border-color: var(--c-line);
+  transform: translateX(2px);
+}
+.command-icon {
+  width: 17px;
+  height: 17px;
+  color: var(--c-muted);
+  flex: 0 0 auto;
+}
+.command-results button.selected .command-icon {
+  color: var(--c-ink);
 }
 .command-results button > span:first-of-type {
   flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+.command-results button > span:last-of-type {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--c-subtle);
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease-expo);
+}
+.command-results button.selected > span:last-of-type {
+  opacity: 1;
+  color: var(--c-signal);
 }
 .command-results small {
   display: block;
+  margin-top: 2px;
   color: var(--c-muted);
-  font-size: 14px;
+  font-size: 11.5px;
+  font-weight: 400;
 }
 .command-help {
   display: flex;
   gap: 16px;
-  color: var(--c-muted);
-  font-size: 14px;
+  color: var(--c-subtle);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
   margin: 0;
 }
 </style>

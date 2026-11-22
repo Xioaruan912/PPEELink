@@ -60,11 +60,9 @@
             tabindex="0"
             role="button"
             :aria-label="`${point.name}，${point.country || '未识别地区'}${point.server ? '，' + point.server : ''}`"
-            @mouseenter="selectedIndex = index"
-            @focus="selectedIndex = index"
-            @click="selectedIndex = index"
-            @keydown.enter.prevent="selectedIndex = index"
-            @keydown.space.stop.prevent="selectedIndex = index"
+            @click.stop="choosePoint(index)"
+            @keydown.enter.prevent="choosePoint(index)"
+            @keydown.space.stop.prevent="choosePoint(index)"
           >
             <title>
               {{ point.name }} / {{ point.country || "未识别地区" }} /
@@ -74,11 +72,10 @@
               class="node-hit"
               :cx="point.x"
               :cy="point.y"
-              r="1"
-              vector-effect="non-scaling-stroke"
+              r="15"
             />
-            <circle class="node-halo" :cx="point.x" :cy="point.y" r="9" />
-            <circle class="node-mark" :cx="point.x" :cy="point.y" r="3.5" />
+            <circle class="node-halo" :cx="point.x" :cy="point.y" r="10" />
+            <circle class="node-mark" :cx="point.x" :cy="point.y" r="4.2" />
           </g>
         </g>
       </svg>
@@ -227,8 +224,12 @@ interface ProjectedPoint extends MapPoint {
 interface WorldFeature {
   geometry: { type: string; coordinates: number[][][] | number[][][][] };
 }
-const props = defineProps<{ points?: MapPoint[]; loading?: boolean }>();
-const emit = defineEmits<{ refresh: [] }>();
+const props = defineProps<{
+  points?: MapPoint[];
+  loading?: boolean;
+  selectedName?: string;
+}>();
+const emit = defineEmits<{ refresh: []; select: [point: MapPoint | undefined] }>();
 const ownPoints = ref<MapPoint[]>([]);
 const ownLoading = ref(false);
 const busy = computed(() => props.loading || ownLoading.value);
@@ -260,9 +261,26 @@ const projected = computed(() => {
     })
   );
 });
-const selectedIndex = ref(0);
-const selected = computed(
-  () => projected.value[selectedIndex.value] || projected.value[0]
+const selectedIndex = ref(-1);
+const selected = computed(() =>
+  selectedIndex.value >= 0 ? projected.value[selectedIndex.value] : undefined
+);
+function choosePoint(index: number) {
+  selectedIndex.value = index;
+  const pt = projected.value[index];
+  if (pt) emit("select", pt);
+}
+watch(
+  () => props.selectedName,
+  (name) => {
+    if (!name) {
+      selectedIndex.value = -1;
+      return;
+    }
+    const idx = projected.value.findIndex((p) => p.name === name);
+    selectedIndex.value = idx;
+  },
+  { immediate: true }
 );
 const landPath = ref("");
 const geographyLoading = ref(true);

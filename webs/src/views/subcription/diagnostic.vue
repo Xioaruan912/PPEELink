@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from "vue";
 import { useRoute } from "vue-router";
-import DiagnosticRoute from "./DiagnosticRoute.vue";
+import gsap from "gsap";
 import request from "@/utils/request";
 import {
   runDiagnosticQueue,
@@ -9,16 +9,34 @@ import {
   canOpenDiagnosticDetails,
 } from "./diagnosticBatch";
 import { getNodes } from "@/api/subcription/node";
-import { UiButton, UiSegmented, UiDrawer } from "@/ui";
+import { UiButton, UiDrawer } from "@/ui";
+import KineticNotice from "@/ui/KineticNotice.vue";
+import {
+  Check,
+  Close,
+  CopyDocument,
+  QuestionFilled,
+  VideoPlay,
+} from "@element-plus/icons-vue";
+
+defineOptions({ name: "SubcriptionDiagnostic" });
+
 const route = useRoute();
-const mode = ref("node"),
-  selected = ref<number>(),
-  link = ref(""),
-  target = ref("cloudflare");
+const rootEl = ref<HTMLElement>();
+let gsapCtx: gsap.Context | null = null;
+
+const mode = ref<"node" | "link">("node");
+const selected = ref<number>();
+const link = ref("");
+const target = ref("cloudflare");
 const nodes = ref<{ ID: number; Name: string; Link: string }[]>([]);
-const loading = ref(false),
-  listError = ref(""),
-  error = ref("");
+const loading = ref(false);
+const listError = ref("");
+const error = ref("");
+const showRawLogs = ref(false);
+const scanStep = ref(0);
+let scanTimer: ReturnType<typeof setInterval> | null = null;
+
 interface Step {
   key: string;
   title: string;
@@ -36,8 +54,10 @@ interface Result {
   checkedAt: string;
   route?: { name: string; protocol: string; transport: string }[];
 }
+
 const result = ref<Result | null>(null);
 let controller: AbortController | undefined;
+
 type BatchStatus =
   | "waiting"
   | "running"
@@ -47,6 +67,7 @@ type BatchStatus =
   | "skipped"
   | "cancelled"
   | "error";
+
 interface BatchRow {
   id: number;
   name: string;
@@ -54,32 +75,156 @@ interface BatchRow {
   note: string;
   result?: Result;
 }
+
 const batchRows = ref<BatchRow[]>([]);
 const batchRunning = ref(false);
 const detailVisible = ref(false);
 const detailRow = ref<BatchRow | null>(null);
 const detailResult = computed(() => detailRow.value?.result);
+
+const targetOptions = [
+  { label: "Cloudflare", value: "cloudflare" },
+  { label: "Google", value: "google" },
+  { label: "GitHub", value: "github" },
+];
+
+const defaultHops = [
+  { key: "config", label: "面板出发" },
+  { key: "dns", label: "DNS 解析" },
+  { key: "transport", label: "入口连通" },
+  { key: "tunnel", label: "协议握手" },
+  { key: "https", label: "目标出口" },
+];
+
+interface VisualHop {
+  key: string;
+  label: string;
+  status: "idle" | "scanning" | "passed" | "failed" | "unknown";
+  millis?: number;
+  detail?: string;
+}
+
+function shortHopLabel(step: Step, idx: number): string {
+  const t = step.title || "";
+  if (/内核|Xray/i.test(t) || step.key === "kernel") return "内核就绪";
+  if (/配置|解析参数/.test(t) || step.key === "config" || step.key === "parse")
+    return "节点配置";
+  if (/DNS/i.test(t) || step.key === "dns") return "DNS 解析";
+  if (/可达|入口|TCP|UDP/i.test(t) || step.key === "transport") return "入口连通";
+  if (/握手|认证|出口/i.test(t) || step.key === "tunnel") return "协议握手";
+  if (/HTTPS|目标/i.test(t) || step.key === "https") return "目标出口";
+  return defaultHops[idx]?.label || t.slice(0, 6);
+}
+
+function buildVisualHops(r: Result | null | undefined, scanning: boolean): VisualHop[] {
+  if (scanning) {
+    return defaultHops.map((h, i) => ({
+      key: h.key,
+      label: h.label,
+      status:
+        i < scanStep.value
+          ? "passed"
+          : i === scanStep.value
+            ? "scanning"
+            : "idle",
+    }));
+  }
+  if (!r || !r.steps?.length) {
+    return defaultHops.map((h) => ({
+      key: h.key,
+      label: h.label,
+      status: "idle",
+    }));
+  }
+  return r.steps.map((s, idx) => ({
+    key: s.key || `step-${idx}`,
+    label: shortHopLabel(s, idx),
+    status:
+      s.status === "passed"
+        ? "passed"
+        : s.status === "failed"
+          ? "failed"
+          : "unknown",
+    millis: s.millis,
+    detail: s.detail,
+  }));
+}
+
+const activeHops = computed(() =>
+  buildVisualHops(result.value, loading.value && !batchRunning.value)
+);
+
+const drawerHops = computed(() => buildVisualHops(detailResult.value, false));
+
+const activeVerdict = computed(() => {
+  if (loading.value && !batchRunning.value) {
+    return { state: "scanning", text: "正在从面板逐跳探测链路…" };
+  }
+  if (!result.value) {
+    return { state: "idle", text: "选择节点后点击开始诊断" };
+  }
+  const v = diagnosticVerdict(result.value);
+  const firstFailed = activeHops.value.find((h) => h.status === "failed");
+  const firstUnknown = activeHops.value.find((h) => h.status === "unknown");
+  const firstBad = firstFailed || firstUnknown;
+  if (v === "passed") {
+    return { state: "passed", text: "全链路畅通" };
+  }
+  if (v === "failed") {
+    return {
+      state: "failed",
+      text: firstBad ? `故障点：${firstBad.label}` : "链路异常",
+    };
+  }
+  return {
+    state: "unknown",
+    text: firstBad ? `卡顿 / 待确认：${firstBad.label}` : "链路待确认",
+  };
+});
+
+function totalMillis(r: Result | null | undefined): number {
+  if (!r?.steps?.length) return 0;
+  return r.steps.reduce((acc, s) => acc + (s.millis || 0), 0);
+}
+
+function startScanAnimation() {
+  stopScanAnimation();
+  scanStep.value = 0;
+  scanTimer = setInterval(() => {
+    scanStep.value = (scanStep.value + 1) % defaultHops.length;
+  }, 1100);
+}
+
+function stopScanAnimation() {
+  if (scanTimer) {
+    clearInterval(scanTimer);
+    scanTimer = null;
+  }
+}
+
 function openDetails(row: BatchRow) {
   if (!canOpenDiagnosticDetails(row)) return;
   detailRow.value = { ...row };
   detailVisible.value = true;
 }
+
 const batchStatusText: Record<BatchStatus, string> = {
   waiting: "等待中",
-  running: "检测中",
-  passed: "通过",
-  failed: "失败",
+  running: "探测中",
+  passed: "畅通",
+  failed: "故障",
   unknown: "待确认",
   skipped: "暂不支持",
   cancelled: "已取消",
-  error: "请求错误",
+  error: "异常",
 };
+
 const batchDone = computed(
   () =>
-    batchRows.value.filter(
-      (row) => !["waiting", "running"].includes(row.status)
-    ).length
+    batchRows.value.filter((row) => !["waiting", "running"].includes(row.status))
+      .length
 );
+
 const batchCounts = computed(() => ({
   passed: batchRows.value.filter((r) => r.status === "passed").length,
   failed: batchRows.value.filter((r) => r.status === "failed").length,
@@ -88,6 +233,62 @@ const batchCounts = computed(() => ({
   errors: batchRows.value.filter((r) => r.status === "error").length,
   cancelled: batchRows.value.filter((r) => r.status === "cancelled").length,
 }));
+
+const supported = computed(() =>
+  nodes.value.filter((n) => /^(vless|hy2|hysteria2):\/\//i.test(n.Link))
+);
+
+async function load() {
+  listError.value = "";
+  try {
+    const response = await getNodes(true);
+    nodes.value = Array.isArray(response.data) ? response.data : [];
+    if (!selected.value && supported.value.length) {
+      selected.value = supported.value[0].ID;
+    }
+  } catch {
+    listError.value = "节点列表加载失败";
+  }
+}
+
+async function run() {
+  if (loading.value) return;
+  error.value = "";
+  result.value = null;
+  batchRows.value = [];
+  showRawLogs.value = false;
+  if (mode.value === "node" ? !selected.value : !link.value.trim()) {
+    error.value = "请选择节点或输入 Reality / HY2 链接";
+    return;
+  }
+  loading.value = true;
+  startScanAnimation();
+  controller = new AbortController();
+  try {
+    const response = await request({
+      url: "/api/v1/nodes/diagnose",
+      method: "post",
+      timeout: 48000,
+      signal: controller.signal,
+      data: {
+        id: mode.value === "node" ? selected.value : 0,
+        link: mode.value === "link" ? link.value.trim() : "",
+        target: target.value,
+      },
+    });
+    result.value = response.data;
+  } catch (e: any) {
+    error.value =
+      e?.code === "ERR_CANCELED"
+        ? "已取消诊断"
+        : e?.message || "诊断请求失败";
+  } finally {
+    stopScanAnimation();
+    loading.value = false;
+    controller = undefined;
+  }
+}
+
 async function runAll() {
   if (loading.value || !nodes.value.length) return;
   loading.value = true;
@@ -108,19 +309,19 @@ async function runAll() {
   const links = new Map(nodes.value.map((n) => [n.ID, n.Link]));
   const queue = batchRows.value.filter((row) => {
     const uri = links.get(row.id) || "";
-    let supported = false;
+    let ok = false;
     try {
       const u = new URL(uri);
-      supported =
+      ok =
         ["hy2:", "hysteria2:"].includes(u.protocol) ||
         (u.protocol === "vless:" &&
           u.searchParams.get("security") === "reality");
     } catch {}
-    if (!supported) {
+    if (!ok) {
       row.status = "skipped";
-      row.note = "当前深度诊断支持 Reality 和 HY2；此协议未发送诊断请求。";
+      row.note = "协议暂不支持";
     }
-    return supported;
+    return ok;
   });
   try {
     await runDiagnosticQueue(
@@ -139,7 +340,7 @@ async function runAll() {
         signal: abort.signal,
         onStart(row) {
           row.status = "running";
-          row.note = "正在检查配置、网络与代理通路…";
+          row.note = "链路探测中…";
         },
         onResult(row, data) {
           row.result = data;
@@ -148,11 +349,11 @@ async function runAll() {
         },
         onError(row, e: any) {
           row.status = "error";
-          row.note = e?.message || "诊断请求失败，可单独重试";
+          row.note = e?.message || "请求失败";
         },
         onCancel(row) {
           row.status = "cancelled";
-          row.note = "未完成的检测已取消";
+          row.note = "已取消";
         },
       }
     );
@@ -163,64 +364,12 @@ async function runAll() {
   }
 }
 
-const supported = computed(() =>
-  nodes.value.filter((n) => /^(vless|hy2|hysteria2):\/\//i.test(n.Link))
-);
-async function load() {
-  listError.value = "";
-  try {
-    const response = await getNodes(true);
-    nodes.value = Array.isArray(response.data) ? response.data : [];
-  } catch {
-    listError.value = "节点加载失败，请重试，或切换到粘贴链接。";
-  }
-}
-onMounted(async () => {
-  await load();
-  const id = Number(route.query.id);
-  if (Number.isInteger(id) && nodes.value.some((n) => n.ID === id)) {
-    selected.value = id;
-  }
-});
-onBeforeUnmount(() => controller?.abort());
-async function run() {
-  if (loading.value) return;
-  error.value = "";
-  result.value = null;
-  if (mode.value === "node" ? !selected.value : !link.value.trim()) {
-    error.value = "请选择节点或填写完整的 Reality / HY2 链接。";
-    return;
-  }
-  loading.value = true;
-  controller = new AbortController();
-  try {
-    const response = await request({
-      url: "/api/v1/nodes/diagnose",
-      method: "post",
-      timeout: 48000,
-      signal: controller.signal,
-      data: {
-        id: mode.value === "node" ? selected.value : 0,
-        link: mode.value === "link" ? link.value.trim() : "",
-        target: target.value,
-      },
-    });
-    result.value = response.data;
-  } catch (e: any) {
-    error.value =
-      e?.code === "ERR_CANCELED"
-        ? "诊断已取消。"
-        : e?.message || "诊断请求失败，请重试。";
-  } finally {
-    loading.value = false;
-    controller = undefined;
-  }
-}
 const statusText: Record<string, string> = {
   passed: "通过",
-  failed: "失败",
+  failed: "故障",
   unknown: "待确认",
 };
+
 function copyReport(report?: Result) {
   const r = report || result.value;
   if (!r) return;
@@ -228,432 +377,942 @@ function copyReport(report?: Result) {
     .writeText(
       [
         r.summary,
-        `检测位置：${r.perspective}`,
-        ...(r.route && r.route.length > 1
-          ? [
-              `中转路径：面板 → ${r.route.map((h) => h.name).join(" → ")} → 目标网站`,
-            ]
-          : []),
         `${r.protocol} / ${r.transport}`,
         ...r.steps.map(
-          (s) => `${s.title}：${statusText[s.status]} · ${s.detail}`
+          (s) => `${s.title}：${statusText[s.status] || s.status} (${s.millis} ms) · ${s.detail}`
         ),
-        ...r.advice,
       ].join("\n")
     )
-    .then(() => ElMessage.success("已复制不含节点密码的诊断结果"))
-    .catch(() => ElMessage.error("复制失败，请手动选择结果"));
+    .then(() => ElMessage.success("已复制诊断摘要"))
+    .catch(() => ElMessage.error("复制失败"));
 }
+
+onMounted(async () => {
+  await load();
+  const id = Number(route.query.id);
+  if (Number.isInteger(id) && nodes.value.some((n) => n.ID === id)) {
+    selected.value = id;
+  }
+  if (rootEl.value) {
+    gsapCtx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+        tl.from("[data-title-reveal]", {
+          yPercent: 108,
+          duration: 0.62,
+          clearProps: "transform",
+        }).from(
+          "[data-top-rule]",
+          {
+            scaleX: 0,
+            duration: 0.68,
+            clearProps: "transform",
+          },
+          "-=0.45"
+        );
+      });
+    }, rootEl.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  stopScanAnimation();
+  controller?.abort();
+  gsapCtx?.revert();
+  gsapCtx = null;
+});
 </script>
+
 <template>
-  <main class="diagnostic-page">
-    <header>
-      <div>
-        <h1>节点一键诊断</h1>
-        <p>逐步检查 Reality / HY2，确认连接在哪一环失败。</p>
-      </div>
-      <span class="perspective">从面板服务器检测</span>
-    </header>
-    <section class="diagnostic-form">
-      <UiSegmented
-        v-model="mode"
-        class="source-switch"
-        label="节点来源"
-        :options="[
-          { label: '选择已有节点', value: 'node' },
-          { label: '粘贴节点链接', value: 'link' },
-        ]"
-      />
-      <el-form label-position="top" @submit.prevent="run">
-        <el-form-item v-if="mode === 'node'" label="需要检查的节点"
-          ><el-select
-            v-model="selected"
-            filterable
-            placeholder="搜索 Reality / HY2 节点"
-            style="width: 100%"
-            ><el-option
-              v-for="n in supported"
-              :key="n.ID"
-              :value="n.ID"
-              :label="n.Name"
-          /></el-select>
-          <p v-if="listError" role="alert">
-            {{ listError }} <UiButton @click="load">重试</UiButton>
-          </p></el-form-item
-        >
-        <el-form-item v-else label="节点分享链接"
-          ><el-input
-            v-model="link"
-            type="textarea"
-            :rows="3"
-            maxlength="16384"
-            placeholder="vless://… 或 hy2://…"
-          /><small
-            >链接仅用于本次诊断，结果中不显示密码。请勿发送到公开场所。</small
-          ></el-form-item
-        >
-        <el-form-item label="通过代理访问的目标"
-          ><el-select v-model="target"
-            ><el-option label="Cloudflare" value="cloudflare" /><el-option
-              label="Google"
-              value="google" /><el-option
-              label="GitHub"
-              value="github" /></el-select
-        ></el-form-item>
-        <div class="run-actions">
-          <UiButton variant="primary" :loading="loading" @click="run">{{
-            loading
-              ? batchRunning
-                ? "批量检测中…"
-                : "正在逐步检查…"
-              : "开始诊断"
-          }}</UiButton>
-          <UiButton :disabled="loading || !nodes.length" @click="runAll"
-            >检测全部节点（{{ nodes.length }}）</UiButton
-          >
-          <UiButton v-if="loading" @click="controller?.abort()">取消</UiButton>
+  <main ref="rootEl" class="diag-gallery">
+    <!-- Pure Gallery Masthead -->
+    <header class="diag-masthead">
+      <div class="masthead-left">
+        <div class="title-mask">
+          <h1 class="gallery-title" data-title-reveal>节点一键诊断</h1>
         </div>
-      </el-form>
-      <p class="context-note">
-        支持 Reality TCP / Vision、XHTTP 等传输，以及
-        HY2；已有节点会沿保存的中转路径检测（最多 4 跳）。HY2 使用 UDP，TCP
-        端口不通不代表 HY2 不可用。诊断约需 10–40 秒；首次准备内核可能需重试。
-      </p>
-      <p v-if="error" class="failure" role="alert">{{ error }}</p>
+      </div>
+
+      <div class="masthead-actions">
+        <UiButton
+          v-if="loading"
+          variant="ghost"
+          @click="controller?.abort()"
+        >
+          取消检测
+        </UiButton>
+        <UiButton
+          variant="ghost"
+          :disabled="loading || !nodes.length"
+          @click="runAll"
+        >
+          全部检测 ({{ nodes.length }})
+        </UiButton>
+        <UiButton
+          variant="primary"
+          :icon="VideoPlay"
+          :loading="loading && !batchRunning"
+          @click="run"
+        >
+          {{ loading && !batchRunning ? "探测中…" : "开始诊断" }}
+        </UiButton>
+      </div>
+    </header>
+
+    <span class="top-rule" data-top-rule aria-hidden="true"></span>
+
+    <!-- Compact Single-Strip Control Bar -->
+    <section class="control-strip">
+      <div class="pill-group" role="group" aria-label="节点来源">
+        <button
+          type="button"
+          class="seg-pill"
+          :class="{ 'is-active': mode === 'node' }"
+          @click="mode = 'node'"
+        >
+          已有节点
+        </button>
+        <button
+          type="button"
+          class="seg-pill"
+          :class="{ 'is-active': mode === 'link' }"
+          @click="mode = 'link'"
+        >
+          粘贴链接
+        </button>
+      </div>
+
+      <div class="source-field">
+        <el-select
+          v-if="mode === 'node'"
+          v-model="selected"
+          filterable
+          placeholder="选择 Reality / HY2 节点"
+          style="width: 100%"
+        >
+          <el-option
+            v-for="n in supported"
+            :key="n.ID"
+            :value="n.ID"
+            :label="n.Name"
+          />
+        </el-select>
+        <el-input
+          v-else
+          v-model="link"
+          placeholder="粘贴 vless:// 或 hy2:// 节点链接"
+          clearable
+        />
+      </div>
+
+      <div class="pill-group" role="group" aria-label="探测目标">
+        <button
+          v-for="opt in targetOptions"
+          :key="opt.value"
+          type="button"
+          class="seg-pill"
+          :class="{ 'is-active': target === opt.value }"
+          @click="target = opt.value"
+        >
+          {{ opt.label }}
+        </button>
+      </div>
     </section>
+
+    <KineticNotice :raw="error || listError" />
+
+    <!-- Visual Animated Link Pipeline Stage -->
     <section
-      v-if="batchRows.length"
-      class="diagnostic-result batch-result"
+      v-if="!batchRows.length"
+      class="pipeline-stage"
+      :class="`is-${activeVerdict.state}`"
+      aria-live="polite"
+    >
+      <div class="stage-head">
+        <span class="verdict-pill" :class="`is-${activeVerdict.state}`">
+          <i class="verdict-dot" aria-hidden="true"></i>
+          <span>{{ activeVerdict.text }}</span>
+        </span>
+
+        <div v-if="result" class="stage-meta">
+          <span class="meta-tag mono">
+            {{ result.protocol.toUpperCase() }} · {{ result.transport.toUpperCase() }}
+          </span>
+          <span class="meta-tag mono">{{ totalMillis(result) }} ms</span>
+          <button type="button" class="icon-text-btn" @click="copyReport()">
+            <el-icon><CopyDocument /></el-icon>
+            <span>复制</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Kinetic Hop-by-Hop Visual Topology -->
+      <div class="hop-track" :class="{ 'is-scanning': loading && !batchRunning }">
+        <div
+          v-for="(hop, idx) in activeHops"
+          :key="hop.key"
+          class="hop-item"
+          :class="`is-${hop.status}`"
+        >
+          <!-- Animated Beam Connector to Next Hop -->
+          <div
+            v-if="idx < activeHops.length - 1"
+            class="hop-beam"
+            :class="`is-${hop.status}`"
+            aria-hidden="true"
+          >
+            <span class="beam-fill"></span>
+            <span
+              v-if="loading && !batchRunning"
+              class="beam-pulse"
+              :style="{ animationDelay: `${idx * 0.22}s` }"
+            ></span>
+          </div>
+
+          <!-- Node Circle -->
+          <div class="hop-node">
+            <span v-if="hop.status === 'scanning' || hop.status === 'failed' || hop.status === 'unknown'" class="hop-halo" aria-hidden="true"></span>
+            <el-icon v-if="hop.status === 'passed'"><Check /></el-icon>
+            <el-icon v-else-if="hop.status === 'failed'"><Close /></el-icon>
+            <el-icon v-else-if="hop.status === 'unknown'"><QuestionFilled /></el-icon>
+            <span v-else class="hop-index mono">{{ idx + 1 }}</span>
+          </div>
+
+          <!-- Minimal Label + Latency -->
+          <div class="hop-caption">
+            <strong>{{ hop.label }}</strong>
+            <small v-if="hop.millis !== undefined" class="mono">
+              {{ hop.millis }} ms
+            </small>
+            <small v-else-if="hop.status === 'scanning'" class="mono">探测中</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Collapsible Raw Details (Hidden by Default) -->
+      <div v-if="result" class="stage-foot">
+        <button
+          type="button"
+          class="raw-toggle"
+          @click="showRawLogs = !showRawLogs"
+        >
+          {{ showRawLogs ? "收起原始明细" : "查看原始明细" }}
+        </button>
+
+        <div v-if="showRawLogs" class="raw-list">
+          <div
+            v-for="s in result.steps"
+            :key="s.key"
+            class="raw-row"
+            :class="`is-${s.status}`"
+          >
+            <span class="raw-badge">{{ statusText[s.status] || s.status }}</span>
+            <strong>{{ s.title }}</strong>
+            <span class="raw-ms mono">{{ s.millis }} ms</span>
+            <p>{{ s.detail }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Batch Mode: Compact Progress + Mini Visual Pipeline per Node -->
+    <section
+      v-else
+      class="batch-stage"
       aria-label="全部节点检测结果"
     >
-      <div class="result-heading">
-        <h2>
-          {{
-            batchRunning
-              ? "正在检测全部节点"
-              : batchCounts.cancelled
-                ? "批量检测已取消"
-                : "全部节点检测结果"
-          }}
-        </h2>
-        <span>{{ batchDone }} / {{ batchRows.length }}</span>
+      <div class="batch-head">
+        <div class="batch-counts mono">
+          <span>{{ batchDone }} / {{ batchRows.length }}</span>
+          <em class="c-ok">畅通 {{ batchCounts.passed }}</em>
+          <em class="c-bad">故障 {{ batchCounts.failed }}</em>
+          <em class="c-warn">待确认 {{ batchCounts.unknown }}</em>
+        </div>
+        <div class="batch-bar" aria-hidden="true">
+          <i :style="{ width: `${(batchDone / Math.max(1, batchRows.length)) * 100}%` }"></i>
+        </div>
       </div>
-      <progress
-        :value="batchDone"
-        :max="batchRows.length"
-        :aria-label="`已完成 ${batchDone} 个，共 ${batchRows.length} 个节点`"
-      ></progress>
-      <p aria-live="polite">
-        通过 {{ batchCounts.passed }} · 失败 {{ batchCounts.failed }} · 待确认
-        {{ batchCounts.unknown }} · 暂不支持 {{ batchCounts.skipped }} ·
-        请求错误 {{ batchCounts.errors }} · 已取消 {{ batchCounts.cancelled }}
-      </p>
-      <p>
-        每次最多同时检测两个节点；目标在开始时确定。取消或关闭页面会停止后续检测，已完成的结果保留。
-      </p>
+
       <div class="batch-list">
-        <div v-for="row in batchRows" :key="row.id" class="batch-row">
-          <div class="batch-node">
-            <strong>{{ row.name }}</strong>
-            <p>{{ row.note || "等待安排检测" }}</p>
-          </div>
-          <span class="batch-status" :class="`batch-status-${row.status}`">{{
-            batchStatusText[row.status]
-          }}</span>
-          <UiButton
-            :disabled="!canOpenDiagnosticDetails(row)"
-            @click="openDetails(row)"
-            >{{
-              row.status === "waiting"
-                ? "等待检测"
-                : row.status === "running"
-                  ? "检测中…"
-                  : "查看详情"
-            }}</UiButton
-          >
-        </div>
-      </div>
-    </section>
-    <section v-if="result" class="diagnostic-result" aria-live="polite">
-      <div class="result-heading">
-        <div>
-          <h2>{{ result.summary }}</h2>
-          <p>
-            {{ result.protocol }} {{ result.transport }} ·
-            {{ result.perspective }} ·
-            {{ new Date(result.checkedAt).toLocaleString() }}
-          </p>
-        </div>
-        <UiButton @click="copyReport()">复制诊断结果</UiButton>
-      </div>
-      <DiagnosticRoute :route="result.route" />
-      <ol class="diagnostic-steps">
-        <li
-          v-for="step in result.steps"
-          :key="step.key"
-          class="diagnostic-step"
-          :class="step.status"
+        <button
+          v-for="row in batchRows"
+          :key="row.id"
+          type="button"
+          class="batch-row"
+          :disabled="!canOpenDiagnosticDetails(row)"
+          @click="openDetails(row)"
         >
-          <div class="step-status">{{ statusText[step.status] }}</div>
-          <div>
-            <h3>
-              {{ step.title }} <small>{{ step.millis }} ms</small>
-            </h3>
-            <p>{{ step.detail }}</p>
+          <strong class="batch-name">{{ row.name }}</strong>
+
+          <!-- Inline Mini Visual Pipeline Dots -->
+          <div class="mini-dots" aria-hidden="true">
+            <template v-if="row.result?.steps?.length">
+              <i
+                v-for="s in row.result.steps"
+                :key="s.key"
+                :class="`is-${s.status}`"
+              ></i>
+            </template>
+            <span v-else-if="row.status === 'running'" class="mini-scan"></span>
           </div>
-        </li>
-      </ol>
-      <aside v-if="result.advice.length">
-        <h3>接下来检查</h3>
-        <p v-for="advice in result.advice" :key="advice">{{ advice }}</p>
-      </aside>
+
+          <span class="batch-pill" :class="`is-${row.status}`">
+            {{ batchStatusText[row.status] }}
+          </span>
+        </button>
+      </div>
     </section>
+
+    <!-- Batch Row Visual Pipeline Drawer -->
     <UiDrawer
       v-model="detailVisible"
-      :title="detailRow ? `${detailRow.name} · 诊断详情` : '诊断详情'"
-      size="min(640px, 100vw)"
+      :title="detailRow ? detailRow.name : '链路诊断'"
+      size="min(580px, 100vw)"
     >
-      <section v-if="detailRow" class="detail-body">
-        <p class="detail-status">{{ batchStatusText[detailRow.status] }}</p>
-        <template v-if="detailResult">
-          <h2>{{ detailResult.summary }}</h2>
-          <p>
-            {{ detailResult.protocol }} {{ detailResult.transport }} ·
-            {{ detailResult.perspective }} ·
-            {{ new Date(detailResult.checkedAt).toLocaleString() }}
-          </p>
-          <DiagnosticRoute :route="detailResult.route" />
-          <ol class="diagnostic-steps">
-            <li
-              v-for="step in detailResult.steps"
-              :key="step.key"
-              class="diagnostic-step"
-              :class="step.status"
+      <div v-if="detailRow" class="drawer-stage">
+        <div v-if="detailResult" class="hop-track is-compact">
+          <div
+            v-for="(hop, idx) in drawerHops"
+            :key="hop.key"
+            class="hop-item"
+            :class="`is-${hop.status}`"
+          >
+            <div
+              v-if="idx < drawerHops.length - 1"
+              class="hop-beam"
+              :class="`is-${hop.status}`"
+              aria-hidden="true"
             >
-              <div class="step-status">{{ statusText[step.status] }}</div>
-              <div>
-                <h3>
-                  {{ step.title }} <small>{{ step.millis }} ms</small>
-                </h3>
-                <p>{{ step.detail }}</p>
-              </div>
-            </li>
-          </ol>
-          <aside v-if="detailResult.advice.length">
-            <h3>接下来检查</h3>
-            <p v-for="advice in detailResult.advice" :key="advice">
-              {{ advice }}
-            </p>
-          </aside>
-        </template>
-        <template v-else>
-          <h2>{{ detailRow.note || "本次没有生成完整的诊断报告" }}</h2>
-          <p v-if="detailRow.status === 'error'">
-            这是诊断请求失败，不代表节点已经损坏。请稍后重试，或单独选择这个节点检测。
-          </p>
-          <p v-else-if="detailRow.status === 'skipped'">
-            这个节点尚未进行深度诊断，不能据此判定是否可用。
-          </p>
-          <p v-else-if="detailRow.status === 'cancelled'">
-            检测已取消，没有足够结果判断节点是否可用。可以重新检测。
-          </p>
-        </template>
-      </section>
-      <template #footer
-        ><UiButton v-if="detailResult" @click="copyReport(detailResult)"
-          >复制诊断结果</UiButton
-        ><UiButton @click="detailVisible = false">关闭</UiButton></template
-      >
+              <span class="beam-fill"></span>
+            </div>
+            <div class="hop-node">
+              <el-icon v-if="hop.status === 'passed'"><Check /></el-icon>
+              <el-icon v-else-if="hop.status === 'failed'"><Close /></el-icon>
+              <el-icon v-else-if="hop.status === 'unknown'"><QuestionFilled /></el-icon>
+              <span v-else class="hop-index mono">{{ idx + 1 }}</span>
+            </div>
+            <div class="hop-caption">
+              <strong>{{ hop.label }}</strong>
+              <small v-if="hop.millis !== undefined" class="mono">{{ hop.millis }} ms</small>
+            </div>
+          </div>
+        </div>
+        <p v-else class="drawer-empty">{{ detailRow.note || "暂无链路报告" }}</p>
+      </div>
+      <template #footer>
+        <UiButton v-if="detailResult" variant="ghost" @click="copyReport(detailResult)">
+          复制摘要
+        </UiButton>
+        <UiButton variant="primary" @click="detailVisible = false">关闭</UiButton>
+      </template>
     </UiDrawer>
-    <p class="context-note">
-      面板可连通而手机无法访问时，还需检查手机网络、客户端参数和本地
-      DNS。网站返回 403 / 429
-      等状态不等于节点无法连接。单次超时不能唯一确认密码、握手或出口故障。
-    </p>
   </main>
 </template>
+
 <style scoped>
-.diagnostic-page {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 24px;
-  color: var(--c-ink);
+.diag-gallery {
+  display: grid;
+  gap: 20px;
+  max-width: 1120px;
+  min-width: 0;
 }
-header,
-.result-heading {
+
+.diag-masthead {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  align-items: center;
   flex-wrap: wrap;
 }
-h1 {
-  font-size: 25px;
-  margin: 0 0 8px;
+
+.title-mask {
+  overflow: hidden;
+  padding-bottom: 4px;
+  margin-bottom: -4px;
 }
-h2 {
-  font-size: 19px;
-  margin: 0 0 8px;
-}
-h3 {
+
+.gallery-title {
   margin: 0;
-  font-size: 14px;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 2.8vw, 36px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
 }
-p {
-  line-height: 1.7;
-  margin: 6px 0;
+
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-rule {
+  display: block;
+  height: 1px;
+  background: var(--c-ink);
+  transform-origin: left;
+}
+
+/* Control Strip */
+.control-strip {
+  display: grid;
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+}
+
+.seg-pill {
+  padding: 6px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+
+.seg-pill:hover {
+  color: var(--c-ink);
+}
+
+.seg-pill.is-active {
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
+}
+
+.source-field {
+  min-width: 0;
+}
+
+.inline-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--c-bad);
+}
+
+/* Animated Link Pipeline Stage */
+.pipeline-stage {
+  display: grid;
+  gap: 36px;
+  padding: 28px 32px;
+  border: 1px solid var(--c-line);
+  border-radius: 22px;
+  background: var(--c-surface);
+}
+
+.stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.verdict-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: var(--c-surface-muted);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.verdict-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--c-muted);
+}
+
+.verdict-pill.is-scanning .verdict-dot {
+  background: var(--c-ok);
+  animation: pulseDot 1.1s infinite ease-in-out;
+}
+
+.verdict-pill.is-passed {
+  color: var(--c-ok);
+}
+.verdict-pill.is-passed .verdict-dot {
+  background: var(--c-ok);
+}
+
+.verdict-pill.is-failed {
+  color: var(--c-bad);
+}
+.verdict-pill.is-failed .verdict-dot {
+  background: var(--c-bad);
+}
+
+.verdict-pill.is-unknown {
+  color: var(--c-warn);
+}
+.verdict-pill.is-unknown .verdict-dot {
+  background: var(--c-warn);
+}
+
+.stage-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta-tag {
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.icon-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.icon-text-btn:hover {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+
+/* Horizontal Kinetic Hop Track */
+.hop-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: start;
+  padding: 18px 0 8px;
+}
+
+.hop-item {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.hop-beam {
+  position: absolute;
+  top: 22px;
+  left: calc(50% + 24px);
+  right: calc(-50% + 24px);
+  height: 2px;
+  background: var(--c-line);
+  overflow: hidden;
+  border-radius: 2px;
+}
+
+.beam-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  transition: width 420ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hop-beam.is-passed .beam-fill {
+  width: 100%;
+  background: var(--c-ok);
+}
+
+.hop-beam.is-failed {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--c-bad) 0 6px,
+    transparent 6px 12px
+  );
+  opacity: 0.55;
+}
+
+.hop-beam.is-unknown .beam-fill {
+  width: 100%;
+  background: var(--c-warn);
+  opacity: 0.45;
+}
+
+.beam-pulse {
+  position: absolute;
+  top: -1px;
+  left: -30%;
+  width: 36%;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--c-ok), transparent);
+  animation: beamTravel 1.3s infinite linear;
+}
+
+.hop-node {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1.5px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 16px;
+  transition:
+    border-color 280ms var(--ease-out),
+    background 280ms var(--ease-out),
+    color 280ms var(--ease-out),
+    transform 280ms var(--ease-out);
+}
+
+.hop-index {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.hop-item.is-scanning .hop-node {
+  border-color: var(--c-ok);
+  color: var(--c-ok);
+  transform: scale(1.08);
+}
+
+.hop-item.is-passed .hop-node {
+  border-color: var(--c-ok);
+  background: var(--c-ok);
+  color: #fff;
+}
+
+.hop-item.is-failed .hop-node {
+  border-color: var(--c-bad);
+  background: var(--c-bad);
+  color: #fff;
+  transform: scale(1.08);
+}
+
+.hop-item.is-unknown .hop-node {
+  border-color: var(--c-warn);
+  background: var(--c-warn);
+  color: #fff;
+}
+
+.hop-halo {
+  position: absolute;
+  inset: -7px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  opacity: 0.35;
+  animation: haloRipple 1.6s infinite cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.hop-item.is-failed .hop-halo {
+  color: var(--c-bad);
+}
+.hop-item.is-unknown .hop-halo {
+  color: var(--c-warn);
+}
+.hop-item.is-scanning .hop-halo {
+  color: var(--c-ok);
+}
+
+.hop-caption {
+  display: grid;
+  gap: 3px;
+}
+
+.hop-caption strong {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.hop-caption small {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+/* Optional Collapsible Raw Logs */
+.stage-foot {
+  display: grid;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-line);
+}
+
+.raw-toggle {
+  justify-self: end;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.raw-toggle:hover {
+  color: var(--c-ink);
+}
+
+.raw-list {
+  display: grid;
+  border-top: 1px solid var(--c-line);
+}
+
+.raw-row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 4px 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--c-line);
+  font-size: 12px;
+}
+
+.raw-row p {
+  grid-column: 2 / -1;
+  margin: 0;
+  color: var(--c-muted);
+}
+
+.raw-badge {
+  font-weight: 600;
+  color: var(--c-warn);
+}
+.raw-row.is-passed .raw-badge {
+  color: var(--c-ok);
+}
+.raw-row.is-failed .raw-badge {
+  color: var(--c-bad);
+}
+
+.raw-ms {
+  color: var(--c-muted);
+}
+
+/* Batch Stage */
+.batch-stage {
+  display: grid;
+  gap: 16px;
+}
+
+.batch-head {
+  display: grid;
+  gap: 10px;
+}
+
+.batch-counts {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--c-ink);
+}
+
+.batch-counts em {
+  font-style: normal;
+  font-size: 12px;
+}
+
+.c-ok {
+  color: var(--c-ok);
+}
+.c-bad {
+  color: var(--c-bad);
+}
+.c-warn {
+  color: var(--c-warn);
+}
+
+.batch-bar {
+  height: 3px;
+  border-radius: 3px;
+  background: var(--c-line);
+  overflow: hidden;
+}
+
+.batch-bar i {
+  display: block;
+  height: 100%;
+  background: var(--c-ink);
+  transition: width 260ms var(--ease-out);
+}
+
+.batch-list {
+  display: grid;
+  border-top: 1px solid var(--c-line);
+}
+
+.batch-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 76px;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 14px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--c-line);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.batch-row:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
+.batch-row:not(:disabled):hover {
+  background: var(--c-surface);
+}
+
+.batch-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mini-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mini-dots i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-line);
+}
+
+.mini-dots i.is-passed {
+  background: var(--c-ok);
+}
+.mini-dots i.is-failed {
+  background: var(--c-bad);
+}
+.mini-dots i.is-unknown {
+  background: var(--c-warn);
+}
+
+.mini-scan {
+  width: 48px;
+  height: 3px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, transparent, var(--c-ok), transparent);
+  animation: beamTravel 1s infinite linear;
+}
+
+.batch-pill {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--c-muted);
+}
+
+.batch-pill.is-passed {
+  color: var(--c-ok);
+}
+.batch-pill.is-failed,
+.batch-pill.is-error {
+  color: var(--c-bad);
+}
+.batch-pill.is-unknown {
+  color: var(--c-warn);
+}
+
+.drawer-stage {
+  padding: 12px 0;
+}
+
+.drawer-empty {
   color: var(--c-muted);
   font-size: 13px;
 }
-.perspective {
-  color: var(--c-muted);
-  font-size: 12px;
-}
-.diagnostic-form,
-.diagnostic-result {
-  margin-top: 22px;
-  padding: 22px;
-  background: var(--c-surface);
-  border: 1px solid var(--c-line);
-  border-radius: 16px;
-}
-.diagnostic-form :deep(.el-form) {
-  margin-top: 20px;
-}
-.diagnostic-form :deep(.el-select) {
-  width: 100%;
-}
-.run-actions {
-  flex-wrap: wrap;
-  display: flex;
-  gap: 10px;
-}
-.context-note {
-  margin-top: 16px;
-}
-small {
-  font-size: 12px;
-  color: var(--c-muted);
-}
-.failure {
-  color: #b42318;
-}
-.diagnostic-steps {
-  padding: 0;
-  list-style: none;
-  margin: 20px 0 0;
-}
-.diagnostic-step {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: 14px;
-  padding: 18px 0;
-  border-top: 1px solid var(--c-line);
-}
-.diagnostic-step p {
-  overflow-wrap: anywhere;
-}
-.step-status {
-  font-size: 12px;
-  font-weight: 600;
-  color: #946200;
-}
-.passed .step-status {
-  color: #15803d;
-}
-.failed .step-status {
-  color: #b42318;
-}
-h3 small {
-  margin-left: 8px;
-  font-weight: 400;
-}
-aside {
-  border-top: 1px solid var(--c-line);
-  padding-top: 18px;
-}
-@media (max-width: 600px) {
-  .diagnostic-page {
-    padding: 14px;
-  }
-  .diagnostic-form,
-  .diagnostic-result {
-    padding: 16px;
-  }
-  .run-actions :deep(button) {
-    min-height: 44px;
-  }
-  .diagnostic-step {
-    grid-template-columns: 48px minmax(0, 1fr);
-    gap: 8px;
-  }
-}
-</style>
 
-<style scoped>
-.detail-body {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.detail-status {
-  font-weight: 600;
-  color: var(--c-ink);
-}
-.source-switch {
-  display: inline-grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  box-sizing: border-box;
-  overflow: hidden;
-}
-.source-switch :deep(button) {
-  min-width: 0;
-  white-space: normal;
-}
-.batch-result progress {
-  width: 100%;
-  height: 10px;
-  accent-color: var(--c-signal-text);
-  margin: 14px 0 4px;
-}
-.batch-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 84px auto;
-  gap: 14px;
-  align-items: center;
-  padding: 16px 0;
-  border-top: 1px solid var(--c-line);
-}
-.batch-node {
-  min-width: 0;
-}
-.batch-node strong,
-.batch-node p {
-  overflow-wrap: anywhere;
-}
-.batch-status {
-  font-size: 12px;
-  color: var(--c-muted);
-}
-.batch-status-passed {
-  color: #15803d;
-}
-.batch-status-failed,
-.batch-status-error {
-  color: #b42318;
-}
-.batch-status-unknown {
-  color: #946200;
-}
-@media (max-width: 600px) {
-  .batch-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px;
+@keyframes beamTravel {
+  0% {
+    transform: translateX(-100%);
   }
-  .batch-node {
-    grid-column: 1/-1;
+  100% {
+    transform: translateX(360%);
   }
-  .batch-row :deep(button) {
-    min-height: 44px;
+}
+
+@keyframes haloRipple {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.45;
+  }
+  100% {
+    transform: scale(1.36);
+    opacity: 0;
+  }
+}
+
+@keyframes pulseDot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.8);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .beam-pulse,
+  .hop-halo,
+  .verdict-dot,
+  .mini-scan {
+    animation: none;
+  }
+}
+
+@media (max-width: 820px) {
+  .control-strip {
+    grid-template-columns: 1fr;
+  }
+  .pipeline-stage {
+    padding: 20px 16px;
+  }
+  .hop-track {
+    grid-auto-flow: row;
+    gap: 18px;
+  }
+  .hop-item {
+    grid-template-columns: 44px minmax(0, 1fr);
+    justify-items: start;
+    text-align: left;
+    align-items: center;
+  }
+  .hop-beam {
+    display: none;
   }
 }
 </style>

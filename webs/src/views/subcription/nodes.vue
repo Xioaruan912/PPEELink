@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from "vue";
 import { useRoute } from "vue-router";
-import { Plus, Refresh } from "@element-plus/icons-vue";
-import PageHeader from "@/ui/PageHeader.vue";
-import { UiButton, UiPanel, UiSkeleton, UiDrawer, EmptyState } from "@/ui";
+import gsap from "gsap";
+import { Plus, Refresh, Search, MoreFilled } from "@element-plus/icons-vue";
+import { UiButton, UiSkeleton, UiDrawer, EmptyState } from "@/ui";
 import IconPulse from "~icons/ph/pulse";
 import { useMotion } from "@/motion";
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue";
@@ -16,7 +16,9 @@ import NodeTools from "./nodes/NodeTools.vue";
 import CompatibilityReport from "@/components/share/CompatibilityReport.vue";
 import PauseDialog from "./nodes/PauseDialog.vue";
 import ProbePolicyDialog from "./nodes/ProbePolicyDialog.vue";
+
 defineOptions({ name: "NodesPage" });
+
 const {
   loading,
   loadError,
@@ -47,32 +49,130 @@ const {
   testNode,
   openTool,
 } = provideNodes();
+
 const compatibilityOpen = ref(false);
 const compatibilityIds = ref<number[]>([]);
 function openCompatibility() {
   compatibilityIds.value = selectedNodes.value.map((n) => n.id);
   compatibilityOpen.value = true;
 }
+
 const route = useRoute();
 watch(
-  () => [route.path, route.query.group] as const,
-  ([path, group]) => {
-    if (path === "/subcription/nodes" && typeof group === "string") {
+  () => [route.path, route.query.group, route.query.q] as const,
+  ([path, group, q]) => {
+    if (path !== "/subcription/nodes") return;
+    if (typeof group === "string") {
       activeGroup.value = group;
       searchText.value = "";
       filterCountries.value = [];
+    } else if (typeof q === "string" && q) {
+      searchText.value = q;
     }
   },
   { immediate: true }
 );
+
 const inspectedId = ref<number | null>(null);
 const { reduced, animate } = useMotion();
+
 const validCount = computed(
   () => overviewList.value.filter((node) => node.valid).length
 );
 const blockedCount = computed(
   () => overviewList.value.filter((node) => node.blocked).length
 );
+
+const rootEl = ref<HTMLElement>();
+const listEl = ref<HTMLElement>();
+let gsapCtx: gsap.Context | null = null;
+let rowAnim: gsap.core.Tween | null = null;
+
+function animateRowsIn() {
+  rowAnim?.kill();
+  if (
+    !listEl.value ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    return;
+  }
+  const rows = listEl.value.querySelectorAll<HTMLElement>(".node-row");
+  if (!rows.length) return;
+  rowAnim = gsap.fromTo(
+    rows,
+    { y: 16, opacity: 0 },
+    {
+      y: 0,
+      opacity: 1,
+      duration: 0.48,
+      stagger: 0.04,
+      ease: "expo.out",
+      clearProps: "transform,opacity",
+    }
+  );
+}
+
+onMounted(() => {
+  if (!rootEl.value) return;
+  gsapCtx = gsap.context(() => {
+    const mm = gsap.matchMedia();
+    mm.add("(prefers-reduced-motion: no-preference)", () => {
+      const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+      tl.from("[data-title-reveal]", {
+        yPercent: 108,
+        duration: 0.62,
+        clearProps: "transform",
+      })
+        .from(
+          "[data-metric-item]",
+          {
+            y: 12,
+            opacity: 0,
+            duration: 0.46,
+            stagger: 0.05,
+            clearProps: "transform,opacity",
+          },
+          "-=0.42"
+        )
+        .from(
+          "[data-top-rule]",
+          {
+            scaleX: 0,
+            duration: 0.7,
+            clearProps: "transform",
+          },
+          "-=0.44"
+        );
+    });
+  }, rootEl.value);
+  void nextTick(animateRowsIn);
+});
+
+watch(
+  () => [loading.value, activeGroup.value, filteredNodes.value.length],
+  ([busyNow]) => {
+    if (!busyNow) {
+      void nextTick(animateRowsIn);
+    }
+  }
+);
+
+onBeforeUnmount(() => {
+  gsapCtx?.revert();
+  gsapCtx = null;
+  rowAnim?.kill();
+});
+
+function handleBulkCommand(command: string) {
+  if (command === "rename") openTool("rename");
+  else if (command === "flags") openTool("flags");
+  else if (command === "unbind") bulk("unbind");
+  else if (command === "pause") openPause(selectedNodes.value);
+  else if (command === "enable-delivery") bulk("enable-delivery");
+  else if (command === "disable-delivery") bulk("disable-delivery");
+  else if (command === "delete") bulk("delete");
+}
+
 function enterBar(element: Element, done: () => void) {
   if (reduced.value) {
     done();
@@ -105,178 +205,281 @@ function leaveBar(element: Element, done: () => void) {
   );
 }
 </script>
+
 <template>
-  <div class="nodes-workbench">
-    <aside class="nodes-masthead" data-enter>
-      <PageHeader
-        title="节点资产"
-        description="按分组整理连接，检查可用性并控制订阅下发。"
-        ><template #actions
-          ><UiButton variant="primary" :icon="Plus" @click="handleAddNode"
-            >添加节点</UiButton
-          ><UiButton :icon="Refresh" :loading="loading" @click="loadAll"
-            >刷新</UiButton
-          ><UiButton :disabled="loading || busy" @click="openTool('dedupe', [])"
-            >去重</UiButton
-          ><UiButton :disabled="loading" @click="openCompatibility"
-            >客户端兼容</UiButton
-          ></template
-        ></PageHeader
-      >
-      <div class="node-overview" aria-label="节点概览">
-        <div>
-          <span>全部节点</span
-          ><strong>{{ loading || loadError ? "—" : overviewList.length }}</strong>
+  <div ref="rootEl" class="nodes-gallery">
+    <!-- Compact Pure Gallery Masthead -->
+    <header class="nodes-masthead" aria-labelledby="nodes-title">
+      <div class="masthead-left">
+        <div class="title-cluster">
+          <div class="title-mask">
+            <h1 id="nodes-title" class="gallery-title" data-title-reveal>
+              节点资产
+            </h1>
+          </div>
+          <dl class="inline-metrics mono" aria-label="节点概览指标">
+            <div data-metric-item>
+              <dt>全部</dt>
+              <dd>{{ loading || loadError ? "—" : overviewList.length }}</dd>
+            </div>
+            <div data-metric-item>
+              <dt>有效</dt>
+              <dd class="is-ok">
+                {{ loading || loadError ? "—" : validCount }}
+              </dd>
+            </div>
+            <div v-if="blockedCount > 0" data-metric-item>
+              <dt>暂不下发</dt>
+              <dd class="is-warn">{{ blockedCount }}</dd>
+            </div>
+            <div data-metric-item>
+              <dt>分组</dt>
+              <dd>{{ loading || loadError ? "—" : groupTree.length }}</dd>
+            </div>
+          </dl>
         </div>
-        <div>
-          <span>检测有效</span
-          ><strong>{{ loading || loadError ? "—" : validCount }}</strong>
-        </div>
-        <div>
-          <span>暂不下发</span
-          ><strong>{{ loading || loadError ? "—" : blockedCount }}</strong>
-        </div>
-        <div>
-          <span>分组</span
-          ><strong>{{ loading || loadError ? "—" : groupTree.length }}</strong>
-        </div>
+        <p class="gallery-lead">
+          点击节点名称查看硬件级详情、探针延迟与下发策略。
+        </p>
       </div>
-    </aside>
-    <UiPanel
-      class="node-main"
-      title="节点列表"
-      description="点击节点名称查看连接、诊断和下发策略。"
-      flush
-      :aria-busy="loading"
-    >
-      <div class="node-toolbar">
-        <el-input
-          v-model="searchText"
-          placeholder="搜索名称或主机"
-          clearable
-          aria-label="搜索节点名称或主机"
-        /><el-select
-          v-model="filterCountries"
-          multiple
-          collapse-tags
-          clearable
-          placeholder="全部国家"
-          aria-label="国家筛选"
-          ><el-option
-            v-for="country in countryOptions"
-            :key="country"
-            :label="country"
-            :value="country"
-        /></el-select>
-        <el-select v-model="activeGroup" filterable aria-label="节点分组">
-          <el-option label="全部分组" value="全部" />
-          <el-option
-            v-for="group in groupTree"
-            :key="group.name"
-            :label="`${group.name} · ${group.count}`"
-            :value="group.name"
-          />
-        </el-select>
-        <UiButton @click="openGroupManager()">管理分组</UiButton>
-      </div>
-      <div class="view-toolbar">
+
+      <div class="masthead-actions">
+        <UiButton variant="primary" :icon="Plus" @click="handleAddNode">
+          添加节点
+        </UiButton>
         <UiButton
           variant="ghost"
           :icon="IconPulse"
           :loading="checking"
           :disabled="loading || !overviewList.length"
           @click="checkValidity"
-          >{{ checking ? "检测中" : "检测有效性" }}</UiButton
-        ><span class="result-count mono">{{ filteredNodes.length }} 个节点</span
-        ><UiButton
-          v-if="filteredNodes.length"
-          variant="ghost"
-          @click="toggleNodes(filteredNodes)"
-          >{{ allSelected(filteredNodes) ? "取消全选" : "全选" }}</UiButton
         >
+          {{ checking ? "检测中" : "检测有效" }}
+        </UiButton>
+        <UiButton variant="ghost" :disabled="loading" @click="openCompatibility">
+          客户端兼容
+        </UiButton>
+        <el-dropdown
+          trigger="click"
+          @command="
+            (cmd: string) =>
+              cmd === 'dedupe'
+                ? openTool('dedupe', [])
+                : cmd === 'groups'
+                  ? openGroupManager()
+                  : loadAll()
+          "
+        >
+          <UiButton variant="ghost" :icon="MoreFilled">更多</UiButton>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="groups">管理分组…</el-dropdown-item>
+              <el-dropdown-item command="dedupe" :disabled="loading || busy">
+                去除重复节点
+              </el-dropdown-item>
+              <el-dropdown-item command="refresh" divided :disabled="loading">
+                刷新全部节点
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
-      <EmptyState
-        v-if="loadError"
-        size="section"
-        title="无法加载节点"
-        :description="loadError"
-        ><template #action
-          ><UiButton @click="loadAll">重新加载</UiButton></template
-        ></EmptyState
-      >
-      <UiSkeleton v-else-if="loading" :lines="5" height="72px" />
-      <div v-else>
+    </header>
+
+    <!-- Sticky Hairline Filter & Group Pill Bar -->
+    <section class="nodes-ledger" :aria-busy="loading" aria-label="节点名录">
+      <header class="ledger-bar">
+        <span class="bar-top-rule" data-top-rule aria-hidden="true"></span>
+
+        <div class="group-pills" role="tablist" aria-label="节点分组筛选">
+          <button
+            type="button"
+            role="tab"
+            class="group-pill"
+            :class="{ 'is-active': activeGroup === '全部' }"
+            :aria-selected="activeGroup === '全部'"
+            @click="activeGroup = '全部'"
+          >
+            <span>全部</span>
+            <small class="mono">{{ overviewList.length }}</small>
+          </button>
+          <button
+            v-for="group in groupTree"
+            :key="group.name"
+            type="button"
+            role="tab"
+            class="group-pill"
+            :class="{ 'is-active': activeGroup === group.name }"
+            :aria-selected="activeGroup === group.name"
+            @click="activeGroup = group.name"
+          >
+            <span>{{ group.name }}</span>
+            <small class="mono">{{ group.count }}</small>
+          </button>
+          <button
+            type="button"
+            class="group-manage-link"
+            @click="openGroupManager()"
+          >
+            管理分组
+          </button>
+        </div>
+
+        <div class="bar-right">
+          <el-select
+            v-model="filterCountries"
+            class="country-select"
+            multiple
+            collapse-tags
+            clearable
+            placeholder="国家 / 地区"
+            aria-label="国家筛选"
+          >
+            <el-option
+              v-for="country in countryOptions"
+              :key="country"
+              :label="country"
+              :value="country"
+            />
+          </el-select>
+
+          <label class="inline-search">
+            <Search class="search-icon" aria-hidden="true" />
+            <input
+              v-model="searchText"
+              type="search"
+              placeholder="搜索名称或主机"
+              aria-label="搜索节点名称或主机"
+            />
+          </label>
+
+          <button
+            v-if="filteredNodes.length"
+            type="button"
+            class="select-all-btn"
+            @click="toggleNodes(filteredNodes)"
+          >
+            {{ allSelected(filteredNodes) ? "取消全选" : "全选" }}
+          </button>
+        </div>
+      </header>
+
+      <div v-if="loadError" class="ledger-state">
+        <EmptyState size="section" title="无法加载节点" :description="loadError">
+          <template #action>
+            <UiButton @click="loadAll">重新加载</UiButton>
+          </template>
+        </EmptyState>
+      </div>
+
+      <div v-else-if="loading" class="ledger-state">
+        <UiSkeleton :lines="5" height="72px" />
+      </div>
+
+      <div v-else-if="!overviewList.length" class="ledger-state">
         <EmptyState
           size="page"
-          v-if="!overviewList.length"
           title="建立你的连接"
           description="粘贴节点链接，或从订阅里导入节点。"
-          ><template #action
-            ><UiButton @click="handleAddNode">添加节点</UiButton></template
-          ></EmptyState
         >
+          <template #action>
+            <UiButton variant="primary" @click="handleAddNode">
+              添加节点
+            </UiButton>
+          </template>
+        </EmptyState>
+      </div>
+
+      <div v-else-if="!filteredNodes.length" class="ledger-state">
         <EmptyState
-          v-else-if="!filteredNodes.length"
           size="section"
           title="没有匹配节点"
           description="试试其他分组、国家或关键词。"
-          ><template #action
-            ><UiButton @click="clearFilters">清除筛选</UiButton></template
-          ></EmptyState
         >
-        <template v-else>
-          <div class="list-heading" aria-hidden="true">
-            <span>节点 / 主机</span><span>协议</span><span>状态</span
-            ><span>下发</span><span class="actions-heading">操作</span>
-          </div>
-          <TransitionGroup
-            tag="div"
-            :name="reduced ? '' : 'nodes'"
-            class="node-list"
-            ><NodeRow
-              v-for="node in filteredNodes"
-              :key="node.id"
-              :node="node"
-              @inspect="inspectedId = $event"
-          /></TransitionGroup>
-        </template>
+          <template #action>
+            <UiButton @click="clearFilters">清除筛选</UiButton>
+          </template>
+        </EmptyState>
       </div>
-    </UiPanel>
-    <Transition :css="false" @enter="enterBar" @leave="leaveBar"
-      ><div v-if="selectedCount" class="bulk-anchor">
-        <div class="bulk-bar" role="region" aria-label="已选节点批量操作">
-          <span class="mono" role="status">已选 {{ selectedCount }}</span
-          ><UiButton variant="ghost" @click="clearSelection">取消选择</UiButton
-          ><UiButton @click="copySelected">复制选中</UiButton>
-          <details class="bulk-more">
-            <summary>更多操作</summary>
-            <div class="bulk-more-actions">
-              <UiButton :disabled="busy" @click="openTool('rename')"
-                >改名</UiButton
-              ><UiButton :disabled="busy" @click="openTool('flags')"
-                >开关</UiButton
-              ><UiButton
-                v-if="activeGroup !== '全部'"
-                :disabled="busy"
-                @click="bulk('unbind')"
-                >移出分组</UiButton
-              ><UiButton :disabled="busy" @click="openPause(selectedNodes)"
-                >暂停下发</UiButton
-              ><UiButton :disabled="busy" @click="bulk('enable-delivery')"
-                >开启下发</UiButton
-              ><UiButton :disabled="busy" @click="bulk('disable-delivery')"
-                >关闭下发</UiButton
-              ><UiButton
-                variant="danger"
-                :disabled="busy"
-                @click="bulk('delete')"
-                >删除选中</UiButton
-              >
-            </div>
-          </details>
+
+      <template v-else>
+        <div class="list-heading" aria-hidden="true">
+          <span>节点 / 主机 · 共 {{ filteredNodes.length }}</span>
+          <span>协议</span>
+          <span>状态</span>
+          <span>下发</span>
+          <span class="actions-heading">操作</span>
         </div>
-      </div></Transition
-    >
+
+        <div ref="listEl" class="node-list">
+          <NodeRow
+            v-for="node in filteredNodes"
+            :key="node.id"
+            :node="node"
+            @inspect="inspectedId = $event"
+          />
+        </div>
+      </template>
+    </section>
+
+    <!-- Machined Obsidian Floating Bulk Action Pill -->
+    <Transition :css="false" @enter="enterBar" @leave="leaveBar">
+      <div v-if="selectedCount" class="bulk-anchor">
+        <div class="bulk-bar" role="region" aria-label="已选节点批量操作">
+          <span class="bulk-count mono" role="status">
+            已选 {{ selectedCount }}
+          </span>
+          <span class="bulk-sep" aria-hidden="true"></span>
+          <button type="button" class="bulk-btn" @click="copySelected">
+            复制选中
+          </button>
+          <button type="button" class="bulk-btn" @click="openCompatibility">
+            检查兼容
+          </button>
+          <el-dropdown
+            trigger="click"
+            placement="top"
+            @command="handleBulkCommand"
+          >
+            <button type="button" class="bulk-btn is-accent">
+              更多操作 ▴
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="rename" :disabled="busy"
+                  >批量改名…</el-dropdown-item
+                >
+                <el-dropdown-item command="flags" :disabled="busy"
+                  >连接开关…</el-dropdown-item
+                >
+                <el-dropdown-item
+                  v-if="activeGroup !== '全部'"
+                  command="unbind"
+                  :disabled="busy"
+                  >移出当前分组</el-dropdown-item
+                >
+                <el-dropdown-item command="pause" divided :disabled="busy"
+                  >暂停下发…</el-dropdown-item
+                >
+                <el-dropdown-item command="enable-delivery" :disabled="busy"
+                  >开启下发</el-dropdown-item
+                >
+                <el-dropdown-item command="disable-delivery" :disabled="busy"
+                  >关闭下发</el-dropdown-item
+                >
+                <el-dropdown-item command="delete" divided :disabled="busy">
+                  <span class="danger">删除选中节点</span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <button type="button" class="bulk-btn is-muted" @click="clearSelection">
+            取消
+          </button>
+        </div>
+      </div>
+    </Transition>
+
     <UiDrawer
       v-model="compatibilityOpen"
       :title="
@@ -284,16 +487,17 @@ function leaveBar(element: Element, done: () => void) {
           ? `客户端兼容 · 已选 ${compatibilityIds.length} 个节点`
           : '客户端兼容 · 全部节点'
       "
-      size="min(760px, 100vw)"
+      size="min(740px, 100vw)"
     >
       <CompatibilityReport
         v-if="compatibilityOpen"
         :node-ids="compatibilityIds"
       />
-      <template #footer
-        ><UiButton @click="compatibilityOpen = false">关闭</UiButton></template
-      >
+      <template #footer>
+        <UiButton @click="compatibilityOpen = false">关闭</UiButton>
+      </template>
     </UiDrawer>
+
     <NodeInspector v-model="inspectedId" />
     <NodeDrawers />
     <PauseDialog />
@@ -313,289 +517,376 @@ function leaveBar(element: Element, done: () => void) {
     />
   </div>
 </template>
+
 <style scoped>
-.nodes-workbench {
+.nodes-gallery {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 40px;
-  align-items: start;
+  gap: 20px;
+  max-width: 1200px;
   min-width: 0;
-  padding-bottom: 56px;
+  padding-bottom: 64px;
 }
+
 .nodes-masthead {
-  position: sticky;
-  top: 28px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding-top: 2px;
+}
+
+.masthead-left {
   display: grid;
-  gap: 28px;
-}
-.nodes-masthead :deep(.page-header) {
-  margin-bottom: 0;
-}
-.nodes-masthead :deep(.page-header__grid) {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 18px;
-}
-.nodes-masthead :deep(.page-header__actions) {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.nodes-masthead :deep(.page-header__actions > :first-child) {
-  grid-column: 1 / -1;
-}
-.mono {
-  font: 400 13px/1.6 var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.node-main {
+  gap: 6px;
   min-width: 0;
 }
-.node-toolbar {
-  display: grid;
-  grid-template-columns: minmax(160px, 2fr) minmax(125px, 1fr) minmax(
-      125px,
-      1fr
-    ) auto;
-  gap: 10px;
-  padding: 18px 20px 8px;
+
+.title-cluster {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  flex-wrap: wrap;
 }
-.view-toolbar {
+
+.title-mask {
+  overflow: hidden;
+  padding-bottom: 4px;
+  margin-bottom: -4px;
+}
+
+.gallery-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
+}
+
+.inline-metrics {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 16px;
+  margin: 0;
+}
+
+.inline-metrics > div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.inline-metrics dt {
+  font-family: var(--font-ui);
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.inline-metrics dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.inline-metrics dd.is-ok {
+  color: var(--c-ok);
+}
+
+.inline-metrics dd.is-warn {
+  color: var(--c-warn);
+}
+
+.gallery-lead {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--c-muted);
+}
+
+.masthead-actions {
   display: flex;
   align-items: center;
+  gap: 6px;
   flex-wrap: wrap;
-  gap: 4px 10px;
-  padding: 0 20px 14px;
 }
-.result-count {
+
+.nodes-ledger {
+  display: grid;
+  min-width: 0;
+}
+
+.ledger-bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 20px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--c-line);
+  background: color-mix(in srgb, var(--c-canvas) 90%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.bar-top-rule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--c-ink);
+  transform-origin: left;
+  pointer-events: none;
+}
+
+.group-pills {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.group-pill {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
   color: var(--c-muted);
-  margin-left: auto;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    background var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
+
+.group-pill:hover {
+  color: var(--c-ink);
+}
+
+.group-pill.is-active {
+  background: var(--c-surface);
+  border-color: var(--c-line);
+  color: var(--c-ink);
+  font-weight: 500;
+}
+
+.group-pill small {
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.group-manage-link {
+  margin-left: 4px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.group-manage-link:hover {
+  color: var(--c-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.bar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.country-select {
+  width: 152px;
+}
+
+.country-select :deep(.el-select__wrapper) {
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--c-line);
+  min-height: 32px;
+  padding: 2px 12px;
+}
+
+.inline-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  width: 196px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--c-line);
+  color: var(--c-muted);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.inline-search:focus-within {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+
+.search-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.inline-search input {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 13px;
+}
+
+.inline-search input::placeholder {
+  color: var(--c-muted);
+}
+
+.select-all-btn {
+  padding: 5px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
+}
+
+.select-all-btn:hover {
+  color: var(--c-ink);
+  border-color: var(--c-ink);
+}
+
+.ledger-state {
+  padding: 40px 0;
+}
+
 .list-heading {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 92px 116px 68px 136px;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 20px;
-  border-top: 1px solid var(--c-line);
+  grid-template-columns: minmax(0, 1fr) 88px 110px 64px 124px;
+  gap: 16px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--c-line);
-  background: var(--c-surface-2);
   color: var(--c-muted);
-  font: 600 12px/1.4 var(--font-ui);
+  font-size: 11.5px;
+  font-weight: 500;
 }
+
 .actions-heading {
   text-align: right;
-  padding-right: 8px;
 }
-.node-list,
-.nodes-move,
-.nodes-enter-active,
-.nodes-leave-active {
-  transition:
-    transform var(--duration-slow) var(--ease-out),
-    opacity var(--duration-medium);
+
+.node-list {
+  display: grid;
 }
-.nodes-enter-from,
-.nodes-leave-to {
-  opacity: 0;
-  transform: translateY(12px);
+
+@media (hover: hover) and (pointer: fine) {
+  .node-list:hover :deep(.node-row:not(:hover)) {
+    opacity: 0.46;
+  }
 }
-.nodes-leave-active {
-  position: absolute;
-  width: 100%;
-}
+
+/* Machined Obsidian Floating Bulk Action Pill */
 .bulk-anchor {
   position: fixed;
   z-index: 1100;
+  left: 0;
+  right: 0;
   bottom: 24px;
-  left: calc(var(--sidebar-w, 0px) + 24px);
-  right: 24px;
   display: flex;
   justify-content: center;
   pointer-events: none;
 }
+
 .bulk-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  max-width: 100%;
-  padding: 12px 16px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
-  background: var(--c-surface);
-  box-shadow: var(--shadow-overlay);
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 16px;
+  border-radius: 999px;
+  background: rgb(12 12 14 / 0.94);
+  backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgb(255 255 255 / 0.14);
+  color: #ffffff;
+  box-shadow: 0 24px 60px -12px rgb(0 0 0 / 0.38);
 }
-.bulk-bar .mono {
-  padding: 0 4px;
+
+.bulk-count {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #29df7e;
 }
-@media (max-width: 1199px) {
-  .list-heading {
-    grid-template-columns: minmax(0, 1fr) 65px 100px 44px 132px;
-    gap: 8px;
-  }
+
+.bulk-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: rgb(255 255 255 / 0.18);
 }
-@media (max-width: 1160px) {
-  .node-toolbar {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+
+.bulk-btn {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: rgb(255 255 255 / 0.85);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 180ms var(--ease-out), color 180ms var(--ease-out);
 }
-@media (max-width: 767px) {
+
+.bulk-btn:hover {
+  background: rgb(255 255 255 / 0.12);
+  color: #ffffff;
+}
+
+.bulk-btn.is-accent {
+  background: rgb(255 255 255 / 0.12);
+  color: #ffffff;
+  font-weight: 500;
+}
+
+.bulk-btn.is-muted {
+  color: rgb(255 255 255 / 0.55);
+}
+
+.danger {
+  color: var(--c-bad);
+}
+
+@media (max-width: 960px) {
   .list-heading {
     display: none;
   }
-  .bulk-anchor {
-    left: 16px;
-    right: 16px;
-    bottom: calc(16px + env(safe-area-inset-bottom));
-  }
-  .bulk-bar {
-    justify-content: flex-start;
-    gap: 8px;
-    padding: 10px;
-  }
-  .bulk-bar :deep(.ui-button) {
-    padding: 8px 12px;
-  }
 }
-@media (prefers-reduced-motion: reduce) {
-  .nodes-move,
-  .nodes-enter-active,
-  .nodes-leave-active {
-    transition: none;
-  }
-}
-</style>
 
-<style scoped>
-.node-overview {
-  display: grid;
-  border-top: 1px solid var(--c-ink);
-}
-.node-overview > div {
-  padding: 15px 2px;
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  border-bottom: 1px solid var(--c-line);
-}
-.node-overview span {
-  font-size: 13px;
-  font-weight: 540;
-  color: var(--c-muted);
-}
-.node-overview strong {
-  font: 700 28px/1 var(--font-display);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.04em;
-  color: var(--c-ink);
-}
-@media (max-width: 1024px) {
-  .nodes-workbench {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-  .nodes-masthead {
+@media (max-width: 640px) {
+  .ledger-bar {
     position: static;
-    gap: 20px;
   }
-  .node-overview {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--c-line);
-    border-radius: var(--radius-panel);
-    background: var(--c-surface);
+  .bar-right {
+    width: 100%;
   }
-  .node-overview > div {
-    padding: 14px 16px;
-    border-bottom: 0;
-    border-right: 1px solid var(--c-line);
-  }
-  .node-overview > div:last-child {
-    border-right: 0;
-  }
-}
-
-.node-list {
-  position: relative;
-  display: grid;
-  gap: 0;
-}
-.bulk-more {
-  position: static;
-}
-.bulk-more summary {
-  cursor: pointer;
-  font-size: 13px;
-  padding: 9px 14px;
-  background: var(--c-surface-2);
-  border-radius: var(--radius-control);
-  list-style: none;
-}
-.bulk-more summary:focus-visible {
-  outline: 2px solid var(--c-focus);
-}
-.bulk-more[open] summary {
-  color: var(--c-signal-text);
-}
-.bulk-more-actions {
-  position: absolute;
-  bottom: calc(100% + 12px);
-  right: 0;
-  width: 300px;
-  max-width: calc(100vw - 48px);
-  padding: 12px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  background: var(--c-surface);
-  border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-overlay);
-  max-height: 50vh;
-  overflow: auto;
-}
-.bulk-bar {
-  position: relative;
-  border: 0;
-  border-radius: var(--radius-panel);
-  padding: 10px 16px;
-  gap: 8px;
-  box-shadow: var(--shadow-overlay);
-}
-@media (max-width: 767px) {
-  .node-overview {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
-  .node-overview > div {
-    padding: 14px;
-  }
-  .node-overview strong {
-    font-size: 24px;
-  }
-  .node-toolbar {
-    grid-template-columns: 1fr;
-  }
-
-  .bulk-anchor {
-    left: 12px;
-    right: 12px;
-    bottom: calc(12px + env(safe-area-inset-bottom));
-  }
-  .bulk-bar {
-    gap: 6px;
-    padding: 8px;
-  }
-  .bulk-bar :deep(button),
-  .bulk-more summary {
-    min-height: 44px;
-    font-size: 12px;
-    padding: 8px;
-  }
-  .nodes-workbench {
-    padding-bottom: 115px;
+  .country-select,
+  .inline-search {
+    width: 100%;
   }
 }
 </style>

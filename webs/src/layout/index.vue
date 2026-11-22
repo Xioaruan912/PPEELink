@@ -128,64 +128,67 @@
       <AppMain />
     </main>
 
-    <!-- Floating Bottom Machined Obsidian Command Dock -->
+    <!-- Left-Anchored Floating Obsidian Dynamic Island -->
     <div v-if="!locked" class="floating-dock-anchor">
-      <div class="floating-dock">
-        <nav
-          ref="domainNavEl"
-          class="dock-domains"
-          aria-label="功能域切换"
-        >
+      <div class="floating-dock-rail">
+        <div class="floating-dock">
+          <nav
+            ref="domainNavEl"
+            class="dock-domains"
+            aria-label="功能域切换"
+          >
+            <span
+              class="dock-glider"
+              :style="domainGliderStyle"
+              aria-hidden="true"
+            ></span>
+            <RouterLink
+              v-for="group in navigation"
+              :key="group.label"
+              :to="group.path"
+              class="dock-domain-pill"
+              :class="{ 'is-active': activeGroup?.label === group.label }"
+            >
+              <span>{{ group.label }}</span>
+            </RouterLink>
+          </nav>
+
           <span
-            class="dock-glider"
-            :style="domainGliderStyle"
+            v-if="activeGroup && activeGroup.children.length > 0"
+            class="dock-divider"
             aria-hidden="true"
           ></span>
-          <RouterLink
-            v-for="group in navigation"
-            :key="group.label"
-            :to="group.path"
-            class="dock-domain-pill"
-            :class="{ 'is-active': activeGroup?.label === group.label }"
-          >
-            <span>{{ group.label }}</span>
-          </RouterLink>
-        </nav>
 
-        <span
-          v-if="activeGroup && activeGroup.children.length > 0"
-          class="dock-divider"
-          aria-hidden="true"
-        ></span>
-
-        <nav
-          v-if="activeGroup && activeGroup.children.length > 0"
-          class="dock-subpages"
-          :aria-label="`${activeGroup.label}页面`"
-        >
-          <template
-            v-for="item in flattenNavigation([activeGroup])"
-            :key="item.path"
+          <nav
+            v-if="activeGroup && activeGroup.children.length > 0"
+            :key="activeGroup.label"
+            class="dock-subpages"
+            :aria-label="`${activeGroup.label}页面`"
           >
-            <a
-              v-if="isExternal(item.path)"
-              :href="item.path"
-              class="dock-sub-link"
+            <template
+              v-for="item in flattenNavigation([activeGroup])"
+              :key="item.path"
             >
-              <span class="union-nav-dot" aria-hidden="true"></span>
-              <span class="union-nav-label">{{ item.label }}</span>
-            </a>
-            <RouterLink
-              v-else
-              :to="item.path"
-              class="dock-sub-link"
-              :aria-current="route.path === item.path ? 'page' : undefined"
-            >
-              <span class="union-nav-dot" aria-hidden="true"></span>
-              <span class="union-nav-label">{{ item.label }}</span>
-            </RouterLink>
-          </template>
-        </nav>
+              <a
+                v-if="isExternal(item.path)"
+                :href="item.path"
+                class="dock-sub-link"
+              >
+                <span class="union-nav-dot" aria-hidden="true"></span>
+                <span class="union-nav-label">{{ item.label }}</span>
+              </a>
+              <RouterLink
+                v-else
+                :to="item.path"
+                class="dock-sub-link"
+                :aria-current="route.path === item.path ? 'page' : undefined"
+              >
+                <span class="union-nav-dot" aria-hidden="true"></span>
+                <span class="union-nav-label">{{ item.label }}</span>
+              </RouterLink>
+            </template>
+          </nav>
+        </div>
       </div>
     </div>
 
@@ -280,7 +283,7 @@ const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)
 const domainNavEl = ref<HTMLElement>();
 const domainGliderStyle = ref({
   transform: "translate3d(0,0,0)",
-  width: "0px",
+  height: "0px",
   opacity: 0,
 });
 
@@ -293,8 +296,8 @@ function syncDomainGlider() {
     return;
   }
   domainGliderStyle.value = {
-    transform: `translate3d(${active.offsetLeft}px, 0, 0)`,
-    width: `${active.offsetWidth}px`,
+    transform: `translate3d(0, ${active.offsetTop}px, 0)`,
+    height: `${active.offsetHeight}px`,
     opacity: 1,
   };
 }
@@ -662,60 +665,69 @@ onBeforeUnmount(() => {
   color: var(--c-ok);
 }
 
-/* Floating Bottom Machined Obsidian Command Dock */
+/* Left-Side Vertical Floating Obsidian Dynamic Island */
 .floating-dock-anchor {
   position: fixed;
   z-index: 1200;
-  left: 16px;
-  right: 16px;
+  top: 96px;
+  left: 20px;
   bottom: 20px;
+  pointer-events: none;
+}
+.floating-dock-rail {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: flex-start;
+  max-height: 100%;
   pointer-events: none;
 }
 .floating-dock {
   pointer-events: auto;
-  max-width: 100%;
-  overflow-x: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 8px;
-  border-radius: 999px;
-  background: rgb(12 12 14 / 0.9);
+  width: 142px;
+  max-height: calc(100dvh - 116px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 22px;
+  background: rgb(12 12 14 / 0.92);
   backdrop-filter: blur(22px) saturate(160%);
   border: 1px solid rgb(255 255 255 / 0.12);
   box-shadow:
-    0 24px 60px -12px rgb(0 0 0 / 0.35),
+    0 24px 60px -12px rgb(0 0 0 / 0.34),
     inset 0 1px 0 rgb(255 255 255 / 0.14);
 }
 .dock-domains {
   position: relative;
-  display: inline-flex;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  flex: none;
   gap: 2px;
 }
 .dock-glider {
   position: absolute;
   top: 0;
-  bottom: 0;
   left: 0;
-  border-radius: 999px;
+  right: 0;
+  border-radius: 14px;
   background: #ffffff;
   pointer-events: none;
   transition:
     transform var(--duration-medium) var(--ease-out),
-    width var(--duration-medium) var(--ease-out),
+    height var(--duration-medium) var(--ease-out),
     opacity var(--duration-fast) ease;
 }
 .dock-domain-pill {
   position: relative;
   z-index: 1;
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  min-height: 34px;
+  min-height: 36px;
   padding: 0 14px;
-  border-radius: 999px;
+  border-radius: 14px;
   color: rgb(255 255 255 / 0.65);
   font-size: 13px;
   font-weight: 540;
@@ -735,27 +747,39 @@ onBeforeUnmount(() => {
 }
 
 .dock-divider {
-  width: 1px;
-  height: 20px;
-  background: rgb(255 255 255 / 0.16);
+  width: auto;
+  height: 1px;
+  margin: 2px 8px;
+  background: rgb(255 255 255 / 0.14);
   flex: none;
 }
 
 .dock-subpages {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding-right: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  animation: dock-wing-in var(--duration-fast) var(--ease-out) both;
+}
+@keyframes dock-wing-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .dock-sub-link {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   min-height: 34px;
-  padding: 0 11px;
-  border-radius: 999px;
+  padding: 0 12px;
+  border-radius: 12px;
   color: rgb(255 255 255 / 0.65);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 520;
   white-space: nowrap;
   transition:
@@ -772,10 +796,12 @@ onBeforeUnmount(() => {
   transition:
     transform var(--duration-medium) var(--ease-out),
     background-color var(--duration-medium) var(--ease-out),
-    width var(--duration-medium) var(--ease-out),
+    height var(--duration-medium) var(--ease-out),
     border-radius var(--duration-medium) var(--ease-out);
 }
 .union-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: transform var(--duration-medium) var(--ease-out);
 }
 .dock-sub-link[aria-current="page"] {
@@ -784,7 +810,7 @@ onBeforeUnmount(() => {
   font-weight: 640;
 }
 .dock-sub-link[aria-current="page"] .union-nav-dot {
-  width: 10px;
+  height: 12px;
   border-radius: 3px;
   background: #29df7e;
 }
@@ -804,9 +830,9 @@ onBeforeUnmount(() => {
 .workspace-content {
   position: relative;
   z-index: 1;
-  max-width: 1400px;
+  max-width: 1460px;
   margin: 0 auto;
-  padding: 24px clamp(20px, 4vw, 48px) 120px;
+  padding: 24px clamp(20px, 4vw, 48px) 64px 186px;
   min-width: 0;
 }
 .mobile-trigger {
@@ -839,6 +865,7 @@ onBeforeUnmount(() => {
   }
   .workspace-content {
     padding-top: 16px;
+    padding-left: clamp(20px, 4vw, 48px);
     padding-bottom: 64px;
   }
 }

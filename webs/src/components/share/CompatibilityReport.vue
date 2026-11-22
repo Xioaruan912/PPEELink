@@ -6,12 +6,14 @@ import type {
   ClientCompatibility as Report,
   CompatibilityData,
 } from "./compatibility";
+
 const props = defineProps<{
   subscriptionId?: number;
   nodeIds?: number[];
   clientKey?: string;
   preloaded?: CompatibilityData;
 }>();
+
 const reports = ref<Report[]>([]);
 const selected = ref("clash");
 const loading = ref(false);
@@ -19,10 +21,12 @@ const limited = ref(false);
 const error = ref("");
 let generation = 0;
 let alive = true;
+
 onBeforeUnmount(() => {
   alive = false;
   generation++;
 });
+
 async function load() {
   const current = ++generation;
   loading.value = true;
@@ -49,6 +53,12 @@ async function load() {
     if (alive && current === generation) {
       reports.value = data.clients;
       limited.value = !!data.limited;
+      if (
+        reports.value.length &&
+        !reports.value.some((r) => r.key === selected.value)
+      ) {
+        selected.value = reports.value[0].key;
+      }
     }
   } catch {
     if (alive && current === generation)
@@ -57,6 +67,7 @@ async function load() {
     if (alive && current === generation) loading.value = false;
   }
 }
+
 watch(
   () => [
     props.subscriptionId,
@@ -64,10 +75,9 @@ watch(
     props.preloaded,
   ],
   load,
-  {
-    immediate: true,
-  }
+  { immediate: true }
 );
+
 const current = computed(() =>
   reports.value.find((r) => r.key === (props.clientKey || selected.value))
 );
@@ -83,6 +93,7 @@ const supported = computed(() =>
   (current.value?.items ?? []).filter((i) => i.status === "supported")
 );
 </script>
+
 <template>
   <section
     class="compatibility"
@@ -91,61 +102,101 @@ const supported = computed(() =>
   >
     <div class="compat-heading">
       <div>
-        <h3>客户端兼容</h3>
-        <p>检查节点参数能否完整导出；实际连接可使用节点一键诊断。</p>
+        <h3>客户端导出兼容性</h3>
+        <p>检查节点协议与参数能否完整导出；实际连通性请使用节点一键诊断。</p>
       </div>
-      <UiButton size="sm" :loading="loading" @click="load">重新检查</UiButton>
+      <UiButton size="sm" variant="ghost" :loading="loading" @click="load">
+        重新检查
+      </UiButton>
     </div>
-    <UiSkeleton v-if="loading" :lines="3" />
+
+    <UiSkeleton v-if="loading" :lines="4" height="44px" />
     <EmptyState v-else-if="error" size="inline" :description="error" />
+
     <template v-else-if="current">
-      <p v-if="limited" class="compat-empty">
+      <p v-if="limited" class="compat-alert">
         链接较多，本次仅检查前 10000 条。请分批选择节点检查剩余链接。
       </p>
-      <el-select
-        v-if="!clientKey"
-        v-model="selected"
+
+      <!-- Direct Client Pill Switcher -->
+      <div
+        v-if="!clientKey && reports.length"
+        class="client-pills"
+        role="tablist"
         aria-label="检查的客户端"
-        class="compat-select"
-        ><el-option
+      >
+        <button
           v-for="report in reports"
           :key="report.key"
-          :label="report.name"
-          :value="report.key"
-      /></el-select>
-      <div class="compat-summary" role="status">
-        <strong>{{ current.included }} / {{ current.total }} 可导出</strong
-        ><span>{{ current.warnings }} 个需注意</span
-        ><span :class="{ excluded: current.excluded > 0 }"
-          >{{ current.excluded }} 个已排除</span
+          type="button"
+          role="tab"
+          class="client-pill"
+          :class="{ 'is-active': selected === report.key }"
+          :aria-selected="selected === report.key"
+          @click="selected = report.key"
         >
+          <span>{{ report.name }}</span>
+          <small v-if="report.excluded > 0" class="pill-badge is-bad mono">
+            {{ report.excluded }}
+          </small>
+          <small v-else-if="report.warnings > 0" class="pill-badge is-warn mono">
+            {{ report.warnings }}
+          </small>
+        </button>
       </div>
-      <p class="compat-note">{{ current.note }}</p>
-      <p v-if="!current.included && current.total" class="compat-empty">
-        当前没有可导出的节点，此客户端的订阅更新会被拒绝。可查看下方原因并选择其他客户端。
+
+      <!-- Hairline Metric Ruler -->
+      <dl class="compat-ruler" role="status">
+        <div>
+          <dt>可导出</dt>
+          <dd class="mono is-ok">
+            {{ current.included }} <small>/ {{ current.total }}</small>
+          </dd>
+        </div>
+        <div>
+          <dt>需注意</dt>
+          <dd class="mono" :class="{ 'is-warn': current.warnings > 0 }">
+            {{ current.warnings }}
+          </dd>
+        </div>
+        <div>
+          <dt>已排除</dt>
+          <dd class="mono" :class="{ 'is-bad': current.excluded > 0 }">
+            {{ current.excluded }}
+          </dd>
+        </div>
+      </dl>
+
+      <p v-if="current.note" class="compat-note">{{ current.note }}</p>
+      <p v-if="!current.included && current.total" class="compat-alert">
+        当前没有可导出的节点，此客户端的订阅更新会被拒绝。可查看下方原因并切换其他客户端。
       </p>
       <p v-if="!current.total" class="compat-note">
-        当前没有可检查的节点。订阅已暂停或关闭下发的节点不会计入。
+        当前没有可检查的节点。已暂停或关闭下发的节点不会计入。
       </p>
+
       <ul v-if="issues.length" class="compat-items">
         <li v-for="(item, index) in issues" :key="`${item.id}-${index}`">
-          <div>
-            <strong>{{ item.name }}</strong
-            ><span class="compat-state" :data-state="item.status">{{
-              item.status === "unsupported" ? "已排除" : "需注意"
-            }}</span>
+          <div class="item-top">
+            <strong>{{ item.name }}</strong>
+            <span class="compat-state" :data-state="item.status">
+              {{ item.status === "unsupported" ? "已排除" : "需注意" }}
+            </span>
           </div>
-          <small>{{ item.protocol || "未知协议" }}</small>
+          <small class="mono">{{ item.protocol || "未知协议" }}</small>
           <p>{{ item.reason }}</p>
         </li>
       </ul>
+
       <details v-if="supported.length" class="compat-supported">
-        <summary>{{ supported.length }} 个节点参数可完整导出</summary>
+        <summary>
+          <span>{{ supported.length }} 个节点参数可完整导出</span>
+        </summary>
         <ul class="compat-items">
           <li v-for="(item, index) in supported" :key="`${item.id}-${index}`">
-            <div>
-              <strong>{{ item.name }}</strong
-              ><span>{{ item.protocol }}</span>
+            <div class="item-top">
+              <strong>{{ item.name }}</strong>
+              <span class="proto-tag mono">{{ item.protocol }}</span>
             </div>
             <p>{{ item.reason }}</p>
           </li>
@@ -154,127 +205,231 @@ const supported = computed(() =>
     </template>
   </section>
 </template>
+
 <style scoped>
 .compatibility {
   min-width: 0;
   display: grid;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-panel);
-  background: var(--c-surface);
+  gap: 18px;
 }
+
 .compat-heading {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
+
 .compat-heading h3 {
-  margin: 0 0 6px;
-  font: 600 16px/1.4 var(--font-ui);
-}
-.compat-heading p,
-.compat-note,
-.compat-items p {
   margin: 0;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--c-ink);
+}
+
+.compat-heading p {
+  margin: 4px 0 0;
+  font-size: 12.5px;
   color: var(--c-muted);
-  font-size: 13px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
 }
-.compat-select {
-  width: 100%;
-}
-.compat-summary {
+
+.client-pills {
   display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+}
+
+.client-pill {
+  display: inline-flex;
   align-items: center;
-  gap: 8px 18px;
+  gap: 6px;
+  padding: 6px 13px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
   font-size: 13px;
-  padding-block: 12px;
-  border-block: 1px solid var(--c-line);
+  cursor: pointer;
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out),
+    border-color var(--duration-fast) var(--ease-out);
 }
-.compat-summary strong {
-  font-size: 15px;
-  color: var(--c-signal-text);
+
+.client-pill:hover {
+  color: var(--c-ink);
+  border-color: var(--c-ink);
 }
-.excluded,
-.compat-empty {
-  color: var(--el-color-danger);
+
+.client-pill.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
 }
-.compat-empty {
+
+.pill-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.pill-badge.is-bad {
+  background: rgb(223 41 41 / 0.14);
+  color: var(--c-bad);
+}
+
+.pill-badge.is-warn {
+  background: rgb(180 83 9 / 0.14);
+  color: var(--c-warn);
+}
+
+.client-pill.is-active .pill-badge {
+  background: rgb(255 255 255 / 0.18);
+  color: var(--c-surface);
+}
+
+.compat-ruler {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--c-ink);
+  border-bottom: 1px solid var(--c-line);
+}
+
+.compat-ruler > div {
+  display: grid;
+  gap: 4px;
+  padding: 14px 16px 14px 0;
+  border-right: 1px solid var(--c-line);
+}
+
+.compat-ruler > div:not(:first-child) {
+  padding-left: 16px;
+}
+
+.compat-ruler > div:last-child {
+  border-right: 0;
+  padding-right: 0;
+}
+
+.compat-ruler dt {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.compat-ruler dd {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.compat-ruler dd small {
+  font-size: 13px;
+  color: var(--c-muted);
+  font-weight: 400;
+}
+
+.compat-ruler dd.is-ok {
+  color: var(--c-ok);
+}
+
+.compat-ruler dd.is-warn {
+  color: var(--c-warn);
+}
+
+.compat-ruler dd.is-bad {
+  color: var(--c-bad);
+}
+
+.compat-note {
   margin: 0;
   font-size: 13px;
+  color: var(--c-muted);
   line-height: 1.6;
 }
+
+.compat-alert {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid rgb(180 83 9 / 0.28);
+  border-radius: 12px;
+  background: rgb(180 83 9 / 0.06);
+  color: var(--c-warn);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .compat-items {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
 }
+
 .compat-items li {
-  min-width: 0;
-  padding: 12px 0;
+  display: grid;
+  gap: 4px;
+  padding: 14px 0;
   border-bottom: 1px solid var(--c-line);
 }
-.compat-items li:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
-}
-.compat-items li > div {
+
+.item-top {
   display: flex;
-  align-items: start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
 }
-.compat-items strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 14px;
-  font-weight: 550;
+
+.item-top strong {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--c-ink);
 }
+
 .compat-items small {
-  display: block;
+  font-size: 11.5px;
   color: var(--c-muted);
-  font-size: 12px;
-  margin: 3px 0;
 }
-.compat-items li > div > span {
-  flex-shrink: 0;
+
+.compat-items p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
   color: var(--c-muted);
-  font-size: 12px;
+  line-height: 1.55;
 }
+
+.compat-state {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .compat-state[data-state="unsupported"] {
-  color: var(--el-color-danger);
+  background: rgb(223 41 41 / 0.1);
+  color: var(--c-bad);
 }
+
 .compat-state[data-state="warning"] {
-  color: var(--el-color-warning);
+  background: rgb(180 83 9 / 0.1);
+  color: var(--c-warn);
 }
+
+.proto-tag {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
 .compat-supported summary {
   cursor: pointer;
-  color: var(--c-muted);
+  padding: 10px 0;
   font-size: 13px;
-  line-height: 1.6;
-  padding-block: 6px;
-}
-.compat-supported summary:focus-visible {
-  outline: 2px solid var(--c-focus);
-  outline-offset: 3px;
-}
-@media (max-width: 599px) {
-  .compatibility {
-    padding: 14px;
-  }
-  .compat-heading {
-    flex-wrap: wrap;
-  }
-  .compat-heading > div {
-    flex: 1 1 180px;
-  }
-  .compat-summary {
-    gap: 8px 12px;
-  }
+  font-weight: 500;
+  color: var(--c-ink);
+  border-bottom: 1px solid var(--c-line);
 }
 </style>

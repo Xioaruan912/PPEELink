@@ -188,18 +188,18 @@ function createTerminal() {
       '"JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace',
     scrollback: 2000,
     theme: {
-      background: "#17191d",
-      foreground: "#e2e5eb",
-      cursor: "#73c9f4",
-      selectionBackground: "rgba(96, 165, 250, 0.3)",
-      black: "#1b211a",
-      red: "#e06c75",
-      green: "#9ccc3c",
-      yellow: "#e5c07b",
-      blue: "#61afef",
-      magenta: "#c678dd",
-      cyan: "#56b6c2",
-      white: "#e2e5eb",
+      background: "#0b0b0e",
+      foreground: "#f0f0ed",
+      cursor: "#29df7e",
+      selectionBackground: "rgba(41, 223, 126, 0.22)",
+      black: "#141418",
+      red: "#f04848",
+      green: "#29df7e",
+      yellow: "#f59e0b",
+      blue: "#5b92f0",
+      magenta: "#c084fc",
+      cyan: "#38bdf8",
+      white: "#f0f0ed",
     },
   });
   fit = new FitAddon();
@@ -670,35 +670,38 @@ async function executeDraft() {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  padding: 8px;
-  background: #202329;
+  padding: 10px 12px;
+  background: #121216;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
 }
 .session-bar select {
   flex: 1;
   min-width: 120px;
   max-width: 100%;
-  background: #17191d;
-  color: #e2e5eb;
-  border: 1px solid #414752;
+  background: #0b0b0e;
+  color: #f0f0ed;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
-  padding: 8px;
+  padding: 7px 10px;
 }
 .command-draft {
   display: grid;
   gap: 8px;
   padding: 12px;
-  color: #e2e5eb;
-  background: #202329;
+  color: #f0f0ed;
+  background: #121216;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
   font-size: 12px;
 }
 .command-draft textarea {
   width: 100%;
   box-sizing: border-box;
-  background: #17191d;
-  color: #e2e5eb;
-  font: 12px/1.6 monospace;
-  padding: 8px;
-  border: 1px solid #414752;
+  background: #0b0b0e;
+  color: #f0f0ed;
+  font: 12.5px/1.6 var(--font-mono);
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
 }
 .command-draft > div {
   display: flex;
@@ -713,9 +716,9 @@ async function executeDraft() {
 
 .ssh-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 276px;
-  gap: 12px;
-  min-height: 520px;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+  min-height: 540px;
 }
 .terminal-pane {
   display: flex;
@@ -723,28 +726,28 @@ async function executeDraft() {
   flex-direction: column;
   overflow: hidden;
   border: 1px solid var(--c-line);
-  border-radius: 12px;
-  background: #17191d;
+  border-radius: var(--radius-panel);
+  background: #0b0b0e;
 }
 .terminal-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  background: #202329;
-  color: #b7bec9;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  background: #121216;
+  color: #c2c5ce;
   font-size: 12px;
 }
 .terminal-bar .dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #6b7563;
+  background: #525560;
 }
 .terminal-bar .dot.is-on {
-  background: #73c9f4;
-  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.18);
+  background: #29df7e;
+  box-shadow: 0 0 0 3px rgba(41, 223, 126, 0.18);
 }
 .terminal-bar .spacer {
   flex: 1;
@@ -756,30 +759,37 @@ async function executeDraft() {
 }
 .terminal-note {
   margin: 0;
-  padding: 6px 10px 10px;
-  color: #a0a8b6;
+  padding: 6px 12px 10px;
+  color: rgba(240, 240, 237, 0.56);
   font-size: 11px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 .terminal-note a {
-  color: #73c9f4;
+  color: #29df7e;
+  text-decoration: none;
+}
+.terminal-note a:hover {
+  text-decoration: underline;
 }
 .command-pane {
   display: flex;
   min-height: 0;
   flex-direction: column;
   border: 1px solid var(--c-line);
-  border-radius: 12px;
+  border-radius: 14px;
   background: var(--c-surface);
+  overflow: hidden;
 }
 .command-pane > header {
   display: grid;
   gap: 2px;
-  padding: 12px 14px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--c-line);
 }
 .command-pane strong {
   font-size: 13px;
   font-weight: 500;
+  letter-spacing: -0.01em;
 }
 .command-pane small {
   color: var(--c-muted);
@@ -788,39 +798,46 @@ async function executeDraft() {
 .command-scroll {
   min-height: 0;
   overflow: auto;
-  padding: 8px;
+  padding: 10px;
 }
 .command-scroll section + section {
-  margin-top: 10px;
+  margin-top: 12px;
 }
 .command-scroll h4 {
-  margin: 0 0 4px;
-  padding: 0 6px;
-  color: var(--c-muted);
-  font-size: 11px;
+  margin: 0 0 6px;
+  padding: 0 8px;
+  color: var(--c-subtle);
+  font-size: 10.5px;
   font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .command-item {
   display: grid;
   width: 100%;
-  gap: 1px;
-  padding: 7px 8px;
-  border: 0;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--c-ink);
   cursor: pointer;
   text-align: left;
+  transition: background var(--t-fast) var(--ease-expo), border-color var(--t-fast) var(--ease-expo), transform var(--t-fast) var(--ease-expo);
 }
 .command-item:hover {
   background: var(--c-surface-2);
+  border-color: var(--c-line);
+  transform: translateX(2px);
 }
 .command-item span {
   font-size: 12.5px;
+  font-weight: 500;
 }
 .command-item small {
   overflow: hidden;
   color: var(--c-muted);
+  font-family: var(--font-mono);
   font-size: 10.5px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -837,36 +854,48 @@ async function executeDraft() {
 .terminal-keys,
 .terminal-actions {
   display: flex;
-  gap: 4px;
-  padding: 6px;
+  gap: 6px;
+  padding: 8px 10px;
   overflow-x: auto;
   flex-shrink: 0;
-  border-top: 1px solid #343840;
+  background: #101014;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 .terminal-keys button,
 .terminal-actions button {
   flex-shrink: 0;
   min-width: 44px;
   min-height: 44px;
-  padding: 0 10px;
-  border: 1px solid #414752;
-  border-radius: 6px;
-  color: #e2e5eb;
-  background: #252930;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #f0f0ed;
+  background: #17171c;
   touch-action: manipulation;
-  font-size: 13px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-expo), border-color var(--t-fast) var(--ease-expo), color var(--t-fast) var(--ease-expo);
+}
+.terminal-keys button:hover:not(:disabled),
+.terminal-actions button:hover:not(:disabled) {
+  background: #222229;
+  border-color: rgba(255, 255, 255, 0.24);
 }
 .terminal-keys button[aria-pressed="true"] {
-  background: #2563eb;
-  color: white;
+  background: #29df7e;
+  border-color: #29df7e;
+  color: #070707;
+  font-weight: 600;
 }
 .terminal-keys button:disabled,
 .terminal-actions button:disabled {
-  opacity: 0.4;
+  opacity: 0.36;
+  cursor: not-allowed;
 }
 .terminal-keys button:focus-visible,
 .terminal-actions button:focus-visible {
-  outline: 2px solid #93c5fd;
+  outline: 2px solid #29df7e;
   outline-offset: -2px;
 }
 .terminal-output {

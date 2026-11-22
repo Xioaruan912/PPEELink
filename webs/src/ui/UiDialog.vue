@@ -1,6 +1,7 @@
 <template>
   <el-dialog
     v-bind="$attrs"
+    append-to-body
     :model-value="modelValue"
     :title="title"
     :width="width"

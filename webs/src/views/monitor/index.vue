@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import PageHeader from "@/ui/PageHeader.vue";
 import {
   computed,
+  nextTick,
   onMounted,
   onBeforeUnmount,
   onActivated,
@@ -11,6 +11,7 @@ import {
   watch,
 } from "vue";
 import { useRouter } from "vue-router";
+import gsap from "gsap";
 import { Delete, Plus, Refresh } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -18,7 +19,6 @@ import {
   UiButton,
   UiDialog,
   UiDrawer,
-  UiPanel,
   UiSegmented,
   UiSkeleton,
   UiTag,
@@ -26,7 +26,6 @@ import {
 import IconChartLine from "~icons/ph/chart-line";
 import IconCheckCircle from "~icons/ph/check-circle";
 import MetricChart from "@/components/monitor/MetricChart.vue";
-import MonitorTerminal from "./MonitorTerminal.vue";
 import { formatBytes } from "@/utils/traffic";
 import { formatDateTime } from "@/utils/date";
 import {
@@ -41,15 +40,12 @@ import {
 } from "@/api/monitor";
 
 defineOptions({ name: "MonitorPage" });
+
 const router = useRouter();
-function openWorkspace(tab: "files" | "docker") {
-  const id = activeMonitor.value?.id;
-  detailVisible.value = false;
-  void router.push({
-    path: "/monitor/workspace",
-    query: { ...(id ? { id: String(id) } : {}), tab },
-  });
-}
+const rootEl = ref<HTMLElement>();
+const gridEl = ref<HTMLElement>();
+let gsapCtx: gsap.Context | null = null;
+let cardAnim: gsap.core.Tween | null = null;
 
 const phase = ref<"loading" | "ready" | "error">("loading");
 const error = ref("");
@@ -57,6 +53,7 @@ const items = ref<MonitorItem[]>([]);
 const agentManagerVisible = ref(false);
 const latestAgentVersion = ref("");
 const checkingAgents = ref(false);
+
 async function checkAgents() {
   checkingAgents.value = true;
   try {
@@ -65,6 +62,7 @@ async function checkAgents() {
     checkingAgents.value = false;
   }
 }
+
 const summary = reactive({ total: 0, online: 0, offline: 0 });
 
 const avgCPU = computed(() => {
@@ -75,7 +73,32 @@ const avgCPU = computed(() => {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 });
 
+function animateCardsIn() {
+  cardAnim?.kill();
+  if (
+    !gridEl.value ||
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  ) {
+    return;
+  }
+  const cards = gridEl.value.querySelectorAll<HTMLElement>(".server-card");
+  if (!cards.length) return;
+  cardAnim = gsap.fromTo(
+    cards,
+    { y: 16, opacity: 0 },
+    {
+      y: 0,
+      opacity: 1,
+      duration: 0.48,
+      stagger: 0.055,
+      ease: "expo.out",
+      clearProps: "transform,opacity",
+    }
+  );
+}
+
 let listLoading = false;
+let hasAnimatedInitial = false;
 async function load(silent = false, showError = false) {
   if (listLoading) return;
   listLoading = true;
@@ -89,6 +112,10 @@ async function load(silent = false, showError = false) {
     summary.online = data?.summary.online || 0;
     summary.offline = data?.summary.offline || 0;
     phase.value = "ready";
+    if (!hasAnimatedInitial) {
+      hasAnimatedInitial = true;
+      void nextTick(animateCardsIn);
+    }
   } catch (err: any) {
     if (showError) error.value = err?.message || "检查更新失败，请重试";
     if (!silent || !items.value.length) {
@@ -118,16 +145,42 @@ function resumeRefresh() {
   active = true;
   scheduleRefresh();
 }
+
 onMounted(() => {
   void load();
   resumeRefresh();
+  if (rootEl.value) {
+    gsapCtx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+        tl.from("[data-title-reveal]", {
+          yPercent: 108,
+          duration: 0.62,
+          clearProps: "transform",
+        }).from(
+          "[data-top-rule]",
+          {
+            scaleX: 0,
+            duration: 0.68,
+            clearProps: "transform",
+          },
+          "-=0.45"
+        );
+      });
+    }, rootEl.value);
+  }
 });
+
 onActivated(resumeRefresh);
 onDeactivated(stopRefresh);
-onBeforeUnmount(stopRefresh);
+onBeforeUnmount(() => {
+  stopRefresh();
+  gsapCtx?.revert();
+  gsapCtx = null;
+  cardAnim?.kill();
+});
 
-// Upgrade states: unknown (no hash yet), current, available, queued/offline,
-// failed/retry, sending, and local/read-only. Never report success on POST alone.
 const upgrading = ref<number | null>(null);
 async function upgrade(item: MonitorItem, cancel = false) {
   if (upgrading.value !== null) return;
@@ -135,9 +188,7 @@ async function upgrade(item: MonitorItem, cancel = false) {
   try {
     await updateMonitorAgent(item.id, cancel);
     ElMessage.success(
-      cancel
-        ? "已撤销尚未执行的升级请求"
-        : "升级已安排，等待服务器上的 Agent 完成更新并回报"
+      cancel ? "已撤销升级请求" : "升级已安排，等待 Agent 完成更新并回报"
     );
     await load();
   } catch (err: any) {
@@ -207,18 +258,6 @@ const detailLoading = ref(false);
 const detailError = ref("");
 const range = ref<string | number>("24h");
 const activeMonitor = ref<MonitorItem | null>(null);
-const terminalVisible = ref(false);
-const terminalTarget = ref<MonitorItem | null>(null);
-
-function openTerminal(item: MonitorItem | null) {
-  if (!item) return;
-  if (!item.proxyServerId) {
-    ElMessage.warning("该监控未关联自建服务器 agent，无法打开终端");
-    return;
-  }
-  terminalTarget.value = item;
-  terminalVisible.value = true;
-}
 
 const rangeOptions = [
   { label: "1 小时", value: "1h" },
@@ -281,6 +320,12 @@ const rows = computed(() => detail.value?.metrics || []);
 const percent = (used = 0, total = 0) =>
   total > 0 ? Math.min(100, (used / total) * 100) : 0;
 
+function barTone(value: number) {
+  if (value >= 90) return "is-bad";
+  if (value >= 75) return "is-warn";
+  return "";
+}
+
 const cpuSeries = computed(() => [
   { name: "CPU", data: rows.value.map((row) => row.cpuPercent) },
 ]);
@@ -300,12 +345,12 @@ const netSeries = computed(() => [
   {
     name: "下行",
     data: rows.value.map((row) => row.netInSpeed),
-    color: "#4fc3f7",
+    color: "#296edf",
   },
   {
     name: "上行",
     data: rows.value.map((row) => row.netOutSpeed),
-    color: "#ffb74d",
+    color: "#15b85a",
   },
 ]);
 const loadSeries = computed(() => [
@@ -313,12 +358,12 @@ const loadSeries = computed(() => [
   {
     name: "5 分钟",
     data: rows.value.map((row) => row.load5),
-    color: "#4fc3f7",
+    color: "#296edf",
   },
   {
     name: "15 分钟",
     data: rows.value.map((row) => row.load15),
-    color: "#ba68c8",
+    color: "#b45309",
   },
 ]);
 
@@ -339,15 +384,16 @@ function agentLabel(item: MonitorItem) {
       ? "旧版本"
       : "等待上报";
 }
+
 function agentState(item: MonitorItem) {
   if (item.removing) return "等待卸载";
   if (item.agentUpdateError) return "升级失败";
   if (item.agentUpdateRequested)
     return item.online ? "等待更新回报" : "等待服务器上线";
   if (item.agentUpgradeable === false) return "随面板更新";
-  if (item.agentUpdateConfirmed) return "已是最新版本";
+  if (item.agentUpdateConfirmed) return "已是最新";
   if (item.agentUpdateAvailable) return "有可用更新";
-  return "等待版本上报";
+  return "等待上报";
 }
 
 const currentPercent = (used?: number, total?: number) =>
@@ -358,7 +404,7 @@ async function removeMonitor(item: MonitorItem | null) {
   try {
     await ElMessageBox.confirm(
       item.ownsAgent
-        ? `删除「${item.name}」将卸载其 Agent 和代理服务，并删除历史指标。离线时等待上线后执行。`
+        ? `删除「${item.name}」将卸载其 Agent 和代理服务，并删除历史指标。`
         : `删除监控「${item.name}」？历史指标会一起删除。`,
       "删除服务器监控",
       { type: "warning", confirmButtonText: "删除", cancelButtonText: "取消" }
@@ -390,283 +436,302 @@ async function resetToken(item: MonitorItem | null) {
       install: data?.install || "",
     };
     addVisible.value = true;
-    ElMessage.success("令牌已重置，请更新服务器上的监控命令");
+    ElMessage.success("令牌已重置");
   } catch {
     ElMessage.error("重置失败，请稍后重试");
   }
 }
 </script>
+
 <template>
-  <div class="monitor-page server-experience">
-    <aside class="monitor-masthead" data-enter>
-      <PageHeader
-        title="主机与 Agent"
-        description="查看服务器运行状态；通过 Agent 管理终端、文件、容器和网络诊断。"
-      >
-        <template #actions>
-          <UiButton variant="primary" :icon="Plus" @click="openAdd"
-            >添加服务器</UiButton
-          >
-          <UiButton @click="agentManagerVisible = true">Agent 管理</UiButton>
-          <UiButton
-            :icon="Refresh"
-            :loading="phase === 'loading'"
-            @click="load()"
-            >刷新</UiButton
-          >
-        </template>
-      </PageHeader>
-
-      <div class="monitor-ledger">
-        <div>
-          <span>服务器</span>
-          <strong>{{ summary.total }}</strong>
+  <div ref="rootEl" class="monitor-gallery">
+    <!-- Compact Editorial Masthead -->
+    <header class="monitor-masthead" aria-labelledby="monitor-title">
+      <div class="masthead-left">
+        <div class="title-cluster">
+          <div class="title-mask">
+            <h1 id="monitor-title" class="gallery-title" data-title-reveal>
+              主机与 Agent
+            </h1>
+          </div>
+          <dl class="inline-metrics mono" aria-label="服务器运行概览">
+            <div>
+              <dt>服务器</dt>
+              <dd>{{ summary.total }}</dd>
+            </div>
+            <div>
+              <dt>在线</dt>
+              <dd class="is-ok">{{ summary.online }}</dd>
+            </div>
+            <div v-if="summary.offline > 0">
+              <dt>离线</dt>
+              <dd class="is-bad">{{ summary.offline }}</dd>
+            </div>
+            <div>
+              <dt>平均 CPU</dt>
+              <dd>{{ avgCPU.toFixed(1) }}%</dd>
+            </div>
+          </dl>
         </div>
-        <div>
-          <span>在线</span>
-          <strong class="ok">{{ summary.online }}</strong>
-        </div>
-        <div>
-          <span>离线</span>
-          <strong>{{ summary.offline }}</strong>
-        </div>
-        <div>
-          <span>平均 CPU</span>
-          <strong>{{ avgCPU.toFixed(1) }}<i>%</i></strong>
-        </div>
+        <p class="gallery-lead">
+          实时监控服务器硬件负载与网络吞吐，点击任意卡片查看历史曲线。
+        </p>
       </div>
-    </aside>
 
-    <UiPanel
-      title="服务器"
-      :count="items.length"
-      description="点击卡片查看历史曲线与实时指标。"
-      flush
-    >
-      <UiSkeleton
-        v-if="phase === 'loading'"
-        class="panel-pad"
-        :lines="4"
-        height="64px"
-      />
-      <div
-        v-else-if="phase === 'error'"
-        class="state-error panel-pad"
-        role="alert"
-      >
-        <span>{{ error }}</span>
-        <UiButton @click="load()">重试</UiButton>
-      </div>
-      <EmptyState
-        v-else-if="!items.length"
-        size="section"
-        title="还没有监控服务器"
-        description="在 VPS 上运行一条安装命令，就能看到 CPU、内存、磁盘和网络。"
-      >
-        <template #icon>
-          <span class="empty-icon"><IconChartLine /></span>
-        </template>
-        <template #action>
-          <UiButton :icon="Plus" @click="openAdd">添加第一台服务器</UiButton>
-        </template>
-      </EmptyState>
-      <div v-else class="server-grid">
-        <article
-          v-for="(item, index) in items"
-          :key="item.id"
-          :style="{ '--server-index': index }"
-          class="server-card"
-          role="button"
-          tabindex="0"
-          @click="openDetail(item)"
-          @keydown.enter="openDetail(item)"
+      <div class="masthead-actions">
+        <UiButton variant="primary" :icon="Plus" @click="openAdd">
+          添加服务器
+        </UiButton>
+        <UiButton variant="ghost" @click="agentManagerVisible = true">
+          Agent 管理
+        </UiButton>
+        <UiButton
+          variant="ghost"
+          :icon="Refresh"
+          :loading="phase === 'loading'"
+          @click="load()"
         >
-          <header class="server-head">
+          刷新
+        </UiButton>
+      </div>
+    </header>
+
+    <span class="top-rule" data-top-rule aria-hidden="true"></span>
+
+    <div v-if="phase === 'loading'" class="state-pad">
+      <UiSkeleton :lines="4" height="84px" />
+    </div>
+
+    <div v-else-if="phase === 'error'" class="state-error" role="alert">
+      <span>{{ error }}</span>
+      <UiButton @click="load()">重试</UiButton>
+    </div>
+
+    <EmptyState
+      v-else-if="!items.length"
+      size="section"
+      title="还没有监控服务器"
+      description="在 VPS 上运行一条安装命令，即可实时查看 CPU、内存、磁盘与网络。"
+    >
+      <template #icon>
+        <span class="empty-icon"><IconChartLine /></span>
+      </template>
+      <template #action>
+        <UiButton variant="primary" :icon="Plus" @click="openAdd">
+          添加第一台服务器
+        </UiButton>
+      </template>
+    </EmptyState>
+
+    <!-- Pure Telemetry Server Cards -->
+    <div v-else ref="gridEl" class="server-grid">
+      <article
+        v-for="item in items"
+        :key="item.id"
+        class="server-card"
+        :class="{ 'is-offline': !item.online }"
+        role="button"
+        tabindex="0"
+        @click="openDetail(item)"
+        @keydown.enter="openDetail(item)"
+      >
+        <header class="card-head">
+          <div class="card-title-wrap">
             <span
               class="status-dot"
               :class="item.online ? 'is-on' : 'is-off'"
+              aria-hidden="true"
             ></span>
-            <strong>{{ item.name }}</strong>
-            <UiTag :tone="item.online ? 'ok' : 'neutral'">{{
-              item.online ? "在线" : "离线"
-            }}</UiTag>
-          </header>
-          <p class="server-sub">
-            {{
-              [
-                item.group,
-                item.os && item.arch
-                  ? `${item.os}/${item.arch}`
-                  : item.os || "系统待上报",
-              ]
-                .filter(Boolean)
-                .join(" · ")
-            }}
-            <span v-if="item.lastSeenAt">
-              · {{ formatDateTime(item.lastSeenAt) }}
-            </span>
-          </p>
+            <div class="card-identity">
+              <h2>{{ item.name }}</h2>
+              <span class="card-meta mono">
+                {{
+                  [
+                    item.group,
+                    item.os && item.arch
+                      ? `${item.os}/${item.arch}`
+                      : item.os || "待上报",
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")
+                }}
+              </span>
+            </div>
+          </div>
+          <UiTag :tone="item.online ? 'ok' : 'neutral'">
+            {{ item.online ? "在线" : "离线" }}
+          </UiTag>
+        </header>
 
-          <template v-if="item.latest">
-            <div class="metric-line">
+        <div v-if="item.latest" class="card-metrics">
+          <div class="metric-item">
+            <div class="metric-row">
               <span>CPU</span>
-              <b>{{ item.latest.cpuPercent.toFixed(1) }}%</b>
+              <strong class="mono">{{ item.latest.cpuPercent.toFixed(1) }}%</strong>
             </div>
-            <div class="bar">
+            <div class="metric-track">
               <i
-                :style="{ width: `${Math.max(2, item.latest.cpuPercent)}%` }"
-              ></i>
-            </div>
-            <div class="metric-line">
-              <span>内存</span>
-              <b
-                >{{
-                  currentPercent(item.latest.memUsed, item.latest.memTotal)
-                }}%</b
-              >
-            </div>
-            <div class="bar">
-              <i
+                :class="barTone(item.latest.cpuPercent)"
                 :style="{
-                  width: `${Math.max(2, percent(item.latest.memUsed, item.latest.memTotal))}%`,
+                  transform: `scaleX(${Math.max(0.02, Math.min(1, item.latest.cpuPercent / 100))})`,
                 }"
               ></i>
             </div>
-            <div class="metric-line">
-              <span>磁盘</span>
-              <b
-                >{{
-                  currentPercent(item.latest.diskUsed, item.latest.diskTotal)
-                }}%</b
-              >
-            </div>
-            <div class="bar">
-              <i
-                :style="{
-                  width: `${Math.max(2, percent(item.latest.diskUsed, item.latest.diskTotal))}%`,
-                }"
-              ></i>
-            </div>
-            <footer class="server-foot">
-              <span>↓ {{ formatBytes(item.latest.netInSpeed) }}/s</span>
-              <span>↑ {{ formatBytes(item.latest.netOutSpeed) }}/s</span>
-              <span>{{ formatUptime(item.latest.uptime) }}</span>
-            </footer>
-          </template>
-          <p v-else class="server-empty">等待服务器首次上报…</p>
-          <p v-if="item.check" class="check-line">
-            节点检测
-            <b :class="{ bad: item.check.success < item.check.total }"
-              >{{ item.check.success }}/{{ item.check.total }}</b
-            >
-            <span v-if="item.check.checkedAt"
-              >· {{ formatDateTime(item.check.checkedAt) }}</span
-            >
-          </p>
-          <p v-else-if="item.linked" class="check-line muted">
-            节点检测等待 Agent 上报…
-          </p>
-        </article>
-      </div>
-    </UiPanel>
+          </div>
 
+          <div class="metric-item">
+            <div class="metric-row">
+              <span>内存</span>
+              <strong class="mono">
+                {{ currentPercent(item.latest.memUsed, item.latest.memTotal) }}%
+              </strong>
+            </div>
+            <div class="metric-track">
+              <i
+                :class="barTone(percent(item.latest.memUsed, item.latest.memTotal))"
+                :style="{
+                  transform: `scaleX(${Math.max(0.02, Math.min(1, percent(item.latest.memUsed, item.latest.memTotal) / 100))})`,
+                }"
+              ></i>
+            </div>
+          </div>
+
+          <div class="metric-item">
+            <div class="metric-row">
+              <span>磁盘</span>
+              <strong class="mono">
+                {{ currentPercent(item.latest.diskUsed, item.latest.diskTotal) }}%
+              </strong>
+            </div>
+            <div class="metric-track">
+              <i
+                :class="barTone(percent(item.latest.diskUsed, item.latest.diskTotal))"
+                :style="{
+                  transform: `scaleX(${Math.max(0.02, Math.min(1, percent(item.latest.diskUsed, item.latest.diskTotal) / 100))})`,
+                }"
+              ></i>
+            </div>
+          </div>
+        </div>
+        <p v-else class="card-empty">等待服务器首次上报…</p>
+
+        <footer class="card-foot mono">
+          <div v-if="item.latest" class="net-speed">
+            <span>↓ {{ formatBytes(item.latest.netInSpeed) }}/s</span>
+            <span>↑ {{ formatBytes(item.latest.netOutSpeed) }}/s</span>
+          </div>
+          <span v-else class="net-speed">--</span>
+          <span class="uptime">
+            {{ item.latest ? formatUptime(item.latest.uptime) : "未上线" }}
+          </span>
+        </footer>
+      </article>
+    </div>
+
+    <!-- Clean Agent Manager Drawer (Zero Bottom Fine-Print Clutter) -->
     <UiDrawer
       v-model="agentManagerVisible"
       title="Agent 管理"
-      size="min(680px, 100vw)"
+      size="min(620px, 100vw)"
     >
       <div class="agent-manager">
-        <p class="agent-intro">
-          Agent
-          是安装在服务器上的管理程序，提供运行监控、远程终端、文件与容器管理、网络诊断，以及已启用的节点和中转服务。
-        </p>
         <div class="agent-release">
           <div>
-            <span>当前发布版本</span
-            ><strong>{{
-              latestAgentVersion ? `v${latestAgentVersion}` : "等待获取"
-            }}</strong>
+            <span>当前发布版本</span>
+            <strong class="mono">
+              {{ latestAgentVersion ? `v${latestAgentVersion}` : "等待获取" }}
+            </strong>
           </div>
           <UiButton
+            variant="ghost"
             :icon="Refresh"
             :loading="checkingAgents"
             @click="checkAgents"
-            >检查更新</UiButton
           >
+            检查更新
+          </UiButton>
         </div>
+
         <p v-if="error" class="agent-error" role="alert">{{ error }}</p>
+
         <EmptyState
           v-if="!items.length"
           size="inline"
-          description="添加服务器后，可在这里管理 Agent。"
+          description="添加服务器后，可在这里统一管理 Agent 版本。"
         />
-        <article v-for="item in items" :key="item.id" class="agent-row">
-          <header>
-            <strong>{{ item.name }}</strong
-            ><UiTag :tone="item.online ? 'ok' : 'neutral'">{{
-              item.online ? "在线" : "离线"
-            }}</UiTag>
-          </header>
-          <div class="agent-version-line">
-            <span
-              >已安装 <b>{{ agentLabel(item) }}</b></span
-            ><span
-              class="agent-state"
-              :class="{ failed: !!item.agentUpdateError }"
-              >{{ agentState(item) }}</span
-            >
-          </div>
-          <p v-if="item.agentUpdateError" class="agent-error">
-            {{ item.agentUpdateError }}
-          </p>
-          <div class="agent-row-actions">
-            <UiButton
-              v-if="
-                item.agentUpgradeable !== false &&
-                (item.agentUpdateAvailable ||
-                  item.agentUpdateRequested ||
-                  item.agentUpdateError)
-              "
-              size="sm"
-              :variant="item.agentUpdateRequested ? 'ghost' : 'primary'"
-              :loading="upgrading === item.id"
-              :disabled="upgrading !== null || item.removing"
-              @click="
-                upgrade(
-                  item,
-                  !!item.agentUpdateRequested && !item.agentUpdateError
-                )
-              "
-              >{{
-                item.agentUpdateError
-                  ? "重试升级"
-                  : item.agentUpdateRequested
-                    ? "撤销升级"
-                    : "升级 Agent"
-              }}</UiButton
-            ><UiButton
-              v-if="item.proxyServerId"
-              size="sm"
-              variant="ghost"
-              @click="
-                agentManagerVisible = false;
-                router.push({ name: 'ProxyServers' });
-              "
-              >代理配置</UiButton
-            >
-          </div>
-        </article>
-        <p class="agent-intro">
-          版本从 1.11 顺序递增，1.19 后为 1.20。网页界面更新不会单独触发 Agent
-          升级提示；点击检查更新会读取服务器最近上报的状态。
-        </p>
+
+        <div v-else class="agent-list">
+          <article v-for="item in items" :key="item.id" class="agent-row">
+            <div class="agent-row-main">
+              <div class="agent-row-top">
+                <strong>{{ item.name }}</strong>
+                <UiTag :tone="item.online ? 'ok' : 'neutral'">
+                  {{ item.online ? "在线" : "离线" }}
+                </UiTag>
+              </div>
+              <div class="agent-version-line mono">
+                <span>{{ agentLabel(item) }}</span>
+                <span
+                  class="agent-state"
+                  :class="{ failed: !!item.agentUpdateError }"
+                >
+                  {{ agentState(item) }}
+                </span>
+              </div>
+              <p v-if="item.agentUpdateError" class="agent-error">
+                {{ item.agentUpdateError }}
+              </p>
+            </div>
+
+            <div class="agent-row-actions">
+              <UiButton
+                v-if="
+                  item.agentUpgradeable !== false &&
+                  (item.agentUpdateAvailable ||
+                    item.agentUpdateRequested ||
+                    item.agentUpdateError)
+                "
+                size="sm"
+                :variant="item.agentUpdateRequested ? 'ghost' : 'primary'"
+                :loading="upgrading === item.id"
+                :disabled="upgrading !== null || item.removing"
+                @click="
+                  upgrade(
+                    item,
+                    !!item.agentUpdateRequested && !item.agentUpdateError
+                  )
+                "
+              >
+                {{
+                  item.agentUpdateError
+                    ? "重试升级"
+                    : item.agentUpdateRequested
+                      ? "撤销升级"
+                      : "升级 Agent"
+                }}
+              </UiButton>
+              <UiButton
+                v-if="item.proxyServerId"
+                size="sm"
+                variant="ghost"
+                @click="
+                  agentManagerVisible = false;
+                  router.push({ name: 'ProxyServers' });
+                "
+              >
+                代理配置
+              </UiButton>
+            </div>
+          </article>
+        </div>
       </div>
     </UiDrawer>
 
+    <!-- Add Server Monitor Dialog -->
     <UiDialog
       v-model="addVisible"
       :title="created ? '监控已创建' : '添加服务器监控'"
-      width="680px"
+      width="620px"
     >
       <template v-if="created">
         <div class="install-success">
@@ -674,15 +739,11 @@ async function resetToken(item: MonitorItem | null) {
             <span class="success-icon"><IconCheckCircle /></span>
             <div class="install-title">
               <strong>{{ created.name }}</strong>
-              <small>已创建，等待服务器首次上报</small>
+              <small>已创建，以 root 登录服务器执行下方命令即可接入</small>
             </div>
           </div>
-          <div class="install-steps">
-            <div><span>1</span>使用 root 登录服务器</div>
-            <div><span>2</span>执行下面的安装命令</div>
-          </div>
           <div class="command-box">
-            <code>{{ created.install }}</code>
+            <code class="mono">{{ created.install }}</code>
             <button
               type="button"
               class="copy-chip"
@@ -691,58 +752,56 @@ async function resetToken(item: MonitorItem | null) {
               复制
             </button>
           </div>
-          <p class="install-hint">
-            令牌只显示这一次。重置令牌后旧命令会失效；安装完成后约一分钟出现第一份数据。
-          </p>
         </div>
       </template>
+
       <el-form v-else label-position="top" @submit.prevent="submitAdd">
-        <p class="dialog-note">
-          如果这台机器已经装了自建节点
-          agent，不用在这里添加：到「自建节点」编辑服务器，打开「服务器监控」即可复用同一个
-          agent。
-        </p>
-        <el-form-item label="名称" required>
-          <el-input
-            v-model="form.name"
-            maxlength="40"
-            placeholder="例如 日本-01"
-          />
-        </el-form-item>
-        <el-form-item label="分组">
-          <el-input
-            v-model="form.group"
-            maxlength="20"
-            placeholder="例如 日本"
-          />
-        </el-form-item>
+        <div class="dialog-grid-2">
+          <el-form-item label="服务器名称" required>
+            <el-input
+              v-model="form.name"
+              maxlength="40"
+              placeholder="例如：日本-01"
+            />
+          </el-form-item>
+          <el-form-item label="分组">
+            <el-input
+              v-model="form.group"
+              maxlength="20"
+              placeholder="例如：亚太"
+            />
+          </el-form-item>
+        </div>
         <el-form-item label="备注">
           <el-input
             v-model="form.note"
             maxlength="80"
-            placeholder="例如 主要落地机"
+            placeholder="例如：主要落地机"
           />
         </el-form-item>
         <p v-if="addError" class="field-error" role="alert">{{ addError }}</p>
       </el-form>
+
       <template #footer>
-        <UiButton @click="addVisible = false">{{
-          created ? "完成" : "取消"
-        }}</UiButton>
+        <UiButton variant="ghost" @click="addVisible = false">
+          {{ created ? "完成" : "取消" }}
+        </UiButton>
         <UiButton
           v-if="!created"
           variant="primary"
           :loading="adding"
           @click="submitAdd"
-          >创建</UiButton
         >
+          创建并生成命令
+        </UiButton>
       </template>
     </UiDialog>
 
+    <!-- Pure Telemetry Detail Dialog (No Redundant Terminal/Files/Docker Buttons) -->
     <UiDialog
       v-model="detailVisible"
       :title="detail?.monitor.name || activeMonitor?.name || '服务器详情'"
-      width="1000px"
+      width="980px"
       @closed="closeDetail"
     >
       <div v-if="detailLoading" class="detail-loading">
@@ -758,79 +817,83 @@ async function resetToken(item: MonitorItem | null) {
             <span
               class="status-dot"
               :class="detail.online ? 'is-on' : 'is-off'"
+              aria-hidden="true"
             ></span>
             <strong>{{ detail.monitor.name }}</strong>
-            <UiTag :tone="detail.online ? 'ok' : 'neutral'">{{
-              detail.online ? "在线" : "离线"
-            }}</UiTag>
-            <span class="detail-meta"
-              >{{ detail.monitor.group || "未分组" }} ·
-              {{ detail.monitor.os }}/{{ detail.monitor.arch }}</span
-            >
+            <UiTag :tone="detail.online ? 'ok' : 'neutral'">
+              {{ detail.online ? "在线" : "离线" }}
+            </UiTag>
+            <span class="detail-meta mono">
+              {{ detail.monitor.group || "未分组" }} ·
+              {{ detail.monitor.os }}/{{ detail.monitor.arch }}
+            </span>
           </div>
           <div class="detail-actions">
-            <UiButton variant="primary" @click="openTerminal(activeMonitor)"
-              >Agent 终端</UiButton
-            >
-            <UiButton @click="openWorkspace('files')">文件管理</UiButton>
-            <UiButton @click="openWorkspace('docker')">Docker 管理</UiButton>
             <UiButton
+              size="sm"
+              variant="ghost"
               :icon="Refresh"
               :loading="detailLoading"
               @click="loadDetail"
-              >刷新</UiButton
             >
-            <UiButton :icon="Refresh" @click="resetToken(activeMonitor)"
-              >重置令牌</UiButton
-            >
+              刷新
+            </UiButton>
             <UiButton
+              size="sm"
+              variant="ghost"
+              @click="resetToken(activeMonitor)"
+            >
+              重置令牌
+            </UiButton>
+            <UiButton
+              size="sm"
               variant="danger"
               :icon="Delete"
               @click="removeMonitor(activeMonitor)"
-              >删除</UiButton
             >
+              删除
+            </UiButton>
           </div>
         </div>
 
-        <div class="detail-stats" v-if="latest">
+        <div v-if="latest" class="detail-stats">
           <div>
             <span>CPU</span>
-            <strong>{{ latest.cpuPercent.toFixed(1) }}%</strong>
+            <strong class="mono">{{ latest.cpuPercent.toFixed(1) }}%</strong>
           </div>
           <div>
             <span>内存</span>
-            <strong
-              >{{ currentPercent(latest.memUsed, latest.memTotal) }}%</strong
-            >
-            <small
-              >{{ formatBytes(latest.memUsed) }} /
-              {{ formatBytes(latest.memTotal) }}</small
-            >
+            <strong class="mono">
+              {{ currentPercent(latest.memUsed, latest.memTotal) }}%
+            </strong>
+            <small class="mono">
+              {{ formatBytes(latest.memUsed) }} /
+              {{ formatBytes(latest.memTotal) }}
+            </small>
           </div>
           <div>
             <span>磁盘</span>
-            <strong
-              >{{ currentPercent(latest.diskUsed, latest.diskTotal) }}%</strong
-            >
-            <small
-              >{{ formatBytes(latest.diskUsed) }} /
-              {{ formatBytes(latest.diskTotal) }}</small
-            >
+            <strong class="mono">
+              {{ currentPercent(latest.diskUsed, latest.diskTotal) }}%
+            </strong>
+            <small class="mono">
+              {{ formatBytes(latest.diskUsed) }} /
+              {{ formatBytes(latest.diskTotal) }}
+            </small>
           </div>
           <div>
             <span>负载</span>
-            <strong>{{ latest.load1.toFixed(2) }}</strong>
-            <small
-              >{{ latest.load5.toFixed(2) }} /
-              {{ latest.load15.toFixed(2) }}</small
-            >
+            <strong class="mono">{{ latest.load1.toFixed(2) }}</strong>
+            <small class="mono">
+              {{ latest.load5.toFixed(2) }} / {{ latest.load15.toFixed(2) }}
+            </small>
           </div>
           <div>
             <span>运行时间</span>
-            <strong>{{ formatUptime(latest.uptime) }}</strong>
-            <small
-              >{{ latest.processCount }} 进程 · {{ latest.tcpConns }} TCP</small
-            >
+            <strong class="mono">{{ formatUptime(latest.uptime) }}</strong>
+            <small class="mono">
+              {{ latest.processCount }} 进程 · {{ latest.tcpConns }} TCP
+            </small>
           </div>
         </div>
 
@@ -883,548 +946,547 @@ async function resetToken(item: MonitorItem | null) {
         </div>
       </template>
     </UiDialog>
-
-    <MonitorTerminal v-model="terminalVisible" :monitor="terminalTarget" />
   </div>
 </template>
+
 <style scoped>
-.agent-manager {
+.monitor-gallery {
   display: grid;
-  gap: 16px;
+  gap: 20px;
+  max-width: 1200px;
   min-width: 0;
+  padding-bottom: 56px;
 }
-.agent-intro {
-  font-size: 12px;
-  line-height: 1.8;
-  color: var(--c-muted);
-  margin: 0;
-}
-.agent-release {
+
+.monitor-masthead {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  padding: 16px;
-  background: var(--c-surface-2);
-  border-radius: 12px;
-}
-.agent-release > div {
-  display: grid;
-  gap: 5px;
-}
-.agent-release span {
-  font-size: 12px;
-  color: var(--c-muted);
-}
-.agent-release strong {
-  font-size: 23px;
-  color: var(--c-data);
-  font-variant-numeric: tabular-nums;
-}
-.agent-row {
-  display: grid;
-  gap: 12px;
-  padding: 15px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  min-width: 0;
-}
-.agent-row header {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-}
-.agent-row header strong {
-  font-size: 14px;
-  overflow-wrap: anywhere;
-}
-.agent-version-line {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--c-muted);
-}
-.agent-version-line b {
-  font-weight: 600;
-  color: var(--c-ink);
-  margin-left: 5px;
-}
-.agent-state {
-  color: var(--c-data);
-}
-.agent-state.failed,
-.agent-error {
-  color: var(--c-warn-ink);
-}
-.agent-error {
-  font-size: 12px;
-  line-height: 1.7;
-  margin: 0;
-  overflow-wrap: anywhere;
-}
-.agent-row-actions {
-  display: flex;
-  gap: 8px;
+  gap: 20px;
   flex-wrap: wrap;
 }
 
-.monitor-page {
+.masthead-left {
   display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 40px;
-  align-items: start;
-  padding-bottom: 48px;
+  gap: 6px;
+  min-width: 0;
 }
-.monitor-masthead {
-  position: sticky;
-  top: 28px;
-  display: grid;
-  gap: 28px;
-}
-.monitor-masthead :deep(.page-header) {
-  margin-bottom: 0;
-}
-.monitor-masthead :deep(.page-header__grid) {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 18px;
-}
-.monitor-masthead :deep(.page-header__actions) {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.monitor-masthead :deep(.page-header__actions > :first-child) {
-  grid-column: 1 / -1;
-}
-.monitor-ledger {
-  display: grid;
-  border-top: 1px solid var(--c-ink);
-}
-.monitor-ledger > div {
+
+.title-cluster {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 15px 2px;
-  border-bottom: 1px solid var(--c-line);
+  gap: 20px;
+  flex-wrap: wrap;
 }
-.monitor-ledger span {
-  color: var(--c-muted);
-  font-size: 13px;
-  font-weight: 540;
+
+.title-mask {
+  overflow: hidden;
+  padding-bottom: 4px;
+  margin-bottom: -4px;
 }
-.monitor-ledger strong {
-  font: 700 28px/1 var(--font-display);
-  font-variant-numeric: tabular-nums;
+
+.gallery-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 500;
+  line-height: 1.08;
   letter-spacing: -0.04em;
   color: var(--c-ink);
 }
-.monitor-ledger strong.ok {
-  color: var(--c-ok);
-}
-.monitor-ledger strong i {
-  margin-left: 2px;
-  color: var(--c-muted);
-  font-size: 13px;
-  font-style: normal;
-}
-@media (max-width: 1024px) {
-  .monitor-page {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
-  .monitor-masthead {
-    position: static;
-    gap: 20px;
-  }
-  .monitor-ledger {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    border: 1px solid var(--c-line);
-    border-radius: var(--radius-panel);
-    background: var(--c-surface);
-  }
-  .monitor-ledger > div {
-    padding: 14px 16px;
-    border-bottom: 0;
-    border-right: 1px solid var(--c-line);
-  }
-  .monitor-ledger > div:last-child {
-    border-right: 0;
-  }
-}
-.server-grid {
-  display: grid;
-  align-items: start; /* 卡片按自身内容高度，不被同行最高卡片拉出空白 */
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
-  padding: 14px;
-}
-.server-card {
-  min-width: 0;
-  display: grid;
-  align-content: start; /* 卡片被拉高时内容贴顶，避免中间出现大片空白 */
-  gap: 6px;
-  padding: 14px;
-  border: 1px solid var(--c-line);
-  border-radius: 14px;
-  background: var(--c-surface);
-  cursor: pointer;
-  transition:
-    border-color var(--duration-fast),
-    transform var(--duration-fast);
-}
-.server-card:hover {
-  border-color: var(--c-focus);
-  transform: translateY(-1px);
-}
-.server-head {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.server-head strong {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-size: 14px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--c-muted);
-}
-.status-dot.is-on {
-  background: var(--c-ok);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-ok) 18%, transparent);
-}
-.status-dot.is-off {
-  background: var(--c-bad);
-}
-.server-sub {
-  margin: 0 0 4px;
-  overflow: hidden;
-  color: var(--c-muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.agent-status {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  min-width: 0;
-  color: var(--c-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-.agent-status > span {
-  overflow-wrap: anywhere;
-}
-.metric-line {
-  display: flex;
-  justify-content: space-between;
-  color: var(--c-muted);
-  font-size: 11px;
-}
-.metric-line b {
-  color: var(--c-ink);
-  font-weight: 500;
-}
-.bar {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--c-surface-2);
-}
-.bar i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--c-signal);
-}
-.server-foot {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  margin-top: 4px;
-  color: var(--c-muted);
-  font-size: 11px;
-}
-.server-empty {
-  margin: 8px 0 0;
-  color: var(--c-muted);
-  font-size: 12px;
-}
-.check-line {
-  display: flex;
-  flex-wrap: wrap;
+
+.inline-metrics {
+  display: inline-flex;
   align-items: baseline;
-  gap: 5px;
-  margin: 6px 0 0;
-  padding-top: 6px;
-  border-top: 1px dashed var(--c-line);
+  gap: 16px;
+  margin: 0;
+}
+
+.inline-metrics > div {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.inline-metrics dt {
+  font-family: var(--font-ui);
+  font-size: 12px;
   color: var(--c-muted);
-  font-size: 11px;
 }
-.check-line b {
-  color: var(--c-ok);
+
+.inline-metrics dd {
+  margin: 0;
+  font-size: 16px;
   font-weight: 600;
+  color: var(--c-ink);
 }
-.check-line b.bad {
-  color: var(--c-warn);
+
+.inline-metrics dd.is-ok {
+  color: var(--c-ok);
 }
-.check-line.muted {
-  border-top: 0;
-  padding-top: 0;
+
+.inline-metrics dd.is-bad {
+  color: var(--c-bad);
 }
-.panel-pad {
-  padding: 16px;
+
+.gallery-lead {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--c-muted);
 }
+
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.top-rule {
+  display: block;
+  height: 1px;
+  background: var(--c-ink);
+  transform-origin: left;
+}
+
+.state-pad {
+  padding: 20px 0;
+}
+
 .state-error {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid rgb(223 41 41 / 0.25);
+  border-radius: 14px;
+  background: rgb(223 41 41 / 0.05);
   color: var(--c-bad);
-  font-size: 13px;
+  font-size: 13.5px;
 }
+
 .empty-icon {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
-  margin-bottom: 12px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--c-signal) 18%, var(--c-surface-2));
-  color: var(--c-signal-text);
+  background: var(--c-surface-2);
+  color: var(--c-ink);
 }
-.empty-icon svg {
-  width: 20px;
-  height: 20px;
-}
-.install-success {
+
+/* Sculptural Server Telemetry Cards */
+.server-grid {
   display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.server-card {
+  display: grid;
+  gap: 18px;
+  padding: 20px 22px;
+  border: 1px solid var(--c-line);
+  border-radius: 18px;
+  background: var(--c-surface);
+  cursor: pointer;
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    opacity var(--duration-fast) var(--ease-out);
+}
+
+.server-card.is-offline {
+  opacity: 0.72;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .server-grid:hover .server-card:not(:hover) {
+    opacity: 0.62;
+  }
+  .server-card:hover {
+    border-color: var(--c-ink);
+    transform: translateY(-2px);
+    opacity: 1;
+  }
+}
+
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--c-muted);
+}
+
+.status-dot.is-on {
+  background: var(--c-ok);
+  box-shadow: 0 0 0 3px rgb(21 184 90 / 0.16);
+}
+
+.card-identity {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.card-identity h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16.5px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-meta {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.card-metrics {
+  display: grid;
+  gap: 12px;
+}
+
+.metric-item {
+  display: grid;
+  gap: 5px;
+}
+
+.metric-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.metric-row strong {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.metric-track {
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+}
+
+.metric-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--c-ok);
+  transform-origin: left;
+  transition: transform var(--duration-medium) var(--ease-out);
+}
+
+.metric-track i.is-warn {
+  background: var(--c-warn);
+}
+
+.metric-track i.is-bad {
+  background: var(--c-bad);
+}
+
+.card-empty {
+  margin: 0;
+  padding: 20px 0;
+  font-size: 13px;
+  color: var(--c-muted);
+}
+
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--c-line);
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.net-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Agent Manager Drawer */
+.agent-manager {
+  display: grid;
+  gap: 18px;
+}
+
+.agent-release {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface);
+}
+
+.agent-release span {
+  display: block;
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.agent-release strong {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.agent-list {
+  display: grid;
+  border-top: 1px solid var(--c-line);
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.agent-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.agent-row-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-row-top strong {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.agent-version-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.agent-state.failed {
+  color: var(--c-bad);
+}
+
+.agent-error {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-bad);
+}
+
+.agent-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
+
+/* Add Server Modal */
+.dialog-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+
+.install-success {
+  display: grid;
+  gap: 16px;
+}
+
 .install-head {
   display: flex;
   align-items: center;
   gap: 12px;
 }
+
 .success-icon {
   display: grid;
-  width: 40px;
-  height: 40px;
-  flex: none;
   place-items: center;
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--c-ok) 16%, var(--c-surface-2));
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgb(21 184 90 / 0.12);
   color: var(--c-ok);
 }
-.success-icon svg {
-  width: 20px;
-  height: 20px;
-}
+
 .install-title {
   display: grid;
   gap: 2px;
 }
-.install-title strong {
-  font-size: 15px;
-  font-weight: 600;
-}
+
 .install-title small {
-  color: var(--c-muted);
-  font-size: 12px;
-}
-.install-steps {
-  display: grid;
-  gap: 6px;
   color: var(--c-muted);
   font-size: 12.5px;
 }
-.install-steps > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.install-steps span {
-  display: grid;
-  width: 18px;
-  height: 18px;
-  flex: none;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--c-surface-2);
-  color: var(--c-ink);
-  font-size: 10px;
-}
+
 .command-box {
+  position: relative;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px 12px 12px 14px;
-  border: 1px solid var(--c-line);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
   border-radius: 12px;
-  background: var(--c-surface-2);
+  background: #0c0c0f;
+  color: #f0f0ed;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: break-all;
 }
-.command-box code {
-  min-width: 0;
-  flex: 1;
-  color: var(--c-ink);
-  font: 12px/1.75 var(--font-mono);
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
-}
+
 .copy-chip {
   flex: none;
-  padding: 4px 10px;
-  border: 1px solid var(--c-line);
+  padding: 5px 12px;
+  border: 1px solid rgb(255 255 255 / 0.18);
   border-radius: 999px;
-  background: var(--c-surface);
-  color: var(--c-ink);
-  font-size: 11.5px;
+  background: rgb(255 255 255 / 0.08);
+  color: #ffffff;
+  font-size: 12px;
   cursor: pointer;
 }
+
 .copy-chip:hover {
-  border-color: var(--c-focus);
+  background: rgb(255 255 255 / 0.16);
 }
-.install-hint {
+
+.field-error {
   margin: 0;
-  color: var(--c-subtle);
-  font-size: 11px;
-  line-height: 1.7;
+  color: var(--c-bad);
+  font-size: 12.5px;
 }
-.detail-loading {
-  padding: 4px 0;
-}
+
+/* Detail Modal */
 .detail-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--c-line);
 }
+
 .detail-title {
   display: flex;
-  min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
+
 .detail-title strong {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
 }
+
 .detail-meta {
-  overflow: hidden;
-  color: var(--c-muted);
   font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: var(--c-muted);
 }
+
 .detail-actions {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
+
 .detail-stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
-  margin-bottom: 14px;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--c-line);
 }
+
 .detail-stats > div {
   display: grid;
-  gap: 2px;
-  padding: 10px 12px;
-  border: 1px solid var(--c-line);
-  border-radius: 10px;
-  background: var(--c-surface);
+  gap: 3px;
 }
+
 .detail-stats span {
+  font-size: 11.5px;
   color: var(--c-muted);
-  font-size: 11px;
 }
+
 .detail-stats strong {
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 500;
+  color: var(--c-ink);
 }
+
 .detail-stats small {
-  overflow: hidden;
-  color: var(--c-subtle);
-  font-size: 10px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 11px;
+  color: var(--c-muted);
 }
+
 .range-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
+  padding: 16px 0 12px;
 }
+
+.chart-empty {
+  padding: 36px 0;
+  text-align: center;
+  color: var(--c-muted);
+  font-size: 13px;
+}
+
 .chart-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px 18px;
+  gap: 16px;
 }
+
 .chart-wide {
   grid-column: 1 / -1;
 }
-.chart-empty {
-  padding: 40px 0;
-  color: var(--c-muted);
-  font-size: 13px;
-  text-align: center;
-}
-@media (max-width: 767px) {
-  .summary-line {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    padding: 12px;
-  }
-  .summary-line > div,
-  .summary-line > div:first-child {
-    min-width: 0;
-    padding: 0;
-    border: 0;
-    justify-content: space-between;
-  }
-  .server-sub {
-    white-space: normal;
-    overflow-wrap: anywhere;
-  }
-  .agent-status {
-    gap: 6px;
-  }
-  .agent-status :deep(button) {
-    flex: 1 1 auto;
-  }
-  .server-card {
-    padding: 14px;
-  }
-  .detail-head {
-    align-items: flex-start;
-    flex-direction: column;
+
+@media (max-width: 780px) {
+  .server-grid,
+  .chart-grid,
+  .dialog-grid-2 {
+    grid-template-columns: 1fr;
   }
   .detail-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .chart-grid {
-    grid-template-columns: 1fr;
-  }
-  .server-grid {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 10px;
   }
 }
 </style>
