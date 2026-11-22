@@ -1,26 +1,29 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
-import { useMediaQuery } from "@vueuse/core";
-import { Refresh, FullScreen } from "@element-plus/icons-vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import gsap from "gsap";
 import {
-  PageHeader,
-  UiButton,
-  UiPanel,
-  StatusDot,
-  EmptyState,
-  UiSkeleton,
-} from "@/ui";
-import { useMotion, useStagger } from "@/motion";
-import RuleAnalysis from "./rules/RuleAnalysis.vue";
+  FolderChecked,
+  Plus,
+  Refresh,
+  Search,
+  View,
+} from "@element-plus/icons-vue";
+import { EmptyState, UiButton, UiSkeleton } from "@/ui";
+import KineticNotice from "@/ui/KineticNotice.vue";
 import RuleDialogs from "./rules/RuleDialogs.vue";
 import {
   provideRules,
   sourceLabel,
-  metadataSummary,
   fmtTime,
   type RuleItem,
 } from "./rules/useRules";
+
 defineOptions({ name: "RulesWorkbench" });
+
+const rootEl = ref<HTMLElement>();
+let gsapCtx: gsap.Context | null = null;
+const showSources = ref(false);
+
 const {
   loading,
   loadingMore,
@@ -41,7 +44,6 @@ const {
   selectedIds,
   selectedRules,
   focusedRule,
-  detailOpen,
   loadSources,
   loadCatalog,
   loadMoreCatalog,
@@ -52,324 +54,776 @@ const {
   openPreview,
   openImport,
 } = provideRules();
-const root = ref<HTMLElement>();
-const mobile = useMediaQuery("(max-width: 767px)");
-function onCatalogScroll(event: Event) {
-  if (
-    mobile.value ||
-    loading.value ||
-    loadingMore.value ||
-    loadMoreError.value ||
-    !hasMore.value
-  )
-    return;
-  const viewport = event.currentTarget as HTMLElement;
-  if (viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 64)
-    void loadMoreCatalog();
+
+const sourceTabs = [
+  { label: "全部来源", value: "" },
+  { label: "ShuntRules", value: "shunt_rules" },
+  { label: "ios_rule_script", value: "ios_rule_script" },
+];
+
+const clientTabs = ["Clash", "Surge", "Loon"];
+
+const allSelected = computed(
+  () => !!rules.value.length && selectedIds.value.length === rules.value.length
+);
+
+function selectSource(val: string) {
+  if (source.value === val) return;
+  source.value = val;
+  void loadCatalog();
 }
-const { reduced } = useMotion();
-const stagger = useStagger();
-watch([loading, sourcesLoading], async () => {
-  await nextTick();
-  if (root.value)
-    stagger(root.value.querySelectorAll(".source-row, .rule-row"));
-});
+
+function selectPlatform(val: string) {
+  if (platform.value === val) return;
+  platform.value = val;
+  void loadCatalog();
+}
+
 function inspect(row: RuleItem) {
-  void openPreview(row, mobile.value);
+  void openPreview(row, true);
 }
+
 function selectAll() {
-  selectedIds.value =
-    selectedIds.value.length === rules.value.length
-      ? []
-      : rules.value.map((row) => row.externalId);
+  selectedIds.value = allSelected.value
+    ? []
+    : rules.value.map((row) => row.externalId);
 }
+
+onMounted(() => {
+  if (rootEl.value) {
+    gsapCtx = gsap.context(() => {
+      const mm = gsap.matchMedia();
+      mm.add("(prefers-reduced-motion: no-preference)", () => {
+        const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
+        tl.from("[data-title-reveal]", {
+          yPercent: 108,
+          duration: 0.62,
+          clearProps: "transform",
+        }).from(
+          "[data-top-rule]",
+          {
+            scaleX: 0,
+            duration: 0.68,
+            clearProps: "transform",
+          },
+          "-=0.45"
+        );
+      });
+    }, rootEl.value);
+  }
+});
+
+onBeforeUnmount(() => {
+  gsapCtx?.revert();
+  gsapCtx = null;
+});
 </script>
+
 <template>
-  <div ref="root" class="rules-page">
-    <PageHeader title="规则中心" description="从规则源到模板，先检查，再应用。"
-      ><template #actions
-        ><UiButton
+  <div ref="rootEl" class="rules-gallery">
+    <!-- Pure Gallery Masthead -->
+    <header class="rules-masthead">
+      <div class="masthead-left">
+        <div class="title-mask">
+          <h1 class="gallery-title" data-title-reveal>规则仓库</h1>
+        </div>
+        <span class="count-pill mono">
+          <i aria-hidden="true"></i>
+          {{ total }} 条规则
+        </span>
+      </div>
+
+      <div class="masthead-actions">
+        <UiButton
+          variant="ghost"
+          @click="showSources = !showSources"
+        >
+          {{ showSources ? "收起规则源" : `规则源 (${sources.length})` }}
+        </UiButton>
+        <UiButton
           variant="primary"
           :icon="Refresh"
           :loading="syncing"
           @click="doSync"
-          >{{ syncing ? "同步中" : "立即同步" }}</UiButton
-        ></template
-      ></PageHeader
-    >
-    <p v-if="errorText" class="notice error" role="alert">{{ errorText }}</p>
-    <UiPanel
-      class="sources-section"
-      title="规则源"
-      :count="sources.length"
-      description="远程规则仓库，同步后生成可搜索的目录。"
-      collapsible
-      :default-open="false"
-      data-enter
-    >
-      <template #actions
-        ><StatusDot
-          :state="syncing ? 'warn' : 'idle'"
-          :running="syncing"
-          :label="syncing ? '正在同步目录' : '已就绪'"
-      /></template>
-      <EmptyState
-        v-if="sourcesError"
-        size="section"
-        title="无法读取规则源"
-        :description="sourcesError"
-        ><template #action
-          ><UiButton @click="loadSources">重新加载</UiButton></template
-        ></EmptyState
-      >
-      <UiSkeleton v-else-if="sourcesLoading" :lines="2" height="64px" />
-      <EmptyState
-        v-else-if="!sources.length"
-        size="section"
-        title="尚无规则源"
-        description="同步后查看可用的远程规则目录。"
-        ><template #action
-          ><UiButton :loading="syncing" @click="doSync"
-            >同步规则源</UiButton
-          ></template
-        ></EmptyState
-      >
-      <TransitionGroup
-        v-else
-        tag="div"
-        :name="reduced ? '' : 'rules'"
-        class="source-list"
-      >
-        <article v-for="item in sources" :key="item.key" class="source-row">
-          <div class="source-name">
-            <strong>{{ item.name }}</strong
-            ><span class="mono muted">{{ item.repo }}</span
-            ><span v-if="item.error" class="source-error">{{
-              item.error
-            }}</span>
+        >
+          {{ syncing ? "同步中…" : "立即同步" }}
+        </UiButton>
+      </div>
+    </header>
+
+    <span class="top-rule" data-top-rule aria-hidden="true"></span>
+
+    <KineticNotice :raw="errorText || sourcesError" />
+
+    <!-- On-Demand Collapsible Remote Sources Strip -->
+    <Transition name="fade-slide">
+      <section v-if="showSources" class="sources-strip" aria-label="远程规则源状态">
+        <UiSkeleton v-if="sourcesLoading" :lines="2" height="44px" />
+        <div v-else-if="sources.length" class="source-grid">
+          <article v-for="item in sources" :key="item.key" class="source-card">
+            <div class="source-top">
+              <strong>{{ item.name }}</strong>
+              <span
+                class="src-state"
+                :class="item.status === 'ok' ? 'is-ok' : item.error ? 'is-bad' : ''"
+              >
+                <i aria-hidden="true"></i>
+                {{ item.status === "ok" ? "已同步" : item.error ? "异常" : "待同步" }}
+              </span>
+            </div>
+            <span class="src-repo mono">{{ item.repo }}</span>
+            <div class="src-foot mono">
+              <span>{{ item.count || 0 }} 目录 · 缓存 {{ item.cachedCount || 0 }}</span>
+              <time>{{ fmtTime(item.lastSyncAt) }}</time>
+            </div>
+          </article>
+        </div>
+        <div v-else class="source-empty">
+          <span>暂无规则源</span>
+          <UiButton size="sm" variant="ghost" @click="loadSources">刷新</UiButton>
+        </div>
+      </section>
+    </Transition>
+
+    <!-- Single-Line Zero-Dropdown Filter Deck -->
+    <section class="filter-deck">
+      <div class="filter-top">
+        <div class="pill-groups">
+          <div class="pill-group" role="group" aria-label="目标客户端">
+            <button
+              v-for="c in clientTabs"
+              :key="c"
+              type="button"
+              class="seg-pill"
+              :class="{ 'is-active': platform === c }"
+              @click="selectPlatform(c)"
+            >
+              {{ c }}
+            </button>
           </div>
-          <StatusDot
-            :state="item.status === 'ok' ? 'ok' : item.error ? 'bad' : 'idle'"
-            :label="
-              item.status === 'ok'
-                ? '已同步'
-                : item.error
-                  ? '同步失败'
-                  : '尚未同步'
-            "
-          />
-          <div class="source-count mono">
-            <span>{{ item.count || 0 }} 条目录</span
-            ><small>已缓存 {{ item.cachedCount || 0 }}</small>
+
+          <span class="bar-sep" aria-hidden="true"></span>
+
+          <div class="pill-group" role="group" aria-label="规则来源">
+            <button
+              v-for="s in sourceTabs"
+              :key="s.value"
+              type="button"
+              class="seg-pill"
+              :class="{ 'is-active': source === s.value }"
+              @click="selectSource(s.value)"
+            >
+              {{ s.label }}
+            </button>
           </div>
-          <time class="source-time mono">{{ fmtTime(item.lastSyncAt) }}</time>
-        </article>
-      </TransitionGroup>
-    </UiPanel>
-    <div class="workbench">
-      <UiPanel
-        class="catalog-section"
-        title="规则目录"
-        :count="total"
-        :description="`已加载 ${rules.length} / ${total}，勾选后批量加入模板。`"
-        data-enter
-      >
-        <form class="filter-form" @submit.prevent="loadCatalog">
-          <el-input
+        </div>
+
+        <form class="search-wrap" @submit.prevent="loadCatalog">
+          <el-icon class="search-icon"><Search /></el-icon>
+          <input
             v-model="keyword"
-            clearable
+            type="search"
             class="search-input"
-            aria-label="搜索分流规则"
             placeholder="搜索 OpenAI / Netflix / Telegram…"
-          /><el-select
-            v-model="source"
-            aria-label="规则来源"
-            placeholder="全部来源"
-            @change="loadCatalog"
-            ><el-option label="全部来源" value="" /><el-option
-              label="ShuntRules"
-              value="shunt_rules" /><el-option
-              label="ios_rule_script"
-              value="ios_rule_script" /></el-select
-          ><el-select
-            v-model="platform"
-            aria-label="目标客户端"
-            @change="loadCatalog"
-            ><el-option
-              v-for="client in ['Clash', 'Surge', 'Loon']"
-              :key="client"
-              :label="client"
-              :value="client"
-          /></el-select>
-          <div class="filter-actions">
-            <UiButton type="submit" :loading="loading">搜索</UiButton
-            ><UiButton variant="ghost" @click="resetFilters">重置</UiButton>
-          </div>
+            aria-label="搜索分流规则"
+          />
         </form>
-        <div class="category-list" role="group" aria-label="规则分类">
+      </div>
+
+      <!-- Category Quick Pills + Select All -->
+      <div v-if="categories.length" class="category-bar">
+        <div class="cat-pills" role="group" aria-label="规则分类">
           <button
             v-for="item in categories"
             :key="item"
             type="button"
-            :aria-pressed="category === item"
-            :class="{ active: category === item }"
+            class="cat-pill"
+            :class="{ 'is-active': category === item }"
             @click="toggleCategory(item)"
           >
             {{ item }}
           </button>
         </div>
-        <div class="batch-bar">
-          <label class="select-all"
-            ><input
-              type="checkbox"
-              :checked="!!rules.length && selectedIds.length === rules.length"
-              :disabled="loading || !rules.length"
-              @change="selectAll"
-            />全选当前目录</label
-          ><UiButton
-            :disabled="!selectedRules.length"
-            @click="openImport(selectedRules)"
-            >导入已选
-            <span class="mono">{{ selectedRules.length }}</span></UiButton
-          >
-        </div>
-        <div
-          class="catalog-viewport"
-          role="region"
-          aria-label="规则目录滚动列表"
-          tabindex="0"
-          :aria-busy="loading || loadingMore"
-          @scroll.passive="onCatalogScroll"
+
+        <button
+          v-if="rules.length"
+          type="button"
+          class="select-all-btn"
+          @click="selectAll"
         >
-          <UiSkeleton v-if="loading" :lines="6" height="72px" />
-          <EmptyState
-            v-else-if="!rules.length"
-            size="section"
-            :title="errorText ? '目录加载失败' : '没有匹配规则'"
-            :description="errorText || '试试其他关键词、来源或客户端。'"
-            ><template #action
-              ><UiButton @click="errorText ? loadCatalog() : resetFilters()">{{
-                errorText ? "重新加载" : "重置筛选"
-              }}</UiButton></template
-            ></EmptyState
-          >
-          <TransitionGroup
-            v-else
-            tag="div"
-            class="catalog-list"
-            :name="reduced ? '' : 'rules'"
-          >
-            <article
-              v-for="row in rules"
-              :key="row.externalId"
-              class="rule-row"
-              :class="{
-                'is-focused': focusedRule?.externalId === row.externalId,
-              }"
-            >
-              <label class="row-check"
-                ><input
-                  type="checkbox"
-                  :aria-label="`选择规则 ${row.name}`"
-                  :checked="selectedIds.includes(row.externalId)"
-                  @change="toggleSelected(row.externalId)"
-              /></label>
-              <div class="rule-description">
-                <strong>{{ row.name || "未命名规则" }}</strong
-                ><span
-                  >{{ sourceLabel(row.sourceKey) }} ·
-                  {{ row.category || "其他" }} ·
-                  <span class="mono"
-                    >{{ row.platform }} / {{ row.format }}</span
-                  ></span
-                ><small v-if="metadataSummary(row)">{{
-                  metadataSummary(row)
-                }}</small
-                ><small v-if="row.remoteUpdate" class="mono">{{
-                  row.remoteUpdate
-                }}</small>
-              </div>
-              <div class="rule-size mono">
-                {{ row.checksum ? `${row.ruleCount} 条` : "自动缓存中…" }}
-              </div>
-              <div class="row-actions">
-                <UiButton variant="ghost" @click="inspect(row)">预览</UiButton
-                ><UiButton variant="ghost" @click="openImport([row])"
-                  >加入模板</UiButton
-                >
-              </div>
-            </article>
-          </TransitionGroup>
-          <div
-            v-if="!loading && rules.length"
-            class="catalog-pagination"
-            aria-live="polite"
-          >
-            <p v-if="loadMoreError" class="notice error" role="alert">
-              {{ loadMoreError }}
-            </p>
-            <span class="muted mono"
-              >已加载 {{ rules.length }} / {{ total }}</span
-            >
-            <UiButton
-              v-if="hasMore"
-              :loading="loadingMore"
-              @click="loadMoreCatalog"
-              >{{ loadMoreError ? "重试加载" : "加载更多" }}</UiButton
-            >
-            <span v-else class="muted">已加载全部规则</span>
-          </div>
-        </div>
-        <section
-          v-if="selectedRules.length"
-          class="selected-section"
-          aria-label="已选规则"
-        >
-          <h3>
-            已选规则 <span class="mono">{{ selectedRules.length }}</span>
-          </h3>
-          <TransitionGroup tag="div" :name="reduced ? '' : 'rules'"
-            ><div
-              v-for="row in selectedRules"
-              :key="row.externalId"
-              class="selected-row"
-            >
-              <div>
-                <strong>{{ row.name }}</strong
-                ><span class="muted"
-                  >{{ sourceLabel(row.sourceKey) }} · {{ row.platform }}</span
-                >
-              </div>
-              <UiButton
-                variant="ghost"
-                :aria-label="`移除 ${row.name}`"
-                @click="toggleSelected(row.externalId)"
-                >移除</UiButton
-              >
-            </div></TransitionGroup
-          >
-        </section>
-      </UiPanel>
-      <UiPanel
-        class="analysis-section"
-        title="规则预览"
-        description="选择目录中的一项查看内容。"
-        data-enter
+          {{ allSelected ? "取消全选" : "全选当前" }}
+        </button>
+      </div>
+    </section>
+
+    <!-- Full-Width Pure Gallery Rule Catalog -->
+    <UiSkeleton v-if="loading" :lines="6" height="60px" />
+
+    <EmptyState
+      v-else-if="!rules.length"
+      size="section"
+      :title="errorText ? '目录加载失败' : '暂无匹配规则'"
+    >
+      <template #action>
+        <UiButton variant="ghost" @click="errorText ? loadCatalog() : resetFilters()">
+          {{ errorText ? "重试" : "重置筛选" }}
+        </UiButton>
+      </template>
+    </EmptyState>
+
+    <div v-else class="rule-list" role="list">
+      <article
+        v-for="row in rules"
+        :key="row.externalId"
+        class="rule-row"
+        :class="{
+          'is-selected': selectedIds.includes(row.externalId),
+          'is-focused': focusedRule?.externalId === row.externalId,
+        }"
+        role="listitem"
       >
-        <template #actions
-          ><UiButton
-            v-if="focusedRule"
-            variant="ghost"
-            :icon="FullScreen"
-            aria-label="展开规则分析"
-            @click="detailOpen = true"
-            >展开</UiButton
-          ></template
-        >
-        <RuleAnalysis compact />
-      </UiPanel>
+        <label class="row-check">
+          <input
+            type="checkbox"
+            :aria-label="`选择规则 ${row.name}`"
+            :checked="selectedIds.includes(row.externalId)"
+            @change="toggleSelected(row.externalId)"
+          />
+        </label>
+
+        <button type="button" class="row-main" @click="inspect(row)">
+          <div class="row-title-line">
+            <strong class="row-name">{{ row.name || "未命名规则" }}</strong>
+            <span class="row-cat">{{ row.category || "其他" }}</span>
+            <span class="row-fmt mono">{{ row.platform }} / {{ row.format }}</span>
+          </div>
+          <span class="row-sub">
+            {{ sourceLabel(row.sourceKey) }}
+            <template v-if="row.remoteUpdate">
+              · <span class="mono">{{ row.remoteUpdate }}</span>
+            </template>
+          </span>
+        </button>
+
+        <span class="row-count mono">
+          {{ row.checksum ? `${row.ruleCount} 条` : "缓存中" }}
+        </span>
+
+        <div class="row-actions">
+          <button
+            type="button"
+            class="action-pill"
+            @click="inspect(row)"
+          >
+            <el-icon><View /></el-icon>
+            <span>预览</span>
+          </button>
+          <button
+            type="button"
+            class="action-pill is-primary"
+            @click="openImport([row])"
+          >
+            <el-icon><Plus /></el-icon>
+            <span>加入模板</span>
+          </button>
+        </div>
+      </article>
     </div>
+
+    <!-- Clean Load More Footer -->
+    <footer v-if="!loading && rules.length" class="catalog-foot">
+      <span class="mono muted">已加载 {{ rules.length }} / {{ total }}</span>
+      <UiButton
+        v-if="hasMore"
+        variant="ghost"
+        :loading="loadingMore"
+        @click="loadMoreCatalog"
+      >
+        {{ loadMoreError ? "重试加载" : "加载更多" }}
+      </UiButton>
+    </footer>
+
+    <!-- Floating Obsidian Bulk Import Dock -->
+    <Transition name="dock-pop">
+      <div v-if="selectedRules.length" class="bulk-dock">
+        <span class="mono">已选 {{ selectedRules.length }} 条规则</span>
+        <button
+          type="button"
+          class="dock-btn is-primary"
+          @click="openImport(selectedRules)"
+        >
+          <el-icon><FolderChecked /></el-icon>
+          <span>批量加入模板</span>
+        </button>
+        <button
+          type="button"
+          class="dock-btn"
+          @click="selectedIds = []"
+        >
+          清空
+        </button>
+      </div>
+    </Transition>
+
+    <!-- Preserved Preview Drawer & Import Dialog -->
     <RuleDialogs />
   </div>
 </template>
-<style scoped src="./rules/workbench.scss"></style>
+
+<style scoped>
+.rules-gallery {
+  display: grid;
+  gap: 18px;
+  max-width: 1180px;
+  min-width: 0;
+  padding-bottom: 64px;
+}
+
+.rules-masthead {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.masthead-left {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.title-mask {
+  overflow: hidden;
+  padding-bottom: 4px;
+  margin-bottom: -4px;
+}
+
+.gallery-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(26px, 2.8vw, 36px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
+}
+
+.count-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.count-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-ok);
+}
+
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.top-rule {
+  display: block;
+  height: 1px;
+  background: var(--c-ink);
+  transform-origin: left;
+}
+
+/* Collapsible Remote Sources */
+.sources-strip {
+  display: grid;
+}
+
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.source-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface);
+}
+
+.source-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+
+.src-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.src-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.src-state.is-ok {
+  color: var(--c-ok);
+}
+
+.src-state.is-bad {
+  color: var(--c-bad);
+}
+
+.src-repo {
+  font-size: 11.5px;
+  color: var(--c-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.src-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--c-muted);
+  padding-top: 6px;
+  border-top: 1px solid var(--c-line);
+}
+
+.source-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  font-size: 12.5px;
+  color: var(--c-muted);
+}
+
+/* Filter Deck */
+.filter-deck {
+  display: grid;
+  gap: 12px;
+}
+
+.filter-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.pill-groups {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.bar-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--c-line);
+}
+
+.seg-pill {
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.seg-pill:hover {
+  border-color: var(--c-line);
+  color: var(--c-ink);
+}
+
+.seg-pill.is-active {
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
+}
+
+.search-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: min(280px, 100%);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.search-wrap:focus-within {
+  border-bottom-color: var(--c-ink);
+}
+
+.search-icon {
+  color: var(--c-muted);
+}
+
+.search-input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 13px;
+  outline: none !important;
+}
+
+.category-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cat-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.cat-pill {
+  padding: 4px 11px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.cat-pill:hover {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+
+.cat-pill.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.select-all-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.select-all-btn:hover {
+  color: var(--c-ink);
+}
+
+/* Borderless Full-Width Gallery List */
+.rule-list {
+  display: grid;
+  border-top: 1px solid var(--c-line);
+}
+
+.rule-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 88px auto;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 10px;
+  border-bottom: 1px solid var(--c-line);
+  transition: background 180ms var(--ease-out);
+}
+
+.rule-row:hover {
+  background: var(--c-surface);
+}
+
+.row-check input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--c-ink);
+  cursor: pointer;
+}
+
+.row-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.row-name {
+  font-size: 14.5px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.row-cat {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c-surface-muted);
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.row-fmt {
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.row-sub {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.row-count {
+  font-size: 12px;
+  color: var(--c-muted);
+  text-align: right;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.action-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 11px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.action-pill:hover {
+  border-color: var(--c-ink);
+}
+
+.action-pill.is-primary:hover {
+  background: var(--c-ink);
+  color: var(--c-surface);
+}
+
+.catalog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 8px;
+}
+
+.muted {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+/* Floating Obsidian Bulk Dock */
+.bulk-dock {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 10px 20px;
+  border-radius: 999px;
+  background: #141416;
+  color: #f4f4f6;
+  font-size: 12.5px;
+  box-shadow: 0 22px 48px -12px rgb(0 0 0 / 0.45);
+}
+
+.dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 13px;
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 999px;
+  background: transparent;
+  color: #f4f4f6;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.dock-btn.is-primary {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #111113;
+  font-weight: 600;
+}
+
+.dock-pop-enter-active,
+.dock-pop-leave-active {
+  transition: opacity 200ms var(--ease-out), transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dock-pop-enter-from,
+.dock-pop-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 14px);
+}
+
+@media (max-width: 780px) {
+  .rule-row {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px 10px;
+  }
+  .row-count,
+  .row-actions {
+    grid-column: 2;
+    text-align: left;
+  }
+}
+</style>

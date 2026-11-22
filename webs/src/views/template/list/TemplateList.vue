@@ -1,11 +1,18 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from "vue";
-import { Plus, Edit, MoreFilled } from "@element-plus/icons-vue";
-import { UiButton, UiPanel, UiSkeleton, EmptyState } from "@/ui";
+import { computed, ref } from "vue";
+import {
+  CopyDocument,
+  Delete,
+  Edit,
+  Plus,
+  Refresh,
+  Search,
+} from "@element-plus/icons-vue";
+import { EmptyState, UiButton, UiSkeleton } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
-import { useMotion, useStagger } from "@/motion";
 import { formatDateTime } from "@/utils/date";
 import { useTemplates, tempType, fileSize, type Temp } from "./useTemplates";
+
 const {
   tableData,
   filteredData,
@@ -18,258 +25,359 @@ const {
   copyText,
   handleDel,
 } = useTemplates();
-const root = ref<HTMLElement>();
-const { reduced } = useMotion();
-const stagger = useStagger();
-watch(
-  loading,
-  async (busy) => {
-    if (!busy) {
-      await nextTick();
-      if (root.value) stagger(root.value.querySelectorAll(".template-row"));
-    }
-  },
-  { immediate: true }
-);
-function command(value: string, row: Temp) {
-  if (value === "copy") void copyText(row);
-  else if (value === "delete") void handleDel(row);
+
+const typeFilter = ref<"all" | "yaml" | "conf">("all");
+
+const displayRows = computed<Temp[]>(() => {
+  if (typeFilter.value === "all") return filteredData.value;
+  return filteredData.value.filter((row) => {
+    const ext = row.file.toLowerCase();
+    if (typeFilter.value === "yaml")
+      return ext.endsWith(".yaml") || ext.endsWith(".yml");
+    return ext.endsWith(".conf") || ext.endsWith(".ini");
+  });
+});
+
+function formatExt(filename: string) {
+  const parts = filename.split(".");
+  return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : "TEXT";
 }
 </script>
+
 <template>
-  <UiPanel
-    title="模板文件"
-    :count="filteredData.length"
-    description="订阅按模板生成客户端配置；点击名称进入编辑。"
-    flush
-    :aria-busy="loading"
-    data-enter
-    ><template #actions
-      ><el-input
-        v-model="searchKey"
-        class="template-search"
-        clearable
-        aria-label="搜索模板文件名"
-        placeholder="搜索模板文件名"
-      /><UiButton :loading="loading" @click="gettemps">刷新</UiButton></template
-    >
+  <section class="list-stage" :aria-busy="loading">
+    <!-- Single-Line Filter & Search Bar -->
+    <div class="control-bar">
+      <div class="pill-group" role="group" aria-label="格式筛选">
+        <button
+          type="button"
+          class="seg-pill"
+          :class="{ 'is-active': typeFilter === 'all' }"
+          @click="typeFilter = 'all'"
+        >
+          全部 ({{ filteredData.length }})
+        </button>
+        <button
+          type="button"
+          class="seg-pill"
+          :class="{ 'is-active': typeFilter === 'yaml' }"
+          @click="typeFilter = 'yaml'"
+        >
+          Clash · YAML
+        </button>
+        <button
+          type="button"
+          class="seg-pill"
+          :class="{ 'is-active': typeFilter === 'conf' }"
+          @click="typeFilter = 'conf'"
+        >
+          Loon / Surge
+        </button>
+      </div>
+
+      <div class="bar-right">
+        <label class="search-wrap">
+          <el-icon class="search-icon"><Search /></el-icon>
+          <input
+            v-model="searchKey"
+            type="search"
+            class="search-input"
+            placeholder="搜索模板文件名..."
+            aria-label="搜索模板文件名"
+          />
+        </label>
+        <UiButton
+          variant="ghost"
+          :icon="Refresh"
+          :loading="loading"
+          @click="gettemps"
+        >
+          刷新
+        </UiButton>
+      </div>
+    </div>
+
     <EmptyState
       v-if="loadError"
       size="section"
       title="无法加载模板"
       :description="loadError"
-      ><template #action
-        ><UiButton @click="gettemps">重新加载</UiButton></template
-      ></EmptyState
     >
-    <UiSkeleton
-      v-else-if="loading && !tableData.length"
-      :lines="4"
-      height="72px"
-    />
-    <div v-else ref="root">
-      <EmptyState
-        v-if="!tableData.length"
-        size="page"
-        title="写下你的连接规则"
-        description="添加模板，或前往构建器生成配置。"
-        ><template #action
-          ><UiButton :icon="Plus" @click="handleAddTemp"
-            >添加模板</UiButton
-          ></template
-        ></EmptyState
-      >
-      <EmptyState
-        v-else-if="!filteredData.length"
-        size="section"
-        title="没有匹配模板"
-        description="试试其他文件名。"
-        ><template #action
-          ><UiButton @click="searchKey = ''">清除搜索</UiButton></template
-        ></EmptyState
-      >
-      <div
-        v-if="filteredData.length"
-        class="template-heading"
-        aria-hidden="true"
-      >
-        <span>名称 / 客户端</span><span>更新时间</span
-        ><span class="end">操作</span>
-      </div>
-      <TransitionGroup tag="div" :name="reduced ? '' : 'template-row'">
-        <article
-          v-for="row in filteredData"
-          :key="row.file"
-          class="template-row"
+      <template #action>
+        <UiButton @click="gettemps">重新加载</UiButton>
+      </template>
+    </EmptyState>
+
+    <UiSkeleton v-else-if="loading && !tableData.length" :lines="4" height="64px" />
+
+    <EmptyState
+      v-else-if="!tableData.length"
+      size="page"
+      title="暂无配置模板"
+    >
+      <template #action>
+        <UiButton variant="primary" :icon="Plus" @click="handleAddTemp">
+          新建模板
+        </UiButton>
+      </template>
+    </EmptyState>
+
+    <EmptyState
+      v-else-if="!displayRows.length"
+      size="section"
+      title="未匹配到模板文件"
+    >
+      <template #action>
+        <UiButton
+          variant="ghost"
+          @click="
+            searchKey = '';
+            typeFilter = 'all';
+          "
         >
-          <button class="template-name" @click="handleEdit(row)">
-            <strong>{{ row.file }}</strong
-            ><span
-              >{{ tempType(row.file) }}
-              <span class="mono"> / {{ fileSize(row.text) }}</span></span
-            >
-          </button>
-          <div class="row-value">
-            <span class="mobile-label">更新时间</span
-            ><time class="mono" :datetime="row.create_date">{{
-              formatDateTime(row.create_date) || "未提供"
-            }}</time>
+          清空筛选
+        </UiButton>
+      </template>
+    </EmptyState>
+
+    <!-- Pure Gallery Full-Width Borderless Rows -->
+    <div v-else class="template-list" role="list">
+      <article
+        v-for="(row, idx) in displayRows"
+        :key="row.file"
+        class="template-row"
+        role="listitem"
+      >
+        <span class="row-index mono">{{ String(idx + 1).padStart(2, "0") }}</span>
+
+        <button
+          type="button"
+          class="row-main"
+          @click="handleEdit(row)"
+        >
+          <div class="row-title-line">
+            <strong class="row-filename mono">{{ row.file }}</strong>
+            <span class="ext-chip mono">{{ formatExt(row.file) }}</span>
           </div>
-          <div class="row-actions">
-            <RowIconButton
-              :icon="Edit"
-              :label="`编辑 ${row.file}`"
-              @click="handleEdit(row)"
-            /><el-dropdown
-              trigger="click"
-              @command="(value: string) => command(value, row)"
-              ><RowIconButton
-                :icon="MoreFilled"
-                :label="`${row.file} 更多操作`"
-              /><template #dropdown
-                ><el-dropdown-menu
-                  ><el-dropdown-item command="copy">复制内容</el-dropdown-item
-                  ><el-dropdown-item command="delete" divided
-                    ><span class="danger-text">删除模板</span></el-dropdown-item
-                  ></el-dropdown-menu
-                ></template
-              ></el-dropdown
-            >
-          </div>
-        </article>
-      </TransitionGroup>
+          <span class="row-sub">
+            {{ tempType(row.file) }} · <span class="mono">{{ fileSize(row.text) }}</span>
+          </span>
+        </button>
+
+        <time class="row-time mono" :datetime="row.create_date">
+          {{ formatDateTime(row.create_date) || "—" }}
+        </time>
+
+        <div class="row-actions">
+          <RowIconButton
+            :icon="Edit"
+            :label="`编辑 ${row.file}`"
+            @click="handleEdit(row)"
+          />
+          <RowIconButton
+            :icon="CopyDocument"
+            :label="`复制 ${row.file}`"
+            @click="copyText(row)"
+          />
+          <RowIconButton
+            :icon="Delete"
+            :label="`删除 ${row.file}`"
+            @click="handleDel(row)"
+          />
+        </div>
+      </article>
     </div>
-  </UiPanel>
+  </section>
 </template>
+
 <style scoped>
-.template-search {
-  width: 220px;
-}
-.template-heading,
-.template-row {
+.list-stage {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) 180px 88px;
-  gap: 12px;
+  gap: 16px;
+}
+
+.control-bar {
+  display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
-.template-heading {
-  padding: 10px 16px;
-  font: 400 12px/1.4 var(--font-mono);
+
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.seg-pill {
+  padding: 6px 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
   color: var(--c-muted);
-  background: color-mix(in srgb, var(--c-surface-2) 60%, transparent);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition:
+    background 160ms var(--ease-out),
+    color 160ms var(--ease-out),
+    border-color 160ms var(--ease-out);
+}
+
+.seg-pill:hover {
+  border-color: var(--c-line);
+  color: var(--c-ink);
+}
+
+.seg-pill.is-active {
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
+}
+
+.bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.search-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: min(240px, 100%);
+  padding: 6px 0;
   border-bottom: 1px solid var(--c-line);
+  transition: border-color 160ms var(--ease-out);
 }
-.template-row {
-  padding: 10px 16px;
-  min-height: 64px;
-  border-bottom: 1px solid var(--c-line);
+
+.search-wrap:focus-within {
+  border-bottom-color: var(--c-ink);
 }
-.template-row:last-child {
-  border-bottom: 0;
+
+.search-icon {
+  color: var(--c-muted);
 }
-.template-row:hover {
-  background: var(--c-surface-2);
-}
-.template-name {
-  min-width: 0;
-  min-height: 36px;
-  display: grid;
-  text-align: left;
-  gap: 2px;
-  padding: 0;
+
+.search-input {
+  width: 100%;
   border: 0;
   background: transparent;
   color: var(--c-ink);
+  font-size: 13px;
+  outline: none !important;
 }
-.template-name strong {
-  font-size: 14px;
+
+/* Pure Gallery Borderless Rows */
+.template-list {
+  display: grid;
+  border-top: 1px solid var(--c-line);
+}
+
+.template-list:hover .template-row:not(:hover) {
+  opacity: 0.56;
+}
+
+.template-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) 165px auto;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 10px;
+  border-bottom: 1px solid var(--c-line);
+  overflow: hidden;
+  transition: opacity 220ms var(--ease-out);
+}
+
+.template-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--c-surface);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 0;
+}
+
+.template-row:hover::before {
+  transform: scaleX(1);
+}
+
+.template-row > * {
+  position: relative;
+  z-index: 1;
+}
+
+.row-index {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.row-title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.row-filename {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--c-ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.template-name > span {
+
+.ext-chip {
+  flex: none;
+  padding: 2px 7px;
+  border: 1px solid var(--c-line);
+  border-radius: 6px;
+  background: var(--c-surface-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--c-muted);
+}
+
+.row-sub {
   font-size: 12px;
   color: var(--c-muted);
 }
-.row-value {
-  font-size: 13px;
+
+.row-time {
+  font-size: 12px;
   color: var(--c-muted);
-}
-.mono {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-}
-.muted {
-  color: var(--c-muted);
-  font-size: 14px;
-  white-space: nowrap;
-}
-.row-actions {
-  display: flex;
-  justify-content: end;
-}
-.end {
   text-align: right;
 }
-.danger-text {
-  color: var(--c-bad);
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-.mobile-label {
-  display: none;
-}
-.template-row-move,
-.template-row-enter-active,
-.template-row-leave-active {
-  transition:
-    transform var(--duration-slow) var(--ease-spring),
-    opacity var(--duration-medium);
-}
-.template-row-enter-from,
-.template-row-leave-to {
-  opacity: 0;
-  transform: translateY(16px);
-}
-@media (max-width: 1023px) {
-  .template-heading,
+
+@media (max-width: 780px) {
   .template-row {
-    grid-template-columns: minmax(140px, 1fr) 170px 88px;
-    gap: 8px;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 8px 12px;
   }
-}
-@media (max-width: 1023px) {
-  .template-search {
-    width: 100%;
-  }
-  .template-heading {
-    display: none;
-  }
-  .template-row {
-    grid-template-columns: minmax(0, 1fr) 88px;
-    gap: 10px;
-    padding: 12px 0;
-  }
-  .template-name {
-    grid-column: 1;
-  }
-  .row-value {
-    grid-column: 1 / -1;
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-  }
-  .mobile-label {
-    display: inline;
-  }
-  .row-actions {
-    grid-column: 2;
-    grid-row: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .template-row-move,
-  .template-row-enter-active,
-  .template-row-leave-active {
-    transition: none;
+  .row-time {
+    grid-column: 2 / -1;
+    text-align: left;
   }
 }
 </style>
