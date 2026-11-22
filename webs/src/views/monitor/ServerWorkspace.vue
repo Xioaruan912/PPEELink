@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ServerHeader from "@/components/servers/ServerHeader.vue";
+import PageHeader from "@/ui/PageHeader.vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { UiButton, UiSkeleton } from "@/ui";
@@ -35,7 +35,7 @@ onBeforeUnmount(() => { window.removeEventListener("online", connectionChanged);
 
 <template>
  <main class="workspace server-experience">
-  <ServerHeader section="workspace" title="文件与容器" description="选择服务器，管理文件和 Docker 容器。"><template #actions><RouterLink to="/monitor/index" class="back-link">返回服务器监控</RouterLink></template></ServerHeader>
+  <PageHeader  title="文件与容器" description="选择服务器，管理文件和 Docker 容器。"><template #actions><RouterLink to="/monitor/index" class="back-link">返回服务器监控</RouterLink></template></PageHeader>
   <section class="connection-bar" aria-label="连接服务器">
    <UiSkeleton v-if="phase === 'loading'" :lines="2" aria-label="正在加载服务器" />
    <div v-else-if="phase === 'error'" role="alert" class="state"><p>{{ error }}</p><UiButton :disabled="offline" @click="load">重试加载</UiButton></div>

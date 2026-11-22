@@ -1,96 +1,166 @@
 <template>
-  <main ref="page" class="login-page">
-    <section class="login-story" aria-labelledby="brand-title">
-      <div class="aurora" aria-hidden="true">
-        <i class="aurora-a"></i><i class="aurora-b"></i><i class="aurora-c"></i>
-      </div>
-      <a href="#/login" class="login-brand" aria-label="PPEELink"
-        ><img
-          class="brand-logo"
-          :src="logo"
-          width="36"
-          height="36"
-          alt="PPEELink"
-        /><span>PPEELink</span></a
-      >
-      <div class="login-statement">
-        <h1 id="brand-title" data-enter>
-          订阅、节点与规则，<br /><em>一处掌控。</em>
-        </h1>
-        <p data-enter>自托管的代理订阅控制台，给需要掌握自己网络的人。</p>
-      </div>
-    </section>
-    <section class="login-form-side" aria-labelledby="login-title">
-      <header class="login-topline">
-        <span>个人网络工作台</span
-        ><el-tooltip
-          :content="isDark ? '切换浅色主题' : '切换深色主题'"
-          :trigger="['hover', 'focus']"
-          :trigger-keys="[]"
-          ><button
-            class="theme-toggle"
-            :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-            @click="toggleTheme"
-          >
-            <component :is="isDark ? Sunny : Moon" /></button
-        ></el-tooltip>
-      </header>
-      <div class="login-form-wrap" data-enter>
-        <h2 id="login-title">欢迎回来</h2>
-        <p class="login-intro">登录你的 PPEELink。</p>
-        <el-form
-          ref="loginFormRef"
-          :model="loginData"
-          :rules="loginRules"
-          label-position="top"
-          @submit.prevent="handleLogin"
+  <main class="union-login">
+    <header class="union-login__header">
+      <a href="#/login" class="union-logo" aria-label="PPEELink">
+        <span class="sr-only">PPEELink</span>
+        <svg
+          class="union-logo__svg"
+          viewBox="0 0 310 44"
+          fill="none"
+          aria-hidden="true"
         >
-          <el-form-item label="用户名" prop="username" for="login-username"
-            ><el-input
-              id="login-username"
-              v-model="loginData.username"
-              name="username"
-              placeholder="输入用户名"
-              autocomplete="username"
-              size="large"
-          /></el-form-item>
-          <el-form-item label="密码" prop="password" for="login-password"
-            ><el-input
-              id="login-password"
-              v-model="loginData.password"
-              name="password"
-              placeholder="输入密码"
-              autocomplete="current-password"
-              type="password"
-              show-password
-              size="large"
-              @keyup="checkCapslock"
-            /><span v-if="isCapslock" class="capslock-hint" role="status"
-              >大写锁定已开启</span
-            ></el-form-item
+          <text x="0" y="33" fill="currentColor" class="union-logo__word">
+            PPEE
+          </text>
+          <rect
+            class="union-logo__capsule"
+            x="104"
+            y="8"
+            width="36"
+            height="26"
+            rx="13"
+            stroke="currentColor"
+            stroke-width="4.5"
+          />
+          <circle
+            class="union-logo__dot"
+            cx="122"
+            cy="21"
+            r="4"
+            fill="var(--c-ok)"
+          />
+          <text
+            x="150"
+            y="33"
+            fill="currentColor"
+            class="union-logo__word union-logo__trail"
           >
-          <p v-if="loginError" class="login-error" role="alert">
-            {{ loginError }}
-          </p>
-          <UiButton
-            class="login-submit"
-            type="submit"
-            variant="primary"
-            :loading="loading"
-            ><span>{{ loading ? "正在登录…" : "登录" }}</span
-            ><ArrowRight v-if="!loading" aria-hidden="true"
-          /></UiButton>
-        </el-form>
+            LINK
+          </text>
+        </svg>
+      </a>
+
+      <div class="theme-switch-pair">
+        <button
+          type="button"
+          class="theme-word"
+          :class="{ 'is-on': !isDark }"
+          :aria-label="isDark ? '切换浅色主题' : '当前浅色主题'"
+          @click="isDark && toggleTheme()"
+        >
+          Light
+        </button>
+        <span class="theme-slash" aria-hidden="true">/</span>
+        <button
+          type="button"
+          class="theme-word"
+          :class="{ 'is-on': isDark }"
+          :aria-label="!isDark ? '切换深色主题' : '当前深色主题'"
+          @click="!isDark && toggleTheme()"
+        >
+          Dark
+        </button>
       </div>
-    </section>
+    </header>
+
+    <div class="union-login__grid" data-enter>
+      <section class="union-login__hero" aria-labelledby="brand-title">
+        <div class="hero-copy">
+          <h1 id="brand-title" class="hero-headline">
+            <span class="headline-mask"
+              ><span class="headline-line" style="--i: 0"
+                >Network</span
+              ></span
+            >
+            <span class="headline-mask"
+              ><span class="headline-line" style="--i: 1"
+                >Architecture.</span
+              ></span
+            >
+          </h1>
+          <p class="hero-statement">
+            多客户端订阅分发、全球边缘节点资产与实时链路遥测的统一空间。
+          </p>
+        </div>
+
+        <dl class="hero-index" aria-label="系统架构能力">
+          <div>
+            <dt>DISPATCH</dt>
+            <dd>订阅链接与多端自适应同步</dd>
+          </div>
+          <div>
+            <dt>ASSETS</dt>
+            <dd>节点探测、分组与下发控制</dd>
+          </div>
+          <div>
+            <dt>TELEMETRY</dt>
+            <dd>流媒体解锁与三网逐跳追踪</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="union-login__panel" aria-labelledby="login-title">
+        <div class="login-form-wrap">
+          <h2 id="login-title">登录工作区</h2>
+          <p class="login-form-hint">输入管理员或成员凭据以进入控制台。</p>
+          <el-form
+            ref="loginFormRef"
+            :model="loginData"
+            :rules="loginRules"
+            label-position="top"
+            @submit.prevent="handleLogin"
+          >
+            <el-form-item label="用户名" prop="username" for="login-username"
+              ><el-input
+                id="login-username"
+                v-model="loginData.username"
+                name="username"
+                placeholder="输入用户名"
+                autocomplete="username"
+                size="large"
+            /></el-form-item>
+            <el-form-item label="密码" prop="password" for="login-password"
+              ><el-input
+                id="login-password"
+                v-model="loginData.password"
+                name="password"
+                placeholder="输入密码"
+                autocomplete="current-password"
+                type="password"
+                show-password
+                size="large"
+                @keyup="checkCapslock"
+              /><span v-if="isCapslock" class="capslock-hint" role="status"
+                >大写锁定已开启</span
+              ></el-form-item
+            >
+            <p v-if="loginError" class="login-error" role="alert">
+              {{ loginError }}
+            </p>
+            <UiButton
+              class="login-submit"
+              type="submit"
+              variant="primary"
+              :loading="loading"
+              ><span>{{ loading ? "正在验证…" : "进入工作区" }}</span
+              ><ArrowRight v-if="!loading" aria-hidden="true"
+            /></UiButton>
+          </el-form>
+        </div>
+      </section>
+    </div>
   </main>
 </template>
+
 <script setup lang="ts">
-import { computed, ref, onMounted } from "vue";
+import { computed, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useSettingsStore, useUserStore } from "@/store";
 import { ThemeEnum } from "@/enums/ThemeEnum";
 import type { FormInstance, FormRules } from "element-plus";
+import ArrowRight from "~icons/ph/arrow-right";
+import { UiButton } from "@/ui";
+
 const userStore = useUserStore(),
   settingsStore = useSettingsStore(),
   router = useRouter(),
@@ -141,248 +211,187 @@ async function handleLogin() {
     loading.value = false;
   }
 }
-import logo from "@/assets/logo.svg";
-import ArrowRight from "~icons/ph/arrow-right";
-import Moon from "~icons/ph/moon-stars";
-import Sunny from "~icons/ph/sun";
-import { UiButton } from "@/ui";
-import { useMotion } from "@/motion";
-const page = ref<HTMLElement>();
-const { animate } = useMotion();
-onMounted(() => {
-  const elements = page.value?.querySelectorAll("[data-enter]");
-  if (elements)
-    animate(
-      Array.from(elements),
-      { opacity: 0, y: 32, filter: "blur(10px)" },
-      {
-        opacity: 1,
-        y: 0,
-        filter: "blur(0px)",
-        duration: 0.9,
-        stagger: 0.08,
-        ease: "expo.out",
-        clearProps: "opacity,transform,filter",
-      }
-    );
-});
 </script>
+
 <style scoped>
-.login-page {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(420px, 1fr);
+.union-login {
   min-height: 100dvh;
-  background: var(--c-canvas);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  background-color: var(--c-canvas);
 }
-.login-story {
-  position: relative;
+.union-login__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px clamp(20px, 4vw, 56px);
+  border-bottom: 1px solid var(--c-line);
+  background: color-mix(in srgb, var(--c-canvas) 90%, transparent);
+}
+.union-logo {
+  display: inline-block;
+  color: var(--c-ink);
+}
+.union-logo__svg {
+  height: 26px;
+  width: auto;
+  overflow: visible;
+}
+.union-logo__word {
+  font: 800 32px/1 var(--font-display);
+  letter-spacing: -0.04em;
+}
+.union-logo__capsule,
+.union-logo__trail,
+.union-logo__dot {
+  transition:
+    transform var(--duration-slow) var(--ease-out),
+    width var(--duration-slow) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .union-logo:hover .union-logo__capsule {
+    width: 58px;
+  }
+  .union-logo:hover .union-logo__trail {
+    transform: translateX(22px);
+  }
+  .union-logo:hover .union-logo__dot {
+    transform: translateX(11px) scale(1.2);
+  }
+}
+
+.theme-switch-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: 700 13.5px/1 var(--font-display);
+}
+.theme-word {
+  color: var(--c-ink);
+  opacity: 0.28;
+  transition: opacity var(--duration-medium) var(--ease-out);
+}
+.theme-word.is-on {
+  opacity: 1;
+}
+.theme-slash {
+  color: var(--c-muted);
+  opacity: 0.35;
+}
+
+.union-login__grid {
+  max-width: 1180px;
+  width: calc(100% - 40px);
+  margin: auto;
+  padding: clamp(32px, 5vw, 64px);
+  display: grid;
+  grid-template-columns: 1.2fr 0.95fr;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-panel);
+}
+.union-login__hero {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  margin: 12px 0 12px 12px;
-  padding: 32px;
+  gap: 56px;
+  padding-right: clamp(24px, 4vw, 56px);
+  border-right: 1px solid var(--c-line);
+}
+.hero-headline {
+  font: 760 clamp(44px, 6.2vw, 84px)/0.94 var(--font-display);
+  letter-spacing: -0.055em;
+  color: var(--c-ink);
+}
+.headline-mask {
+  display: block;
   overflow: hidden;
-  border-radius: 24px;
-  background: #0b0c0e;
-  color: #eceef2;
+  padding-bottom: 0.08em;
+  margin-bottom: -0.08em;
 }
-/* Three slow-moving colour fields; frozen for reduced motion. */
-.aurora {
-  position: absolute;
-  inset: 0;
-  filter: blur(60px) saturate(1.2);
-  opacity: 0.9;
+.headline-line {
+  display: block;
 }
-.aurora i {
-  position: absolute;
-  border-radius: 50%;
-}
-.aurora-a {
-  width: 60%;
-  height: 60%;
-  right: -10%;
-  top: -15%;
-  background: #73c9f4;
-  opacity: 0.55;
-  animation: drift-a 18s ease-in-out infinite alternate;
-}
-.aurora-b {
-  width: 55%;
-  height: 55%;
-  left: -15%;
-  bottom: -20%;
-  background: #2f6bff;
-  opacity: 0.55;
-  animation: drift-b 22s ease-in-out infinite alternate;
-}
-.aurora-c {
-  width: 35%;
-  height: 35%;
-  left: 40%;
-  top: 40%;
-  background: #3fd18f;
-  opacity: 0.35;
-  animation: drift-a 26s ease-in-out infinite alternate-reverse;
-}
-@keyframes drift-a {
-  to {
-    transform: translate(-18%, 22%) scale(1.15);
+@media (prefers-reduced-motion: no-preference) {
+  .headline-line {
+    animation: mask-rise var(--duration-reveal) var(--ease-out) both;
+    animation-delay: calc(var(--i, 0) * 120ms + 80ms);
   }
 }
-@keyframes drift-b {
-  to {
-    transform: translate(24%, -14%) scale(1.1);
-  }
-}
-.login-story::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 40%, rgb(11 12 14 / 0.75));
-}
-.login-brand {
-  position: relative;
-  z-index: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  width: fit-content;
-  color: inherit;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-.login-statement {
-  position: relative;
-  z-index: 1;
-}
-.login-statement h1 {
-  margin-bottom: 16px;
-  font-size: clamp(40px, 4.6vw, 68px);
-  line-height: 1.12;
-  letter-spacing: -0.02em;
-}
-.login-statement em {
-  font-style: normal;
-  color: #73c9f4;
-}
-.login-statement p {
-  max-width: 32ch;
-  color: rgb(236 238 242 / 0.72);
-  font-size: 15px;
-}
-.login-form-side {
-  display: grid;
-  grid-template-rows: auto minmax(min-content, 1fr) 44px;
-  padding: 24px 40px;
-  min-width: 0;
-}
-.login-topline {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.hero-statement {
+  margin-top: 24px;
+  max-width: 38ch;
+  font-size: 16px;
+  line-height: 1.65;
   color: var(--c-muted);
-  font-size: 13px;
 }
-.theme-toggle {
+.hero-index {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding-top: 24px;
+  border-top: 1px solid var(--c-line);
+}
+.hero-index dt {
+  font: 700 12px/1.2 var(--font-display);
+  letter-spacing: 0.04em;
+  color: var(--c-ink);
+}
+.hero-index dd {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--c-muted);
+}
+
+.union-login__panel {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-pill);
-  color: var(--c-ink);
-  background: var(--c-surface);
-}
-.theme-toggle svg {
-  width: 18px;
-  height: 18px;
-}
-.theme-toggle:hover {
-  background: var(--c-surface-2);
+  padding-left: clamp(24px, 4vw, 56px);
 }
 .login-form-wrap {
-  width: 100%;
-  max-width: 380px;
-  align-self: center;
-  margin: 20px auto;
+  width: min(100%, 360px);
 }
 .login-form-wrap h2 {
-  margin-bottom: 8px;
-  font-size: 32px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: var(--c-ink);
 }
-.login-intro {
+.login-form-hint {
+  margin: 8px 0 28px;
+  font-size: 13.5px;
   color: var(--c-muted);
-  margin-bottom: 28px;
-}
-.login-form-wrap :deep(.el-form-item) {
-  margin-bottom: 18px;
-}
-.login-form-wrap :deep(.el-form-item__label) {
-  padding-bottom: 6px;
-}
-.login-form-wrap :deep(.el-input__wrapper) {
-  min-height: 44px;
 }
 .login-submit {
-  position: relative;
   width: 100%;
-  min-height: 46px;
-  margin-top: 16px;
-}
-.login-submit svg {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 30px;
-  height: 30px;
-  padding: 7px;
-  border-radius: 50%;
-  background: var(--c-on-signal);
-  color: var(--c-signal);
-  transition: transform var(--duration-medium) var(--ease-spring);
-}
-.login-submit:hover svg {
-  transform: translateX(-3px);
-}
-.login-error {
-  padding: 10px 12px;
+  min-height: 44px;
   margin-top: 12px;
-  border: 1px solid color-mix(in srgb, var(--c-bad) 40%, var(--c-line));
-  border-radius: var(--radius-control);
-  color: var(--c-bad);
-  background: color-mix(in srgb, var(--c-bad) 8%, var(--c-surface));
-  font-size: 14px;
 }
+.login-submit :deep(span) {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.login-error,
 .capslock-hint {
-  color: var(--c-muted);
   font-size: 13px;
+  color: var(--c-bad);
 }
-@media (prefers-reduced-motion: reduce) {
-  .aurora i {
-    animation: none;
+
+@media (max-width: 860px) {
+  .union-login__grid {
+    grid-template-columns: 1fr;
+    gap: 32px;
   }
-}
-@media (max-width: 1023px) {
-  .login-page {
-    grid-template-columns: minmax(0, 1fr);
+  .union-login__hero {
+    padding-right: 0;
+    padding-bottom: 28px;
+    border-right: 0;
+    border-bottom: 1px solid var(--c-line);
   }
-  .login-story {
-    min-height: 320px;
-    margin: 12px 12px 0;
-    padding: 24px;
-  }
-  .login-statement h1 {
-    font-size: 36px;
-  }
-  .login-form-side {
-    padding: 20px 16px 24px;
-  }
-  .login-form-wrap {
-    margin: 24px auto;
+  .union-login__panel {
+    padding-left: 0;
   }
 }
 </style>

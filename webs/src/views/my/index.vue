@@ -149,35 +149,38 @@ onMounted(load);
 .my-layout {
   display: grid;
   grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
-  gap: 16px;
+  gap: 20px;
   align-items: start;
 }
 .sub-list {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 .sub-card {
   display: grid;
   gap: 10px;
-  padding: 14px 16px;
-  border: 1px solid var(--c-line);
+  padding: 16px 18px;
   border-radius: var(--radius-panel);
   background: var(--c-surface);
-  box-shadow: var(--shadow-panel), var(--edge-highlight);
   text-align: left;
   transition:
-    border-color var(--duration-fast) var(--ease-out),
-    translate var(--duration-medium) var(--ease-spring),
-    transform var(--duration-slow) var(--ease-out);
+    background-color var(--duration-fast) ease,
+    transform var(--duration-press) var(--ease-out);
 }
-.sub-card:hover {
-  translate: 0 -2px;
+@media (hover: hover) and (pointer: fine) {
+  .sub-card:hover {
+    background: var(--c-surface-2);
+  }
+}
+.sub-card:active {
+  transform: scale(0.99);
 }
 .sub-card[aria-selected="true"] {
-  border-color: var(--c-focus);
-  box-shadow:
-    0 0 0 3px var(--c-glow),
-    var(--edge-highlight);
+  background: var(--c-ink);
+  color: var(--c-surface);
+}
+.sub-card[aria-selected="true"] .sub-expire {
+  color: color-mix(in srgb, var(--c-surface) 70%, transparent);
 }
 .sub-head {
   display: flex;
@@ -195,13 +198,13 @@ onMounted(load);
 .sub-state {
   flex: 0 0 auto;
   padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--c-ok) 14%, transparent);
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--c-ok) 15%, transparent);
   color: var(--c-ok);
   font-size: 12px;
 }
 .sub-state.is-bad {
-  background: color-mix(in srgb, var(--c-bad) 14%, transparent);
+  background: color-mix(in srgb, var(--c-bad) 15%, transparent);
   color: var(--c-bad);
 }
 .sub-expire {
@@ -210,15 +213,15 @@ onMounted(load);
 }
 .share-panel {
   min-width: 0;
-  padding: 20px;
-  border: 1px solid var(--c-line);
+  padding: 24px;
   border-radius: var(--radius-panel);
   background: var(--c-surface);
-  box-shadow: var(--shadow-panel), var(--edge-highlight);
 }
 .share-panel h2 {
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 @media (max-width: 899px) {
   .my-layout {

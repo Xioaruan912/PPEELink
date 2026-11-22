@@ -124,9 +124,6 @@ function createNodes() {
         .length,
     }))
   );
-  const groupedCount = computed(
-    () => overviewList.value.filter((n) => (n.groups || []).length).length
-  );
   const selectedNodes = computed(() =>
     overviewList.value.filter((n) => selectedIds.value.has(n.id))
   );
@@ -619,7 +616,6 @@ function createNodes() {
     countryOptions,
     filteredNodes,
     groupTree,
-    groupedCount,
     selectedNodes,
     selectedCount,
     allSelected,

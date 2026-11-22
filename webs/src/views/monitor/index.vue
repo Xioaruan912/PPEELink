@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ServerHeader from "@/components/servers/ServerHeader.vue";
+import PageHeader from "@/ui/PageHeader.vue";
 import {
   computed,
   onMounted,
@@ -398,40 +398,44 @@ async function resetToken(item: MonitorItem | null) {
 </script>
 <template>
   <div class="monitor-page server-experience">
-    <ServerHeader
-      section="monitor"
-      title="监控与 Agent"
-      description="查看服务器运行状态；通过 Agent 管理终端、文件、容器和网络诊断。"
-    >
-      <template #actions>
-        <UiButton @click="agentManagerVisible = true">Agent 管理</UiButton>
-        <UiButton :icon="Refresh" :loading="phase === 'loading'" @click="load()"
-          >刷新</UiButton
-        >
-        <UiButton variant="primary" :icon="Plus" @click="openAdd"
-          >添加服务器</UiButton
-        >
-      </template>
-    </ServerHeader>
+    <aside class="monitor-masthead" data-enter>
+      <PageHeader
+        title="主机与 Agent"
+        description="查看服务器运行状态；通过 Agent 管理终端、文件、容器和网络诊断。"
+      >
+        <template #actions>
+          <UiButton variant="primary" :icon="Plus" @click="openAdd"
+            >添加服务器</UiButton
+          >
+          <UiButton @click="agentManagerVisible = true">Agent 管理</UiButton>
+          <UiButton
+            :icon="Refresh"
+            :loading="phase === 'loading'"
+            @click="load()"
+            >刷新</UiButton
+          >
+        </template>
+      </PageHeader>
 
-    <div class="summary-line">
-      <div>
-        <span>服务器</span>
-        <strong>{{ summary.total }}</strong>
+      <div class="monitor-ledger">
+        <div>
+          <span>服务器</span>
+          <strong>{{ summary.total }}</strong>
+        </div>
+        <div>
+          <span>在线</span>
+          <strong class="ok">{{ summary.online }}</strong>
+        </div>
+        <div>
+          <span>离线</span>
+          <strong>{{ summary.offline }}</strong>
+        </div>
+        <div>
+          <span>平均 CPU</span>
+          <strong>{{ avgCPU.toFixed(1) }}<i>%</i></strong>
+        </div>
       </div>
-      <div>
-        <span>在线</span>
-        <strong class="ok">{{ summary.online }}</strong>
-      </div>
-      <div>
-        <span>离线</span>
-        <strong>{{ summary.offline }}</strong>
-      </div>
-      <div>
-        <span>平均 CPU</span>
-        <strong>{{ avgCPU.toFixed(1) }}<i>%</i></strong>
-      </div>
-    </div>
+    </aside>
 
     <UiPanel
       title="服务器"
@@ -968,47 +972,89 @@ async function resetToken(item: MonitorItem | null) {
 }
 
 .monitor-page {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
   padding-bottom: 48px;
 }
-.summary-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0;
-  margin-bottom: 12px;
-  padding: 8px 16px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  background: var(--c-surface);
+.monitor-masthead {
+  position: sticky;
+  top: 28px;
+  display: grid;
+  gap: 28px;
 }
-.summary-line > div {
+.monitor-masthead :deep(.page-header) {
+  margin-bottom: 0;
+}
+.monitor-masthead :deep(.page-header__grid) {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 18px;
+}
+.monitor-masthead :deep(.page-header__actions) {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.monitor-masthead :deep(.page-header__actions > :first-child) {
+  grid-column: 1 / -1;
+}
+.monitor-ledger {
+  display: grid;
+  border-top: 1px solid var(--c-ink);
+}
+.monitor-ledger > div {
   display: flex;
   align-items: baseline;
-  gap: 7px;
-  padding: 2px 22px;
-  border-right: 1px solid var(--c-line);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 2px;
+  border-bottom: 1px solid var(--c-line);
 }
-.summary-line > div:first-child {
-  padding-left: 0;
-}
-.summary-line > div:last-child {
-  border-right: 0;
-}
-.summary-line span {
+.monitor-ledger span {
   color: var(--c-muted);
-  font-size: 11.5px;
+  font-size: 13px;
+  font-weight: 540;
 }
-.summary-line strong {
-  font: 600 18px/1.2 var(--font-ui);
+.monitor-ledger strong {
+  font: 700 28px/1 var(--font-display);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  color: var(--c-ink);
 }
-.summary-line strong.ok {
+.monitor-ledger strong.ok {
   color: var(--c-ok);
 }
-.summary-line strong i {
-  margin-left: 1px;
+.monitor-ledger strong i {
+  margin-left: 2px;
   color: var(--c-muted);
-  font-size: 10px;
+  font-size: 13px;
   font-style: normal;
+}
+@media (max-width: 1024px) {
+  .monitor-page {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+  .monitor-masthead {
+    position: static;
+    gap: 20px;
+  }
+  .monitor-ledger {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border: 1px solid var(--c-line);
+    border-radius: var(--radius-panel);
+    background: var(--c-surface);
+  }
+  .monitor-ledger > div {
+    padding: 14px 16px;
+    border-bottom: 0;
+    border-right: 1px solid var(--c-line);
+  }
+  .monitor-ledger > div:last-child {
+    border-right: 0;
+  }
 }
 .server-grid {
   display: grid;

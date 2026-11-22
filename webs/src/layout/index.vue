@@ -1,145 +1,242 @@
 <template>
-  <div v-if="authenticated" class="ion-shell">
-    <a href="#ion-content" class="skip-link" @click.prevent="focusMain"
+  <div
+    v-if="authenticated"
+    class="workspace-shell"
+    :class="{ 'workspace-locked': locked }"
+  >
+    <canvas
+      ref="gridCanvas"
+      class="union-grid-canvas"
+      aria-hidden="true"
+    ></canvas>
+
+    <a href="#workspace-content" class="skip-link" @click.prevent="focusMain"
       >跳到主要内容</a
     >
-    <header class="ion-header">
-      <div class="header-inner">
-        <router-link to="/" class="brand" aria-label="PPEELink 首页"
-          ><img class="brand-logo" :src="logo" width="28" height="28" alt="" />
-          <span class="brand-name">PPEELink</span></router-link
+
+    <!-- Open-Sky Minimalist Corner Header (No full-width top navbar!) -->
+    <header class="sky-header">
+      <div class="sky-header__left">
+        <button
+          v-if="!locked"
+          class="workspace-icon mobile-trigger"
+          aria-label="打开导航"
+          :aria-expanded="sheetOpen"
+          @click="sheetOpen = true"
         >
-        <TopNav v-if="!locked" class="desktop-nav" :items="navigation" />
-        <div class="header-tools">
-          <button
-            v-if="!locked"
-            class="search-pill"
-            aria-label="搜索页面，Command K 或 Control K"
-            @click="commandVisible = true"
+          <IconList />
+        </button>
+
+        <RouterLink
+          to="/"
+          class="union-logo"
+          aria-label="PPEELink 首页"
+          data-hover="logo-morph"
+        >
+          <span class="sr-only">PPEELink</span>
+          <svg
+            class="union-logo__svg"
+            viewBox="0 0 310 44"
+            fill="none"
+            aria-hidden="true"
           >
-            <IconSearch /><span>搜索</span><kbd>{{ shortcutLabel }}K</kbd>
-          </button>
-          <el-tooltip
-            v-if="!locked && isAdmin"
-            :content="`测试任务：${taskLabel}`"
-            :trigger-keys="[]"
-            placement="bottom"
-          >
-            <button
-              class="tool-button"
-              :class="{ 'is-running': testRunning, 'is-warn': statusError }"
-              :aria-label="`测试任务：${taskLabel}`"
-              @click="testVisible = true"
+            <text x="0" y="33" fill="currentColor" class="union-logo__word">
+              PPEE
+            </text>
+            <rect
+              class="union-logo__capsule"
+              x="104"
+              y="9"
+              width="34"
+              height="24"
+              rx="12"
+              stroke="currentColor"
+              stroke-width="4"
+            />
+            <circle
+              class="union-logo__dot"
+              cx="121"
+              cy="21"
+              r="3.8"
+              fill="var(--c-ok)"
+            />
+            <text
+              x="148"
+              y="33"
+              fill="currentColor"
+              class="union-logo__word union-logo__trail"
             >
-              <IconPulse />
-            </button>
-          </el-tooltip>
-          <el-tooltip
-            :content="isDark ? '切换浅色主题' : '切换深色主题'"
-            :trigger-keys="[]"
-            placement="bottom"
+              LINK
+            </text>
+          </svg>
+        </RouterLink>
+
+        <div v-if="!locked && activeGroup" class="sky-coord" aria-hidden="true">
+          <span class="coord-slash">/</span>
+          <span>{{ activeGroup.label }}</span>
+          <span v-if="activePage" class="coord-page"
+            >· {{ activePage.label }}</span
           >
-            <button
-              class="tool-button"
-              :aria-label="isDark ? '切换浅色主题' : '切换深色主题'"
-              @click="toggleTheme"
-            >
-              <Transition name="swap" mode="out-in"
-                ><component
-                  :is="isDark ? IconSun : IconMoon"
-                  :key="String(isDark)"
-              /></Transition>
-            </button>
-          </el-tooltip>
-          <AccountMenu :username="user.user.username" @logout="logout" />
-          <button
-            v-if="!locked"
-            class="tool-button menu-button"
-            :aria-label="sheetOpen ? '关闭导航' : '打开导航'"
-            :aria-expanded="sheetOpen"
-            aria-controls="ion-sheet"
-            @click="sheetOpen = !sheetOpen"
-          >
-            <component :is="sheetOpen ? IconClose : IconList" />
-          </button>
         </div>
       </div>
-    </header>
-    <Transition name="sheet">
-      <nav
-        v-if="sheetOpen"
-        id="ion-sheet"
-        class="mobile-sheet"
-        aria-label="全部页面"
-        @keydown.esc="sheetOpen = false"
-      >
-        <section v-for="group in navigation" :key="group.path">
-          <h2 v-if="group.children.length">{{ group.label }}</h2>
-          <router-link
-            v-for="item in flattenNavigation([group])"
-            :key="item.path"
-            :to="item.path"
-            class="sheet-link"
-            :aria-current="route.path === item.path ? 'page' : undefined"
-            @click="sheetOpen = false"
-            ><span class="sheet-icon"><component :is="item.icon" /></span
-            ><span
-              ><strong>{{ item.label }}</strong
-              ><small v-if="item.hint">{{ item.hint }}</small></span
-            ></router-link
+
+      <div class="sky-header__right">
+        <button
+          v-if="!locked"
+          class="union-search-btn"
+          aria-label="搜索页面，Command K 或 Control K"
+          @click="commandVisible = true"
+        >
+          <IconSearch /><span>搜索</span><kbd>{{ shortcutLabel }}K</kbd>
+        </button>
+        <button
+          v-if="!locked && isAdmin"
+          class="workspace-icon"
+          :class="{ 'task-live': testRunning }"
+          :aria-label="`测试任务：${taskLabel}`"
+          :title="`测试任务：${taskLabel}`"
+          @click="testVisible = true"
+        >
+          <IconPulse />
+        </button>
+        <div class="theme-switch-pair" role="group" aria-label="主题模式">
+          <button
+            type="button"
+            class="theme-word"
+            :class="{ 'is-on': !isDark }"
+            :aria-label="isDark ? '切换浅色主题' : '当前浅色主题'"
+            @click="isDark && toggleTheme()"
           >
-        </section>
-        <div class="sheet-actions">
-          <UiButton @click="toggleTheme">{{
-            isDark ? "浅色主题" : "深色主题"
-          }}</UiButton>
-          <UiButton
-            v-if="isAdmin"
-            @click="
-              testVisible = true;
-              sheetOpen = false;
-            "
-            >测试任务：{{ taskLabel }}</UiButton
+            Light
+          </button>
+          <span class="theme-slash" aria-hidden="true">/</span>
+          <button
+            type="button"
+            class="theme-word"
+            :class="{ 'is-on': isDark }"
+            :aria-label="!isDark ? '切换深色主题' : '当前深色主题'"
+            @click="!isDark && toggleTheme()"
           >
-          <UiButton @click="router.push('/system/user/set')">修改密码</UiButton
-          ><UiButton variant="ghost" @click="logout">退出登录</UiButton>
+            Dark
+          </button>
         </div>
-      </nav>
-    </Transition>
-    <main id="ion-content" class="ion-content" tabindex="-1">
-      <nav v-if="!locked && activeGroup && !['服务器', '订阅与节点'].includes(activeGroup.label)" class="section-nav" :aria-label="activeGroup.label">
-        <span class="section-label">{{ activeGroup.label }}</span>
-        <RouterLink v-for="item in activeGroup.children" :key="item.path" :to="item.path"
-          :aria-current="route.path === item.path ? 'page' : undefined"
-          :title="item.hint">{{ item.label }}</RouterLink>
-      </nav>
+        <AccountMenu :username="user.user.username" @logout="logout" />
+      </div>
+    </header>
+
+    <main id="workspace-content" class="workspace-content" tabindex="-1">
       <AppMain />
     </main>
+
+    <!-- Floating Bottom Machined Obsidian Command Dock -->
+    <div v-if="!locked" class="floating-dock-anchor">
+      <div class="floating-dock">
+        <nav
+          ref="domainNavEl"
+          class="dock-domains"
+          aria-label="功能域切换"
+        >
+          <span
+            class="dock-glider"
+            :style="domainGliderStyle"
+            aria-hidden="true"
+          ></span>
+          <RouterLink
+            v-for="group in navigation"
+            :key="group.label"
+            :to="group.path"
+            class="dock-domain-pill"
+            :class="{ 'is-active': activeGroup?.label === group.label }"
+          >
+            <span>{{ group.label }}</span>
+          </RouterLink>
+        </nav>
+
+        <span
+          v-if="activeGroup && activeGroup.children.length > 0"
+          class="dock-divider"
+          aria-hidden="true"
+        ></span>
+
+        <nav
+          v-if="activeGroup && activeGroup.children.length > 0"
+          class="dock-subpages"
+          :aria-label="`${activeGroup.label}页面`"
+        >
+          <template
+            v-for="item in flattenNavigation([activeGroup])"
+            :key="item.path"
+          >
+            <a
+              v-if="isExternal(item.path)"
+              :href="item.path"
+              class="dock-sub-link"
+            >
+              <span class="union-nav-dot" aria-hidden="true"></span>
+              <span class="union-nav-label">{{ item.label }}</span>
+            </a>
+            <RouterLink
+              v-else
+              :to="item.path"
+              class="dock-sub-link"
+              :aria-current="route.path === item.path ? 'page' : undefined"
+            >
+              <span class="union-nav-dot" aria-hidden="true"></span>
+              <span class="union-nav-label">{{ item.label }}</span>
+            </RouterLink>
+          </template>
+        </nav>
+      </div>
+    </div>
+
+    <el-drawer
+      v-if="!locked"
+      v-model="sheetOpen"
+      size="min(320px, 88vw)"
+      direction="ltr"
+      title="PPEELink"
+      append-to-body
+      destroy-on-close
+      class="workspace-mobile"
+    >
+      <WorkspaceNav :items="navigation" @navigate="sheetOpen = false" />
+    </el-drawer>
     <CommandPalette v-model="commandVisible" :items="commands" />
     <TestStatusDialog v-if="testVisible" v-model:visible="testVisible" />
   </div>
   <main v-else class="public-error-content"><AppMain /></main>
 </template>
+
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessageBox } from "element-plus";
 import IconSearch from "~icons/ph/magnifying-glass";
 import IconPulse from "~icons/ph/pulse";
-import IconSun from "~icons/ph/sun";
-import IconMoon from "~icons/ph/moon-stars";
 import IconList from "~icons/ph/list";
-import IconClose from "~icons/ph/x";
+
 import { usePermissionStore, useSettingsStore, useUserStore } from "@/store";
 import { ThemeEnum } from "@/enums/ThemeEnum";
 import { GetTestStatus } from "@/api/subcription/node";
-import logo from "@/assets/logo.svg";
 import TestStatusDialog from "@/components/TestStatusDialog.vue";
-import { CommandPalette, UiButton, type CommandItem } from "@/ui";
+import { CommandPalette, type CommandItem } from "@/ui";
+import { prefersReducedMotion } from "@/motion";
 import AppMain from "./components/AppMain/index.vue";
-import TopNav from "./components/TopNav.vue";
+import WorkspaceNav from "./components/WorkspaceNav.vue";
 import AccountMenu from "./components/AccountMenu.vue";
-import { buildNavigation, flattenNavigation, organizeNavigation } from "./navigation";
+import {
+  buildNavigation,
+  flattenNavigation,
+  organizeNavigation,
+} from "./navigation";
+
 const permission = usePermissionStore(),
   settings = useSettingsStore(),
   user = useUserStore(),
@@ -148,17 +245,25 @@ const permission = usePermissionStore(),
 const authenticated = !!localStorage.getItem("accessToken");
 const isDark = computed(() => settings.theme === ThemeEnum.DARK);
 const isAdmin = computed(() => user.user.roles.includes("ADMIN"));
-// 必须先改密码时只保留品牌与内容区，其余入口都会被拦截
 const locked = computed(() => !!user.user.mustChangePassword);
-// 在组织菜单前移除普通用户的仪表盘入口。
 const navigation = computed(() =>
-  organizeNavigation(buildNavigation(permission.routes).filter(
-    (item) => isAdmin.value || item.path !== "/dashboard"
-  ))
+  organizeNavigation(
+    buildNavigation(permission.routes).filter(
+      (item) => isAdmin.value || item.path !== "/dashboard"
+    )
+  )
 );
-const activeGroup = computed(() => navigation.value.find(group =>
-  group.children.length && group.children.some(item => item.path === route.path)
-));
+const activeGroup = computed(
+  () =>
+    navigation.value.find(
+      (group) =>
+        group.children.length &&
+        group.children.some((item) => item.path === route.path)
+    ) || navigation.value[0]
+);
+const activePage = computed(() =>
+  flattenNavigation(navigation.value).find((item) => item.path === route.path)
+);
 const isExternal = (path: string) => /^(https?:)?\/\//.test(path);
 const commandVisible = ref(false),
   sheetOpen = ref(false),
@@ -171,11 +276,34 @@ const taskLabel = computed(() =>
 const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)
   ? "⌘"
   : "Ctrl ";
+
+const domainNavEl = ref<HTMLElement>();
+const domainGliderStyle = ref({
+  transform: "translate3d(0,0,0)",
+  width: "0px",
+  opacity: 0,
+});
+
+function syncDomainGlider() {
+  const el = domainNavEl.value;
+  if (!el) return;
+  const active = el.querySelector<HTMLElement>(".dock-domain-pill.is-active");
+  if (!active) {
+    domainGliderStyle.value = { ...domainGliderStyle.value, opacity: 0 };
+    return;
+  }
+  domainGliderStyle.value = {
+    transform: `translate3d(${active.offsetLeft}px, 0, 0)`,
+    width: `${active.offsetWidth}px`,
+    opacity: 1,
+  };
+}
+
 function toggleTheme() {
   settings.changeTheme(isDark.value ? ThemeEnum.LIGHT : ThemeEnum.DARK);
 }
 function focusMain() {
-  document.getElementById("ion-content")?.focus();
+  document.getElementById("workspace-content")?.focus();
 }
 async function logout() {
   try {
@@ -210,7 +338,17 @@ const commands = computed<CommandItem[]>(() => [
     }))
   ),
   { id: "theme", label: "切换主题", run: toggleTheme },
-  ...(isAdmin.value ? [{ id: "tasks", label: "查看测试任务", run: () => { testVisible.value = true; } }] : []),
+  ...(isAdmin.value
+    ? [
+        {
+          id: "tasks",
+          label: "查看测试任务",
+          run: () => {
+            testVisible.value = true;
+          },
+        },
+      ]
+    : []),
   {
     id: "password",
     label: "修改密码",
@@ -218,6 +356,100 @@ const commands = computed<CommandItem[]>(() => [
   },
   { id: "logout", label: "退出登录", run: logout },
 ]);
+
+/* Sparse UNION-TEC Cursor-Reactive Micro-Crosshairs */
+const gridCanvas = ref<HTMLCanvasElement>();
+let rafId = 0;
+let cleanupCanvas: (() => void) | undefined;
+
+function mountBlueprintCanvas() {
+  const canvas = gridCanvas.value;
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  let width = 0;
+  let height = 0;
+  let targetX = -1000;
+  let targetY = -1000;
+  let curX = -1000;
+  let curY = -1000;
+  let settled = false;
+
+  const resize = () => {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    width = window.innerWidth;
+    height = window.innerHeight;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  };
+
+  const draw = () => {
+    ctx.clearRect(0, 0, width, height);
+    const dark = document.documentElement.classList.contains("dark");
+    const step = 136;
+    const baseAlpha = dark ? 0.1 : 0.075;
+
+    for (let x = step; x < width; x += step) {
+      for (let y = step; y < height; y += step) {
+        const dx = curX - x;
+        const dy = curY - y;
+        const dist = Math.hypot(dx, dy);
+        const pull = dist < 200 ? (1 - dist / 200) * 5 : 0;
+        const ox = dist > 1 ? (dx / dist) * pull : 0;
+        const oy = dist > 1 ? (dy / dist) * pull : 0;
+        const arm = dist < 200 ? 3 + (1 - dist / 200) * 2.5 : 2.5;
+        const alpha =
+          dist < 200 ? baseAlpha + (1 - dist / 200) * 0.24 : baseAlpha;
+
+        ctx.strokeStyle = dark
+          ? `rgba(255,255,255,${alpha})`
+          : `rgba(10,10,10,${alpha})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + ox - arm, y + oy + 0.5);
+        ctx.lineTo(x + ox + arm, y + oy + 0.5);
+        ctx.moveTo(x + ox + 0.5, y + oy - arm);
+        ctx.lineTo(x + ox + 0.5, y + oy + arm);
+        ctx.stroke();
+      }
+    }
+  };
+
+  const tick = () => {
+    curX += (targetX - curX) * 0.1;
+    curY += (targetY - curY) * 0.1;
+    draw();
+    if (Math.hypot(targetX - curX, targetY - curY) > 0.4) {
+      rafId = requestAnimationFrame(tick);
+    } else {
+      settled = true;
+    }
+  };
+
+  const onMove = (e: PointerEvent) => {
+    if (prefersReducedMotion()) return;
+    targetX = e.clientX;
+    targetY = e.clientY;
+    if (settled) {
+      settled = false;
+      rafId = requestAnimationFrame(tick);
+    }
+  };
+
+  resize();
+  settled = true;
+  window.addEventListener("resize", resize);
+  window.addEventListener("pointermove", onMove, { passive: true });
+  cleanupCanvas = () => {
+    cancelAnimationFrame(rafId);
+    window.removeEventListener("resize", resize);
+    window.removeEventListener("pointermove", onMove);
+  };
+}
+
 let statusTimer: ReturnType<typeof setTimeout> | undefined;
 let disposed = false;
 async function pollStatus() {
@@ -240,314 +472,396 @@ async function pollStatus() {
     if (!disposed) statusTimer = setTimeout(pollStatus, 5000);
   }
 }
+
+let resizeObs: ResizeObserver | undefined;
 onMounted(() => {
   if (authenticated) pollStatus();
+  mountBlueprintCanvas();
+  nextTick(syncDomainGlider);
+  if (typeof ResizeObserver !== "undefined" && domainNavEl.value) {
+    resizeObs = new ResizeObserver(syncDomainGlider);
+    resizeObs.observe(domainNavEl.value);
+  }
+});
+watch(isDark, () => {
+  window.dispatchEvent(new Event("resize"));
 });
 watch(
-  () => route.path,
-  () => (sheetOpen.value = false)
-);
-watch(sheetOpen, (open) =>
-  document.documentElement.classList.toggle("ion-sheet-lock", open)
+  () => [route.path, navigation.value.length],
+  () => {
+    sheetOpen.value = false;
+    nextTick(syncDomainGlider);
+  }
 );
 onBeforeUnmount(() => {
   disposed = true;
   if (statusTimer) clearTimeout(statusTimer);
-  document.documentElement.classList.remove("ion-sheet-lock");
+  cleanupCanvas?.();
+  resizeObs?.disconnect();
 });
 </script>
-<style scoped>
-.section-nav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 22px; padding-bottom: 12px; border-bottom: 1px solid var(--c-line); }
-.section-label { color: var(--c-muted); font-size: 12px; margin-right: 12px; }
-.section-nav a { padding: 7px 12px; border-radius: 8px; color: var(--c-muted); font-size: 13px; }
-.section-nav a:hover, .section-nav a[aria-current="page"] { color: var(--c-ink); background: var(--c-surface-2); }
-.section-nav a[aria-current="page"] { font-weight: 600; box-shadow: inset 0 -2px var(--c-signal); }
-.section-nav a:focus-visible { outline: 2px solid var(--c-signal); outline-offset: 2px; }
-@media (max-width: 767px) { .section-label { width: 100%; } .section-nav { margin-bottom: 16px; gap: 4px; } }
 
-.public-error-content {
-  min-height: 100dvh;
-  max-width: 1440px;
-  padding: 28px;
-}
-.ion-shell {
+<style scoped>
+.workspace-shell {
+  --sidebar-w: 0px;
+  position: relative;
   min-height: 100dvh;
   background: var(--c-canvas);
 }
+.union-grid-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Open-Sky Corner Bar (Zero full-width border, pure open space) */
+.sky-header {
+  position: relative;
+  z-index: var(--z-tools);
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 26px clamp(20px, 4vw, 48px) 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.sky-header__left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.union-logo {
+  display: inline-flex;
+  align-items: center;
+  color: var(--c-ink);
+}
+.union-logo__svg {
+  height: 22px;
+  width: auto;
+  overflow: visible;
+}
+.union-logo__word {
+  font: 800 31px/1 var(--font-display);
+  letter-spacing: -0.04em;
+}
+.union-logo__capsule,
+.union-logo__trail,
+.union-logo__dot {
+  transition:
+    transform var(--duration-slow) var(--ease-out),
+    width var(--duration-slow) var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .union-logo:hover .union-logo__capsule {
+    width: 54px;
+  }
+  .union-logo:hover .union-logo__trail {
+    transform: translateX(20px);
+  }
+  .union-logo:hover .union-logo__dot {
+    transform: translateX(10px) scale(1.18);
+  }
+}
+
+.sky-coord {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+.coord-slash {
+  opacity: 0.35;
+}
+.coord-page {
+  color: var(--c-ink);
+  font-weight: 600;
+}
+
+.sky-header__right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-surface) 82%, transparent);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--c-line);
+  white-space: nowrap;
+}
+.theme-switch-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  font: 660 12px/1 var(--font-display);
+}
+.theme-word {
+  color: var(--c-ink);
+  opacity: 0.3;
+  transition: opacity var(--duration-medium) var(--ease-out);
+}
+.theme-word.is-on {
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .theme-word:hover {
+    opacity: 0.75;
+  }
+}
+.theme-slash {
+  color: var(--c-muted);
+  opacity: 0.35;
+  font-size: 11px;
+}
+
+.union-search-btn,
+.workspace-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font: 560 12px/1 var(--font-ui);
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition:
+    background-color var(--duration-fast) var(--ease-out),
+    color var(--duration-fast) var(--ease-out);
+}
+.union-search-btn svg,
+.workspace-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.union-search-btn kbd {
+  color: var(--c-muted);
+  font: 500 10.5px/1 var(--font-mono);
+  margin-left: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .union-search-btn:hover,
+  .workspace-icon:hover {
+    background: var(--c-ink);
+    color: var(--c-surface);
+  }
+  .union-search-btn:hover kbd {
+    color: var(--c-surface);
+  }
+}
+.workspace-icon.task-live {
+  color: var(--c-ok);
+}
+
+/* Floating Bottom Machined Obsidian Command Dock */
+.floating-dock-anchor {
+  position: fixed;
+  z-index: 1200;
+  left: 16px;
+  right: 16px;
+  bottom: 20px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.floating-dock {
+  pointer-events: auto;
+  max-width: 100%;
+  overflow-x: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: rgb(12 12 14 / 0.9);
+  backdrop-filter: blur(22px) saturate(160%);
+  border: 1px solid rgb(255 255 255 / 0.12);
+  box-shadow:
+    0 24px 60px -12px rgb(0 0 0 / 0.35),
+    inset 0 1px 0 rgb(255 255 255 / 0.14);
+}
+.dock-domains {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.dock-glider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  pointer-events: none;
+  transition:
+    transform var(--duration-medium) var(--ease-out),
+    width var(--duration-medium) var(--ease-out),
+    opacity var(--duration-fast) ease;
+}
+.dock-domain-pill {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 14px;
+  border-radius: 999px;
+  color: rgb(255 255 255 / 0.65);
+  font-size: 13px;
+  font-weight: 540;
+  white-space: nowrap;
+  transition:
+    color var(--duration-medium) var(--ease-out),
+    opacity var(--duration-medium) var(--ease-out);
+}
+.dock-domain-pill.is-active {
+  color: #0a0a0a;
+  font-weight: 660;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dock-domain-pill:not(.is-active):hover {
+    color: #ffffff;
+  }
+}
+
+.dock-divider {
+  width: 1px;
+  height: 20px;
+  background: rgb(255 255 255 / 0.16);
+  flex: none;
+}
+
+.dock-subpages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-right: 6px;
+}
+.dock-sub-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 11px;
+  border-radius: 999px;
+  color: rgb(255 255 255 / 0.65);
+  font-size: 13px;
+  font-weight: 520;
+  white-space: nowrap;
+  transition:
+    color var(--duration-medium) var(--ease-out),
+    background-color var(--duration-medium) var(--ease-out),
+    opacity var(--duration-medium) var(--ease-out);
+}
+.union-nav-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.3);
+  flex: none;
+  transition:
+    transform var(--duration-medium) var(--ease-out),
+    background-color var(--duration-medium) var(--ease-out),
+    width var(--duration-medium) var(--ease-out),
+    border-radius var(--duration-medium) var(--ease-out);
+}
+.union-nav-label {
+  transition: transform var(--duration-medium) var(--ease-out);
+}
+.dock-sub-link[aria-current="page"] {
+  color: #ffffff;
+  background: rgb(255 255 255 / 0.11);
+  font-weight: 640;
+}
+.dock-sub-link[aria-current="page"] .union-nav-dot {
+  width: 10px;
+  border-radius: 3px;
+  background: #29df7e;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dock-subpages:hover .dock-sub-link:not(:hover) {
+    opacity: 0.45;
+  }
+  .dock-sub-link:hover {
+    color: #ffffff;
+  }
+  .dock-sub-link:hover .union-nav-dot {
+    background: #29df7e;
+    transform: scale(1.25);
+  }
+}
+
+.workspace-content {
+  position: relative;
+  z-index: 1;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px clamp(20px, 4vw, 48px) 120px;
+  min-width: 0;
+}
+.mobile-trigger {
+  display: none;
+}
+.public-error-content {
+  min-height: 100dvh;
+  padding: 28px;
+}
 .skip-link {
   position: fixed;
-  top: 12px;
-  left: 12px;
-  z-index: calc(var(--z-tools) + 2);
+  z-index: 2000;
+  top: 10px;
+  left: 10px;
   transform: translateY(-160%);
-  padding: 10px 16px;
-  border-radius: var(--radius-pill);
+  padding: 8px 14px;
   background: var(--c-surface);
-  color: var(--c-ink);
 }
 .skip-link:focus {
   transform: none;
 }
-.ion-header {
-  position: sticky;
-  top: 0;
-  z-index: var(--z-tools);
-  backdrop-filter: blur(14px) saturate(1.4);
-  background: color-mix(in srgb, var(--c-canvas) 72%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--c-line) 70%, transparent);
-}
-.header-inner {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 16px;
-  max-width: 1400px;
-  height: 64px;
-  margin: 0 auto;
-  padding: 0 32px;
-}
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  justify-self: start;
-  color: var(--c-ink);
-}
-.brand-name {
-  font-size: 16px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-.header-tools {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-}
-.search-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 36px;
-  padding: 0 6px 0 12px;
-  border: 1px solid var(--c-line);
-  border-radius: var(--radius-pill);
-  background: var(--c-surface);
-  color: var(--c-muted);
-  font-size: 13px;
-  transition: border-color var(--duration-fast) var(--ease-out);
-}
-.search-pill:hover {
-  border-color: var(--c-muted);
-  color: var(--c-ink);
-}
-.search-pill svg {
-  width: 16px;
-  height: 16px;
-}
-.search-pill kbd {
-  margin-left: 18px;
-  padding: 2px 8px;
-  border-radius: var(--radius-pill);
-  background: var(--c-surface-2);
-  font: 500 12px var(--font-mono);
-}
-.tool-button {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-pill);
-  color: var(--c-muted);
-  transition:
-    color var(--duration-fast),
-    background-color var(--duration-fast);
-}
-.tool-button:hover {
-  background: var(--c-surface-2);
-  color: var(--c-ink);
-}
-.tool-button svg {
-  width: 18px;
-  height: 18px;
-}
-/* A running task is real state, so it earns the one live indicator. */
-.tool-button.is-running::after,
-.tool-button.is-warn::after {
-  content: "";
-  position: absolute;
-  top: 7px;
-  right: 7px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--c-ok);
-  box-shadow: 0 0 0 2px var(--c-canvas);
-  animation: ion-ping 1.6s var(--ease-out) infinite;
-}
-.tool-button.is-warn::after {
-  background: var(--c-warn);
-  animation: none;
-}
-@keyframes ion-ping {
-  50% {
-    transform: scale(1.5);
-    opacity: 0.6;
-  }
-}
-.swap-enter-active,
-.swap-leave-active {
-  transition:
-    transform var(--duration-medium) var(--ease-spring),
-    opacity var(--duration-fast);
-}
-.swap-enter-from {
-  transform: rotate(-90deg) scale(0.6);
-  opacity: 0;
-}
-.swap-leave-to {
-  transform: rotate(90deg) scale(0.6);
-  opacity: 0;
-}
-.menu-button {
-  display: none;
-}
-.ion-content {
-  max-width: 1320px;
-  margin: 0 auto;
-  padding: 24px 32px 40px;
-  min-width: 0;
-}
-.mobile-sheet {
-  position: fixed;
-  inset: 64px 0 0;
-  z-index: calc(var(--z-tools) - 1);
-  display: grid;
-  align-content: start;
-  gap: 20px;
-  padding: 20px 16px calc(24px + env(safe-area-inset-bottom));
-  overflow-y: auto;
-  background: var(--c-canvas);
-}
-.mobile-sheet h2 {
-  margin: 0 0 6px;
-  color: var(--c-muted);
-  font-size: 12px;
-  font-weight: 500;
-}
-.sheet-link {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 8px;
-  border-radius: 14px;
-  color: var(--c-ink);
-}
-.sheet-link[aria-current="page"] {
-  background: var(--c-surface);
-  box-shadow: var(--edge-highlight);
-}
-.sheet-link strong {
-  display: block;
-  font-size: 15px;
-  font-weight: 500;
-}
-.sheet-link small {
-  color: var(--c-muted);
-  font-size: 12px;
-}
-.sheet-icon {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid var(--c-line);
-  border-radius: 12px;
-  background: var(--c-surface);
-  color: var(--c-muted);
-}
-.sheet-link[aria-current="page"] .sheet-icon {
-  border-color: transparent;
-  background: var(--c-signal);
-  color: var(--c-on-signal);
-}
-.sheet-icon svg {
-  width: 18px;
-  height: 18px;
-}
-.sheet-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.sheet-enter-active,
-.sheet-leave-active {
-  transition:
-    opacity var(--duration-medium) var(--ease-out),
-    transform var(--duration-medium) var(--ease-out);
-}
-.sheet-enter-from,
-.sheet-leave-to {
-  opacity: 0;
-  transform: translateY(-12px);
-}
-@media (max-width: 1099px) {
-  .header-inner {
-    grid-template-columns: auto 1fr;
-    padding: 0 20px;
-  }
-  .desktop-nav {
+
+@media (max-width: 980px) {
+  .floating-dock-anchor,
+  .sky-coord {
     display: none;
   }
-  .menu-button {
-    display: grid;
+  .mobile-trigger {
+    display: inline-flex;
   }
-  .ion-content {
-    padding: 24px 20px 40px;
+  .workspace-content {
+    padding-top: 16px;
+    padding-bottom: 64px;
   }
 }
-@media (max-width: 767px) {
-  .header-inner {
-    padding: 0 12px;
-    gap: 8px;
-  }
-  .search-pill {
-    width: 36px;
-    padding: 0;
-    justify-content: center;
-  }
-  .search-pill span,
-  .search-pill kbd,
-  .header-tools > :deep(.account-dropdown) {
+@media (max-width: 560px) {
+  .theme-switch-pair,
+  .union-search-btn span,
+  .union-search-btn kbd {
     display: none;
   }
-  .ion-content {
-    padding: 20px 12px 32px;
-  }
 }
-@media (prefers-reduced-motion: reduce) {
-  .tool-button.is-running::after {
-    animation: none;
-  }
-  .sheet-enter-active,
-  .sheet-leave-active,
-  .swap-enter-active,
-  .swap-leave-active {
-    transition: none;
-  }
+</style>
+<style>
+.el-drawer.workspace-mobile {
+  background: var(--rail-bg);
+  color: var(--rail-text);
+  border-radius: 0;
 }
-:global(html.ion-sheet-lock) {
-  overflow: hidden;
+.workspace-mobile .el-drawer__header,
+.workspace-mobile .el-drawer__title,
+.workspace-mobile .el-drawer__close-btn {
+  color: var(--rail-text);
 }
-@media (max-width: 767px) {
-  .section-nav { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: 8px; gap: 4px; }
-  .section-label { display: none; }
-  .section-nav a { flex: 0 0 auto; display: flex; align-items: center; min-height: 44px; padding: 8px 12px; }
-  .header-tools .tool-button, .header-tools .search-pill { width: 44px; height: 44px; }
-  .ion-content { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
-  .sheet-link { min-height: 56px; }
-  .sheet-icon { flex-shrink: 0; }
-  .mobile-sheet { overscroll-behavior: contain; }
+.workspace-mobile .el-drawer__body {
+  padding-inline: 0;
 }
 </style>

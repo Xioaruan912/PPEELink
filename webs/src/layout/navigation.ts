@@ -25,69 +25,114 @@ export interface NavigationItem {
   hint?: string;
   children: NavigationItem[];
 }
-// Per-route icon and one-line hint for menus; routes themselves come from the server.
+
+// Per-route icon, refined display label, and search hint; routes come from backend permissions.
 const META: Record<string, { icon: Component; hint?: string; label?: string }> =
   {
-    "/dashboard": { icon: IconHouse, label: "网络总览" },
+    "/dashboard": {
+      icon: IconHouse,
+      label: "运行态势",
+      hint: "节点健康度与订阅到期概览",
+    },
     "/monitor/index": {
       icon: IconChartLine,
-      label: "监控与 Agent",
-      hint: "服务器监控与 Agent 集中管理",
+      label: "主机与 Agent",
+      hint: "服务器遥测与 Agent 集中管理",
     },
     "/monitor/website": {
       icon: IconChartLine,
-      label: "网站流量",
+      label: "流量排行",
       hint: "最近 24 小时的网站流量排行",
     },
     "/monitor/workspace": {
-      icon: IconServer,
-      label: "文件与容器",
-      hint: "文件与 Docker 运维",
+      icon: IconFiles,
+      label: "容器与文件",
+      hint: "文件管理与 Docker 容器运维",
     },
     "/network": { icon: IconNodes },
     "/network/traceroute": {
       icon: IconGauge,
-      label: "路径拓扑",
+      label: "路由追踪",
       hint: "比较各台 VPS 到落地的逐跳路径",
     },
     "/network/throughput": {
       icon: IconGauge,
-      label: "节点互测",
+      label: "吞吐互测",
       hint: "双向测速与同一落地的中转对比",
     },
     "/subcription": { icon: IconSubs },
-    "/subcription/subs": { icon: IconLink, label: "订阅管理", hint: "复制订阅链接或导入客户端" },
-    "/subcription/diagnostic": {
-      icon: IconGauge,
-      hint: "定位 Reality / HY2 的连接故障",
+    "/subcription/subs": {
+      icon: IconLink,
+      label: "订阅链接",
+      hint: "选择客户端、复制订阅链接或扫码导入",
     },
-    "/subcription/nodes": { icon: IconNodes, hint: "分组、编辑与检测节点" },
+    "/subcription/diagnostic": {
+      icon: IconFlask,
+      label: "故障诊断",
+      hint: "一键定位 Reality / HY2 连接异常",
+    },
+    "/subcription/nodes": {
+      icon: IconNodes,
+      label: "节点资产",
+      hint: "分组整理、可用性检测与下发策略",
+    },
     "/subcription/servers": {
       icon: IconServer,
-      hint: "在自己的服务器上运行 xray-core",
+      label: "自建实例",
+      hint: "在自有服务器上部署与管理 xray-core",
     },
     "/subcription/relays": {
       icon: IconLink,
-      label: "中转设置",
-      hint: "纯端口转发与固定入口网关",
+      label: "中转网关",
+      hint: "纯端口转发与固定入口中转",
     },
     "/test": { icon: IconFlask },
-    "/test/index": { icon: IconGauge, hint: "解锁检测与国内可达性" },
+    "/test/index": {
+      icon: IconFlask,
+      label: "解锁与可达",
+      hint: "流媒体/AI 解锁检测与国内三网可达性",
+    },
     "/template": { icon: IconCode },
-    "/template/list": { icon: IconFiles, hint: "编辑客户端配置模板" },
-    "/template/builder": { icon: IconSliders, hint: "勾选规则、拖拽分组" },
-    "/template/rules": { icon: IconBooks, hint: "规则源与规则目录" },
+    "/template/list": {
+      icon: IconFiles,
+      label: "配置模板",
+      hint: "编辑客户端配置模板",
+    },
+    "/template/builder": {
+      icon: IconSliders,
+      label: "分流编排",
+      hint: "勾选规则分类、拖拽策略分组",
+    },
+    "/template/rules": {
+      icon: IconBooks,
+      label: "规则仓库",
+      hint: "规则源与规则目录管理",
+    },
     "/my": { icon: IconUserCircle },
-    "/my/subscriptions": { icon: IconLink, label: "订阅管理", hint: "分配给我的订阅与导入链接" },
+    "/my/subscriptions": {
+      icon: IconLink,
+      label: "我的订阅",
+      hint: "分配给我的订阅与客户端导入",
+    },
     "/system": { icon: IconGear },
-    "/system/users": { icon: IconUsers, hint: "账户、角色与订阅分配" },
-    "/system/settings": { icon: IconGear, hint: "备份、API 令牌、审计与短链" },
+    "/system/users": {
+      icon: IconUsers,
+      label: "成员与权限",
+      hint: "账户、角色与订阅分配",
+    },
+    "/system/settings": {
+      icon: IconGear,
+      label: "系统偏好",
+      hint: "备份、API 令牌、审计日志与短链",
+    },
   };
+
 export function resolvePath(parent: string, child: string) {
   return /^(https?:)?\/\//.test(child) || child.startsWith("/")
     ? child
     : `${parent}/${child}`.replace(/\/+/g, "/");
 }
+
 export function buildNavigation(
   routes: RouteRecordRaw[],
   parent = ""
@@ -97,9 +142,7 @@ export function buildNavigation(
     const path = resolvePath(parent, route.path);
     const children = buildNavigation(route.children || [], path);
     if (!route.meta?.title) return children;
-    // 子页面全部隐藏（例如普通用户的“系统”只有改密页）时不显示该分组
     if (route.children?.length && !children.length) return [];
-    // 只有一个可见子页面时直接显示该页面，避免只有一项的下拉菜单
     if (route.children?.length && children.length === 1) return children;
     const meta = META[path];
     return [
@@ -113,62 +156,62 @@ export function buildNavigation(
     ];
   });
 }
+
 export function flattenNavigation(items: NavigationItem[]): NavigationItem[] {
   return items.flatMap((item) =>
     item.children.length ? flattenNavigation(item.children) : [item]
   );
 }
 
-// Presentation groups only consume permitted routes; URLs and route guards stay authoritative.
+// Rewritten 5-domain IA ordered by operator frequency: Distribution → Compute → Diagnostics → Telemetry → Policy.
 const GROUPS = [
   {
-    label: "服务器",
+    label: "分发中心",
+    icon: IconSubs,
+    paths: ["/subcription/subs", "/my/subscriptions", "/subcription/nodes"],
+  },
+  {
+    label: "算力与网络",
     icon: IconServer,
     paths: [
-      "/monitor/index",
       "/subcription/servers",
       "/subcription/relays",
+      "/monitor/index",
       "/monitor/workspace",
-      "/monitor/website",
     ],
   },
   {
-    label: "订阅与节点",
-    icon: IconSubs,
-    paths: ["/subcription/subs", "/subcription/nodes"],
-  },
-  {
-    label: "配置与规则",
-    icon: IconCode,
-    paths: ["/template/list", "/template/builder", "/template/rules"],
-  },
-  {
-    label: "网络诊断",
-    icon: IconGauge,
+    label: "诊断实验室",
+    icon: IconFlask,
     paths: [
-      "/dashboard",
+      "/subcription/diagnostic",
       "/test/index",
       "/network/traceroute",
       "/network/throughput",
-      "/subcription/diagnostic",
     ],
   },
   {
-    label: "系统",
+    label: "态势总览",
+    icon: IconChartLine,
+    paths: ["/dashboard", "/monitor/website"],
+  },
+  {
+    label: "策略与系统",
     icon: IconGear,
-    paths: ["/system/users", "/system/settings"],
+    paths: [
+      "/template/builder",
+      "/template/list",
+      "/template/rules",
+      "/system/users",
+      "/system/settings",
+    ],
   },
 ];
+
 export function organizeNavigation(items: NavigationItem[]): NavigationItem[] {
   const leaves = flattenNavigation(items);
   const used = new Set<string>();
   const result: NavigationItem[] = [];
-  const home = leaves.find((item) => item.path === "/subcription/subs")
-    || leaves.find((item) => item.path === "/my/subscriptions");
-  if (home) {
-    result.push(home);
-    used.add(home.path);
-  }
   for (const group of GROUPS) {
     const children = group.paths.flatMap((path) => {
       const item = leaves.find((leaf) => leaf.path === path);

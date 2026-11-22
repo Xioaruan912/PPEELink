@@ -27,21 +27,24 @@ const name = computed(() => props.username || "admin");
 .account-avatar {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   margin-left: 4px;
-  border-radius: var(--radius-pill);
-  background: linear-gradient(
-    140deg,
-    var(--c-signal),
-    color-mix(in srgb, var(--c-signal) 40%, var(--c-data))
-  );
-  color: var(--c-on-signal);
-  font: 600 13px var(--font-mono);
-  box-shadow: var(--edge-highlight);
-  transition: transform var(--duration-medium) var(--ease-spring);
+  border-radius: var(--radius-control);
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font: 600 13px/1 var(--font-ui);
+  transition:
+    background-color var(--duration-fast) ease,
+    transform var(--duration-press) var(--ease-out);
 }
-.account-avatar:hover {
-  transform: scale(1.06);
+@media (hover: hover) and (pointer: fine) {
+  .account-avatar:hover {
+    background: var(--c-signal);
+    color: var(--c-on-signal);
+  }
+}
+.account-avatar:active {
+  transform: scale(0.95);
 }
 </style>

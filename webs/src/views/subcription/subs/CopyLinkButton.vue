@@ -115,29 +115,33 @@ function selectClient(value: string) {
 </template>
 <style scoped>
 .copy-split {
-  display: flex;
-  width: 130px;
+  display: inline-flex;
+  align-items: stretch;
+  width: 144px;
   min-width: 0;
 }
 .copy-main {
   flex: 1;
   min-width: 0;
-  padding: 8px;
+  min-height: 38px;
+  padding: 0 12px;
   border-radius: var(--radius-control) 0 0 var(--radius-control);
   gap: 0;
 }
 .copy-client {
-  width: 44px;
-  min-width: 44px;
-  padding: 10px;
+  width: 38px;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
   gap: 0;
   border-left: 0;
   border-radius: 0 var(--radius-control) var(--radius-control) 0;
 }
 .client-chevron {
-  display: inline-flex;
-  width: 18px;
-  height: 18px;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
 }
 .client-option {
   min-width: 128px;
@@ -149,6 +153,6 @@ function selectClient(value: string) {
 .client-check {
   width: 16px;
   height: 16px;
-  color: var(--c-data);
+  color: var(--c-signal-text);
 }
 </style>

@@ -7,7 +7,7 @@ import {
   StatusDot,
   EmptyState,
 } from "@/ui";
-import { ref } from "vue";
+import IconLink from "~icons/ph/link-simple";
 import { countryFlag } from "@/utils/flag";
 import { useSubscriptions } from "./useSubscriptions";
 const {
@@ -37,9 +37,13 @@ const sections = [
 <template>
   <UiDrawer
     v-model="drawerVisible"
-    :title="drawerSub?.Name || '订阅详情'"
+    title="订阅详情"
     size="min(820px, 100vw)"
     ><template v-if="drawerSub">
+      <header class="subscription-inspection">
+        <IconLink aria-hidden="true" />
+        <div><h3>{{ drawerSub.Name }}</h3><p>{{ drawerGroupRefs.length }} 个动态分组 · {{ drawerSub.Nodes.length }} 个固定节点</p></div>
+      </header>
       <UiSegmented
         v-model="detailSection"
         :options="sections"
@@ -163,18 +167,45 @@ const sections = [
 </template>
 <style scoped src="./forms.scss"></style>
 <style scoped>
+.subscription-inspection {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 22px;
+  margin-bottom: 20px;
+  background: var(--c-surface);
+  border-radius: var(--radius-panel);
+}
+.subscription-inspection svg {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  color: var(--c-signal-text);
+}
+.subscription-inspection h3 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+.subscription-inspection p {
+  margin-top: 3px;
+  font-size: 13px;
+  color: var(--c-muted);
+}
+
 .excluded-box {
   display: grid;
-  gap: 6px;
-  margin: 0 0 12px;
-  padding: 12px 14px;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
   border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--c-warn) 10%, transparent);
+  background: color-mix(in srgb, var(--c-warn) 10%, var(--c-surface));
   font-size: 13px;
 }
 .excluded-box ul {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   margin: 0;
   padding: 0;
   list-style: none;

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import IconLink from "~icons/ph/link-simple";
 import {
   UiButton,
   UiPanel,
@@ -33,7 +33,6 @@ const {
   handleAddSub,
   nodeCounts,
 } = useSubscriptions();
-const root = ref<HTMLElement>();
 const { reduced } = useMotion();
 const filters = [
   { label: "全部", value: "all" },
@@ -45,30 +44,7 @@ const expired = (value: string | null) =>
 </script>
 <template>
   <section :aria-busy="loading">
-    <div class="subs-summary" data-enter>
-      <div>
-        <span>订阅总数</span>
-        <strong>{{ loading || loadError ? "—" : tableData.length }}</strong>
-      </div>
-      <div>
-        <span>有效</span>
-        <strong class="ok">{{
-          loading || loadError ? "—" : tableData.length - expiredCount
-        }}</strong>
-      </div>
-      <div>
-        <span>已过期</span>
-        <strong :class="{ bad: expiredCount }">{{
-          loading || loadError ? "—" : expiredCount
-        }}</strong>
-      </div>
-    </div>
-    <UiPanel
-      title="订阅列表"
-      :count="filteredSubs.length"
-      description="先选择客户端，再复制链接或扫码导入。"
-      flush
-      data-enter
+    <UiPanel title="订阅列表" :count="filteredSubs.length" flush data-enter
       ><template #actions
         ><el-input
           v-model="searchKey"
@@ -94,7 +70,7 @@ const expired = (value: string | null) =>
         ></EmptyState
       >
       <UiSkeleton v-else-if="loading" :lines="4" height="80px" />
-      <div v-else ref="root">
+      <div v-else>
         <EmptyState
           v-if="!tableData.length"
           size="section"
@@ -130,18 +106,25 @@ const expired = (value: string | null) =>
             class="subscription-row"
             :aria-label="sub.Name"
           >
-            <button
-              class="name-button"
-              :title="sub.Name"
-              @click="openDrawer(sub)"
-            >
-              <span class="name-text">{{ sub.Name }}</span>
-              <span class="name-meta"
-                ><StatusDot
-                  :state="expired(sub.ExpiresAt) ? 'bad' : 'ok'"
-                  :label="expired(sub.ExpiresAt) ? '已过期' : '有效'"
+            <div class="subscription-identity">
+              <span class="subscription-symbol" aria-hidden="true"
+                ><IconLink
               /></span>
-            </button>
+              <div>
+                <button
+                  class="name-button"
+                  :title="sub.Name"
+                  @click="openDrawer(sub)"
+                >
+                  <span class="name-text">{{ sub.Name }}</span>
+                </button>
+                <span class="name-meta"
+                  ><StatusDot
+                    :state="expired(sub.ExpiresAt) ? 'bad' : 'ok'"
+                    :label="expired(sub.ExpiresAt) ? '已过期' : '有效'"
+                /></span>
+              </div>
+            </div>
             <div class="row-value">
               <span class="mobile-label">包含节点</span
               ><span class="mono">{{

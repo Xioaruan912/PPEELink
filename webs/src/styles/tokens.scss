@@ -1,69 +1,102 @@
 :root {
-  // Neutral surfaces with restrained blue accents.
-  --c-canvas: #f5f5f6;
+  /* UNION-TEC Architectural Monochrome & Blueprint Signal System */
+  --rail-bg: #0a0a0a;
+  --rail-hover: #1a1a1a;
+  --rail-text: #e6e6e3;
+  --rail-muted: #8a8a86;
+  --rail-active: #ffffff;
+  --rail-accent: #29df7e;
+
+  --c-canvas: #f7f7f5;
   --c-surface: #ffffff;
-  --c-surface-2: #f0f1f3;
-  --c-line: #e1e3e7;
-  --c-ink: #202329;
-  --c-muted: #686e78;
-  --c-signal: #2563eb;
-  --c-signal-text: #245bd6;
-  --c-focus: #245bd6;
-  --c-data: #3574e8;
-  --c-ok: #14915c;
-  --c-warn: #c27a06;
-  --c-bad: #d63a3f;
-  --c-glow: rgb(37 99 235 / 0.12);
+  --c-surface-2: #eeeeeb;
+  --c-tray: #f2f2ef;
+  --c-line: #dfdfdB;
+  --c-line-strong: #0a0a0a;
+  --c-ink: #0a0a0a;
+  --c-muted: #6e6e6a;
+  --c-signal: #0a0a0a;
+  --c-signal-text: #0a0a0a;
+  --c-focus: #0a0a0a;
+  --c-data: #296edf;
+  --c-ok: #15b85a;
+  --c-warn: #d97706;
+  --c-bad: #df2929;
+  --c-glow: rgb(10 10 10 / 0.06);
+  --c-on-signal: #ffffff;
 
   --font-display:
-    "Twemoji Country Flags", "Geist", "PingFang SC", "HarmonyOS Sans SC",
-    "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+    "Twemoji Country Flags", "Helvetica Neue", "Geist", "Arial",
+    "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", sans-serif;
   --font-ui:
-    "Twemoji Country Flags", "Geist", "PingFang SC", "HarmonyOS Sans SC",
-    "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
-  --font-mono: "Twemoji Country Flags", "JetBrains Mono", monospace;
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --duration-fast: 160ms;
-  --duration-medium: 300ms;
-  --duration-slow: 600ms;
-  // Shape rule: buttons and chips are pills, inputs 10px, cards 16px.
-  --radius-control: 10px;
+    "Twemoji Country Flags", "Geist", "Helvetica Neue", "PingFang SC",
+    "HarmonyOS Sans SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono:
+    "Twemoji Country Flags", "JetBrains Mono", "SF Mono", monospace;
+
+  /* Exact UNION-TEC Easing Curves */
+  --ease-out: cubic-bezier(0.26, 0.06, 0, 1);
+  --ease-in-out: cubic-bezier(0.43, 0.05, 0.17, 1);
+  --ease-soft: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring: cubic-bezier(0.26, 0.06, 0, 1);
+  --duration-press: 140ms;
+  --duration-fast: 240ms;
+  --duration-medium: 460ms;
+  --duration-slow: 680ms;
+  --duration-reveal: 860ms;
+
+  /* Architectural Precision Geometry */
+  --radius-control: 6px;
   --radius-pill: 999px;
-  --radius-panel: 16px;
-  --radius-overlay: 20px;
-  --shadow-panel:
-    0 1px 2px rgb(16 18 22 / 0.04), 0 8px 24px -16px rgb(16 18 22 / 0.18);
-  --shadow-overlay: 0 32px 64px -24px rgb(18 76 116 / 0.28);
-  --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
-  --c-on-signal: #ffffff;
+  --radius-panel: 10px;
+  --radius-tray: 10px;
+  --radius-overlay: 12px;
+  --shadow-panel: none;
+  --shadow-hover: 0 14px 32px -16px rgb(10 10 10 / 0.1);
+  --shadow-overlay: 0 32px 80px -20px rgb(10 10 10 / 0.26);
+  --edge-highlight: none;
+
   --z-dock: 30;
   --z-tools: 40;
 }
+
 html.dark {
-  --c-canvas: #141518;
-  --c-surface: #1c1e22;
-  --c-surface-2: #25282e;
-  --c-line: #343840;
-  --c-ink: #eceef2;
-  --c-muted: #a0a6b0;
-  --c-signal: #2563eb;
-  --c-signal-text: #8caeff;
-  --c-focus: #2563eb;
-  --c-data: #8caeff;
-  --c-ok: #3fd18f;
-  --c-warn: #f4b13d;
-  --c-bad: #ff6467;
-  --c-glow: rgb(37 99 235 / 0.12);
-  --shadow-panel: 0 1px 0 rgb(0 0 0 / 0.4), 0 12px 32px -20px rgb(0 0 0 / 0.7);
-  --shadow-overlay: 0 40px 80px -24px rgb(0 0 0 / 0.75);
-  --edge-highlight: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --rail-bg: #050505;
+  --rail-hover: #141414;
+  --rail-text: #e6e6e3;
+  --rail-muted: #8a8a86;
+  --rail-active: #ffffff;
+  --rail-accent: #29df7e;
+
+  --c-canvas: #070707;
+  --c-surface: #0f0f0f;
+  --c-surface-2: #181818;
+  --c-tray: #121212;
+  --c-line: #242424;
+  --c-line-strong: #f5f5f3;
+  --c-ink: #f5f5f3;
+  --c-muted: #8c8c88;
+  --c-signal: #f5f5f3;
+  --c-signal-text: #f5f5f3;
+  --c-focus: #f5f5f3;
+  --c-data: #5b92f0;
+  --c-ok: #29df7e;
+  --c-warn: #f59e0b;
+  --c-bad: #f04848;
+  --c-glow: rgb(255 255 255 / 0.06);
+  --c-on-signal: #070707;
+
+  --shadow-panel: none;
+  --shadow-hover: 0 18px 40px -16px rgb(0 0 0 / 0.7);
+  --shadow-overlay: 0 40px 90px -20px rgb(0 0 0 / 0.85);
+  --edge-highlight: none;
 }
+
 :root,
 html.dark {
-  --c-on-danger: var(--c-surface);
-  --c-warn-ink: color-mix(in srgb, var(--c-warn) 65%, var(--c-ink));
-  --c-selected: color-mix(in srgb, var(--c-signal) 12%, transparent);
+  --c-on-danger: #ffffff;
+  --c-warn-ink: color-mix(in srgb, var(--c-warn) 80%, var(--c-ink));
+  --c-selected: color-mix(in srgb, var(--c-ink) 6%, transparent);
   --el-color-white: var(--c-surface);
   --el-color-black: var(--c-ink);
   --el-bg-color: var(--c-surface);
@@ -90,10 +123,10 @@ html.dark {
   --el-disabled-bg-color: var(--c-surface-2);
   --el-disabled-text-color: var(--c-muted);
   --el-disabled-border-color: var(--c-line);
-  --el-mask-color: color-mix(in srgb, var(--c-canvas) 78%, transparent);
+  --el-mask-color: color-mix(in srgb, var(--c-canvas) 82%, transparent);
   --el-mask-color-extra-light: color-mix(
     in srgb,
-    var(--c-canvas) 40%,
+    var(--c-canvas) 45%,
     transparent
   );
   --el-border-radius-base: var(--radius-control);
@@ -104,16 +137,16 @@ html.dark {
   --el-font-size-small: 14px;
   --el-font-size-base: 14px;
   --el-font-size-medium: 14px;
-  --el-component-size-small: 28px;
-  --el-component-size: 34px;
-  --el-component-size-large: 40px;
+  --el-component-size-small: 30px;
+  --el-component-size: 38px;
+  --el-component-size-large: 44px;
   --el-box-shadow: var(--shadow-overlay);
-  --el-box-shadow-light: var(--shadow-panel);
-  --el-box-shadow-lighter: var(--shadow-panel);
+  --el-box-shadow-light: none;
+  --el-box-shadow-lighter: none;
   --el-box-shadow-dark: var(--shadow-overlay);
-  --el-overlay-color: color-mix(in srgb, var(--c-ink) 35%, transparent);
-  --el-overlay-color-light: color-mix(in srgb, var(--c-ink) 25%, transparent);
-  --el-overlay-color-lighter: color-mix(in srgb, var(--c-ink) 15%, transparent);
+  --el-overlay-color: color-mix(in srgb, #050505 46%, transparent);
+  --el-overlay-color-light: color-mix(in srgb, #050505 30%, transparent);
+  --el-overlay-color-lighter: color-mix(in srgb, #050505 16%, transparent);
   --el-color-primary: var(--c-signal-text);
   --el-color-primary-light-3: color-mix(
     in srgb,
@@ -299,13 +332,13 @@ html.dark {
   --ui-success: var(--c-ok);
   --ui-warning: var(--c-warn);
   --ui-danger: var(--c-bad);
-  --ui-accent-soft: color-mix(in srgb, var(--c-signal) 12%, var(--c-surface));
-  --ui-danger-soft: color-mix(in srgb, var(--c-bad) 12%, var(--c-surface));
-  --ui-success-soft: color-mix(in srgb, var(--c-ok) 12%, var(--c-surface));
-  --ui-warning-soft: color-mix(in srgb, var(--c-warn) 12%, var(--c-surface));
+  --ui-accent-soft: color-mix(in srgb, var(--c-signal) 8%, var(--c-surface));
+  --ui-danger-soft: color-mix(in srgb, var(--c-bad) 10%, var(--c-surface));
+  --ui-success-soft: color-mix(in srgb, var(--c-ok) 10%, var(--c-surface));
+  --ui-warning-soft: color-mix(in srgb, var(--c-warn) 10%, var(--c-surface));
   --ui-focus-ring: var(--c-focus);
-  --ui-panel-shadow: var(--shadow-panel);
-  --ui-accent-shadow: var(--shadow-panel);
+  --ui-panel-shadow: none;
+  --ui-accent-shadow: none;
   --font-data: var(--font-mono);
   --ease-workspace: var(--ease-out);
 }

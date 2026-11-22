@@ -1,74 +1,28 @@
-# PPEELink 设计规范 - "Ion"（v3，2026-10-18 起，取代 Signal Atlas）
+# PPEELink 前端设计
 
-> 前端唯一视觉/交互标准。taste-skill 档位：**DESIGN_VARIANCE 10 · MOTION_INTENSITY 10 · VISUAL_DENSITY 4**（用户要求设计与动效开到最大）。
+## 工作区
 
-## 1. Design Read
-自托管代理订阅控制台的整体视觉重做，用户是懂行的单人管理员。语言：**dark-tech 精密仪器感**，冷色 zinc 中性色 + 唯一的青柠强调色，深浅双主题。
-不要：衬线大标题（Instrument Serif 已移除）、暖米色/骨白底、紫色渐变、三等分卡片、emoji 当图标、装饰性网格线、em-dash。
+基于 `taste-skill`（`The quiet instrument` × `Three stones`）重构：桌面使用固定深炭黑侧栏（`#181817`），手机使用可关闭侧栏抽屉。顶栏与浅石色画布（`#eeecea`）融为一体，提供当前位置、页面搜索（`Ctrl/⌘ K`）、测试任务状态和账户菜单。管理员默认进入「订阅链接」，首屏即可选择客户端、复制链接或扫码导入；普通用户仅访问「我的订阅」。
 
-## 2. 设计 tokens（`src/styles/tokens.scss`，`:root` 浅色，`html.dark` 深色）
+功能分类按使用频率重写为 5 个意图域（保留全部后端授权路由与路径兼容）：
 
-| token | 浅色 | 深色 | 用途 |
-|---|---|---|---|
-| `--c-canvas` | `#F3F4F6` | `#0B0C0E` | 页面底 |
-| `--c-surface` | `#FCFCFD` | `#131418` | 卡片 / 面板 |
-| `--c-surface-2` | `#ECEEF1` | `#1B1D22` | 输入底、悬停、凹陷区 |
-| `--c-line` | `#DCDFE4` | `#262930` | 1px 边线 |
-| `--c-ink` | `#101216` | `#ECEEF2` | 主文字 |
-| `--c-muted` | `#596070` | `#8D93A0` | 次要文字 |
-| `--c-signal` | `#C2EC2C` | `#C8F03A` | 强调**填充**（主按钮、选中图标块、进度、地图节点光晕）。其上文字一律 `--c-on-signal` |
-| `--c-signal-text` | `#4B6600` | `#D2F55C` | 强调**文字** |
-| `--c-focus` | `#4B6600` | `#C8F03A` | 焦点环、选中描边、开关、地图节点（满足 3:1） |
-| `--c-data` | `#2F6BFF` | `#6F9BFF` | 第二数据色（图表、渐变） |
-| `--c-ok / warn / bad` | `#14915C / #C27A06 / #D63A3F` | `#3FD18F / #F4B13D / #FF6467` | 状态 |
-| `--c-glow` | lime 18% | lime 14% | 光晕、聚光灯 |
+- **分发中心**：订阅链接、节点资产（普通用户为我的订阅）。
+- **算力与网络**：自建实例、中转网关、主机与 Agent、容器与文件。
+- **诊断实验室**：故障诊断、解锁与可达、路由追踪、吞吐互测。
+- **态势总览**：运行态势、流量排行。
+- **策略与系统**：分流编排、配置模板、规则仓库、成员与权限、系统偏好。
 
-形状规则：按钮 / 分段 / 标签 / 胶囊 = `--radius-pill`；输入 10px；卡片与面板 16px；弹层 20px。卡片阴影 = `--shadow-panel` + `--edge-highlight`（顶部 1px 内高光）。
+## 视觉与动效
 
-## 3. 字体与字号
-- 只用两套自托管字体：**Geist**（标题与界面，`--font-ui` / `--font-display` 同指 Geist）+ **JetBrains Mono**（数字、主机、链接）。
-- 页面标题 clamp(24px, 2.4vw, 32px) 600，字距 -0.02em（中文不能再紧）；面板标题 15px 600；正文 14；次要 13；元信息 12（最小）。
-- `UiStat`：`hero` 为首页超大数字（Geist 600，最高 112px，-0.06em）；`large` 26px 600；`medium/small` mono。
+`src/styles/tokens.scss` 采用 **Three stones** 三阶石色调（`#eeecea` 画布、`#f7f6f4` 面板、`#e4e1dd` 控件填充、`#1e1d1c` 炭墨、`#4a5d48` 苔石主操作色，及配套深色主题）。面板之间以明度阶梯与留白分隔，取消静止态阴影与 1px 线框堆砌；仅浮层保留柔和阴影。
 
-## 4. 布局
-- **外壳**：顶部 64px 粘性栏，毛玻璃底。左：Logo + 字标；中：胶囊形主导航，"首页 / 订阅管理 / 测试 / 模板"，分组悬停或点击展开下拉菜单（图标块 + 名称 + 一句说明），胶囊高亮弹簧跟随指针；右：搜索胶囊（⌘K）、测试任务按钮（仅在真实运行时出现状态点）、主题切换、头像菜单。<1100px 主导航收进右侧菜单按钮，展开为全屏页面清单。页面顶部有一团极淡的青柠光晕。
-- **内容**：最大宽 1400px 居中；页面 = PageHeader → 可选 `.stat-tiles` → 若干 `UiPanel`。首页为 12 列 bento：节点总数大块（2 行，青柠/蓝色渐变底）、订阅、连接评分环、订阅到期、节点地图（点阵大陆）、所在地区，单元格数量与内容一致，手机单列。
-- **登录页**：左侧圆角深色舞台（缓慢漂移的三色光场 + 大标题），右侧表单。
+动效统一由 `src/motion/index.ts` 与 `src/styles/base.scss` 驱动：全面采用指数缓出（`cubic-bezier(0.22, 1, 0.36, 1)`）与平滑位移（`cubic-bezier(0.76, 0, 0.24, 1)`），移除弹性回弹与无意义无限脉冲。包含页头与登录页的遮罩抬升标题（Masked headline）、侧栏与分段控件的物理滑动指示器、路由与列表错峰进场，以及全量 `prefers-reduced-motion` 降级支持。和技术数值使用 JetBrains Mono。页面用 `PageHeader` 放标题和主要动作，表格及详情采用分隔线组织信息，弹窗沿用统一的标题和操作区。
 
-## 5. 组件层（`src/ui/`，全部自建，EP 仅作复杂控件底座）
-`UiButton`（primary=signal 实心 / secondary=描边 / ghost / danger；支持 loading、icon、磁吸 `v-magnetic` 仅用于 primary）、`UiPanel`、`PageHeader`、`UiStat`（按 size 区分 display / mono 数字 + 计数动画 + 标签 + 可选趋势）、`StatusDot`（ok/warn/bad/idle，ok 带呼吸脉冲）、`UiTable`（包 el-table，统一样式 + 移动卡片插槽）、`EmptyState`、`UiSkeleton`、`UiDialog` / `UiDrawer`（包 el-dialog/el-drawer，统一头尾）、`UiSegmented`（分段切换，滑块弹簧动画）、`UiTag`、`CommandPalette`（⌘K / Ctrl+K，模糊搜索所有路由 + 常用动作，方向键 + Enter）。
-Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 必须通过 `src/styles/element.scss` 全局重皮肤到上述 tokens，视觉上与自建组件一致。
+节点名称打开详情。连接区显示主机、协议、地区和分组。检测区显示当前策略、最近检测时间和探针结果，提供国内可达性与解锁检测入口。订阅下发区集中显示暂停原因、恢复时间及下发控制。复制和编辑保留在抽屉底部。
 
-## 6. 动效（MOTION 10，统一在 `src/motion/`）
-- 基础：GSAP（已安装）+ CSS transitions。缓动：`--ease-out: cubic-bezier(.16,1,.3,1)`，弹簧用 GSAP `elastic.out(1,.6)` 或 `back.out(1.6)`；时长 180 / 320 / 560ms 三档。
-- 必做：
-  1. 路由过渡：内容区 clip/translate+opacity 交错入场（标题先、内容后，stagger 40ms），离场 140ms。
-  2. 列表/表格首屏行 stagger 入场；筛选结果变化用 `<TransitionGroup>` FLIP。
-  3. `UiStat` 数字从 0 滚动到值（字体按第 3 节 size 规则）。
-  4. 顶栏导航胶囊弹簧跟随悬停项；下拉菜单缩放淡入；主题图标旋转切换；卡片/面板指针聚光灯（`installSpotlight`）；路由内容模糊 + 位移交错入场（expo.out）；数字计数 1.1s；首页评分环描边动画；地图节点脉冲；登录页光场漂移。
-  5. 主按钮 `v-magnetic` 磁吸（指针 24px 内吸附，离开弹回）。
-  6. 状态脉冲：在线点呼吸、测速/检测进行中扫描线或进度波纹。
-  7. 仪表盘地图/地球：底图始终渲染，缓慢扫描 / 经纬线描线可暂停，reduced-motion 静止；节点位置点与标注线仅来自 `getNodeMap` 真实数据，无节点时左下角叠加小号说明与管理节点按钮。
-  8. 骨架屏 shimmer；对话框/抽屉弹簧入场。
-- 守则：所有动画经 `useMotion()`/`prefersReducedMotion` 守卫，reduced-motion 时直接到终态；组件卸载时 kill tween / 移除监听 / cancel rAF；只动 transform/opacity/clip-path；除可暂停的地图底图扫描外，不要永不停的装饰性无限循环（脉冲仅限真实状态）。
+页面切换、选择和反馈使用短动效。组件按系统的减少动态效果偏好调整。键盘用户可通过跳转链接、页面搜索、Tab、方向键和 Escape 使用工作区。
 
-## 7. 文案
-中文、短、具体。标题 2–6 字；说明 ≤ 25 字；按钮用动词（"添加节点"、"开始检测"）。删除重复说明、英文装饰词（如 "TELEMETRY"、"LIVE"、"CORE"），mono eyebrow 只用于分组名（如 `订阅 / 01`）。
-
-## 8. 无障碍与响应式
-- 所有可交互元素可 Tab 到达，`:focus-visible` 为 2px `--c-signal` 外环 + 2px offset；图标按钮必须有 `aria-label`。
-- 对比度 AA；不只用颜色表达状态（配文字/形状）。
-- 断点：390 / 768 / 1024 / 1440 均无整页横向滚动；触控目标 ≥ 44px。
-
-## 9. 验收清单（每阶段）
-1. `pnpm build`（含 vue-tsc）通过；改动文件 eslint 无 error。
-2. `src/api/**`、`src/utils/request.ts`、`src/store/modules/user.ts`、`src/store/modules/permission.ts` 未修改；页面文件路径不变（后端菜单按 `views/<path>.vue` 映射）。
-3. 每个页面原有的 API 调用、按钮、对话框、流程全部保留（对照任务书清单）。
-4. 无硬编码颜色（除 tokens.scss / echarts 主题读取 token）；无 12px 以下字号；无 TagsView/面包屑/旧 Settings 抽屉残留。
-5. 浏览器：控制台 0 error；390/768/1440 无横向溢出；深浅主题；键盘可用；reduced-motion 生效。
-
-
-## 10. 组件清单（实际实现）
+## 组件参考
 
 以下组件均位于 `src/ui/`。`?` 表示可选；未列出默认值的属性沿用 Vue 的类型默认行为（Boolean 为 false，其余为 undefined）。原生属性、事件及 ARIA 属性可传给组件；`UiTable`、`UiDialog`、`UiDrawer` 将额外属性透传至 Element Plus 底座。
 
@@ -93,13 +47,6 @@ Element Plus 的 input/select/date/switch/message/notification/dropdown/tooltip 
 `CommandItem`：`{ id: string; label: string; group?: string; icon?: string; keywords?: string; run: () => void | Promise<unknown> }`。`src/ui/index.ts` 导出上述主体组件及 CommandItem 类型；`RowIconButton`、`CountryFlag` 使用直接导入。
 
 动效统一使用 `src/motion`。CSS 动效由 `src/styles/base.scss` 的系统 reduced-motion 与 `html[data-motion="reduced"]` 双重终态守卫覆盖；地图、图表和 Monaco 读取同一 motion 状态。业务提交中的弹层保留现有关闭保护，空闲时支持 Esc。
-
-### 动效清单（MOTION 10）
-- 路由内容模糊上浮交错入场；页面标题逐字上浮（`PageHeader`，每字 28ms）。
-- 卡片 / 面板指针聚光灯；`.cell`、客户端卡片、订阅卡片、指标卡随指针 3D 倾斜（±5°，`installSpotlight`）。悬停抬起用独立的 `translate` 属性，与倾斜的 `transform` 叠加。
-- `v-reveal`：首屏以下的面板与卡片滚入视口时模糊上浮出现（IntersectionObserver，只播一次）。
-- 链式代理示意的虚线流动、批量改名预览逐行滑入、设置页分区切换模糊过渡。
-- 全部受 `prefers-reduced-motion` 与 `html[data-motion="reduced"]` 控制。
 
 ### 借鉴功能（参考妙妙屋）
 - 订阅「分享到客户端」：客户端卡片网格选择 → 二维码 + 订阅链接 + 一键导入 + 短链。

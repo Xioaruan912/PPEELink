@@ -14,8 +14,8 @@
       >
         <slot name="header"
           ><h2>
-            {{ title
-            }}<span v-if="count !== undefined" class="ui-panel__count">{{
+            <span>{{ title }}</span
+            ><span v-if="count !== undefined" class="ui-panel__count">{{
               count
             }}</span>
           </h2>
@@ -58,7 +58,6 @@ const props = defineProps<{
   title?: string;
   description?: string;
   count?: number | string;
-  /** Body sits edge to edge (tables, lists). */
   flush?: boolean;
   collapsible?: boolean;
   defaultOpen?: boolean;
@@ -71,46 +70,50 @@ const open = ref(props.defaultOpen ?? !props.collapsible);
   background: var(--c-surface);
   border: 1px solid var(--c-line);
   border-radius: var(--radius-panel);
-  box-shadow: var(--shadow-panel), var(--edge-highlight);
   overflow: clip;
 }
 .ui-panel__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px 16px;
+  gap: 12px 20px;
   flex-wrap: wrap;
-  padding: 14px 16px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--c-line);
 }
 .is-collapsed .ui-panel__header {
-  padding-bottom: 14px;
-}
-.ui-panel:not(.is-collapsed) .ui-panel__header {
-  border-bottom: 1px solid var(--c-line);
+  border-bottom: 0;
 }
 .ui-panel__heading {
   min-width: 0;
-  flex: 1 1 140px;
+  flex: 1 1 180px;
   text-align: left;
   color: inherit;
 }
 h2 {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  gap: 10px;
   margin: 0;
-  font-size: 15px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
 }
 .ui-panel__count {
-  padding: 0 7px;
-  border-radius: 999px;
-  background: var(--c-surface-2);
+  font: 600 13px/1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
   color: var(--c-muted);
-  font: 500 12px/20px var(--font-mono);
+}
+.ui-panel__count::before {
+  content: "[";
+  margin-right: 2px;
+}
+.ui-panel__count::after {
+  content: "]";
+  margin-left: 2px;
 }
 .ui-panel__description {
-  margin-top: 2px;
+  margin-top: 4px;
   color: var(--c-muted);
   font-size: 13px;
 }
@@ -123,38 +126,47 @@ h2 {
 .ui-panel__toggle {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-pill);
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
   color: var(--c-muted);
+  transition:
+    background-color var(--duration-fast) ease,
+    color var(--duration-fast) ease;
 }
-.ui-panel__toggle:hover {
-  background: var(--c-surface-2);
-  color: var(--c-ink);
+@media (hover: hover) and (pointer: fine) {
+  .ui-panel__toggle:hover {
+    background: var(--c-surface-2);
+    color: var(--c-ink);
+  }
 }
 .ui-panel__toggle svg {
-  width: 16px;
-  height: 16px;
-  transition: transform var(--duration-medium) var(--ease-spring);
+  width: 15px;
+  height: 15px;
+  transition: transform var(--duration-medium) var(--ease-out);
 }
 .ui-panel__toggle svg.is-open {
   transform: rotate(180deg);
 }
 .ui-panel__body {
-  padding: 16px;
+  padding: 24px;
   min-width: 0;
 }
 .is-flush .ui-panel__body {
   padding: 0;
 }
 .ui-panel__footer {
-  padding: 12px 16px;
+  padding: 16px 24px;
   border-top: 1px solid var(--c-line);
+  background: var(--c-surface-2);
 }
 @media (max-width: 767px) {
-  .ui-panel__header,
+  .ui-panel__header {
+    padding: 16px;
+  }
   .ui-panel__body {
-    padding: 12px;
+    padding: 16px;
   }
   .is-flush .ui-panel__body {
     padding: 0;

@@ -1,6 +1,7 @@
 <template>
   <el-drawer
     v-bind="$attrs"
+    class="workspace-drawer"
     :model-value="modelValue"
     :title="title"
     :size="size"
@@ -43,6 +44,29 @@ const emit = defineEmits<{ "update:modelValue": [value: boolean] }>();
 .overlay-heading {
   margin: 0;
   padding-right: 20px;
-  font-size: 17px;
+  font-size: 16px;
+  color: var(--c-ink);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+</style>
+
+<style>
+.el-drawer.workspace-drawer {
+  --el-drawer-padding-primary: clamp(18px, 3vw, 30px);
+  border-radius: 0;
+  background: var(--c-canvas);
+}
+.workspace-drawer .el-drawer__header {
+  margin: 0;
+  padding-block: 18px;
+  background: var(--c-canvas);
+}
+.workspace-drawer .el-drawer__body {
+  padding-top: 8px;
+}
+.workspace-drawer .el-drawer__footer {
+  padding-block: 16px;
+  background: var(--c-surface);
 }
 </style>

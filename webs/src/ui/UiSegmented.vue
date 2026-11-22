@@ -1,7 +1,9 @@
 <template>
   <div ref="root" class="ui-segmented" role="radiogroup" :aria-label="label">
-    <span class="ui-segmented__track" aria-hidden="true"
-      ><i ref="slider" class="ui-segmented__slider"></i
+    <span
+      class="ui-segmented__thumb"
+      :style="thumbStyle"
+      aria-hidden="true"
     ></span>
     <button
       v-for="(option, index) in options"
@@ -19,8 +21,7 @@
   </div>
 </template>
 <script setup lang="ts">
-import { nextTick, onMounted, onBeforeUnmount, ref, watch } from "vue";
-import { useMotion } from "@/motion";
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 interface Option {
   label: string;
   value: string | number;
@@ -32,9 +33,44 @@ const props = defineProps<{
   label: string;
 }>();
 const emit = defineEmits<{ "update:modelValue": [value: string | number] }>();
-const root = ref<HTMLElement>(),
-  slider = ref<HTMLElement>();
-const { animate, stop } = useMotion();
+const root = ref<HTMLElement>();
+const thumbStyle = ref<{ transform: string; width: string; opacity: number }>({
+  transform: "translate3d(0, 0, 0)",
+  width: "0px",
+  opacity: 0,
+});
+
+function syncThumb() {
+  const container = root.value;
+  if (!container) return;
+  const active = container.querySelector<HTMLElement>(
+    'button[aria-checked="true"]'
+  );
+  if (!active) {
+    thumbStyle.value = { ...thumbStyle.value, opacity: 0 };
+    return;
+  }
+  thumbStyle.value = {
+    transform: `translate3d(${active.offsetLeft}px, 0, 0)`,
+    width: `${active.offsetWidth}px`,
+    opacity: 1,
+  };
+}
+
+let observer: ResizeObserver | undefined;
+onMounted(() => {
+  nextTick(syncThumb);
+  if (typeof ResizeObserver !== "undefined" && root.value) {
+    observer = new ResizeObserver(syncThumb);
+    observer.observe(root.value);
+  }
+});
+onBeforeUnmount(() => observer?.disconnect());
+watch(
+  () => [props.modelValue, props.options.length],
+  () => nextTick(syncThumb)
+);
+
 function tabIndex(option: Option, index: number) {
   return !option.disabled &&
     (option.value === props.modelValue ||
@@ -77,70 +113,74 @@ function onKey(event: KeyboardEvent, index: number) {
   select(props.options[target]);
   (root.value?.querySelectorAll("button")[target] as HTMLElement)?.focus();
 }
-async function position() {
-  await nextTick();
-  const button = root.value?.querySelector<HTMLElement>(
-    '[aria-checked="true"]'
-  );
-  if (!slider.value) return;
-  slider.value.style.opacity = button ? "1" : "0";
-  if (!button) return;
-  stop();
-  slider.value.style.width = `${button.offsetWidth}px`;
-  animate(
-    slider.value,
-    { x: Number(slider.value.dataset.x || button.offsetLeft) },
-    { x: button.offsetLeft, duration: 0.56, ease: "elastic.out(1,.6)" }
-  );
-  slider.value.dataset.x = String(button.offsetLeft);
-}
-let observer: ResizeObserver | undefined;
-onMounted(() => {
-  position();
-  observer = new ResizeObserver(position);
-  if (root.value) observer.observe(root.value);
-});
-onBeforeUnmount(() => observer?.disconnect());
-watch(() => [props.modelValue, props.options], position);
 </script>
 <style scoped>
 .ui-segmented {
   position: relative;
   display: inline-flex;
+  align-items: center;
   max-width: 100%;
-  padding: 4px;
-  gap: 4px;
-  background: var(--c-surface-2);
   overflow-x: auto;
-  border-radius: var(--radius-pill);
+  gap: 0;
+  padding: 3px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-line);
+  border-radius: var(--radius-control);
+}
+.ui-segmented__thumb {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  border-radius: 4px;
+  background: var(--c-surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.06);
+  pointer-events: none;
+  transition:
+    transform var(--duration-medium) var(--ease-out),
+    width var(--duration-medium) var(--ease-out),
+    opacity var(--duration-fast) ease;
 }
 .ui-segmented button {
+  position: relative;
   z-index: 1;
-  min-width: 44px;
-  min-height: 36px;
-  padding: 8px 12px;
-  border: 0;
-  background: transparent;
-  font-size: 14px;
-  border-radius: var(--radius-pill);
+  flex: 1 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 4px 14px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--c-muted);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+.ui-segmented button[aria-checked="true"] {
+  color: var(--c-ink);
+  font-weight: 620;
+}
+@media (hover: hover) and (pointer: fine) {
+  .ui-segmented button:not(:disabled):not([aria-checked="true"]):hover {
+    color: var(--c-ink);
+  }
 }
 .ui-segmented button:disabled {
-  color: var(--c-muted);
+  opacity: 0.45;
 }
-.ui-segmented__track {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  border-radius: inherit;
+.ui-segmented button:focus-visible {
+  outline: 2px solid var(--c-focus);
+  outline-offset: -2px;
 }
-.ui-segmented__slider {
-  position: absolute;
-  top: 4px;
-  bottom: 4px;
-  left: 0;
-  background: var(--c-surface);
-  border-radius: var(--radius-pill);
-  box-shadow: var(--shadow-panel);
+@media (max-width: 640px) {
+  .ui-segmented button {
+    min-height: 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ui-segmented__thumb,
+  .ui-segmented button {
+    transition: none;
+  }
 }
 </style>

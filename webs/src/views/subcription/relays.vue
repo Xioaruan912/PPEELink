@@ -8,7 +8,7 @@ import {
   watch,
 } from "vue";
 import { useRouter } from "vue-router";
-import ServerHeader from "@/components/servers/ServerHeader.vue";
+import PageHeader from "@/ui/PageHeader.vue";
 import InboundDrawer from "./servers/InboundDrawer.vue";
 import { getNodes } from "@/api/subcription/node";
 import {
@@ -370,8 +370,8 @@ async function removeGateway(inbound: ProxyInbound) {
 
 <template>
   <div class="relays-page server-experience">
-    <ServerHeader
-      section="relay"
+    <PageHeader
+
       title="中转设置"
       description="按需选择连接方式，设备连接入口，网站看到落地出口。"
     >
@@ -380,7 +380,7 @@ async function removeGateway(inbound: ProxyInbound) {
           >刷新状态</UiButton
         ></template
       >
-    </ServerHeader>
+    </PageHeader>
     <nav class="mode-picker" aria-label="中转方式">
       <button
         v-for="item in modes"

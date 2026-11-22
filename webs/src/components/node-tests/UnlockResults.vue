@@ -92,14 +92,12 @@ const resultByGroup = (group: string) =>
 .unlock-results {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 12px 16px;
+  gap: 6px;
 }
 .unlock-item {
   min-width: 0;
-  padding: 16px;
-  border: 1px solid var(--c-line);
-  border-radius: 16px;
+  padding: 14px 18px;
+  border-radius: var(--radius-panel);
   background: var(--c-surface);
 }
 .unlock-item-heading {
@@ -111,19 +109,19 @@ const resultByGroup = (group: string) =>
 }
 .unlock-item-heading strong {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 650;
   overflow-wrap: anywhere;
 }
 .unlock-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 12px;
+  margin-top: 5px;
   color: var(--c-muted);
   font-size: 14px;
 }
 .item-note {
-  margin: 8px 0 0;
+  margin: 4px 0 0;
   color: var(--c-muted);
   font-size: 14px;
   line-height: 1.6;

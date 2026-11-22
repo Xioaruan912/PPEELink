@@ -23,58 +23,50 @@ const labels = { ok: "正常", warn: "注意", bad: "失败", idle: "空闲" };
 .status-dot {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 7px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
   color: var(--c-muted);
 }
 .status-dot i {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   flex: 0 0 auto;
   border-radius: 50%;
   background: var(--c-muted);
+  transition: background-color var(--duration-fast) ease;
+}
+.status-dot--ok {
+  color: var(--c-ok);
 }
 .status-dot--ok i {
   background: var(--c-ok);
-  animation: status-breathe 2s var(--ease-out) infinite;
+}
+.status-dot--warn {
+  color: var(--c-warn-ink);
 }
 .status-dot--warn i {
   background: var(--c-warn);
   border-radius: 2px;
 }
+.status-dot--bad {
+  color: var(--c-bad);
+}
 .status-dot--bad i {
   background: var(--c-bad);
-  border-radius: 0;
+  border-radius: 1px;
   transform: rotate(45deg);
 }
-.is-running {
-  overflow: hidden;
-  position: relative;
+.is-running i {
+  opacity: 0.45;
+  animation: status-pulse 1.2s var(--ease-in-out) infinite alternate;
 }
-.is-running::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--c-selected),
-    transparent
-  );
-  animation: status-scan 1.6s var(--ease-out) infinite;
-}
-@keyframes status-breathe {
-  50% {
-    opacity: 0.4;
-    transform: scale(0.75);
-  }
-}
-@keyframes status-scan {
+@keyframes status-pulse {
   from {
-    transform: translateX(-100%);
+    opacity: 0.35;
   }
   to {
-    transform: translateX(100%);
+    opacity: 1;
   }
 }
 </style>

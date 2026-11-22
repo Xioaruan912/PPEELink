@@ -26,12 +26,21 @@ const {
   <UiDrawer
     v-model="nodeDialog"
     :title="dialogMode === 'add' ? '添加节点' : '编辑节点'"
-    size="560px"
+    size="min(640px, 100vw)"
     :close-on-click-modal="!saving"
   >
     <el-form label-position="top" @submit.prevent="submitNode">
       <section class="form-section">
-        <h3>连接信息</h3>
+        <div class="form-caption">
+          <h3>连接信息</h3>
+          <p>
+            {{
+              dialogMode === "add"
+                ? "每行粘贴一个节点链接。"
+                : "更新节点名称与连接配置。"
+            }}
+          </p>
+        </div>
         <el-form-item label="节点链接" required
           ><el-input
             v-model="nodeForm.Link"
@@ -39,11 +48,8 @@ const {
             :autosize="{ minRows: 5, maxRows: 12 }"
             placeholder="粘贴链接，支持换行或英文逗号分隔"
         /></el-form-item>
-        <p class="field-hint">添加时每行一个链接；编辑时修改当前节点。</p>
         <el-form-item v-if="dialogMode === 'edit'" label="节点名称"
-          ><el-input
-            v-model="nodeForm.Name"
-            placeholder="例如 东京 01、Nosla-JP、AKKO_USA"
+          ><el-input v-model="nodeForm.Name" placeholder="输入节点名称"
         /></el-form-item>
       </section>
       <section class="form-section">
@@ -68,7 +74,7 @@ const {
       }}</UiButton></template
     >
   </UiDrawer>
-  <UiDrawer v-model="groupDialog" title="分组管理" size="640px">
+  <UiDrawer v-model="groupDialog" title="分组管理" size="min(680px, 100vw)">
     <section class="form-section">
       <h3>分组</h3>
       <EmptyState
@@ -168,13 +174,26 @@ const {
 </template>
 <style scoped>
 .form-section {
-  padding: 8px 0 16px;
+  padding: 0 0 18px;
   border-bottom: 1px solid var(--c-line);
   margin-bottom: 16px;
 }
 h3 {
   margin: 0 0 16px;
   font: 600 17px/1.4 var(--font-ui);
+}
+.form-caption {
+  padding: 14px 16px;
+  border-radius: var(--radius-panel);
+  background: var(--c-surface-2);
+  margin-bottom: 16px;
+}
+.form-caption h3 {
+  margin-bottom: 2px;
+}
+.form-caption p {
+  color: var(--c-muted);
+  font-size: 13px;
 }
 .field-hint {
   color: var(--c-muted);

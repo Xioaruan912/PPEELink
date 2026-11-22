@@ -74,3 +74,11 @@
 :global(html[data-motion="reduced"]) .result-list-move {
   transition: none;
 }
+
+.test-context strong { font-size: 19px; font-weight: 650; }
+.test-context:has(> strong) {
+  justify-content: space-between;
+  background: var(--c-surface-2);
+  padding: 13px 16px;
+  border-radius: var(--radius-panel);
+}

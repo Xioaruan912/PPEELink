@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import ServerHeader from "@/components/servers/ServerHeader.vue";
+import PageHeader from "@/ui/PageHeader.vue";
 import {
   computed,
   nextTick,
@@ -345,8 +345,8 @@ const usageRatio = (a: ProxyAccount) =>
 </script>
 <template>
   <div class="servers-page server-experience">
-    <ServerHeader
-      section="proxy"
+    <PageHeader
+
       title="自建节点"
       description="在自己的服务器上运行 xray-core，按账户发放节点、统计流量。"
     >
@@ -355,7 +355,7 @@ const usageRatio = (a: ProxyAccount) =>
           >添加服务器</UiButton
         >
       </template>
-    </ServerHeader>
+    </PageHeader>
 
     <EmptyState
       v-if="loadError"

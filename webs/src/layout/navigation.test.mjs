@@ -30,7 +30,8 @@ const route = (path, title, children) => ({
 });
 const paths = (items) =>
   Array.from(flattenNavigation(items), (item) => item.path);
-test("groups permitted features by task while preserving every URL once", () => {
+
+test("groups permitted features into 5 intent-driven domains while preserving every URL once", () => {
   const input = [
     route("/", "", [route("dashboard", "dashboard")]),
     route("/monitor", "monitor", [
@@ -45,7 +46,10 @@ test("groups permitted features by task while preserving every URL once", () => 
       route("relays", "中转设置"),
       route("diagnostic", "节点一键诊断"),
     ]),
-    route("/network", "network", [route("traceroute", "traceroute")]),
+    route("/network", "network", [
+      route("traceroute", "traceroute"),
+      route("throughput", "throughput"),
+    ]),
     route("/test", "test", [route("index", "test")]),
     route("/future", "Future"),
   ];
@@ -53,21 +57,33 @@ test("groups permitted features by task while preserving every URL once", () => 
   const organized = organizeNavigation(original);
   assert.deepEqual(paths(organized).sort(), paths(original).sort());
   assert.equal(new Set(paths(organized)).size, paths(original).length);
-  assert.equal(organized[0].label, "订阅管理");
+  assert.equal(organized[0].label, "分发中心");
   assert.equal(organized[0].path, "/subcription/subs");
-  assert.equal(organized[0].children.length, 0);
-  assert.deepEqual(paths([organized.find((item) => item.label === "服务器")]), [
-    "/monitor/index",
-    "/subcription/servers",
-    "/subcription/relays",
-    "/monitor/workspace",
-    "/monitor/website",
-  ]);
+  assert.equal(organized[0].children[0].label, "订阅链接");
   assert.deepEqual(
-    paths([organized.find((item) => item.label === "网络诊断")]),
-    ["/dashboard", "/test/index", "/network/traceroute", "/subcription/diagnostic"]
+    paths([organized.find((item) => item.label === "算力与网络")]),
+    [
+      "/subcription/servers",
+      "/subcription/relays",
+      "/monitor/index",
+      "/monitor/workspace",
+    ]
+  );
+  assert.deepEqual(
+    paths([organized.find((item) => item.label === "诊断实验室")]),
+    [
+      "/subcription/diagnostic",
+      "/test/index",
+      "/network/traceroute",
+      "/network/throughput",
+    ]
+  );
+  assert.deepEqual(
+    paths([organized.find((item) => item.label === "态势总览")]),
+    ["/dashboard", "/monitor/website"]
   );
 });
+
 test("ordinary user routes never acquire admin links and hidden routes stay hidden", () => {
   const items = organizeNavigation(
     buildNavigation([
@@ -79,6 +95,7 @@ test("ordinary user routes never acquire admin links and hidden routes stay hidd
   );
   assert.deepEqual(paths(items), ["/my/subscriptions"]);
 });
+
 test("missing permissions omit features and unknown future routes remain accessible", () => {
   const items = organizeNavigation(
     buildNavigation([
@@ -89,7 +106,7 @@ test("missing permissions omit features and unknown future routes remain accessi
   assert.deepEqual(paths(items), ["/monitor/index", "/extra/one"]);
 });
 
-test("diagnostic belongs to network diagnosis and keeps its compatible URL", () => {
+test("diagnostic belongs to diagnostics lab and keeps its compatible URL", () => {
   const items = organizeNavigation(
     buildNavigation([
       route("/subcription", "订阅与节点", [
@@ -99,15 +116,27 @@ test("diagnostic belongs to network diagnosis and keeps its compatible URL", () 
       ]),
     ])
   );
-  assert.equal(items.length, 3);
-  assert.equal(items[0].label, "订阅管理");
-  assert.deepEqual(paths([items[0]]), ["/subcription/subs"]);
-  assert.deepEqual(paths([items[1]]), ["/subcription/nodes"]);
-  assert.equal(items[2].label, "网络诊断");
-  assert.deepEqual(paths([items[2]]), ["/subcription/diagnostic"]);
+  assert.equal(items.length, 2);
+  assert.equal(items[0].label, "分发中心");
+  assert.deepEqual(paths([items[0]]), [
+    "/subcription/subs",
+    "/subcription/nodes",
+  ]);
+  assert.equal(items[1].label, "诊断实验室");
+  assert.deepEqual(paths([items[1]]), ["/subcription/diagnostic"]);
 });
 
-test("path and throughput are both children of network diagnosis",()=>{
- const items=organizeNavigation(buildNavigation([route('/network','network',[route('traceroute','路径拓扑'),route('throughput','节点互测')])]));
- assert.deepEqual(paths([items.find(i=>i.label==='网络诊断')]),['/network/traceroute','/network/throughput']);
+test("path and throughput are both children of diagnostics lab", () => {
+  const items = organizeNavigation(
+    buildNavigation([
+      route("/network", "network", [
+        route("traceroute", "路径拓扑"),
+        route("throughput", "节点互测"),
+      ]),
+    ])
+  );
+  assert.deepEqual(paths([items.find((i) => i.label === "诊断实验室")]), [
+    "/network/traceroute",
+    "/network/throughput",
+  ]);
 });

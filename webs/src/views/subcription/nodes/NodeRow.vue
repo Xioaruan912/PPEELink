@@ -6,6 +6,7 @@ import CountryFlag from "@/ui/CountryFlag.vue";
 import { formatDateTime } from "@/utils/date";
 import { useNodes, validState, validText, type OverviewItem } from "./useNodes";
 defineProps<{ node: OverviewItem }>();
+const emit = defineEmits<{ inspect: [id: number] }>();
 // 暂不下发标签：原因的简称 + 预计恢复日期
 const probeTitle = (node: OverviewItem) =>
   (node.probes || [])
@@ -61,7 +62,7 @@ const {
       />
       <CountryFlag :code="node.countryCode" :label="node.country" />
       <div class="node-name">
-        <button :title="node.name" @click="nodeCommand('edit', node)">
+        <button :title="node.name" :aria-label="`查看 ${node.name} 详情`" @click="emit('inspect', node.id)">
           {{ node.name }}
         </button>
         <span class="host mono" :title="node.server">{{
@@ -187,17 +188,37 @@ const {
 </template>
 <style scoped>
 .node-row {
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 78px 112px 52px 132px;
+  grid-template-columns: minmax(0, 1fr) 92px 116px 68px 136px;
   align-items: center;
-  gap: 10px;
-  padding: 10px 0;
-  min-height: 68px;
+  gap: 14px;
+  padding: 16px 20px;
+  min-height: 82px;
+  background: var(--c-surface);
   border-bottom: 1px solid var(--c-line);
-  transition: background var(--duration-fast);
+  overflow: hidden;
 }
-.node-row:hover {
+.node-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
   background: var(--c-surface-2);
+  transform: scaleX(0);
+  transform-origin: right center;
+  transition: transform var(--duration-slow) var(--ease-out);
+  pointer-events: none;
+  z-index: 0;
+}
+.node-row > * {
+  position: relative;
+  z-index: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .node-row:hover::before {
+    transform: scaleX(1);
+    transform-origin: left center;
+  }
 }
 .is-selected {
   background: var(--c-selected);
@@ -364,36 +385,41 @@ const {
 </style>
 
 <style scoped>
-.node-row {
-  padding: 14px 0;
-  min-height: 84px;
-}
 .node-name {
   gap: 3px;
 }
 .node-name button {
-  font-weight: 500;
+  font-weight: 560;
+  color: var(--c-ink);
+  transition: color var(--duration-fast) ease;
+}
+@media (hover: hover) and (pointer: fine) {
+  .node-name button:hover {
+    color: var(--c-signal-text);
+  }
 }
 .node-name button:focus-visible {
   outline: 2px solid var(--c-focus);
   outline-offset: 2px;
 }
 .membership {
-  font-size: 11px;
+  font-size: 12px;
 }
 .row-protocol {
-  font-size: 11px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  font-weight: 500;
 }
 .is-selected {
   box-shadow: inset 3px 0 var(--c-signal-text);
 }
 @media (max-width: 767px) {
   .node-row {
-    padding: 16px 12px;
-    border: 1px solid var(--c-line);
-    border-radius: 10px;
+    padding: 16px;
+    border-bottom: 0;
+    border-radius: var(--radius-panel);
     margin-bottom: 10px;
-    background: var(--c-surface);
+    background: var(--c-surface-2);
     gap: 14px 10px;
   }
   .node-identity {
