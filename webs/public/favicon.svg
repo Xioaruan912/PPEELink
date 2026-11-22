@@ -1,13 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="PPEELink">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" fill="none" role="img" aria-label="PPEELink">
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#D6F55A"/>
-      <stop offset="1" stop-color="#A9DE1E"/>
+    <linearGradient id="pl-bg" x1="8" y1="4" x2="56" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#191E2A"/>
+      <stop offset="52%" stop-color="#0E1117"/>
+      <stop offset="100%" stop-color="#080A0E"/>
     </linearGradient>
+    <linearGradient id="pl-edge" x1="12" y1="2" x2="52" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="45%" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0.12"/>
+    </linearGradient>
+    <linearGradient id="pl-arc-a" x1="16" y1="16" x2="46" y2="46" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#CBD5E1"/>
+    </linearGradient>
+    <linearGradient id="pl-arc-b" x1="48" y1="18" x2="20" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E2E8F0"/>
+      <stop offset="100%" stop-color="#94A3B8"/>
+    </linearGradient>
+    <radialGradient id="pl-core-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#10B981" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#10B981" stop-opacity="0"/>
+    </radialGradient>
   </defs>
-  <rect width="32" height="32" rx="9" fill="url(#g)"/>
-  <path d="M9.5 21.5 16 10.5l6.5 11h-13" fill="none" stroke="#0D0F12" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>
-  <circle cx="16" cy="10.5" r="2.6" fill="#0D0F12"/>
-  <circle cx="9.5" cy="21.5" r="2.6" fill="#0D0F12"/>
-  <circle cx="22.5" cy="21.5" r="2.6" fill="#D6F55A" stroke="#0D0F12" stroke-width="1.8"/>
+
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#pl-bg)"/>
+  <rect x="2.75" y="2.75" width="58.5" height="58.5" rx="15.25" stroke="url(#pl-edge)" stroke-width="1.5"/>
+  <circle cx="32" cy="32" r="14" fill="url(#pl-core-glow)"/>
+
+  <g transform="rotate(-45 32 32)">
+    <path
+      d="M27.5 23H22C17.0294 23 13 27.0294 13 32C13 36.9706 17.0294 41 22 41H30.5"
+      stroke="url(#pl-arc-a)"
+      stroke-width="4.6"
+      stroke-linecap="round"
+    />
+    <path
+      d="M36.5 41H42C46.9706 41 51 36.9706 51 32C51 27.0294 46.9706 23 42 23H33.5"
+      stroke="url(#pl-arc-b)"
+      stroke-width="4.6"
+      stroke-linecap="round"
+    />
+    <path
+      d="M24.5 32H39.5"
+      stroke="#FFFFFF"
+      stroke-width="3.6"
+      stroke-linecap="round"
+      opacity="0.92"
+    />
+  </g>
+
+  <circle cx="32" cy="32" r="4.2" fill="#0B0E14"/>
+  <circle cx="32" cy="32" r="2.7" fill="#10B981"/>
 </svg>
