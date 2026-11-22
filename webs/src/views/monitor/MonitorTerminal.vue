@@ -48,7 +48,9 @@ const sessionReady = ref(false),
   preparing = ref(false);
 const sessionLoading = ref(false);
 let loadGeneration = 0;
-const showAdvanced = ref(false);
+const commandTab = ref<"builtin" | "nodescripts">("builtin");
+const selectedCategory = ref("全部");
+const commandQuery = ref("");
 const commandDraft = ref("");
 const draftTitle = ref("");
 const selectedCommand = ref<QuickCommand>();
@@ -164,10 +166,45 @@ function viewOutput() {
   outputVisible.value = true;
 }
 
+const nodeScriptsCount = computed(
+  () => quickCommands.filter((c) => c.source === "nodescripts").length
+);
+
+const tabCommands = computed(() =>
+  quickCommands.filter((command) =>
+    commandTab.value === "nodescripts"
+      ? command.source === "nodescripts"
+      : command.source !== "nodescripts"
+  )
+);
+
+const availableCategories = computed(() => {
+  const seen = new Set<string>();
+  for (const command of tabCommands.value) seen.add(command.category);
+  return ["全部", ...seen];
+});
+
+function switchCommandTab(tab: "builtin" | "nodescripts") {
+  commandTab.value = tab;
+  selectedCategory.value = "全部";
+}
+
 const categories = computed(() => {
+  const q = commandQuery.value.trim().toLowerCase();
   const map = new Map<string, QuickCommand[]>();
-  for (const command of quickCommands) {
-    if (command.advanced && !showAdvanced.value) continue;
+  for (const command of tabCommands.value) {
+    if (
+      selectedCategory.value !== "全部" &&
+      command.category !== selectedCategory.value
+    )
+      continue;
+    if (
+      q &&
+      !`${command.name} ${command.category} ${command.description} ${command.command}`
+        .toLowerCase()
+        .includes(q)
+    )
+      continue;
     const list = map.get(command.category) || [];
     list.push(command);
     map.set(command.category, list);
@@ -476,7 +513,7 @@ async function executeDraft() {
   <UiDialog
     v-model="visible"
     :title="`Agent 终端 · ${monitor?.name || ''}`"
-    width="1120px"
+    width="1180px"
     :destroy-on-close="false"
     :fullscreen="mobile"
     :close-on-press-escape="false"
@@ -620,30 +657,83 @@ async function executeDraft() {
       </section>
       <aside class="command-pane" :class="{ 'is-expanded': showCommands }">
         <header>
-          <strong>快速指令</strong>
-          <small>先填入指令，确认后执行</small>
-          <p v-if="showAdvanced">
-            扩展脚本会修改服务器；入口已固定并校验，软件包及后续下载取决于上游。
+          <div class="command-head">
+            <strong>快速指令</strong>
+            <small>点选填入草稿，确认后执行</small>
+          </div>
+          <div class="command-tabs" role="tablist" aria-label="指令来源">
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="commandTab === 'builtin'"
+              :class="{ 'is-active': commandTab === 'builtin' }"
+              @click="switchCommandTab('builtin')"
+            >
+              内置诊断
+            </button>
+            <button
+              type="button"
+              role="tab"
+              :aria-selected="commandTab === 'nodescripts'"
+              :class="{ 'is-active': commandTab === 'nodescripts' }"
+              @click="switchCommandTab('nodescripts')"
+            >
+              脚本库
+              <span class="tab-count">{{ nodeScriptsCount }}</span>
+            </button>
+          </div>
+          <input
+            v-model="commandQuery"
+            type="search"
+            class="command-search"
+            aria-label="搜索指令或脚本"
+            :placeholder="
+              commandTab === 'nodescripts'
+                ? '搜索 NodeScripts 脚本…'
+                : '搜索内置诊断指令…'
+            "
+          />
+          <div class="category-pills" role="group" aria-label="分类筛选">
+            <button
+              v-for="cat in availableCategories"
+              :key="cat"
+              type="button"
+              class="cat-pill"
+              :class="{ 'is-active': selectedCategory === cat }"
+              @click="selectedCategory = cat"
+            >
+              {{ cat }}
+            </button>
+          </div>
+          <p v-if="commandTab === 'nodescripts'" class="script-notice">
+            收录自 nodescripts.net 常用运维脚本，均来源于上游仓库，执行前请核对命令。
           </p>
-          <label class="advanced-toggle"
-            ><input
-              v-model="showAdvanced"
-              type="checkbox"
-            />扩展工具与配置</label
-          >
         </header>
         <div class="command-scroll">
+          <p v-if="!categories.length" class="command-empty">
+            没有匹配的指令或脚本
+          </p>
           <section v-for="[category, list] in categories" :key="category">
-            <h4>{{ category }}</h4>
+            <h4>
+              {{ category }}
+              <span>{{ list.length }}</span>
+            </h4>
             <button
               v-for="command in list"
               :key="command.name"
               type="button"
               class="command-item"
+              :class="{ 'is-dangerous': command.dangerous }"
               :title="command.description"
               @click="runCommand(command)"
             >
-              <span>{{ command.name }}</span>
+              <div class="command-title-row">
+                <span>{{ command.name }}</span>
+                <em v-if="command.dangerous" class="risk-badge">高风险</em>
+                <em v-else-if="command.variants?.length" class="variant-badge"
+                  >{{ command.variants.length }} 方式</em
+                >
+              </div>
               <small>{{ command.description }}</small>
             </button>
           </section>
@@ -716,9 +806,10 @@ async function executeDraft() {
 
 .ssh-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
+  grid-template-columns: minmax(0, 1fr) 320px;
   gap: 14px;
   min-height: 540px;
+  max-height: 76vh;
 }
 .terminal-pane {
   display: flex;
@@ -782,9 +873,102 @@ async function executeDraft() {
 }
 .command-pane > header {
   display: grid;
-  gap: 2px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--c-line);
+}
+.command-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.command-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--c-line);
+  border-radius: 9px;
+  background: var(--c-surface-2);
+}
+.command-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-expo), color var(--t-fast) var(--ease-expo);
+}
+.command-tabs button.is-active {
+  background: var(--c-surface);
+  color: var(--c-ink);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+.tab-count {
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+.command-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 8px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font-size: 12px;
+  outline: none;
+}
+.command-search:focus {
+  border-color: var(--c-ink);
+}
+.category-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.cat-pill {
+  padding: 3px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--t-fast) var(--ease-expo), color var(--t-fast) var(--ease-expo), border-color var(--t-fast) var(--ease-expo);
+}
+.cat-pill:hover {
+  color: var(--c-ink);
+  border-color: var(--c-ink);
+}
+.cat-pill.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+}
+.script-notice {
+  margin: 0;
+  color: var(--c-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.command-empty {
+  margin: 24px 0;
+  text-align: center;
+  color: var(--c-muted);
+  font-size: 12px;
 }
 .command-pane strong {
   font-size: 13px;
@@ -797,6 +981,7 @@ async function executeDraft() {
 }
 .command-scroll {
   min-height: 0;
+  flex: 1;
   overflow: auto;
   padding: 10px;
 }
@@ -804,6 +989,9 @@ async function executeDraft() {
   margin-top: 12px;
 }
 .command-scroll h4 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 0 0 6px;
   padding: 0 8px;
   color: var(--c-subtle);
@@ -811,6 +999,11 @@ async function executeDraft() {
   font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.command-scroll h4 span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  opacity: 0.7;
 }
 .command-item {
   display: grid;
@@ -830,9 +1023,35 @@ async function executeDraft() {
   border-color: var(--c-line);
   transform: translateX(2px);
 }
+.command-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
 .command-item span {
   font-size: 12.5px;
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.risk-badge,
+.variant-badge {
+  flex-shrink: 0;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 500;
+}
+.risk-badge {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+.variant-badge {
+  background: var(--c-surface-2);
+  color: var(--c-muted);
 }
 .command-item small {
   overflow: hidden;
@@ -947,7 +1166,7 @@ async function executeDraft() {
   }
   .command-pane {
     display: none;
-    max-height: 160px;
+    max-height: 280px;
     flex-shrink: 0;
   }
   .command-pane.is-expanded {
