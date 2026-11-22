@@ -77,7 +77,9 @@ type ProxyInbound struct {
 	PrivateKey     string        `gorm:"size:64" json:"-"`
 	PublicKey      string        `gorm:"size:64" json:"publicKey"`
 	ShortID        string        `gorm:"size:255" json:"shortId"`
-	Path           string        `gorm:"size:120" json:"path"` // XHTTP 路径
+	Path           string        `gorm:"size:120" json:"path"`   // XHTTP / WS / gRPC 路径或服务名
+	Host           string        `gorm:"size:255" json:"host"`   // WS Host
+	Method         string        `gorm:"size:40" json:"method"`  // Shadowsocks 2022 加密方式
 	Enabled        bool          `gorm:"not null;default:true" json:"enabled"`
 }
 

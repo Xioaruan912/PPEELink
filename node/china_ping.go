@@ -28,10 +28,11 @@ type ChinaPingTarget struct {
 
 // ChinaPingResult 国内可达性检测总结果
 type ChinaPingResult struct {
-	NodeName string            `json:"nodeName"`
-	Targets  []ChinaPingTarget `json:"targets"`
-	ZStatic  []ZStaticResult   `json:"zstatic"`
-	Error    string            `json:"error,omitempty"`
+	NodeName    string            `json:"nodeName"`
+	Perspective string            `json:"perspective,omitempty"` // "agent"（节点本机直测）或 "panel"（经面板中转）
+	Targets     []ChinaPingTarget `json:"targets"`
+	ZStatic     []ZStaticResult   `json:"zstatic"`
+	Error       string            `json:"error,omitempty"`
 }
 
 // ZStaticResult zstaticcdn 可达结果
@@ -285,6 +286,11 @@ func tcpPingStableVia(ctx context.Context, dialer proxy.ContextDialer, addr stri
 }
 
 // compactChinaTargets 保留每省每运营商一个代表端点，避免同一网络重复探测大量城市。
+// CompactChinaTargets returns one representative target per (province, isp).
+func CompactChinaTargets(targets []ChinaTarget) []ChinaTarget {
+	return compactChinaTargets(targets)
+}
+
 func compactChinaTargets(targets []ChinaTarget) []ChinaTarget {
 	seen := make(map[string]struct{}, len(targets))
 	result := make([]ChinaTarget, 0, len(targets))

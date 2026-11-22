@@ -223,9 +223,16 @@ async function startTest() {
       }
       if (type === "done") {
         completed = true;
-        status.value = "测速完成";
+        status.value =
+          data.perspective === "agent"
+            ? "节点本机直测完成（Agent）"
+            : "测速完成（经面板中转）";
         persist(id);
-        ElMessage.success("TCP Ping 测速完成");
+        ElMessage.success(
+          data.perspective === "agent"
+            ? "TCP Ping 测速完成（节点本机直测）"
+            : "TCP Ping 测速完成"
+        );
       }
     });
     if (

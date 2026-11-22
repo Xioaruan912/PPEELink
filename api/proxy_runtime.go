@@ -2,8 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/url"
 	"strconv"
 	"strings"
@@ -109,7 +112,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		}
 		spec.Inbounds = append(spec.Inbounds, xraycore.InboundSpec{
 			Listen: in.Listen, DomainRoutes: domainRoutes, TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
-			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Users: users, TLSCertFile: in.TLSCertFile, TLSKeyFile: in.TLSKeyFile,
+			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Host: in.Host, Method: in.Method, Users: users, TLSCertFile: in.TLSCertFile, TLSKeyFile: in.TLSKeyFile,
 		})
 	}
 	return spec, nil
@@ -386,9 +389,22 @@ func NotifyProxyChanged() {
 
 // ---- 链接 -------------------------------------------------------------------
 
-// InboundLink 账户在某入站上的 VLESS 分享链接。
+// InboundLink 账户在某入站上的客户端分享链接（支持全部 10 种 3x-ui 协议）。
 func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.ProxyAccount, name string) string {
-	if in.Template == xraycore.TemplateHysteria2 {
+	hostPort := net.JoinHostPort(server.PublicHost, strconv.Itoa(in.Port))
+	firstSNI := strings.TrimSpace(strings.Split(in.SNI, ",")[0])
+	firstSID := strings.TrimSpace(strings.Split(in.ShortID, ",")[0])
+	fp := in.Fingerprint
+	if fp == "" {
+		fp = "chrome"
+	}
+	spiderX := in.SpiderX
+	if spiderX == "" {
+		spiderX = "/"
+	}
+
+	switch in.Template {
+	case xraycore.TemplateHysteria2:
 		hy := node.HY2{Name: name, Password: acc.UUID, Host: server.PublicHost, Port: in.Port, Sni: in.SNI, ALPN: []string{"h3"}}
 		if in.TLSMode == "self-signed" {
 			if in.TLSCertificate == "" {
@@ -405,17 +421,131 @@ func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.P
 			hy.Insecure = 1
 		}
 		return node.EncodeHY2URL(hy)
+
+	case xraycore.TemplateSS2022:
+		if in.PrivateKey == "" {
+			return ""
+		}
+		method := xraycore.NormalizeSS2022Method(in.Method)
+		userPass := xraycore.DeriveSS2022UserKey(acc.UUID, method)
+		cred := base64.StdEncoding.EncodeToString([]byte(method + ":" + in.PrivateKey + ":" + userPass))
+		return fmt.Sprintf("ss://%s@%s#%s", cred, hostPort, url.QueryEscape(name))
+
+	case xraycore.TemplateVMessTCP, xraycore.TemplateVMessWSTLS:
+		isWS := in.Template == xraycore.TemplateVMessWSTLS
+		if isWS && (in.TLSMode == "self-signed" || in.TLSMode == "auto") && in.TLSCertificate == "" {
+			return ""
+		}
+		vm := map[string]any{
+			"v":    "2",
+			"ps":   name,
+			"add":  server.PublicHost,
+			"port": strconv.Itoa(in.Port),
+			"id":   acc.UUID,
+			"aid":  "0",
+			"scy":  "auto",
+			"net":  "tcp",
+			"type": "none",
+			"host": "",
+			"path": "",
+			"tls":  "",
+			"sni":  "",
+		}
+		if isWS {
+			vm["net"] = "ws"
+			vm["tls"] = "tls"
+			vm["sni"] = firstSNI
+			vm["host"] = strings.TrimSpace(in.Host)
+			if vm["host"] == "" {
+				vm["host"] = firstSNI
+			}
+			p := in.Path
+			if p == "" {
+				p = "/vmess"
+			}
+			vm["path"] = p
+		}
+		raw, _ := json.Marshal(vm)
+		return "vmess://" + base64.StdEncoding.EncodeToString(raw)
+
+	case xraycore.TemplateTrojanTLS:
+		if (in.TLSMode == "self-signed" || in.TLSMode == "auto") && in.TLSCertificate == "" {
+			return ""
+		}
+		q := url.Values{}
+		q.Set("security", "tls")
+		q.Set("type", "tcp")
+		if firstSNI != "" {
+			q.Set("sni", firstSNI)
+		}
+		if in.TLSMode == "self-signed" || in.TLSMode == "auto" {
+			q.Set("allowInsecure", "1")
+		}
+		return fmt.Sprintf("trojan://%s@%s?%s#%s", url.QueryEscape(acc.UUID), hostPort, q.Encode(), url.QueryEscape(name))
+
+	case xraycore.TemplateTrojanReality:
+		q := url.Values{}
+		q.Set("security", "reality")
+		q.Set("type", "tcp")
+		q.Set("sni", firstSNI)
+		q.Set("fp", fp)
+		q.Set("pbk", in.PublicKey)
+		if firstSID != "" {
+			q.Set("sid", firstSID)
+		}
+		q.Set("spx", spiderX)
+		return fmt.Sprintf("trojan://%s@%s?%s#%s", url.QueryEscape(acc.UUID), hostPort, q.Encode(), url.QueryEscape(name))
+
+	case xraycore.TemplateVLESSWSTLS:
+		if (in.TLSMode == "self-signed" || in.TLSMode == "auto") && in.TLSCertificate == "" {
+			return ""
+		}
+		wsPath := in.Path
+		if wsPath == "" {
+			wsPath = "/ws"
+		}
+		wsHost := strings.TrimSpace(in.Host)
+		if wsHost == "" {
+			wsHost = firstSNI
+		}
+		q := url.Values{}
+		q.Set("encryption", "none")
+		q.Set("security", "tls")
+		q.Set("type", "ws")
+		q.Set("path", wsPath)
+		if wsHost != "" {
+			q.Set("host", wsHost)
+		}
+		if firstSNI != "" {
+			q.Set("sni", firstSNI)
+		}
+		if in.TLSMode == "self-signed" || in.TLSMode == "auto" {
+			q.Set("allowInsecure", "1")
+		}
+		return fmt.Sprintf("vless://%s@%s?%s#%s", acc.UUID, hostPort, q.Encode(), url.QueryEscape(name))
+
+	case xraycore.TemplateGRPCReality:
+		svc := strings.TrimPrefix(strings.TrimSpace(in.Path), "/")
+		if svc == "" {
+			svc = "grpc"
+		}
+		q := url.Values{}
+		q.Set("encryption", "none")
+		q.Set("security", "reality")
+		q.Set("type", "grpc")
+		q.Set("serviceName", svc)
+		q.Set("sni", firstSNI)
+		q.Set("fp", fp)
+		q.Set("pbk", in.PublicKey)
+		if firstSID != "" {
+			q.Set("sid", firstSID)
+		}
+		return fmt.Sprintf("vless://%s@%s?%s#%s", acc.UUID, hostPort, q.Encode(), url.QueryEscape(name))
 	}
 
 	q := node.VLESSQuery{
-		Security: "reality", Sni: strings.TrimSpace(strings.Split(in.SNI, ",")[0]), Fp: in.Fingerprint, SpiderX: in.SpiderX,
-		Sid: strings.TrimSpace(strings.Split(in.ShortID, ",")[0]), Pbk: in.PublicKey, Encryption: "none",
-	}
-	if q.Fp == "" {
-		q.Fp = "chrome"
-	}
-	if q.SpiderX == "" {
-		q.SpiderX = "/"
+		Security: "reality", Sni: firstSNI, Fp: fp, SpiderX: spiderX,
+		Sid: firstSID, Pbk: in.PublicKey, Encryption: "none",
 	}
 	switch in.Template {
 	case xraycore.TemplateXHTTPReality:

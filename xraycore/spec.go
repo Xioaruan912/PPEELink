@@ -4,7 +4,9 @@
 package xraycore
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"ppeelink/monitorcore"
@@ -14,12 +16,81 @@ import (
 // DefaultVersion 默认安装的 xray-core 版本（官方 release，下载后校验 SHA2-256）。
 const DefaultVersion = "v26.3.27"
 
-// 入站模板
+// 入站模板（全量覆盖 3x-ui 主流协议）
 const (
 	TemplateRealityVision = "vless-reality-vision"
 	TemplateXHTTPReality  = "vless-xhttp-reality"
+	TemplateGRPCReality   = "vless-grpc-reality"
+	TemplateVLESSWSTLS    = "vless-ws-tls"
+	TemplateVMessWSTLS    = "vmess-ws-tls"
+	TemplateVMessTCP      = "vmess-tcp"
+	TemplateTrojanReality = "trojan-reality"
+	TemplateTrojanTLS     = "trojan-tls"
+	TemplateSS2022        = "shadowsocks-2022"
 	TemplateHysteria2     = "hysteria2"
 )
+
+func IsValidTemplate(t string) bool {
+	switch t {
+	case TemplateRealityVision, TemplateXHTTPReality, TemplateGRPCReality,
+		TemplateVLESSWSTLS, TemplateVMessWSTLS, TemplateVMessTCP,
+		TemplateTrojanReality, TemplateTrojanTLS, TemplateSS2022, TemplateHysteria2:
+		return true
+	default:
+		return false
+	}
+}
+
+func TemplateUsesReality(t string) bool {
+	switch t {
+	case TemplateRealityVision, TemplateXHTTPReality, TemplateGRPCReality, TemplateTrojanReality:
+		return true
+	default:
+		return false
+	}
+}
+
+func TemplateUsesTLS(t string) bool {
+	switch t {
+	case TemplateHysteria2, TemplateVLESSWSTLS, TemplateVMessWSTLS, TemplateTrojanTLS:
+		return true
+	default:
+		return false
+	}
+}
+
+// SS2022KeyBytes returns the required raw key size for a Shadowsocks 2022 cipher.
+func SS2022KeyBytes(method string) int {
+	switch method {
+	case "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305":
+		return 32
+	default:
+		return 16
+	}
+}
+
+// NormalizeSS2022Method validates or defaults the Shadowsocks 2022 cipher method.
+func NormalizeSS2022Method(method string) string {
+	switch method {
+	case "2022-blake3-aes-128-gcm", "2022-blake3-aes-256-gcm", "2022-blake3-chacha20-poly1305":
+		return method
+	default:
+		return "2022-blake3-aes-128-gcm"
+	}
+}
+
+// GenerateSS2022Key generates a random base64 PSK of the required length for method.
+func GenerateSS2022Key(method string) string {
+	b := make([]byte, SS2022KeyBytes(method))
+	_, _ = rand.Read(b)
+	return base64.StdEncoding.EncodeToString(b)
+}
+
+// DeriveSS2022UserKey deterministically derives a valid SS-2022 per-user base64 key from UUID.
+func DeriveSS2022UserKey(uuid, method string) string {
+	sum := sha256.Sum256([]byte("ss2022:" + uuid))
+	return base64.StdEncoding.EncodeToString(sum[:SS2022KeyBytes(method)])
+}
 
 // Spec 面板下发给一台服务器的完整期望状态。
 type Spec struct {
@@ -82,6 +153,8 @@ type InboundSpec struct {
 	PrivateKey   string            `json:"privateKey"`
 	ShortID      string            `json:"shortId"`
 	Path         string            `json:"path"`
+	Host         string            `json:"host,omitempty"`
+	Method       string            `json:"method,omitempty"`
 	Users        []UserSpec        `json:"users"`
 }
 

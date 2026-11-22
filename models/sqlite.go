@@ -38,6 +38,15 @@ func InitSqlite() {
 	if err != nil {
 		log.Println("数据表迁移失败:", err)
 	}
+	// 高频时序与统计查询复合索引（幂等创建，加速监控、网站流量与节点质量查询）
+	for _, ddl := range []string{
+		"CREATE INDEX IF NOT EXISTS idx_monitor_metrics_mid_time ON monitor_metrics(monitor_id, collected_at)",
+		"CREATE INDEX IF NOT EXISTS idx_node_quality_nid_time ON node_quality_samples(node_id, checked_at)",
+		"CREATE INDEX IF NOT EXISTS idx_website_traffic_srv_bucket ON website_traffics(server_id, bucket_start)",
+		"CREATE INDEX IF NOT EXISTS idx_probe_results_node_time ON probe_results(node_id, checked_at)",
+	} {
+		_ = db.Exec(ddl).Error
+	}
 	if err := RemoveClientProxyChains(); err != nil {
 		log.Fatalf("清理已移除的客户端链式代理设置失败: %v", err)
 	}

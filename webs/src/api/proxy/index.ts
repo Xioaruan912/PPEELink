@@ -1,7 +1,16 @@
 import request from "@/utils/request";
 
 export type InboundTemplate =
-  "vless-reality-vision" | "vless-xhttp-reality" | "hysteria2";
+  | "vless-reality-vision"
+  | "vless-xhttp-reality"
+  | "vless-grpc-reality"
+  | "vless-ws-tls"
+  | "vmess-ws-tls"
+  | "vmess-tcp"
+  | "trojan-reality"
+  | "trojan-tls"
+  | "shadowsocks-2022"
+  | "hysteria2";
 
 export interface DomainRoute {
   domain: string;
@@ -29,6 +38,8 @@ export interface ProxyInbound {
   publicKey: string;
   shortId: string;
   path: string;
+  host?: string;
+  method?: string;
   enabled: boolean;
 }
 export interface ProxyServer {

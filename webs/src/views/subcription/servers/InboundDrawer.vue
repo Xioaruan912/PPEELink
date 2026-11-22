@@ -8,6 +8,7 @@ import {
   checkRealityTarget,
   getProxyEgressOptions,
   saveProxyInbound,
+  type InboundTemplate,
   type ProxyInbound,
   type DomainRoute,
   type TargetCheck,
@@ -25,34 +26,62 @@ const emit = defineEmits<{ saved: [] }>();
 
 // 精选非 Cloudflare CDN 伪装目标（TLS 1.3 + h2，已排除 CF CDN 防止被用于攻击）
 const targets = [
-  { host: "www.amd.com", tag: "AMD · 推荐" },
-  { host: "www.apple.com", tag: "Apple" },
-  { host: "dl.google.com", tag: "Google" },
-  { host: "www.amazon.com", tag: "Amazon" },
-  { host: "www.tesla.com", tag: "Tesla" },
-  { host: "addons.mozilla.org", tag: "Mozilla" },
+  { host: "www.amd.com", tag: "推荐" },
+  { host: "www.apple.com", tag: "" },
+  { host: "dl.google.com", tag: "" },
+  { host: "www.amazon.com", tag: "" },
+  { host: "www.tesla.com", tag: "" },
+  { host: "addons.mozilla.org", tag: "" },
 ];
 
-const protocolCards: {
-  value: ProxyInbound["template"];
-  title: string;
-  desc: string;
-}[] = [
-  {
-    value: "vless-reality-vision",
-    title: "VLESS Reality",
-    desc: "兼容性最佳，主流客户端通用",
-  },
-  {
-    value: "vless-xhttp-reality",
-    title: "XHTTP Reality",
-    desc: "直连 TLS 伪装，需客户端支持 XHTTP",
-  },
-  {
-    value: "hysteria2",
-    title: "Hysteria2",
-    desc: "UDP 高速传输，免域名自动签发证书",
-  },
+type ProtoFamily = "vless" | "vmess" | "trojan" | "ss2022" | "hy2";
+
+const protocolFamilies: { key: ProtoFamily; label: string }[] = [
+  { key: "vless", label: "VLESS" },
+  { key: "vmess", label: "VMess" },
+  { key: "trojan", label: "Trojan" },
+  { key: "ss2022", label: "SS-2022" },
+  { key: "hy2", label: "Hysteria2" },
+];
+
+const familyTemplates: Record<
+  ProtoFamily,
+  { value: InboundTemplate; title: string; desc: string }[]
+> = {
+  vless: [
+    { value: "vless-reality-vision", title: "Reality Vision", desc: "兼容性最佳，主流客户端通用" },
+    { value: "vless-xhttp-reality", title: "XHTTP Reality", desc: "直连 XHTTP 伪装" },
+    { value: "vless-grpc-reality", title: "gRPC Reality", desc: "多路复用 gRPC 伪装" },
+    { value: "vless-ws-tls", title: "WS + TLS", desc: "WebSocket 加密传输" },
+  ],
+  vmess: [
+    { value: "vmess-ws-tls", title: "WS + TLS", desc: "WebSocket + TLS 加密" },
+    { value: "vmess-tcp", title: "TCP 直连", desc: "轻量无 TLS，适合内网/中转" },
+  ],
+  trojan: [
+    { value: "trojan-reality", title: "Trojan Reality", desc: "Trojan 协议 + Reality 伪装" },
+    { value: "trojan-tls", title: "Trojan TLS", desc: "经典 Trojan + TLS" },
+  ],
+  ss2022: [
+    { value: "shadowsocks-2022", title: "Shadowsocks 2022", desc: "AEAD-2022 现代加密，TCP+UDP" },
+  ],
+  hy2: [
+    { value: "hysteria2", title: "Hysteria2", desc: "UDP QUIC 高速传输，免域名签发" },
+  ],
+};
+
+function familyForTemplate(t: InboundTemplate): ProtoFamily {
+  if (t.startsWith("vless-")) return "vless";
+  if (t.startsWith("vmess-")) return "vmess";
+  if (t.startsWith("trojan-")) return "trojan";
+  if (t === "shadowsocks-2022") return "ss2022";
+  return "hy2";
+}
+
+const ssMethods = [
+  "2022-blake3-aes-128-gcm",
+  "2022-blake3-aes-256-gcm",
+  "2022-blake3-chacha20-poly1305",
 ];
 
 const listenOptions = [
@@ -71,7 +100,7 @@ const fingerprints = [
   "randomized",
 ];
 
-const hy2Modes: { value: "self-signed" | "auto" | "manual"; label: string }[] = [
+const tlsModes: { value: "self-signed" | "auto" | "manual"; label: string }[] = [
   { value: "self-signed", label: "免证书自签" },
   { value: "auto", label: "指纹校验" },
   { value: "manual", label: "已有证书" },
@@ -83,7 +112,7 @@ const blank = () => ({
   egressNodeId: 0,
   domainRoutes: [] as DomainRoute[],
   remark: "Reality",
-  template: "vless-reality-vision" as ProxyInbound["template"],
+  template: "vless-reality-vision" as InboundTemplate,
   port: randomPort(),
   target: "www.amd.com:443",
   listen: "",
@@ -97,23 +126,67 @@ const blank = () => ({
   tlsKeyFile: "",
   sni: "www.amd.com",
   path: "",
+  host: "",
+  method: "2022-blake3-aes-128-gcm",
   enabled: true,
   regenerateKey: false,
 });
 
 const form = reactive(blank());
+const activeFamily = ref<ProtoFamily>("vless");
 const importKey = ref(false);
 const identityLocked = computed(() => !!props.requireEgress && form.id > 0);
+
+const usesReality = computed(() =>
+  ["vless-reality-vision", "vless-xhttp-reality", "vless-grpc-reality", "trojan-reality"].includes(form.template)
+);
+const usesTLS = computed(() =>
+  ["hysteria2", "vless-ws-tls", "vmess-ws-tls", "trojan-tls"].includes(form.template)
+);
+const usesWS = computed(() =>
+  ["vless-ws-tls", "vmess-ws-tls"].includes(form.template)
+);
+
+function selectFamily(f: ProtoFamily) {
+  if (identityLocked.value) return;
+  activeFamily.value = f;
+  const list = familyTemplates[f];
+  if (!list.some((x) => x.value === form.template)) {
+    form.template = list[0].value;
+  }
+}
 
 watch(
   () => form.template,
   (template) => {
-    if (template === "hysteria2" && props.inbound?.template !== "hysteria2") {
-      if (form.sni === "www.amd.com" || form.sni === "www.apple.com") {
-        form.sni = "";
+    activeFamily.value = familyForTemplate(template);
+    if (!props.inbound) {
+      const defaults: Record<InboundTemplate, string> = {
+        "vless-reality-vision": "Reality",
+        "vless-xhttp-reality": "XHTTP",
+        "vless-grpc-reality": "gRPC",
+        "vless-ws-tls": "VLESS-WS",
+        "vmess-ws-tls": "VMess-WS",
+        "vmess-tcp": "VMess",
+        "trojan-reality": "Trojan-Reality",
+        "trojan-tls": "Trojan",
+        "shadowsocks-2022": "SS-2022",
+        hysteria2: "Hysteria2",
+      };
+      if (Object.values(defaults).includes(form.remark) || !form.remark) {
+        form.remark = defaults[template];
       }
-      if (form.remark === "Reality") form.remark = "Hysteria2";
     }
+    if (usesTLS.value && (form.sni === "www.amd.com" || form.sni === "www.apple.com")) {
+      form.sni = "";
+    }
+    if (usesReality.value && !form.target) {
+      form.target = "www.amd.com:443";
+      form.sni = "www.amd.com";
+    }
+    if (template === "vless-ws-tls" && !form.path) form.path = "/ws";
+    if (template === "vmess-ws-tls" && !form.path) form.path = "/vmess";
+    if (template === "vless-grpc-reality" && !form.path) form.path = "grpc";
   }
 );
 
@@ -167,10 +240,13 @@ watch(visible, (open) => {
           privateKey: "",
           fingerprint: props.inbound.fingerprint || "chrome",
           spiderX: props.inbound.spiderX || "/",
+          host: props.inbound.host || "",
+          method: props.inbound.method || "2022-blake3-aes-128-gcm",
           regenerateKey: false,
         }
       : {}
   );
+  activeFamily.value = familyForTemplate(form.template);
   if (props.requireEgress && !props.inbound) form.remark = "";
 });
 
@@ -202,7 +278,7 @@ async function save() {
     error.value = "请选择落地出口，固定入口网关不能使用当前服务器直连。";
     return;
   }
-  if (form.template !== "hysteria2" && check.value?.cloudflare) {
+  if (usesReality.value && check.value?.cloudflare) {
     error.value = "当前伪装目标使用 Cloudflare CDN，已排除，请更换非 CF 站点（如 www.amd.com）。";
     return;
   }
@@ -214,7 +290,7 @@ async function save() {
       regenerateKey: props.requireEgress ? false : form.regenerateKey,
       privateKey:
         !identityLocked.value && importKey.value ? form.privateKey : undefined,
-      tlsMode: form.template === "hysteria2" ? form.tlsMode : "manual",
+      tlsMode: usesTLS.value ? form.tlsMode : "manual",
       ...(identityLocked.value && props.inbound
         ? {
             template: props.inbound.template,
@@ -222,6 +298,8 @@ async function save() {
             target: props.inbound.target,
             sni: props.inbound.sni,
             path: props.inbound.path,
+            host: props.inbound.host,
+            method: props.inbound.method,
             listen: props.inbound.listen,
             fingerprint: props.inbound.fingerprint,
             spiderX: props.inbound.spiderX,
@@ -257,7 +335,7 @@ async function save() {
           ? '编辑入站'
           : '添加入站'
     "
-    size="min(680px, 100vw)"
+    size="min(700px, 100vw)"
   >
     <div class="inbound-editor">
       <p v-if="identityLocked" class="lock-banner">
@@ -267,14 +345,31 @@ async function save() {
       <KineticNotice :raw="error" />
 
       <el-form label-position="top" class="inbound-form" @submit.prevent="save">
-        <!-- 1. Protocol Selector Cards -->
+        <!-- 1. 3x-ui Full Protocol Family & Mode Selector -->
         <section class="form-block">
           <header class="block-head">
-            <h3 class="block-title">协议类型</h3>
+            <h3 class="block-title">协议与传输（3x-ui 全量）</h3>
           </header>
+
+          <div class="pill-rail" role="tablist" aria-label="协议族">
+            <button
+              v-for="fam in protocolFamilies"
+              :key="fam.key"
+              type="button"
+              role="tab"
+              class="pill-btn"
+              :class="{ 'is-active': activeFamily === fam.key }"
+              :aria-selected="activeFamily === fam.key"
+              :disabled="identityLocked"
+              @click="selectFamily(fam.key)"
+            >
+              {{ fam.label }}
+            </button>
+          </div>
+
           <div class="proto-grid" role="radiogroup" aria-label="协议模板">
             <button
-              v-for="p in protocolCards"
+              v-for="p in familyTemplates[activeFamily]"
               :key="p.value"
               type="button"
               role="radio"
@@ -327,7 +422,7 @@ async function save() {
         </section>
 
         <!-- 3A. Reality Camouflage -->
-        <section v-if="form.template !== 'hysteria2'" class="form-block">
+        <section v-if="usesReality" class="form-block">
           <header class="block-head">
             <div>
               <h3 class="block-title">伪装目标（Reality）</h3>
@@ -348,7 +443,7 @@ async function save() {
               @click="pickTarget(item.host)"
             >
               <span class="mono">{{ item.host }}</span>
-              <em v-if="item.host === 'www.amd.com'" class="chip-tag">推荐</em>
+              <em v-if="item.tag" class="chip-tag">{{ item.tag }}</em>
             </button>
           </div>
 
@@ -383,6 +478,17 @@ async function save() {
             />
           </el-form-item>
 
+          <el-form-item
+            v-if="form.template === 'vless-grpc-reality'"
+            label="gRPC ServiceName"
+          >
+            <el-input
+              v-model="form.path"
+              :readonly="identityLocked"
+              placeholder="默认 grpc"
+            />
+          </el-form-item>
+
           <div class="check-bar">
             <UiButton
               variant="ghost"
@@ -412,15 +518,32 @@ async function save() {
           </div>
         </section>
 
-        <!-- 3B. Hysteria2 TLS Mode -->
-        <section v-else class="form-block">
+        <!-- 3B. TLS Protocols (Hysteria2 / VLESS-WS-TLS / VMess-WS-TLS / Trojan-TLS) -->
+        <section v-else-if="usesTLS" class="form-block">
           <header class="block-head">
-            <h3 class="block-title">证书与部署方式</h3>
+            <h3 class="block-title">TLS 证书与传输参数</h3>
           </header>
 
-          <div class="pill-rail" role="radiogroup" aria-label="HY2 部署方式">
+          <div v-if="usesWS" class="two-col">
+            <el-form-item label="WebSocket 路径">
+              <el-input
+                v-model="form.path"
+                :readonly="identityLocked"
+                placeholder="/ws"
+              />
+            </el-form-item>
+            <el-form-item label="WS Host（可选）">
+              <el-input
+                v-model="form.host"
+                :readonly="identityLocked"
+                placeholder="留空默认与 SNI 一致"
+              />
+            </el-form-item>
+          </div>
+
+          <div class="pill-rail" role="radiogroup" aria-label="TLS 部署方式">
             <button
-              v-for="m in hy2Modes"
+              v-for="m in tlsModes"
               :key="m.value"
               type="button"
               role="radio"
@@ -435,12 +558,12 @@ async function save() {
           </div>
 
           <p v-if="form.tlsMode === 'self-signed'" class="mode-note">
-            Agent 自动生成并托管自签证书，无需域名，服务器需放行对应 UDP 端口。
+            Agent 自动生成并托管自签证书，无需域名；客户端自动携带跳过证书校验。
           </p>
 
           <div v-else-if="form.tlsMode === 'auto'" class="mode-note-box">
             <p class="mode-note">
-              IP 直连并携带 SHA-256 证书指纹（推荐 Mihomo / sing-box），无需域名或 Cloudflare。
+              IP 直连并携带 SHA-256 证书指纹，无需域名或 Cloudflare。
             </p>
             <code
               v-if="
@@ -478,6 +601,38 @@ async function save() {
               />
             </el-form-item>
           </template>
+        </section>
+
+        <!-- 3C. Shadowsocks 2022 -->
+        <section v-else-if="form.template === 'shadowsocks-2022'" class="form-block">
+          <header class="block-head">
+            <h3 class="block-title">Shadowsocks 2022 加密算法</h3>
+          </header>
+          <div class="pill-rail" role="radiogroup" aria-label="SS-2022 加密算法">
+            <button
+              v-for="m in ssMethods"
+              :key="m"
+              type="button"
+              role="radio"
+              class="pill-btn mono"
+              :class="{ 'is-active': form.method === m }"
+              :aria-checked="form.method === m"
+              :disabled="identityLocked"
+              @click="form.method = m"
+            >
+              {{ m }}
+            </button>
+          </div>
+          <p class="mode-note">
+            服务端主密钥与各账户独立密钥均由面板自动派生管理，同时支持 TCP 与 UDP 转发。
+          </p>
+        </section>
+
+        <!-- 3D. VMess TCP -->
+        <section v-else class="form-block">
+          <p class="mode-note">
+            VMess TCP 直连模式无需证书或伪装目标，适合作为中转落地或专线入口。
+          </p>
         </section>
 
         <!-- 4. Egress & Routing -->
@@ -527,7 +682,7 @@ async function save() {
                     ? "IPv6"
                     : "双栈"
               }}
-              <template v-if="form.template !== 'hysteria2'">
+              <template v-if="usesReality">
                 · {{ form.fingerprint }}
               </template>
             </span>
@@ -551,7 +706,7 @@ async function save() {
               </div>
             </div>
 
-            <template v-if="form.template !== 'hysteria2'">
+            <template v-if="usesReality">
               <div class="adv-field">
                 <span class="adv-label">客户端指纹（uTLS）</span>
                 <div class="pill-rail">
@@ -618,7 +773,7 @@ async function save() {
           <label
             v-if="
               form.id &&
-              form.template !== 'hysteria2' &&
+              (usesReality || form.template === 'shadowsocks-2022') &&
               !props.requireEgress &&
               !importKey
             "
@@ -635,11 +790,7 @@ async function save() {
       <div class="drawer-footer">
         <UiButton :disabled="saving" @click="visible = false">取消</UiButton>
         <UiButton variant="primary" :loading="saving" @click="save">
-          {{
-            form.template === "hysteria2" && form.tlsMode !== "manual" && !form.id
-              ? "部署 HY2"
-              : "保存入站"
-          }}
+          保存入站
         </UiButton>
       </div>
     </template>
@@ -721,10 +872,9 @@ async function save() {
   font-weight: 600;
 }
 
-/* Protocol Cards */
 .proto-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -732,7 +882,7 @@ async function save() {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 13px 14px;
+  padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--c-line);
   background: var(--c-surface);
@@ -767,7 +917,6 @@ async function save() {
   color: var(--c-muted);
 }
 
-/* Two-col & Port */
 .two-col {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -784,7 +933,6 @@ async function save() {
   flex: 1;
 }
 
-/* Target Chips */
 .target-chips {
   display: flex;
   flex-wrap: wrap;
@@ -831,7 +979,6 @@ async function save() {
   color: var(--c-surface);
 }
 
-/* Check Bar */
 .check-bar {
   display: flex;
   align-items: center;
@@ -861,7 +1008,6 @@ async function save() {
   color: #dc2626;
 }
 
-/* Pills */
 .pill-rail {
   display: flex;
   flex-wrap: wrap;
@@ -918,7 +1064,6 @@ async function save() {
   color: var(--c-ink);
 }
 
-/* Advanced Disclosure */
 .adv-disclosure {
   border-top: 1px solid var(--c-line);
   border-bottom: 1px solid var(--c-line);
@@ -964,7 +1109,6 @@ async function save() {
   color: var(--c-muted);
 }
 
-/* Switches & Footer */
 .bottom-switches {
   display: flex;
   flex-wrap: wrap;
@@ -1010,7 +1154,6 @@ async function save() {
 }
 
 @media (max-width: 640px) {
-  .proto-grid,
   .two-col {
     grid-template-columns: minmax(0, 1fr);
   }

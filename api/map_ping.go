@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"ppeelink/models"
 	"ppeelink/node"
 	"strconv"
@@ -208,7 +209,17 @@ func NodeChinaPing(c *gin.Context) {
 	_ = cancel
 	_ = ctx
 
-	result, err := node.RunChinaPing(ctx, node.UnlockTestConfig{Link: link, Timeout: 3 * time.Second}, provinces, isps, zstaticPorts)
+	var result *node.ChinaPingResult
+	var err error
+	if agentID, _, ok := findOnlineAgentForNodeLink(link); ok {
+		result, err = runAgentDirectChinaPing(agentID, nodeName, provinces, isps, zstaticPorts, nil)
+	}
+	if result == nil {
+		result, err = node.RunChinaPing(ctx, node.UnlockTestConfig{Link: link, Timeout: 3 * time.Second}, provinces, isps, zstaticPorts)
+		if result != nil && result.Perspective == "" {
+			result.Perspective = "panel"
+		}
+	}
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "中国延迟测试失败: " + err.Error()})
 		return
@@ -302,7 +313,17 @@ func NodeChinaPingStream(c *gin.Context) {
 		c.Writer.Flush()
 	}
 
-	result, err := node.RunChinaPingStream(ctx, node.UnlockTestConfig{Link: link, Timeout: 3 * time.Second}, provinces, isps, zstaticPorts, onProvince)
+	var result *node.ChinaPingResult
+	var err error
+	if agentID, _, ok := findOnlineAgentForNodeLink(link); ok {
+		result, err = runAgentDirectChinaPing(agentID, nodeName, provinces, isps, zstaticPorts, onProvince)
+	}
+	if result == nil {
+		result, err = node.RunChinaPingStream(ctx, node.UnlockTestConfig{Link: link, Timeout: 3 * time.Second}, provinces, isps, zstaticPorts, onProvince)
+		if result != nil && result.Perspective == "" {
+			result.Perspective = "panel"
+		}
+	}
 	if err != nil {
 		c.SSEvent("error", gin.H{"msg": err.Error()})
 		c.Writer.Flush()
@@ -310,8 +331,93 @@ func NodeChinaPingStream(c *gin.Context) {
 	}
 
 	c.SSEvent("zstatic", gin.H{"zstatic": result.ZStatic})
-	c.SSEvent("done", gin.H{"nodeName": result.NodeName, "msg": "完成"})
+	c.SSEvent("done", gin.H{"nodeName": result.NodeName, "perspective": result.Perspective, "msg": "完成"})
 	c.Writer.Flush()
+}
+
+func findOnlineAgentForNodeLink(link string) (uint, string, bool) {
+	host, _ := node.ExtractServerHost(link)
+	host = strings.TrimSpace(strings.Trim(host, "[]"))
+	if host == "" {
+		return 0, "", false
+	}
+	var servers []models.ProxyServer
+	if err := models.DB.Where("kind = ? AND enabled = ?", models.ServerKindAgent, true).Find(&servers).Error; err != nil {
+		return 0, "", false
+	}
+	for _, s := range servers {
+		pub := strings.TrimSpace(strings.Trim(s.PublicHost, "[]"))
+		if strings.EqualFold(pub, host) && agentConnForServer(s.ID) != nil {
+			return s.ID, s.Name, true
+		}
+	}
+	return 0, "", false
+}
+
+func runAgentDirectChinaPing(serverID uint, nodeName string, provinces, isps []string, zstaticPorts []int, onProvince node.ChinaPingStreamCallback) (*node.ChinaPingResult, error) {
+	targets := node.CompactChinaTargets(node.FilterChinaTargets(provinces, isps))
+	if len(zstaticPorts) == 0 {
+		zstaticPorts = []int{443}
+	}
+	type targetReq struct {
+		IP   string `json:"ip"`
+		Port int    `json:"port"`
+	}
+	reqTargets := make([]targetReq, 0, len(targets))
+	for _, t := range targets {
+		reqTargets = append(reqTargets, targetReq{IP: t.IP, Port: t.Port})
+	}
+	raw, err := agentRequest(serverID, "china_ping", map[string]any{
+		"targets":      reqTargets,
+		"zstaticPorts": zstaticPorts,
+		"timeoutMs":    3000,
+	}, 25*time.Second)
+	if err != nil {
+		// Older Agent (< v1.18) does not implement china_ping; fall back cleanly.
+		return nil, err
+	}
+	var resp struct {
+		Targets []struct {
+			IP   string `json:"ip"`
+			Port int    `json:"port"`
+			OK   bool   `json:"ok"`
+			Rtt  int    `json:"rtt"`
+		} `json:"targets"`
+		ZStatic []node.ZStaticResult `json:"zstatic"`
+	}
+	if err := json.Unmarshal(raw, &resp); err != nil {
+		return nil, err
+	}
+	outTargets := make([]node.ChinaPingTarget, 0, len(targets))
+	byProvince := map[string][]node.ChinaPingTarget{}
+	provinceOrder := make([]string, 0)
+	for i, t := range targets {
+		ok, rtt := false, -1
+		if i < len(resp.Targets) {
+			ok, rtt = resp.Targets[i].OK, resp.Targets[i].Rtt
+		}
+		item := node.ChinaPingTarget{
+			Province: t.Province, City: t.City, ISP: t.ISP,
+			Lat: t.Lat, Lng: t.Lng, IP: t.IP, Port: t.Port,
+			OK: ok, Rtt: rtt,
+		}
+		outTargets = append(outTargets, item)
+		if _, exists := byProvince[t.Province]; !exists {
+			provinceOrder = append(provinceOrder, t.Province)
+		}
+		byProvince[t.Province] = append(byProvince[t.Province], item)
+	}
+	if onProvince != nil {
+		for _, prov := range provinceOrder {
+			onProvince(prov, byProvince[prov])
+		}
+	}
+	return &node.ChinaPingResult{
+		NodeName:    nodeName,
+		Perspective: "agent",
+		Targets:     outTargets,
+		ZStatic:     resp.ZStatic,
+	}, nil
 }
 
 // TestStatus 返回当前测试会话状态（哪个节点、类型、开始时间）。

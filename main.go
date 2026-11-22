@@ -158,6 +158,7 @@ func Run(port int) {
 	Templateinit()
 	// 安装中间件
 	r.Use(middlewares.SecurityHeaders) // 安全响应头与 API 禁缓存
+	r.Use(middlewares.PublicRateLimit) // 公开订阅与短链按 IP 令牌桶限流
 	r.Use(middlewares.AuthorToken)     // jwt验证token
 	r.Use(middlewares.AuditTrail)      // 管理写操作审计（不记录请求体）
 	// 设置静态资源路径（自定义 handler，支持 gzip + 正确 Content-Length）

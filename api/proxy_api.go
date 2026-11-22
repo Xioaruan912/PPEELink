@@ -293,18 +293,20 @@ type inboundSaveRequest struct {
 	Target        string               `json:"target"`
 	SNI           string               `json:"sni"`
 	Path          string               `json:"path"`
+	Host          string               `json:"host"`
+	Method        string               `json:"method"`
 	Enabled       bool                 `json:"enabled"`
 	RegenerateKey bool                 `json:"regenerateKey"`
 }
 
-// ProxyInboundSave 新建或修改入站；新建时自动生成 Reality 密钥与 shortId。
+// ProxyInboundSave 新建或修改入站；新建时自动生成 Reality 密钥与 shortId 或 SS-2022 密钥。
 func ProxyInboundSave(c *gin.Context) {
 	var req inboundSaveRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": "参数错误"})
 		return
 	}
-	if req.Template != xraycore.TemplateRealityVision && req.Template != xraycore.TemplateXHTTPReality && req.Template != xraycore.TemplateHysteria2 {
+	if !xraycore.IsValidTemplate(req.Template) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "未知的入站模板"})
 		return
 	}
@@ -312,15 +314,32 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "端口需在 1024 到 65535 之间"})
 		return
 	}
-	if _, _, err := net.SplitHostPort(req.Target); err != nil && req.Template != xraycore.TemplateHysteria2 {
-		c.JSON(400, gin.H{"code": "40000", "msg": "伪装目标需为 域名:端口，如 www.apple.com:443"})
-		return
-	}
-	if strings.TrimSpace(req.SNI) == "" {
-		req.SNI, _, _ = net.SplitHostPort(req.Target)
+	usesReality := xraycore.TemplateUsesReality(req.Template)
+	usesTLS := xraycore.TemplateUsesTLS(req.Template)
+	if usesReality {
+		if _, _, err := net.SplitHostPort(req.Target); err != nil {
+			c.JSON(400, gin.H{"code": "40000", "msg": "伪装目标需为 域名:端口，如 www.amd.com:443"})
+			return
+		}
+		if strings.TrimSpace(req.SNI) == "" {
+			req.SNI, _, _ = net.SplitHostPort(req.Target)
+		}
 	}
 	if req.Template == xraycore.TemplateXHTTPReality && !strings.HasPrefix(req.Path, "/") {
 		req.Path = "/" + models.RandomHex(6)
+	}
+	if (req.Template == xraycore.TemplateVLESSWSTLS || req.Template == xraycore.TemplateVMessWSTLS) && !strings.HasPrefix(req.Path, "/") {
+		if req.Template == xraycore.TemplateVMessWSTLS {
+			req.Path = "/vmess"
+		} else {
+			req.Path = "/ws"
+		}
+	}
+	if req.Template == xraycore.TemplateGRPCReality && strings.TrimSpace(req.Path) == "" {
+		req.Path = "grpc"
+	}
+	if req.Template == xraycore.TemplateSS2022 {
+		req.Method = xraycore.NormalizeSS2022Method(req.Method)
 	}
 	var server models.ProxyServer
 	if err := models.DB.First(&server, req.ServerID).Error; err != nil {
@@ -351,8 +370,8 @@ func ProxyInboundSave(c *gin.Context) {
 		return
 	}
 	if req.TLSMode == "auto" || req.TLSMode == "self-signed" {
-		if req.Template != xraycore.TemplateHysteria2 || (req.TLSMode == "auto" && net.ParseIP(strings.Trim(server.PublicHost, "[]")) == nil) {
-			c.JSON(400, gin.H{"code": "40000", "msg": "无域名部署需选择 Hysteria2，并将服务器连接地址填写为 IP"})
+		if !usesTLS || (req.TLSMode == "auto" && net.ParseIP(strings.Trim(server.PublicHost, "[]")) == nil) {
+			c.JSON(400, gin.H{"code": "40000", "msg": "无域名自动证书需选择 TLS 类协议（如 Hysteria2 / WS TLS / Trojan TLS），指纹模式需将服务器地址填写为 IP"})
 			return
 		}
 		if server.Kind == models.ServerKindAgent && server.ProxyFeatures < 2 {
@@ -373,7 +392,7 @@ func ProxyInboundSave(c *gin.Context) {
 		in.TLSFingerprint = ""
 	}
 	in.TLSMode = req.TLSMode
-	if req.Template == xraycore.TemplateHysteria2 && req.TLSMode != "auto" && req.TLSMode != "self-signed" {
+	if usesTLS && req.TLSMode != "auto" && req.TLSMode != "self-signed" {
 		if err := xraycore.ValidateHysteriaTLS(strings.TrimSpace(req.SNI), req.TLSCertFile, req.TLSKeyFile); err != nil {
 			c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
 			return
@@ -426,7 +445,7 @@ func ProxyInboundSave(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "请先升级 Agent 至1.12，以使用 x-ui 部署配置"})
 		return
 	}
-	if req.Template != xraycore.TemplateHysteria2 {
+	if usesReality {
 		if req.PrivateKey != "" && req.RegenerateKey {
 			c.JSON(400, gin.H{"code": "40000", "msg": "导入私钥与重新生成密钥不能同时选择"})
 			return
@@ -487,8 +506,8 @@ func ProxyInboundSave(c *gin.Context) {
 	in.EgressNodeID = req.EgressNodeID
 	in.TLSCertFile, in.TLSKeyFile = req.TLSCertFile, req.TLSKeyFile
 	in.ServerID, in.Remark, in.Template, in.Port = req.ServerID, strings.TrimSpace(req.Remark), req.Template, req.Port
-	in.Target, in.SNI, in.Path, in.Enabled = req.Target, strings.TrimSpace(req.SNI), req.Path, req.Enabled
-	if in.Template != xraycore.TemplateHysteria2 && (in.PrivateKey == "" || req.RegenerateKey) {
+	in.Target, in.SNI, in.Path, in.Host, in.Method, in.Enabled = req.Target, strings.TrimSpace(req.SNI), req.Path, strings.TrimSpace(req.Host), req.Method, req.Enabled
+	if usesReality && (in.PrivateKey == "" || req.RegenerateKey) {
 		priv, pub, err := xraycore.GenerateRealityKeys()
 		if err != nil {
 			c.JSON(500, gin.H{"code": "50000", "msg": "生成密钥失败"})
@@ -498,6 +517,10 @@ func ProxyInboundSave(c *gin.Context) {
 		if req.ShortID == nil {
 			in.ShortID = models.RandomHex(4)
 		}
+	}
+	if in.Template == xraycore.TemplateSS2022 && (in.PrivateKey == "" || req.RegenerateKey) {
+		in.PrivateKey = xraycore.GenerateSS2022Key(in.Method)
+		in.PublicKey = ""
 	}
 	egress, routes, err := resolveInboundRoutes(in, server)
 	if err == nil {
