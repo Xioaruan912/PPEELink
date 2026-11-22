@@ -299,6 +299,9 @@ onBeforeUnmount(() => {
           </div>
           <span class="row-sub">
             {{ sourceLabel(row.sourceKey) }}
+            <template v-if="row.duplicateCount">
+              · 已去重 +{{ row.duplicateCount }}
+            </template>
             <template v-if="row.remoteUpdate">
               · <span class="mono">{{ row.remoteUpdate }}</span>
             </template>

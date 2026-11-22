@@ -28,6 +28,8 @@ export type RuleItem = {
   format: string;
   ruleCount: number;
   checksum?: string;
+  contentHash?: string;
+  duplicateCount?: number;
   remoteUpdate?: string;
   metadataJson?: string;
 };

@@ -111,6 +111,7 @@ func SyncSource(ctx context.Context, key string) error {
 				rec.LocalPath = old.LocalPath
 				rec.RuleCount = old.RuleCount
 				rec.Checksum = old.Checksum
+				rec.ContentHash = old.ContentHash
 				rec.MetadataJSON = old.MetadataJSON
 				rec.CacheRevision = old.CacheRevision
 				if old.RemoteRevision != "" && old.RemoteRevision == item.RemoteRevision && old.CacheRevision == item.RemoteRevision && old.URL != "" {
@@ -407,19 +408,150 @@ func ListCatalog(source, platform, category, keyword string, page, pageSize int)
 	if keyword != "" {
 		q = q.Where("name LIKE ?", "%"+keyword+"%")
 	}
-	var total int64
-	if err := q.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
 	if page < 1 {
 		page = 1
 	}
 	if pageSize < 1 || pageSize > 200 {
 		pageSize = 48
 	}
-	var out []models.RuleCatalog
-	err := q.Order("category asc, name asc, source_key asc").Offset((page - 1) * pageSize).Limit(pageSize).Find(&out).Error
-	return out, total, err
+	var all []models.RuleCatalog
+	if err := q.Order("category asc, name asc, source_key asc").Find(&all).Error; err != nil {
+		return nil, 0, err
+	}
+	backfillCandidateContentHashes(all)
+	deduped := deduplicateCatalog(all)
+	total := int64(len(deduped))
+	start := (page - 1) * pageSize
+	if start >= len(deduped) {
+		return []models.RuleCatalog{}, total, nil
+	}
+	end := start + pageSize
+	if end > len(deduped) {
+		end = len(deduped)
+	}
+	return deduped[start:end], total, nil
+}
+
+func catalogPlatformRank(platform string) int {
+	switch strings.ToLower(strings.TrimSpace(platform)) {
+	case "clash":
+		return 0
+	case "surge":
+		return 1
+	case "loon":
+		return 2
+	default:
+		return 3
+	}
+}
+
+func catalogSourceRank(sourceKey string) int {
+	switch sourceKey {
+	case "ios_rule_script":
+		return 0
+	case "shunt_rules":
+		return 1
+	default:
+		return 2
+	}
+}
+
+func catalogPreferred(a, b models.RuleCatalog) bool {
+	pa, pb := catalogPlatformRank(a.Platform), catalogPlatformRank(b.Platform)
+	if pa != pb {
+		return pa < pb
+	}
+	sa, sb := catalogSourceRank(a.SourceKey), catalogSourceRank(b.SourceKey)
+	if sa != sb {
+		return sa < sb
+	}
+	return a.ID < b.ID
+}
+
+// backfillCandidateContentHashes computes and persists NormalizedContentHash
+// lazily for already-cached records that share (RuleCount, MetadataJSON) with
+// at least one other record, avoiding full-disk scans on untouched singletons.
+func backfillCandidateContentHashes(records []models.RuleCatalog) {
+	type bucketKey struct {
+		count int
+		meta  string
+	}
+	counts := make(map[bucketKey]int, len(records))
+	for i := range records {
+		if records[i].RuleCount <= 0 {
+			continue
+		}
+		counts[bucketKey{count: records[i].RuleCount, meta: records[i].MetadataJSON}]++
+	}
+	type hashUpdate struct {
+		externalID string
+		hash       string
+	}
+	var updates []hashUpdate
+	for i := range records {
+		rec := &records[i]
+		if rec.RuleCount <= 0 || rec.ContentHash != "" {
+			continue
+		}
+		if counts[bucketKey{count: rec.RuleCount, meta: rec.MetadataJSON}] < 2 {
+			continue
+		}
+		local := rec.LocalPath
+		if local == "" {
+			local = cachePath(rec.SourceKey, rec.Platform, rec.Name, rec.Format)
+		}
+		data, err := os.ReadFile(local)
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		rules, _, err := ParseRules(data, rec.Format)
+		if err != nil || len(rules) == 0 {
+			continue
+		}
+		h := NormalizedContentHash(rules)
+		if h == "" {
+			continue
+		}
+		rec.ContentHash = h
+		updates = append(updates, hashUpdate{externalID: rec.ExternalID, hash: h})
+	}
+	if len(updates) == 0 || models.DB == nil {
+		return
+	}
+	_ = models.DB.Transaction(func(tx *gorm.DB) error {
+		for _, u := range updates {
+			if err := tx.Model(&models.RuleCatalog{}).Where("external_id = ?", u.externalID).Update("content_hash", u.hash).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// deduplicateCatalog collapses entries whose normalized rule count AND
+// normalized rule content hash are identical. Uncached entries (RuleCount == 0
+// or empty ContentHash) are never collapsed.
+func deduplicateCatalog(records []models.RuleCatalog) []models.RuleCatalog {
+	out := make([]models.RuleCatalog, 0, len(records))
+	seen := make(map[string]int, len(records))
+	for _, rec := range records {
+		if rec.RuleCount <= 0 || rec.ContentHash == "" {
+			out = append(out, rec)
+			continue
+		}
+		key := fmt.Sprintf("%d:%s", rec.RuleCount, rec.ContentHash)
+		if idx, exists := seen[key]; exists {
+			prevCount := out[idx].DuplicateCount
+			if catalogPreferred(rec, out[idx]) {
+				out[idx] = rec
+			}
+			out[idx].DuplicateCount = prevCount + 1
+			continue
+		}
+		seen[key] = len(out)
+		out = append(out, rec)
+	}
+	return out
 }
 
 func Sources() ([]SourceStatus, error) {
@@ -503,6 +635,11 @@ func refreshCatalogRecord(ctx context.Context, rec models.RuleCatalog, checkRemo
 		// The remote payload is byte-for-byte identical. Keep the existing file
 		// and, critically, do not issue a no-op SQLite UPDATE.
 		rules, warnings, err := ParseRules(cached, rec.Format)
+		if err == nil && rec.ContentHash == "" {
+			if h := NormalizedContentHash(rules); h != "" {
+				_ = models.DB.Model(&models.RuleCatalog{}).Where("external_id = ?", rec.ExternalID).Update("content_hash", h).Error
+			}
+		}
 		return cached, rules, warnings, err
 	}
 	rules, warnings, err := ParseRules(body, rec.Format)
@@ -517,9 +654,10 @@ func refreshCatalogRecord(ctx context.Context, rec models.RuleCatalog, checkRemo
 	}
 	meta := CountTypes(rules)
 	metaJSON, _ := json.Marshal(meta)
+	contentHash := NormalizedContentHash(rules)
 	updates := map[string]any{
 		"local_path": local, "rule_count": len(rules), "checksum": checksum,
-		"metadata_json": string(metaJSON), "cache_revision": rec.RemoteRevision,
+		"content_hash": contentHash, "metadata_json": string(metaJSON), "cache_revision": rec.RemoteRevision,
 	}
 	_ = models.DB.Model(&models.RuleCatalog{}).Where("external_id = ?", rec.ExternalID).Updates(updates).Error
 	return body, rules, warnings, nil

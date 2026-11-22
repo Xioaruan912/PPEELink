@@ -36,7 +36,9 @@ type RuleCatalog struct {
 	RemoteRevision string    `gorm:"size:128;index" json:"remoteRevision"`
 	CacheRevision  string    `gorm:"size:128" json:"cacheRevision"`
 	Checksum       string    `gorm:"size:128" json:"checksum"`
+	ContentHash    string    `gorm:"size:64;index" json:"contentHash,omitempty"`
 	MetadataJSON   string    `gorm:"type:text" json:"metadataJson"`
+	DuplicateCount int       `gorm:"-" json:"duplicateCount,omitempty"`
 	CreatedAt      time.Time `json:"createdAt"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }

@@ -3,8 +3,11 @@ package rulecenter
 import (
 	"bufio"
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -151,6 +154,44 @@ func CountTypes(rules []NormalizedRule) map[string]int {
 		m[r.Type]++
 	}
 	return m
+}
+
+// NormalizedContentHash computes an order- and format-independent SHA-256
+// fingerprint over the normalized rule entries so identical rule sets across
+// YAML/list formats or different upstream sources collapse cleanly.
+func NormalizedContentHash(rules []NormalizedRule) string {
+	if len(rules) == 0 {
+		return ""
+	}
+	lines := make([]string, 0, len(rules))
+	for _, r := range rules {
+		t := strings.ToUpper(strings.TrimSpace(r.Type))
+		v := strings.TrimSpace(r.Value)
+		if t == "" || v == "" {
+			continue
+		}
+		if len(r.Options) == 0 {
+			lines = append(lines, t+","+v)
+			continue
+		}
+		opts := make([]string, 0, len(r.Options))
+		for _, o := range r.Options {
+			if o = strings.TrimSpace(o); o != "" {
+				opts = append(opts, o)
+			}
+		}
+		if len(opts) == 0 {
+			lines = append(lines, t+","+v)
+		} else {
+			lines = append(lines, t+","+v+","+strings.Join(opts, ","))
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	sort.Strings(lines)
+	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
+	return hex.EncodeToString(sum[:])
 }
 
 func MatchDomain(rules []NormalizedRule, domain string) bool {
