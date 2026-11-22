@@ -90,6 +90,136 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 	if in.Port <= 0 || in.Port > 65535 {
 		return nil, fmt.Errorf("端口无效")
 	}
+	listen, normalizeErr := NormalizeListen(in.Listen)
+	if normalizeErr != nil {
+		return nil, normalizeErr
+	}
+	attachListen := func(item map[string]any) map[string]any {
+		// Omit the default listener, as x-ui does. Xray panics on an explicit empty string.
+		if listen != "" {
+			item["listen"] = listen
+		}
+		return item
+	}
+	sniffing := map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true}
+
+	// Shadowsocks 2022 (TCP + UDP, per-user derived keys)
+	if in.Template == TemplateSS2022 {
+		method := NormalizeSS2022Method(in.Method)
+		serverPass := strings.TrimSpace(in.PrivateKey)
+		if serverPass == "" {
+			return nil, fmt.Errorf("缺少 Shadowsocks 2022 服务端密钥")
+		}
+		clients := make([]any, 0, len(in.Users))
+		for _, u := range in.Users {
+			clients = append(clients, map[string]any{
+				"password": DeriveSS2022UserKey(u.UUID, method),
+				"email":    u.Email,
+				"level":    0,
+			})
+		}
+		return attachListen(map[string]any{
+			"tag":      in.Tag,
+			"port":     in.Port,
+			"protocol": "shadowsocks",
+			"settings": map[string]any{
+				"method":   method,
+				"password": serverPass,
+				"network":  "tcp,udp",
+				"clients":  clients,
+			},
+			"sniffing": sniffing,
+		}), nil
+	}
+
+	// VMess TCP (no TLS)
+	if in.Template == TemplateVMessTCP {
+		clients := make([]any, 0, len(in.Users))
+		for _, u := range in.Users {
+			clients = append(clients, map[string]any{"id": u.UUID, "email": u.Email, "level": 0})
+		}
+		return attachListen(map[string]any{
+			"tag":      in.Tag,
+			"port":     in.Port,
+			"protocol": "vmess",
+			"settings": map[string]any{"clients": clients},
+			"sniffing": sniffing,
+			"streamSettings": map[string]any{
+				"network":     "raw",
+				"security":    "none",
+				"rawSettings": map[string]any{"acceptProxyProtocol": false, "header": map[string]any{"type": "none"}},
+			},
+		}), nil
+	}
+
+	// Non-Hysteria2 TLS protocols: vless-ws-tls, vmess-ws-tls, trojan-tls
+	if TemplateUsesTLS(in.Template) {
+		if err := ValidateHysteriaTLS(in.SNI, in.TLSCertFile, in.TLSKeyFile); err != nil {
+			return nil, err
+		}
+		tlsSettings := map[string]any{
+			"serverName":   in.SNI,
+			"minVersion":   "1.2",
+			"certificates": []any{map[string]any{"certificateFile": in.TLSCertFile, "keyFile": in.TLSKeyFile}},
+		}
+		stream := map[string]any{"security": "tls", "tlsSettings": tlsSettings}
+		switch in.Template {
+		case TemplateVLESSWSTLS:
+			wsPath := in.Path
+			if wsPath == "" {
+				wsPath = "/ws"
+			}
+			wsSettings := map[string]any{"path": wsPath}
+			if h := strings.TrimSpace(in.Host); h != "" {
+				wsSettings["host"] = h
+			}
+			stream["network"] = "ws"
+			stream["wsSettings"] = wsSettings
+			clients := make([]any, 0, len(in.Users))
+			for _, u := range in.Users {
+				clients = append(clients, map[string]any{"id": u.UUID, "email": u.Email, "level": 0})
+			}
+			return attachListen(map[string]any{
+				"tag": in.Tag, "port": in.Port, "protocol": "vless",
+				"settings": map[string]any{"clients": clients, "decryption": "none"},
+				"sniffing": sniffing, "streamSettings": stream,
+			}), nil
+		case TemplateVMessWSTLS:
+			wsPath := in.Path
+			if wsPath == "" {
+				wsPath = "/vmess"
+			}
+			wsSettings := map[string]any{"path": wsPath}
+			if h := strings.TrimSpace(in.Host); h != "" {
+				wsSettings["host"] = h
+			}
+			stream["network"] = "ws"
+			stream["wsSettings"] = wsSettings
+			clients := make([]any, 0, len(in.Users))
+			for _, u := range in.Users {
+				clients = append(clients, map[string]any{"id": u.UUID, "email": u.Email, "level": 0})
+			}
+			return attachListen(map[string]any{
+				"tag": in.Tag, "port": in.Port, "protocol": "vmess",
+				"settings": map[string]any{"clients": clients},
+				"sniffing": sniffing, "streamSettings": stream,
+			}), nil
+		case TemplateTrojanTLS:
+			stream["network"] = "raw"
+			stream["rawSettings"] = map[string]any{"acceptProxyProtocol": false, "header": map[string]any{"type": "none"}}
+			clients := make([]any, 0, len(in.Users))
+			for _, u := range in.Users {
+				clients = append(clients, map[string]any{"password": u.UUID, "email": u.Email, "level": 0})
+			}
+			return attachListen(map[string]any{
+				"tag": in.Tag, "port": in.Port, "protocol": "trojan",
+				"settings": map[string]any{"clients": clients},
+				"sniffing": sniffing, "streamSettings": stream,
+			}), nil
+		}
+	}
+
+	// Reality protocols: vless-reality-vision, vless-xhttp-reality, vless-grpc-reality, trojan-reality
 	host, port, err := net.SplitHostPort(in.Target)
 	if err != nil || host == "" || port == "" {
 		return nil, fmt.Errorf("伪装目标需为 host:port")
@@ -101,13 +231,33 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 	if normalizeErr != nil {
 		return nil, normalizeErr
 	}
-	listen, normalizeErr := NormalizeListen(in.Listen)
-	if normalizeErr != nil {
-		return nil, normalizeErr
-	}
 	if _, err := PublicKeyFor(in.PrivateKey); err != nil {
 		return nil, fmt.Errorf("Reality 私钥无效")
 	}
+	reality := map[string]any{
+		"show":        false,
+		"target":      target,
+		"xver":        0,
+		"serverNames": strings.Split(sni, ","),
+		"privateKey":  in.PrivateKey,
+		"shortIds":    strings.Split(shortIDs, ","),
+	}
+	stream := map[string]any{"security": "reality", "realitySettings": reality}
+
+	if in.Template == TemplateTrojanReality {
+		stream["network"] = "raw"
+		stream["rawSettings"] = map[string]any{"acceptProxyProtocol": false, "header": map[string]any{"type": "none"}}
+		clients := make([]any, 0, len(in.Users))
+		for _, u := range in.Users {
+			clients = append(clients, map[string]any{"password": u.UUID, "email": u.Email, "level": 0})
+		}
+		return attachListen(map[string]any{
+			"tag": in.Tag, "port": in.Port, "protocol": "trojan",
+			"settings": map[string]any{"clients": clients},
+			"sniffing": sniffing, "streamSettings": stream,
+		}), nil
+	}
+
 	flow := ""
 	if in.Template == TemplateRealityVision {
 		flow = "xtls-rprx-vision"
@@ -120,15 +270,6 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 		}
 		clients = append(clients, client)
 	}
-	reality := map[string]any{
-		"show":        false,
-		"target":      target,
-		"xver":        0,
-		"serverNames": strings.Split(sni, ","),
-		"privateKey":  in.PrivateKey,
-		"shortIds":    strings.Split(shortIDs, ","),
-	}
-	stream := map[string]any{"security": "reality", "realitySettings": reality}
 	switch in.Template {
 	case TemplateRealityVision:
 		stream["network"] = "raw"
@@ -140,20 +281,22 @@ func buildInbound(in InboundSpec) (map[string]any, error) {
 		}
 		stream["network"] = "xhttp"
 		stream["xhttpSettings"] = map[string]any{"path": path, "mode": "auto"}
+	case TemplateGRPCReality:
+		svc := strings.TrimPrefix(strings.TrimSpace(in.Path), "/")
+		if svc == "" {
+			svc = "grpc"
+		}
+		stream["network"] = "grpc"
+		stream["grpcSettings"] = map[string]any{"serviceName": svc}
 	default:
 		return nil, fmt.Errorf("未知模板 %s", in.Template)
 	}
-	item := map[string]any{
+	return attachListen(map[string]any{
 		"tag":            in.Tag,
 		"port":           in.Port,
 		"protocol":       "vless",
 		"settings":       map[string]any{"clients": clients, "decryption": "none"},
-		"sniffing":       map[string]any{"enabled": true, "destOverride": []string{"http", "tls", "quic"}, "routeOnly": true},
+		"sniffing":       sniffing,
 		"streamSettings": stream,
-	}
-	// Omit the default listener, as x-ui does. Xray panics on an explicit empty string.
-	if listen != "" {
-		item["listen"] = listen
-	}
-	return item, nil
+	}), nil
 }

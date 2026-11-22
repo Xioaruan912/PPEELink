@@ -300,6 +300,8 @@ func handleAgentOp(ctx context.Context, op string, payload json.RawMessage) (jso
 			return nil, errors.New("文件请求格式无效")
 		}
 		return handleAgentFiles(req)
+	case "china_ping":
+		return handleAgentChinaPing(ctx, payload)
 	default:
 		return nil, errors.New("不支持的 agent 操作")
 	}

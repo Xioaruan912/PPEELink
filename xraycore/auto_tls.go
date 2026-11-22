@@ -125,8 +125,8 @@ func prepareAutoTLS(dir string, spec Spec) (Spec, map[string]string, error) {
 		if in.TLSAutoID == "" {
 			continue
 		}
-		if in.Template != TemplateHysteria2 {
-			return spec, nil, fmt.Errorf("自动证书仅支持 Hysteria2")
+		if !TemplateUsesTLS(in.Template) {
+			return spec, nil, fmt.Errorf("自动证书仅支持 TLS 类入站协议")
 		}
 		cert, key, public, e := ensureAutoTLS(dir, in.TLSAutoID)
 		if e != nil {
