@@ -141,11 +141,25 @@ function directions(
   ];
 }
 
-function toggleSource(id: number) {
-  if (settings.sourceIds.includes(id)) {
-    settings.sourceIds = settings.sourceIds.filter((x) => x !== id);
-  } else if (settings.sourceIds.length < 8) {
-    settings.sourceIds = [...settings.sourceIds, id];
+const landingCandidates = computed(() =>
+  sources.value.filter((s) => s.id !== settings.sourceIds[0])
+);
+
+function selectSource(id: number) {
+  if (settings.sourceIds[0] === id) return;
+  settings.sourceIds = [id];
+  if (settings.landingId === id) {
+    const other = sources.value.find((s) => s.id !== id);
+    settings.landingId = other ? other.id : 0;
+  }
+}
+
+function selectLanding(id: number) {
+  if (settings.landingId === id) return;
+  settings.landingId = id;
+  if (settings.sourceIds[0] === id) {
+    const other = sources.value.find((s) => s.id !== id);
+    settings.sourceIds = other ? [other.id] : [];
   }
 }
 
@@ -362,14 +376,16 @@ onBeforeUnmount(() => {
     <section class="simple-picker">
       <div class="picker-col">
         <span class="picker-label">测试起点（中转）</span>
-        <div v-if="candidates.length" class="chip-rail">
+        <div v-if="candidates.length" class="chip-rail" role="radiogroup" aria-label="测试起点">
           <button
             v-for="s in candidates"
             :key="s.id"
             type="button"
+            role="radio"
             class="srv-pill"
-            :class="{ 'is-active': settings.sourceIds.includes(s.id) }"
-            @click="toggleSource(s.id)"
+            :class="{ 'is-active': settings.sourceIds[0] === s.id }"
+            :aria-checked="settings.sourceIds[0] === s.id"
+            @click="selectSource(s.id)"
           >
             <i class="s-dot" :class="s.available ? 'is-ok' : 'is-off'"></i>
             <span>{{ s.name }}</span>
@@ -384,14 +400,16 @@ onBeforeUnmount(() => {
 
       <div class="picker-col">
         <span class="picker-label">目标终点（落地）</span>
-        <div v-if="sources.length" class="chip-rail">
+        <div v-if="landingCandidates.length" class="chip-rail" role="radiogroup" aria-label="目标终点">
           <button
-            v-for="s in sources"
+            v-for="s in landingCandidates"
             :key="s.id"
             type="button"
+            role="radio"
             class="srv-pill"
             :class="{ 'is-active': settings.landingId === s.id }"
-            @click="settings.landingId = s.id"
+            :aria-checked="settings.landingId === s.id"
+            @click="selectLanding(s.id)"
           >
             <i class="s-dot" :class="s.available ? 'is-ok' : 'is-off'"></i>
             <span>{{ s.name }}</span>

@@ -8,7 +8,8 @@ import {
   diagnosticVerdict,
   canOpenDiagnosticDetails,
 } from "./diagnosticBatch";
-import { getNodes } from "@/api/subcription/node";
+import { getNodes, getNodeOverview } from "@/api/subcription/node";
+import { countryFlag } from "@/utils/flag";
 import { UiButton, UiDrawer } from "@/ui";
 import KineticNotice from "@/ui/KineticNotice.vue";
 import {
@@ -30,6 +31,15 @@ const selected = ref<number>();
 const link = ref("");
 const target = ref("cloudflare");
 const nodes = ref<{ ID: number; Name: string; Link: string }[]>([]);
+const countryMap = ref<Map<number, string>>(new Map());
+const hasFlagEmoji = (s: string) => /\p{RI}{2}/u.test(s);
+function displayNodeName(id: number, name: string) {
+  if (!name || hasFlagEmoji(name)) return name;
+  const code = countryMap.value.get(id);
+  if (!code) return name;
+  const flag = countryFlag(code);
+  return flag ? `${flag} ${name}` : name;
+}
 const loading = ref(false);
 const listError = ref("");
 const error = ref("");
@@ -241,8 +251,19 @@ const supported = computed(() =>
 async function load() {
   listError.value = "";
   try {
-    const response = await getNodes(true);
-    nodes.value = Array.isArray(response.data) ? response.data : [];
+    const [nodeRes, overviewRes] = await Promise.allSettled([
+      getNodes(true),
+      getNodeOverview(),
+    ]);
+    if (nodeRes.status !== "fulfilled") throw nodeRes.reason;
+    nodes.value = Array.isArray(nodeRes.value.data) ? nodeRes.value.data : [];
+    if (overviewRes.status === "fulfilled" && Array.isArray(overviewRes.value.data)) {
+      const m = new Map<number, string>();
+      for (const item of overviewRes.value.data) {
+        if (item?.id && item?.countryCode) m.set(item.id, item.countryCode);
+      }
+      countryMap.value = m;
+    }
     if (!selected.value && supported.value.length) {
       selected.value = supported.value[0].ID;
     }
@@ -302,7 +323,7 @@ async function runAll() {
   const batchTarget = target.value;
   batchRows.value = nodes.value.map((n) => ({
     id: n.ID,
-    name: n.Name,
+    name: displayNodeName(n.ID, n.Name),
     status: "waiting",
     note: "",
   }));
@@ -495,7 +516,7 @@ onBeforeUnmount(() => {
             v-for="n in supported"
             :key="n.ID"
             :value="n.ID"
-            :label="n.Name"
+            :label="displayNodeName(n.ID, n.Name)"
           />
         </el-select>
         <el-input

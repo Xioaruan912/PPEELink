@@ -235,8 +235,14 @@ async function loadSources() {
       sourceError.value = "无法读取追踪来源";
     }
     if (nodeRes.status === "fulfilled") {
+      const seenServers = new Set<string>();
       panelNodes.value = (nodeRes.value.data || [])
-        .filter((n: any) => n.server)
+        .filter((n: any) => {
+          const srv = String(n?.server || "").trim().toLowerCase();
+          if (!srv || seenServers.has(srv)) return false;
+          seenServers.add(srv);
+          return true;
+        })
         .map((n: any) => ({ id: n.id, name: n.name, server: n.server }));
     }
   } finally {

@@ -31,10 +31,21 @@ interface Point {
   viewId: number;
   source: string;
   hop: TraceHop;
+  ttls: number[];
   x: number;
   y: number;
   color: string;
   index: number;
+}
+
+function formatTtlRange(ttls: number[]) {
+  if (!ttls.length) return "#?";
+  if (ttls.length === 1) return `#${ttls[0]}`;
+  const first = ttls[0];
+  const last = ttls[ttls.length - 1];
+  return last - first + 1 === ttls.length
+    ? `#${first}–${last}`
+    : `#${ttls.join(",")}`;
 }
 
 function positioned(h: TraceHop): boolean {
@@ -51,26 +62,34 @@ function positioned(h: TraceHop): boolean {
 }
 
 const routes = computed(() =>
-  props.views.map((view, i) => ({
-    ...view,
-    color: colors[i % colors.length],
-    points: view.hops.flatMap((hop, index): Point[] =>
-      positioned(hop)
-        ? [
-            {
-              key: `${view.id}-${index}`,
-              viewId: view.id,
-              source: view.sourceName,
-              hop,
-              index,
-              color: colors[i % colors.length],
-              x: ((hop.longitude! + 180) / 360) * 1000,
-              y: ((90 - hop.latitude!) / 180) * 500,
-            },
-          ]
-        : []
-    ),
-  }))
+  props.views.map((view, i) => {
+    const color = colors[i % colors.length];
+    const pts: Point[] = [];
+    const byIp = new Map<string, Point>();
+    view.hops.forEach((hop, index) => {
+      if (!positioned(hop)) return;
+      const ipKey = (hop.ip || "").trim().toLowerCase();
+      if (ipKey && byIp.has(ipKey)) {
+        const existing = byIp.get(ipKey)!;
+        if (!existing.ttls.includes(hop.ttl)) existing.ttls.push(hop.ttl);
+        return;
+      }
+      const pt: Point = {
+        key: `${view.id}-${index}`,
+        viewId: view.id,
+        source: view.sourceName,
+        hop,
+        ttls: [hop.ttl],
+        index,
+        color,
+        x: ((hop.longitude! + 180) / 360) * 1000,
+        y: ((90 - hop.latitude!) / 180) * 500,
+      };
+      if (ipKey) byIp.set(ipKey, pt);
+      pts.push(pt);
+    });
+    return { ...view, color, points: pts };
+  })
 );
 
 const visibleRoutes = computed(() =>
@@ -177,10 +196,121 @@ const lines = computed(() =>
   )
 );
 
+interface JumpOrb {
+  key: string;
+  x: number;
+  y: number;
+  color: string;
+}
+
+const isPlaying = ref(false);
+const jumpOrbs = ref<JumpOrb[]>([]);
+const activeJumpKeys = ref<Set<string>>(new Set());
+const jumpBanner = ref("");
+let rafId: number | null = null;
+
+function stopHopAnimation() {
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
+  isPlaying.value = false;
+  jumpOrbs.value = [];
+  activeJumpKeys.value = new Set();
+  jumpBanner.value = "";
+}
+
+function evalArcPoint(a: Point, b: Point, t: number): { x: number; y: number } {
+  let endX = b.x;
+  const diff = endX - a.x;
+  if (diff > 500) endX -= 1000;
+  else if (diff < -500) endX += 1000;
+  const ctrlX = (a.x + endX) / 2;
+  const bend = Math.min(36, Math.max(8, Math.abs(endX - a.x) * 0.12));
+  const ctrlY = (a.y + b.y) / 2 - bend;
+  const u = 1 - t;
+  let x = u * u * a.x + 2 * u * t * ctrlX + t * t * endX;
+  const y = u * u * a.y + 2 * u * t * ctrlY + t * t * b.y;
+  if (x < 0) x += 1000;
+  if (x > 1000) x -= 1000;
+  return { x, y };
+}
+
+function playHopAnimation() {
+  stopHopAnimation();
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const playable = visibleRoutes.value.filter((v) => v.points.length >= 2);
+  if (!playable.length) return;
+
+  isPlaying.value = true;
+  const segMs = 620;
+  const maxSegs = Math.max(...playable.map((v) => v.points.length - 1));
+  const totalMs = maxSegs * segMs + 400;
+  const startAt = performance.now();
+
+  const tick = (now: number) => {
+    const elapsed = now - startAt;
+    if (elapsed >= totalMs) {
+      stopHopAnimation();
+      return;
+    }
+    const orbs: JumpOrb[] = [];
+    const arrived = new Set<string>();
+    let latestBanner = "";
+
+    for (const r of playable) {
+      const segCount = r.points.length - 1;
+      const segFloat = Math.min(segCount, elapsed / segMs);
+      const segIdx = Math.min(segCount - 1, Math.floor(segFloat));
+      const localT = Math.min(1, Math.max(0, segFloat - segIdx));
+      const eased =
+        localT < 0.5
+          ? 2 * localT * localT
+          : 1 - Math.pow(-2 * localT + 2, 2) / 2;
+
+      for (let k = 0; k <= segIdx; k++) {
+        arrived.add(r.points[k].key);
+      }
+      if (localT >= 0.88) {
+        arrived.add(r.points[segIdx + 1].key);
+      }
+
+      const pos = evalArcPoint(r.points[segIdx], r.points[segIdx + 1], eased);
+      orbs.push({ key: `orb-${r.id}`, x: pos.x, y: pos.y, color: r.color });
+
+      const targetPt = r.points[Math.min(r.points.length - 1, segIdx + 1)];
+      if (!latestBanner && targetPt) {
+        const loc = location(targetPt.hop) || targetPt.hop.ip || "跳点";
+        const rtt =
+          targetPt.hop.rtt === null ? "" : ` · ${targetPt.hop.rtt.toFixed(1)} ms`;
+        latestBanner = `${formatTtlRange(targetPt.ttls)} ${loc}${rtt}`;
+      }
+    }
+
+    jumpOrbs.value = orbs;
+    activeJumpKeys.value = arrived;
+    jumpBanner.value = latestBanner;
+    rafId = requestAnimationFrame(tick);
+  };
+
+  rafId = requestAnimationFrame(tick);
+}
+
+watch(
+  () => props.running,
+  (now, prev) => {
+    if (prev && !now && visibleRoutes.value.some((v) => v.points.length >= 2)) {
+      fit();
+      playHopAnimation();
+    }
+  }
+);
+
 watch(
   () => props.views,
   (next, old) => {
     if (next.map((v) => v.id).join(",") !== old?.map((v) => v.id).join(",")) {
+      stopHopAnimation();
       hidden.value = [];
       selected.value = "";
       reset();
@@ -221,6 +351,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   disposed = true;
+  stopHopAnimation();
 });
 </script>
 
@@ -342,31 +473,75 @@ onBeforeUnmount(() => {
             v-for="p in points"
             :key="p.key"
             class="map-hop"
-            :class="{ 'is-selected': current?.key === p.key }"
+            :class="{
+              'is-selected': current?.key === p.key,
+              'is-arrived': activeJumpKeys.has(p.key),
+            }"
             :style="{ '--hop-color': p.color }"
             tabindex="0"
             role="button"
             @click.stop="choose(p.key)"
             @keydown.enter.prevent="choose(p.key)"
           >
-            <title>{{ p.source }} #{{ p.hop.ttl }} {{ p.hop.ip }}</title>
+            <title>{{ p.source }} {{ formatTtlRange(p.ttls) }} {{ p.hop.ip }}</title>
             <circle :cx="p.x" :cy="p.y" :r="15 / zoom" class="hop-hit" />
             <circle :cx="p.x" :cy="p.y" :r="9.5 / zoom" class="hop-halo" />
             <circle :cx="p.x" :cy="p.y" :r="5 / zoom" class="hop-dot" />
+          </g>
+
+          <!-- Animated Hop-by-Hop Jumping Tracer Orbs -->
+          <g v-if="jumpOrbs.length" class="jump-layer" aria-hidden="true">
+            <g v-for="orb in jumpOrbs" :key="orb.key">
+              <circle
+                :cx="orb.x"
+                :cy="orb.y"
+                :r="14 / zoom"
+                :fill="orb.color"
+                opacity="0.24"
+              />
+              <circle
+                :cx="orb.x"
+                :cy="orb.y"
+                :r="7.5 / zoom"
+                :fill="orb.color"
+                opacity="0.52"
+              />
+              <circle
+                :cx="orb.x"
+                :cy="orb.y"
+                :r="4.2 / zoom"
+                fill="#ffffff"
+                :stroke="orb.color"
+                :stroke-width="2 / zoom"
+              />
+            </g>
           </g>
         </g>
       </svg>
 
       <!-- Floating Top-Right Controls -->
       <div class="floating-controls">
+        <button
+          v-if="located >= 2"
+          type="button"
+          aria-label="重播跳点动画"
+          @click="playHopAnimation"
+        >
+          {{ isPlaying ? "播放中" : "▶ 重播" }}
+        </button>
         <button type="button" aria-label="放大" @click="setZoom(0.5)">+</button>
         <button type="button" aria-label="缩小" @click="setZoom(-0.5)">−</button>
         <button type="button" aria-label="适应路径" @click="fit">适应</button>
         <button type="button" aria-label="重置" @click="reset">全图</button>
       </div>
 
+      <!-- Live Jumping Hop Banner -->
+      <div v-if="isPlaying && jumpBanner" class="map-hint is-jumping">
+        <i aria-hidden="true"></i>
+        <span class="mono">{{ jumpBanner }}</span>
+      </div>
       <!-- Subtle Hint When No Hop Selected -->
-      <div v-if="!current && !located" class="map-hint">
+      <div v-else-if="!current && !located" class="map-hint">
         <i aria-hidden="true"></i>
         <span>{{ running ? "正在追踪全球路由跳点…" : "选择目标并点击开始追踪" }}</span>
       </div>
@@ -381,7 +556,7 @@ onBeforeUnmount(() => {
           <div class="hop-card-top">
             <span class="hop-ttl mono">
               <i :style="{ background: current.color }"></i>
-              #{{ current.hop.ttl }} · {{ current.source }}
+              {{ formatTtlRange(current.ttls) }} · {{ current.source }}
             </span>
             <button
               type="button"
@@ -741,6 +916,20 @@ onBeforeUnmount(() => {
 
 .legend-pill.is-muted {
   opacity: 0.45;
+}
+
+.map-hop.is-arrived .hop-halo {
+  opacity: 0.42;
+  transition: opacity 260ms ease;
+}
+
+.map-hint.is-jumping {
+  color: var(--c-ink);
+  font-weight: 500;
+}
+
+.map-hint.is-jumping i {
+  background: #10b981;
 }
 
 .hop-pop-enter-active,

@@ -22,8 +22,8 @@ type ChinaPingTarget struct {
 	Lng      float64 `json:"lng"`
 	IP       string  `json:"ip"`
 	Port     int     `json:"port"`
-	OK       bool    `json:"ok"` // 经节点能连上即可达；连不上通常说明节点 IP 被墙或线路异常
-	Rtt      int     `json:"-"`  // 毫秒，-1 失败；仅用于判断可达，不对外展示
+	OK       bool    `json:"ok"`  // 经节点能连上即可达；连不上通常说明节点 IP 被墙或线路异常
+	Rtt      int     `json:"rtt"` // 毫秒，-1 失败
 }
 
 // ChinaPingResult 国内可达性检测总结果
@@ -38,7 +38,7 @@ type ChinaPingResult struct {
 type ZStaticResult struct {
 	Port int  `json:"port"`
 	OK   bool `json:"ok"`
-	Rtt  int  `json:"-"`
+	Rtt  int  `json:"rtt"`
 }
 
 // RunChinaPing 经节点连接国内各省运营商与 zstaticcdn，检测是否可达。
