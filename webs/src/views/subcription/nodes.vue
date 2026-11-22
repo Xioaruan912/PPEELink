@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import gsap from "gsap";
 import { Plus, Refresh, Search, MoreFilled } from "@element-plus/icons-vue";
 import { UiButton, UiSkeleton, UiDrawer, EmptyState } from "@/ui";
+import { countryFlag } from "@/utils/flag";
 import IconPulse from "~icons/ph/pulse";
 import { useMotion } from "@/motion";
 import NodeUnlockDialog from "@/components/NodeUnlockDialog.vue";
@@ -29,7 +30,6 @@ const {
   filterCountries,
   countryOptions,
   filteredNodes,
-  groupTree,
   selectedCount,
   allSelected,
   toggleNodes,
@@ -39,7 +39,6 @@ const {
   checking,
   checkValidity,
   handleAddNode,
-  openGroupManager,
   copySelected,
   bulk,
   openPause,
@@ -49,6 +48,36 @@ const {
   testNode,
   openTool,
 } = provideNodes();
+
+const countryPills = computed(() => {
+  const counts = new Map<string, { name: string; code: string; count: number }>();
+  for (const n of overviewList.value) {
+    const name = n.country || "未知";
+    const entry = counts.get(name);
+    if (entry) {
+      entry.count++;
+    } else {
+      counts.set(name, { name, code: n.countryCode || "", count: 1 });
+    }
+  }
+  return [...counts.values()].sort(
+    (a, b) => b.count - a.count || a.name.localeCompare(b.name, "zh-CN")
+  );
+});
+
+function selectCountryPill(country: string) {
+  activeGroup.value = "全部";
+  if (!country) {
+    filterCountries.value = [];
+  } else if (
+    filterCountries.value.length === 1 &&
+    filterCountries.value[0] === country
+  ) {
+    filterCountries.value = [];
+  } else {
+    filterCountries.value = [country];
+  }
+}
 
 const compatibilityOpen = ref(false);
 const compatibilityIds = ref<number[]>([]);
@@ -233,8 +262,8 @@ function leaveBar(element: Element, done: () => void) {
               <dd class="is-warn">{{ blockedCount }}</dd>
             </div>
             <div data-metric-item>
-              <dt>分组</dt>
-              <dd>{{ loading || loadError ? "—" : groupTree.length }}</dd>
+              <dt>地区</dt>
+              <dd>{{ loading || loadError ? "—" : countryPills.length }}</dd>
             </div>
           </dl>
         </div>
@@ -263,17 +292,12 @@ function leaveBar(element: Element, done: () => void) {
           trigger="click"
           @command="
             (cmd: string) =>
-              cmd === 'dedupe'
-                ? openTool('dedupe', [])
-                : cmd === 'groups'
-                  ? openGroupManager()
-                  : loadAll()
+              cmd === 'dedupe' ? openTool('dedupe', []) : loadAll()
           "
         >
           <UiButton variant="ghost" :icon="MoreFilled">更多</UiButton>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item command="groups">管理分组…</el-dropdown-item>
               <el-dropdown-item command="dedupe" :disabled="loading || busy">
                 去除重复节点
               </el-dropdown-item>
@@ -291,58 +315,39 @@ function leaveBar(element: Element, done: () => void) {
       <header class="ledger-bar">
         <span class="bar-top-rule" data-top-rule aria-hidden="true"></span>
 
-        <div class="group-pills" role="tablist" aria-label="节点分组筛选">
+        <div class="group-pills" role="tablist" aria-label="按国家/地区筛选节点">
           <button
             type="button"
             role="tab"
             class="group-pill"
-            :class="{ 'is-active': activeGroup === '全部' }"
-            :aria-selected="activeGroup === '全部'"
-            @click="activeGroup = '全部'"
+            :class="{ 'is-active': !filterCountries.length }"
+            :aria-selected="!filterCountries.length"
+            @click="selectCountryPill('')"
           >
-            <span>全部</span>
+            <span>全部地区</span>
             <small class="mono">{{ overviewList.length }}</small>
           </button>
           <button
-            v-for="group in groupTree"
-            :key="group.name"
+            v-for="c in countryPills"
+            :key="c.name"
             type="button"
             role="tab"
             class="group-pill"
-            :class="{ 'is-active': activeGroup === group.name }"
-            :aria-selected="activeGroup === group.name"
-            @click="activeGroup = group.name"
+            :class="{
+              'is-active':
+                filterCountries.length === 1 && filterCountries[0] === c.name,
+            }"
+            :aria-selected="
+              filterCountries.length === 1 && filterCountries[0] === c.name
+            "
+            @click="selectCountryPill(c.name)"
           >
-            <span>{{ group.name }}</span>
-            <small class="mono">{{ group.count }}</small>
-          </button>
-          <button
-            type="button"
-            class="group-manage-link"
-            @click="openGroupManager()"
-          >
-            管理分组
+            <span>{{ countryFlag(c.code) }} {{ c.name }}</span>
+            <small class="mono">{{ c.count }}</small>
           </button>
         </div>
 
         <div class="bar-right">
-          <el-select
-            v-model="filterCountries"
-            class="country-select"
-            multiple
-            collapse-tags
-            clearable
-            placeholder="国家 / 地区"
-            aria-label="国家筛选"
-          >
-            <el-option
-              v-for="country in countryOptions"
-              :key="country"
-              :label="country"
-              :value="country"
-            />
-          </el-select>
-
           <label class="inline-search">
             <Search class="search-icon" aria-hidden="true" />
             <input
@@ -451,12 +456,6 @@ function leaveBar(element: Element, done: () => void) {
                 >
                 <el-dropdown-item command="flags" :disabled="busy"
                   >连接开关…</el-dropdown-item
-                >
-                <el-dropdown-item
-                  v-if="activeGroup !== '全部'"
-                  command="unbind"
-                  :disabled="busy"
-                  >移出当前分组</el-dropdown-item
                 >
                 <el-dropdown-item command="pause" divided :disabled="busy"
                   >暂停下发…</el-dropdown-item

@@ -125,7 +125,8 @@ func applyProbeResults(items []NodeOverviewItem) {
 		panelValid := item.Valid
 		policy := item.ProbePolicy
 		if policy == "" {
-			policy = "panel"
+			// 默认任一视角（面板或任一在线 Agent）连通即有效，兼容仅限国内入口的专线节点。
+			policy = "any"
 		}
 		statuses := make([]ProbeStatus, 0, len(agents))
 		allOK, anyOK, bestRTT := true, false, 0

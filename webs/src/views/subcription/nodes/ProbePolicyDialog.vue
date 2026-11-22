@@ -12,24 +12,24 @@ const {
 
 const options = [
   {
-    value: "panel",
-    label: "只看面板",
-    hint: "和以前一样，只由面板服务器连接节点端口判断。",
-  },
-  {
     value: "any",
-    label: "任一视角通过",
-    hint: "面板或任意一个自建服务器 agent 连上即有效，适合 IPv6-only 或跨网络节点。",
-  },
-  {
-    value: "all",
-    label: "所有视角通过",
-    hint: "面板和所有在线 agent 都通过才算有效，最严格。",
+    label: "任一视角可达（推荐 · 兼容专线）",
+    hint: "面板或任意一台在线 Agent（如国内入口机）连通即判定有效，不会因海外面板连不上国内专线而误判无效。",
   },
   {
     value: "manual",
-    label: "手动有效",
-    hint: "不自动判无效，节点始终下发；检测结果只展示。",
+    label: "始终有效（手动放行）",
+    hint: "不自动判无效，节点始终下发；适合禁 ping 或严格白名单节点。",
+  },
+  {
+    value: "panel",
+    label: "仅看面板服务器",
+    hint: "只由面板所在服务器直接连接节点端口判断。",
+  },
+  {
+    value: "all",
+    label: "所有视角全部通过",
+    hint: "面板和所有在线 Agent 都连通才算有效，最严格。",
   },
 ] as const;
 </script>

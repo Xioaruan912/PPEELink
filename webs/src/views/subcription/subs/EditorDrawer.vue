@@ -22,11 +22,8 @@ const {
 } = useSubscriptions();
 
 const sourceBadge = computed(() => {
-  const g = selectedGroups.value.length;
   const n = value1.value.length;
-  if (!g && !n) return "";
-  if (g && n) return `${g}组·${n}点`;
-  return g ? `${g}组` : `${n}点`;
+  return n ? String(n) : "";
 });
 
 const sections = computed(() => [

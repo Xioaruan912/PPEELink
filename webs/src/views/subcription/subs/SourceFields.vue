@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { Search, Check } from "@element-plus/icons-vue";
 import { EmptyState } from "@/ui";
+import { countryFlag } from "@/utils/flag";
 import { useSubscriptions } from "./useSubscriptions";
 import { VueDraggable } from "vue-draggable-plus";
 import { usePrefersReducedMotion } from "@/motion";
@@ -15,23 +16,57 @@ const {
   nodeQuality,
   nodeQualityByName,
   validLabel,
-  groupedNodes,
   removeNode,
   selectAllNodes,
-  selectGroupNodes,
   clearAllNodes,
   moveNode,
 } = useSubscriptions();
 
 const nodeQuery = ref("");
-const activeGroup = ref("");
+const activeCountry = ref("");
 
-function toggleGroup(id: number) {
-  const idx = selectedGroups.value.indexOf(id);
-  if (idx >= 0) {
-    selectedGroups.value.splice(idx, 1);
+interface CountryBucket {
+  country: string;
+  code: string;
+  nodes: typeof NodesList.value;
+}
+
+const countryBuckets = computed<CountryBucket[]>(() => {
+  const map = new Map<string, CountryBucket>();
+  for (const n of NodesList.value) {
+    const q = nodeQuality(n);
+    const country = q?.country || "未知地区";
+    const code = q?.countryCode || "";
+    let bucket = map.get(country);
+    if (!bucket) {
+      bucket = { country, code, nodes: [] };
+      map.set(country, bucket);
+    }
+    bucket.nodes.push(n);
+  }
+  return [...map.values()].sort(
+    (a, b) => b.nodes.length - a.nodes.length || a.country.localeCompare(b.country, "zh-CN")
+  );
+});
+
+function countrySelectedCount(bucket: CountryBucket) {
+  const picked = new Set(value1.value);
+  return bucket.nodes.filter((n) => picked.has(n.Name)).length;
+}
+
+function toggleCountryAll(bucket: CountryBucket) {
+  const picked = new Set(value1.value);
+  const allPicked = bucket.nodes.every((n) => picked.has(n.Name));
+  if (allPicked) {
+    const toRemove = new Set(bucket.nodes.map((n) => n.Name));
+    value1.value = value1.value.filter((name) => !toRemove.has(name));
   } else {
-    selectedGroups.value.push(id);
+    for (const n of bucket.nodes) {
+      if (!picked.has(n.Name)) {
+        value1.value.push(n.Name);
+        picked.add(n.Name);
+      }
+    }
   }
 }
 
@@ -43,96 +78,66 @@ function toggleNode(name: string) {
   }
 }
 
-const visibleNodes = computed(() => {
-  const q = nodeQuery.value.trim().toLowerCase();
-  const groups = activeGroup.value
-    ? groupedNodes.value.filter((g) => g.name === activeGroup.value)
-    : groupedNodes.value;
-  const seen = new Set<string>();
-  const list: typeof NodesList.value = [];
-  for (const g of groups) {
-    for (const n of g.nodes) {
-      if (seen.has(n.Name)) continue;
-      if (q && !n.Name.toLowerCase().includes(q)) continue;
-      seen.add(n.Name);
-      list.push(n);
+function flattenLegacyGroups() {
+  const groupNames = new Set(
+    allGroups.value
+      .filter((g) => selectedGroups.value.includes(g.ID))
+      .map((g) => g.Name)
+  );
+  const picked = new Set(value1.value);
+  for (const n of NodesList.value) {
+    const inLegacy = (n.GroupNodes || []).some((g) => groupNames.has(g.Name));
+    if (inLegacy && !picked.has(n.Name)) {
+      value1.value.push(n.Name);
+      picked.add(n.Name);
     }
   }
-  return list;
-});
+  selectedGroups.value = [];
+}
 
-const activeGroupObj = computed(() =>
-  groupedNodes.value.find((g) => g.name === activeGroup.value)
-);
+const visibleNodes = computed(() => {
+  const q = nodeQuery.value.trim().toLowerCase();
+  const list = activeCountry.value
+    ? countryBuckets.value.find((b) => b.country === activeCountry.value)?.nodes || []
+    : NodesList.value;
+  if (!q) return list;
+  return list.filter((n) => {
+    const meta = nodeQuality(n);
+    return (
+      n.Name.toLowerCase().includes(q) ||
+      (meta?.country || "").toLowerCase().includes(q)
+    );
+  });
+});
 </script>
 
 <template>
   <div class="sources-layout">
-    <!-- Block 1: Dynamic Node Groups -->
+    <!-- Legacy group compatibility notice (only for old subscriptions that still have GroupRefs) -->
+    <div v-if="selectedGroups.length" class="legacy-banner">
+      <span>
+        该订阅仍保留 {{ selectedGroups.length }} 个旧版手动分组绑定，可一键转换为节点清单。
+      </span>
+      <button type="button" class="legacy-btn" @click="flattenLegacyGroups">
+        展平并移除旧分组
+      </button>
+    </div>
+
+    <!-- Block 1: Country / Region Quick Select -->
     <section class="source-block">
       <header class="block-head">
         <div>
-          <h3 class="block-title">关联动态分组</h3>
-          <p class="block-sub">
-            勾选后拉取订阅时自动跟进分组内的最新节点
-          </p>
-        </div>
-        <span v-if="selectedGroups.length" class="block-pill mono">
-          已选 {{ selectedGroups.length }} 组
-        </span>
-      </header>
-
-      <div v-if="allGroups.length" class="group-grid">
-        <button
-          v-for="g in allGroups"
-          :key="g.ID"
-          type="button"
-          class="group-card"
-          :class="{ 'is-selected': selectedGroups.includes(g.ID) }"
-          :aria-pressed="selectedGroups.includes(g.ID)"
-          @click="toggleGroup(g.ID)"
-        >
-          <div class="group-card-main">
-            <strong class="group-card-name">{{ g.Name }}</strong>
-            <span class="group-card-count mono">{{ g.NodeCount }} 节点</span>
-          </div>
-          <span class="check-circle" aria-hidden="true">
-            <el-icon v-if="selectedGroups.includes(g.ID)"><Check /></el-icon>
-          </span>
-        </button>
-      </div>
-
-      <EmptyState
-        v-else
-        size="section"
-        title="暂无节点分组"
-        description="创建分组后可自动同步节点变化。"
-      />
-    </section>
-
-    <!-- Block 2: Fixed Nodes Picker -->
-    <section class="source-block">
-      <header class="block-head">
-        <div>
-          <h3 class="block-title">固定节点</h3>
-          <p class="block-sub">按需勾选额外固定下发的单个节点</p>
+          <h3 class="block-title">按国家 / 地区快选</h3>
+          <p class="block-sub">点击地区卡片一键勾选或取消该地区全部节点</p>
         </div>
         <div class="head-actions">
           <button
-            v-if="activeGroupObj"
-            type="button"
-            class="text-action"
-            @click="selectGroupNodes(activeGroupObj.nodes)"
-          >
-            全选本组
-          </button>
-          <button
-            v-else-if="NodesList.length"
+            v-if="NodesList.length"
             type="button"
             class="text-action"
             @click="selectAllNodes"
           >
-            全选
+            全选全部
           </button>
           <button
             v-if="value1.length"
@@ -145,90 +150,140 @@ const activeGroupObj = computed(() =>
         </div>
       </header>
 
-      <template v-if="NodesList.length">
-        <div class="picker-toolbar">
-          <label class="search-box">
-            <el-icon class="search-ico" aria-hidden="true"><Search /></el-icon>
-            <input
-              v-model="nodeQuery"
-              type="search"
-              class="search-input"
-              placeholder="搜索节点名称…"
-              aria-label="搜索固定节点"
-            />
-          </label>
-
-          <div
-            v-if="groupedNodes.length > 1"
-            class="group-filter-rail"
-            role="group"
-            aria-label="按分组筛选节点"
-          >
-            <button
-              type="button"
-              class="filter-pill"
-              :class="{ 'is-active': activeGroup === '' }"
-              @click="activeGroup = ''"
-            >
-              全部 <span class="mono">{{ NodesList.length }}</span>
-            </button>
-            <button
-              v-for="g in groupedNodes"
-              :key="g.name"
-              type="button"
-              class="filter-pill"
-              :class="{ 'is-active': activeGroup === g.name }"
-              @click="activeGroup = activeGroup === g.name ? '' : g.name"
-            >
-              {{ g.name }} <span class="mono">{{ g.nodes.length }}</span>
-            </button>
-          </div>
-        </div>
-
-        <div v-if="visibleNodes.length" class="node-pick-grid">
-          <button
-            v-for="item in visibleNodes"
-            :key="item.Name"
-            type="button"
-            class="node-pick-card"
-            :class="{ 'is-selected': value1.includes(item.Name) }"
-            :aria-pressed="value1.includes(item.Name)"
-            @click="toggleNode(item.Name)"
-          >
-            <span
-              class="dot"
-              :class="
-                nodeQuality(item)?.valid === undefined
-                  ? 'is-idle'
-                  : nodeQuality(item)?.valid
-                    ? 'is-ok'
-                    : 'is-bad'
-              "
-              aria-hidden="true"
-            ></span>
-            <span class="pick-name" :title="item.Name">{{ item.Name }}</span>
-            <span class="pick-check" aria-hidden="true">
-              <el-icon v-if="value1.includes(item.Name)"><Check /></el-icon>
+      <div v-if="countryBuckets.length" class="country-grid">
+        <button
+          v-for="bucket in countryBuckets"
+          :key="bucket.country"
+          type="button"
+          class="country-card"
+          :class="{
+            'is-selected':
+              bucket.nodes.length > 0 &&
+              countrySelectedCount(bucket) === bucket.nodes.length,
+            'is-partial':
+              countrySelectedCount(bucket) > 0 &&
+              countrySelectedCount(bucket) < bucket.nodes.length,
+          }"
+          @click="toggleCountryAll(bucket)"
+        >
+          <div class="country-card-main">
+            <strong class="country-card-name">
+              <span>{{ countryFlag(bucket.code) }}</span>
+              <span>{{ bucket.country }}</span>
+            </strong>
+            <span class="country-card-count mono">
+              已选 {{ countrySelectedCount(bucket) }} / {{ bucket.nodes.length }}
             </span>
-          </button>
-        </div>
-
-        <p v-else class="empty-inline">没有匹配的节点，请调整搜索词。</p>
-      </template>
+          </div>
+          <span class="check-circle" aria-hidden="true">
+            <el-icon
+              v-if="
+                bucket.nodes.length > 0 &&
+                countrySelectedCount(bucket) === bucket.nodes.length
+              "
+            >
+              <Check />
+            </el-icon>
+          </span>
+        </button>
+      </div>
 
       <EmptyState
         v-else
         size="section"
-        title="暂无节点"
-        description="添加节点后可在此选择。"
+        title="暂无可用节点"
+        description="添加节点后可按国家/地区一键勾选。"
       />
     </section>
 
-    <!-- Block 3: Reorder Selected Fixed Nodes (only when > 0) -->
+    <!-- Block 2: Individual Node Picker -->
+    <section v-if="NodesList.length" class="source-block">
+      <header class="block-head">
+        <div>
+          <h3 class="block-title">按单个节点微调</h3>
+          <p class="block-sub">支持按名称或地区检索，精确增删节点</p>
+        </div>
+      </header>
+
+      <div class="picker-toolbar">
+        <label class="search-box">
+          <el-icon class="search-ico" aria-hidden="true"><Search /></el-icon>
+          <input
+            v-model="nodeQuery"
+            type="search"
+            class="search-input"
+            placeholder="搜索节点名称或国家/地区…"
+            aria-label="搜索节点"
+          />
+        </label>
+
+        <div
+          v-if="countryBuckets.length > 1"
+          class="country-filter-rail"
+          role="group"
+          aria-label="按地区筛选节点"
+        >
+          <button
+            type="button"
+            class="filter-pill"
+            :class="{ 'is-active': activeCountry === '' }"
+            @click="activeCountry = ''"
+          >
+            全部 <span class="mono">{{ NodesList.length }}</span>
+          </button>
+          <button
+            v-for="bucket in countryBuckets"
+            :key="bucket.country"
+            type="button"
+            class="filter-pill"
+            :class="{ 'is-active': activeCountry === bucket.country }"
+            @click="
+              activeCountry =
+                activeCountry === bucket.country ? '' : bucket.country
+            "
+          >
+            {{ countryFlag(bucket.code) }} {{ bucket.country }}
+            <span class="mono">{{ bucket.nodes.length }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div v-if="visibleNodes.length" class="node-pick-grid">
+        <button
+          v-for="item in visibleNodes"
+          :key="item.Name"
+          type="button"
+          class="node-pick-card"
+          :class="{ 'is-selected': value1.includes(item.Name) }"
+          :aria-pressed="value1.includes(item.Name)"
+          @click="toggleNode(item.Name)"
+        >
+          <span
+            class="dot"
+            :class="
+              nodeQuality(item)?.valid === undefined
+                ? 'is-idle'
+                : nodeQuality(item)?.valid
+                  ? 'is-ok'
+                  : 'is-bad'
+            "
+            aria-hidden="true"
+          ></span>
+          <span class="pick-name" :title="item.Name">{{ item.Name }}</span>
+          <span class="pick-check" aria-hidden="true">
+            <el-icon v-if="value1.includes(item.Name)"><Check /></el-icon>
+          </span>
+        </button>
+      </div>
+
+      <p v-else class="empty-inline">没有匹配的节点，请调整搜索词。</p>
+    </section>
+
+    <!-- Block 3: Reorder Selected Nodes -->
     <section v-if="value1.length" class="source-block">
       <header class="block-head">
         <div>
-          <h3 class="block-title">已选固定节点顺序</h3>
+          <h3 class="block-title">已选节点顺序</h3>
           <p class="block-sub">支持拖拽或点击调整下发顺序</p>
         </div>
         <span class="block-pill mono">{{ value1.length }} 个</span>
@@ -291,12 +346,37 @@ const activeGroupObj = computed(() =>
 .sources-layout {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 26px;
 }
 
 .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+.legacy-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 15px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #f59e0b 35%, transparent);
+  background: color-mix(in srgb, #f59e0b 8%, var(--c-surface));
+  font-size: 13px;
+  color: var(--c-ink);
+}
+
+.legacy-btn {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--c-ink);
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
 }
 
 .source-block {
@@ -349,7 +429,6 @@ const activeGroupObj = computed(() =>
   color: var(--c-ink);
   cursor: pointer;
   opacity: 0.78;
-  transition: opacity 0.16s ease;
 }
 
 .text-action:hover {
@@ -360,53 +439,56 @@ const activeGroupObj = computed(() =>
   color: #dc2626;
 }
 
-/* Dynamic Groups Grid */
-.group-grid {
+.country-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
   gap: 10px;
 }
 
-.group-card {
+.country-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 13px 15px;
   border-radius: 12px;
   border: 1px solid var(--c-line);
   background: var(--c-surface);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.18s ease, background 0.18s ease;
+  transition: border-color 0.16s ease, background 0.16s ease;
 }
 
-.group-card:hover {
+.country-card:hover {
   border-color: color-mix(in srgb, var(--c-ink) 32%, transparent);
 }
 
-.group-card.is-selected {
+.country-card.is-selected {
   border-color: var(--c-ink);
   background: color-mix(in srgb, var(--c-ink) 4%, var(--c-surface));
 }
 
-.group-card-main {
+.country-card.is-partial {
+  border-color: color-mix(in srgb, var(--c-ink) 45%, transparent);
+}
+
+.country-card-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
 
-.group-card-name {
+.country-card-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 14px;
   font-weight: 600;
   color: var(--c-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.group-card-count {
+.country-card-count {
   font-size: 12px;
   color: var(--c-muted);
 }
@@ -422,15 +504,13 @@ const activeGroupObj = computed(() =>
   justify-content: center;
   font-size: 12px;
   color: var(--c-surface);
-  transition: all 0.16s ease;
 }
 
-.group-card.is-selected .check-circle {
+.country-card.is-selected .check-circle {
   background: var(--c-ink);
   border-color: var(--c-ink);
 }
 
-/* Fixed Node Picker */
 .picker-toolbar {
   display: flex;
   flex-direction: column;
@@ -465,7 +545,7 @@ const activeGroupObj = computed(() =>
   color: var(--c-ink);
 }
 
-.group-filter-rail {
+.country-filter-rail {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -482,7 +562,6 @@ const activeGroupObj = computed(() =>
   font-size: 12.5px;
   color: var(--c-muted);
   cursor: pointer;
-  transition: all 0.16s ease;
 }
 
 .filter-pill.is-active {
@@ -510,7 +589,6 @@ const activeGroupObj = computed(() =>
   background: var(--c-surface);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.16s ease, background 0.16s ease;
 }
 
 .node-pick-card:hover {
@@ -576,7 +654,6 @@ const activeGroupObj = computed(() =>
   color: var(--c-muted);
 }
 
-/* Reorder Stack */
 .order-stack {
   display: flex;
   flex-direction: column;

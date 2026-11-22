@@ -246,14 +246,7 @@ onBeforeUnmount(() => {
             />
           </div>
           <p class="row-source">
-            {{
-              sub.GroupRefs?.length
-                ? `${sub.GroupRefs.length} 个动态分组`
-                : "固定节点来源"
-            }}
-            <template v-if="sub.GroupRefs?.length && sub.Nodes.length">
-              · {{ sub.Nodes.length }} 个固定节点
-            </template>
+            共 {{ nodeCounts[sub.ID] ?? sub.Nodes.length }} 个节点
           </p>
         </div>
 

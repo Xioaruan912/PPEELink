@@ -19,7 +19,6 @@ const {
   nodeCommand,
   setDelivery,
   busy,
-  activeGroup,
 } = useNodes();
 const node = computed(() =>
   overviewList.value.find((item) => item.id === id.value)
@@ -37,14 +36,28 @@ const sections = [
   { label: "订阅下发", value: "delivery" },
 ];
 const policies = {
-  panel: "面板检测",
-  any: "任一 Agent 通过",
-  all: "全部 Agent 通过",
-  manual: "手动标记有效",
+  any: "任一视角可达（兼容专线）",
+  manual: "始终有效（手动放行）",
+  panel: "仅看面板服务器",
+  all: "全部视角通过",
 };
 const probeCount = computed(
   () => node.value?.probes?.filter((probe) => probe.success).length ?? 0
 );
+const bestReachText = computed(() => {
+  const n = node.value;
+  if (!n) return "—";
+  const okProbes = (n.probes || [])
+    .filter((p) => p.success)
+    .sort((a, b) => (a.rtt || 9999) - (b.rtt || 9999));
+  if (okProbes.length) {
+    const best = okProbes[0];
+    return best.rtt ? `${best.name} · ${best.rtt} ms` : `${best.name} 可达`;
+  }
+  if (n.probePolicy === "manual") return "手动放行";
+  if (n.valid) return "面板可达";
+  return n.probes?.length ? "暂未连通" : "未检测";
+});
 const capabilityTiles = computed(() => [
   {
     label: "UDP 转发",
@@ -105,12 +118,8 @@ function openAction(command: string, selected: OverviewItem) {
             <strong>{{ protocol(node) }}</strong>
           </div>
           <div>
-            <span>探针通过</span>
-            <strong class="tabular">{{
-              node.probes?.length
-                ? `${probeCount} / ${node.probes.length}`
-                : "未检测"
-            }}</strong>
+            <span>最佳可达</span>
+            <strong class="tabular">{{ bestReachText }}</strong>
           </div>
           <div>
             <span>分发状态</span>
@@ -178,17 +187,6 @@ function openAction(command: string, selected: OverviewItem) {
               </div>
             </div>
 
-            <div class="inspection-actions">
-              <UiButton @click="openAction('group', node)">加入分组</UiButton>
-              <UiButton
-                v-if="
-                  activeGroup !== '全部' && node.groups?.includes(activeGroup)
-                "
-                :disabled="busy"
-                @click="nodeCommand('unbind', node)"
-                >移出当前分组</UiButton
-              >
-            </div>
           </div>
 
           <div class="danger-zone">
@@ -219,7 +217,7 @@ function openAction(command: string, selected: OverviewItem) {
             <dl class="bento-specs">
               <div class="bento-spec-cell">
                 <dt>判定策略</dt>
-                <dd>{{ policies[node.probePolicy || "panel"] }}</dd>
+                <dd>{{ policies[node.probePolicy || "any"] }}</dd>
               </div>
               <div class="bento-spec-cell">
                 <dt>最近检测</dt>
@@ -248,10 +246,14 @@ function openAction(command: string, selected: OverviewItem) {
 
           <div class="spec-tray">
             <header class="spec-tray__head">
-              <h4>探针遥测矩阵</h4>
-              <span v-if="node.probes?.length" class="probe-summary tabular"
-                >{{ probeCount }} / {{ node.probes.length }} 节点可达</span
-              >
+              <h4>多视角 Agent 连通状态</h4>
+              <span v-if="node.probes?.length" class="probe-summary tabular">
+                {{
+                  probeCount > 0
+                    ? `${probeCount} 个入口可达`
+                    : "暂无 Agent 连通"
+                }}
+              </span>
             </header>
             <ul v-if="node.probes?.length" class="probe-cards">
               <li

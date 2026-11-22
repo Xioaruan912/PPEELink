@@ -129,16 +129,6 @@ function applyExpirePreset(days: number) {
       <header class="detail-head">
         <div class="detail-title-row">
           <h2 class="detail-name">{{ drawerSub.Name }}</h2>
-          <div v-if="drawerGroupRefs.length" class="source-pills">
-            <span
-              v-for="group in drawerGroupRefs"
-              :key="group.ID"
-              class="source-pill"
-            >
-              {{ group.Name }}
-              <em class="mono">{{ group.NodeCount }}</em>
-            </span>
-          </div>
         </div>
 
         <div class="detail-metrics">
@@ -149,12 +139,6 @@ function applyExpirePreset(days: number) {
           <div class="metric-item">
             <span class="metric-label">覆盖地区</span>
             <strong class="metric-val mono">{{ drawerNodesByCountry.length }}</strong>
-          </div>
-          <div class="metric-item">
-            <span class="metric-label">来源构成</span>
-            <strong class="metric-val">
-              {{ drawerGroupRefs.length }} 分组 · {{ drawerSub.Nodes.length }} 固定
-            </strong>
           </div>
           <div v-if="previewExcluded.length" class="metric-item is-warn">
             <span class="metric-label">暂不下发</span>
