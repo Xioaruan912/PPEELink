@@ -15,7 +15,6 @@ AGENTS.txt
 !.env.example
 
 # Local development / AI notes
-AGENTS.md
 GPTTODO.md
 new_todo.md
 DEVNOTES.md

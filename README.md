@@ -6,7 +6,8 @@
   <a href="README.en-US.md">English</a> ·
   <a href="#界面预览">界面预览</a> ·
   <a href="#快速开始">快速开始</a> ·
-  <a href="#架构">架构</a>
+  <a href="#架构">架构</a> ·
+  <a href="#致-ai-开发者">致 AI 开发者</a>
 </p>
 
 <br />
@@ -97,6 +98,17 @@ go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink .
 ### 发布 Agent 产物
 
 在 `agent` 分支执行 `./build.sh`，将生成的 `dist/` 目录内容复制到面板运行目录的 `downloads/agent/` 下即可支持一键安装与在线升级。
+
+<br />
+
+## 致 AI 开发者
+
+如果你是接手这个仓库继续开发的 AI Agent，动代码前请先读一遍根目录的 [AGENTS.md](AGENTS.md) 和 [webs/DESIGN.md](webs/DESIGN.md)。
+
+- **延续既有工程与视觉风格**：项目采用克制的石色调面板与固定高度容器布局，改 UI 时请顺着现有组件体系演进，不要推倒重来，也不要堆砌花哨装饰。
+- **遵守构建与测试门禁**：前端先过 `vue-tsc` 和单元测试再出包，后端编译记得带 `-tags "with_utls with_quic"`，发布 Agent 后核对 `release.json` 版本号与校验和。
+- **关于 `AGENTS.md`**：里面沉淀了前序完整的工作流与踩坑记录——**只允许在文末日志区续写，严禁覆盖或删改已有正文**。
+- **提交规范**：请不要在 commit message 里附加 `Co-Authored-By:`，仓库只维护 `main` 与 `agent` 两个分支。
 
 <br />
 
