@@ -70,6 +70,16 @@
 
 ## 快速开始
 
+### 让 AI 帮你部署
+
+不想手动敲编译和守护进程配置，可以直接把下面这段话发给你的 AI 编程助手（Antigravity / Claude Code / Cursor / Codex 等），它会按仓库里的 [AGENTS.md](AGENTS.md) 完成编译、systemd 托管和 Agent 产物准备：
+
+```text
+请帮我把 https://github.com/Xioaruan912/PPEELink 部署到我的 Linux 服务器。
+请严格按照仓库根目录的 AGENTS.md「AI 协助用户部署标准流程」执行：
+先询问我目标服务器的连接方式、监听端口和是否需要域名 HTTPS，再完成前后端编译、Agent 产物放置、systemd 服务配置并验证启动成功。
+```
+
 ### 从源码构建
 
 需要 Go 1.25+ 与 Node.js 20+（pnpm）：

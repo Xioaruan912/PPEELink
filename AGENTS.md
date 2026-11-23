@@ -83,6 +83,28 @@ GOOS=linux GOARCH=amd64 go build \
 
 ---
 
+## 3. AI 协助用户部署标准流程（Deployment Runbook）
+
+当用户请你帮忙把 PPEELink 部署到他们的服务器时，请按以下顺序执行，不要跳步或猜测：
+
+1. **先确认部署参数**（缺项主动询问，不要编造）：
+   - 部署方式：本机部署，还是远程 Linux VPS（SSH 地址、端口、认证方式）与 CPU 架构（`amd64` / `arm64`）。
+   - 面板监听端口（默认 `8000`，建议显式指定如 `8001`）与是否需要配置域名 + HTTPS 反向代理（Caddy / Nginx）。
+2. **编译主面板（`main` 分支）**：
+   - 前端：`cd webs && pnpm install && pnpm build`（生成 `webs/dist/` 供 Go 嵌入）。
+   - 后端：务必带齐探测标签 `GOOS=linux GOARCH=<arch> go build -tags "with_utls with_quic" -ldflags="-w -s" -o ppeelink .`。
+3. **准备 Agent 产物（`agent` 分支）**：
+   - 如用户需要纳管远程 VPS，检出 `agent` 分支交叉编译 `agent-linux-amd64`、`agent-linux-arm64`、`agent-linux-armv7` 并生成含 `version` 与 `sha256` 的 `release.json`。
+   - 全部放至面板运行目录的 `downloads/agent/` 下（与 `WorkingDirectory` 相对一致），面板即可一键安装与在线升级 Agent。
+4. **配置 systemd 守护进程与安全启动**：
+   - 推荐安装目录 `/usr/local/bin/ppeelink/`，创建 `/etc/systemd/system/ppeelink.service`，设置 `WorkingDirectory=/usr/local/bin/ppeelink`、`ExecStart=/usr/local/bin/ppeelink/ppeelink run -port <PORT>`、`Restart=on-failure`。
+   - 执行 `systemctl daemon-reload && systemctl enable --now ppeelink.service`，随后用 `systemctl is-active ppeelink.service` 与 `curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:<PORT>/` 验证返回 `active` 且 `200`。
+5. **交付与安全提醒**：
+   - 告知用户访问地址与默认初始账号 `admin / 123456`（首次登录会强制修改密码；也可通过 `./ppeelink setting -username admin -password <新密码>` 预先修改）。
+   - 提醒放行对应端口防火墙；公网使用强烈建议前置 Caddy / Nginx 启用 HTTPS（并确保 WebSocket 路径透传，供 WebShell 与 Agent 反向连接正常通信）。
+
+---
+
 ## 后续 Agent 续写日志（Append-Only）
 
 > 请严格按以下格式在文末追加，勿修改上方任何条目：
