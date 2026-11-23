@@ -63,8 +63,8 @@ const steps = computed(() =>
       ]
     : [
         { num: "01", label: "模板与基础", value: 0 },
-        { num: "02", label: "分流规则", value: 1 },
-        { num: "03", label: "策略分组", value: 2 },
+        { num: "02", label: "策略分组", value: 1 },
+        { num: "03", label: "分流规则", value: 2 },
         { num: "04", label: "预览与生成", value: 3 },
       ]
 );

@@ -263,7 +263,7 @@ function onCardDrop(index: number) {
 .group-cards {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
 }
 
@@ -271,6 +271,9 @@ function onCardDrop(index: number) {
   display: grid;
   align-content: start;
   gap: 10px;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
   padding: 16px;
   border: 1px solid var(--c-line);
   border-radius: 18px;
@@ -331,11 +334,14 @@ function onCardDrop(index: number) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: 8px;
 }
 
 .mini-pills {
   display: inline-flex;
+  flex-shrink: 0;
   padding: 2px;
   border: 1px solid var(--c-line);
   border-radius: 999px;
@@ -349,6 +355,7 @@ function onCardDrop(index: number) {
   background: transparent;
   color: var(--c-muted);
   font-size: 11.5px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -359,12 +366,14 @@ function onCardDrop(index: number) {
 }
 
 .all-nodes-pill {
+  flex-shrink: 0;
   padding: 4px 10px;
   border: 1px solid var(--c-line);
   border-radius: 999px;
   background: transparent;
   color: var(--c-muted);
   font-size: 11.5px;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -376,7 +385,10 @@ function onCardDrop(index: number) {
 
 .filter-input {
   width: 100%;
-  padding: 6px 10px;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 7px 10px;
   border: 1px solid var(--c-line);
   border-radius: 10px;
   background: var(--c-surface-muted);
@@ -499,5 +511,11 @@ function onCardDrop(index: number) {
 
 .card-leave-active {
   position: absolute;
+}
+
+@media (max-width: 640px) {
+  .group-cards {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 </style>

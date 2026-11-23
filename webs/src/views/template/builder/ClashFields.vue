@@ -34,6 +34,104 @@ const ruleLineCount = computed(
       .split("\n")
       .filter((l) => l.trim() && !l.trim().startsWith("#")).length
 );
+
+interface ParsedRuleRow {
+  lineIndex: number;
+  type: string;
+  match: string;
+  policy: string;
+  extra: string;
+  raw: string;
+}
+
+const availablePolicies = computed(() => {
+  const names = form.groups.map((g) => g.name.trim()).filter(Boolean);
+  return [...new Set([...names, "DIRECT", "REJECT"])];
+});
+
+const parsedRules = computed<ParsedRuleRow[]>(() => {
+  const lines = rulesText.value.split("\n");
+  const rows: ParsedRuleRow[] = [];
+  lines.forEach((rawLine, lineIndex) => {
+    const trimmed = rawLine.trim();
+    if (!trimmed || trimmed.startsWith("#")) return;
+    const parts = trimmed.split(",").map((p) => p.trim());
+    const type = parts[0] || "";
+    if (/^(MATCH|FINAL)$/i.test(type)) {
+      rows.push({
+        lineIndex,
+        type: type.toUpperCase(),
+        match: "兜底匹配",
+        policy: parts[1] || "DIRECT",
+        extra: parts.slice(2).join(","),
+        raw: trimmed,
+      });
+      return;
+    }
+    if (parts.length >= 3) {
+      rows.push({
+        lineIndex,
+        type: type.toUpperCase(),
+        match: parts[1] || "",
+        policy: parts[2] || "DIRECT",
+        extra: parts.slice(3).join(","),
+        raw: trimmed,
+      });
+    }
+  });
+  return rows;
+});
+
+function updateRulePolicy(row: ParsedRuleRow, nextPolicy: string) {
+  const lines = rulesText.value.split("\n");
+  const rebuilt = /^(MATCH|FINAL)$/i.test(row.type)
+    ? [row.type, nextPolicy, row.extra].filter(Boolean).join(",")
+    : [row.type, row.match, nextPolicy, row.extra].filter(Boolean).join(",");
+  lines[row.lineIndex] = rebuilt;
+  rulesText.value = lines.join("\n");
+}
+
+function removeRuleRow(row: ParsedRuleRow) {
+  const lines = rulesText.value.split("\n");
+  lines.splice(row.lineIndex, 1);
+  rulesText.value = lines.join("\n");
+}
+
+const newRuleType = ref("RULE-SET");
+const newRuleMatch = ref("");
+const newRulePolicy = ref("");
+
+const ruleTypeOptions = [
+  "RULE-SET",
+  "DOMAIN-SUFFIX",
+  "DOMAIN-KEYWORD",
+  "DOMAIN",
+  "IP-CIDR",
+  "GEOIP",
+  "MATCH",
+];
+
+function addQuickRule() {
+  const type = newRuleType.value;
+  const policy = newRulePolicy.value || availablePolicies.value[0] || "DIRECT";
+  const match = newRuleMatch.value.trim();
+  if (type !== "MATCH" && !match) return;
+  const line = type === "MATCH" ? `MATCH,${policy}` : `${type},${match},${policy}`;
+  const lines = rulesText.value
+    .split("\n")
+    .filter((l) => l.trim().length > 0);
+  if (type === "MATCH") {
+    lines.push(line);
+  } else {
+    const tailIndex = lines.findIndex((l) =>
+      /^(GEOIP|MATCH|FINAL)\s*,/i.test(l.trim())
+    );
+    if (tailIndex >= 0) lines.splice(tailIndex, 0, line);
+    else lines.push(line);
+  }
+  rulesText.value = lines.join("\n");
+  newRuleMatch.value = "";
+}
 </script>
 
 <template>
@@ -133,14 +231,114 @@ const ruleLineCount = computed(
       </div>
     </section>
 
-    <!-- Stage 02: 分流规则（全屏点选 + 自定义规则抽屉） -->
+    <!-- Stage 02: 策略分组（先定分组，再配分流规则） -->
     <section v-else-if="step === 1" class="stage-panel">
+      <GroupBoard />
+    </section>
+
+    <!-- Stage 03: 分流规则（点选分类 + 逐条指定目标分组 + 自定义规则抽屉） -->
+    <section v-else-if="step === 2" class="stage-panel">
       <RulePicker />
+
+      <div class="rule-routing-card">
+        <header class="routing-head">
+          <div>
+            <strong>分流规则与目标分组</strong>
+            <small>按上一步建好的策略分组，逐条指定每条规则的去向</small>
+          </div>
+          <span class="mono routing-count">
+            {{ form.rule_providers.length }} 个规则集 · {{ ruleLineCount }} 条规则
+          </span>
+        </header>
+
+        <div class="rule-add-bar">
+          <select v-model="newRuleType" class="rule-select is-type" aria-label="规则类型">
+            <option v-for="t in ruleTypeOptions" :key="t" :value="t">
+              {{ t }}
+            </option>
+          </select>
+          <input
+            v-model="newRuleMatch"
+            type="text"
+            class="rule-match-input mono"
+            :disabled="newRuleType === 'MATCH'"
+            :placeholder="
+              newRuleType === 'MATCH'
+                ? '兜底规则无需填写匹配项'
+                : newRuleType === 'RULE-SET'
+                  ? '规则集名（如 Xbox、Discord、China）'
+                  : '匹配值（如 CN、openai.com）'
+            "
+            @keydown.enter.prevent="addQuickRule"
+          />
+          <select
+            v-model="newRulePolicy"
+            class="rule-select is-policy"
+            aria-label="目标分组"
+          >
+            <option value="" disabled>选择目标分组</option>
+            <option v-for="p in availablePolicies" :key="p" :value="p">
+              {{ p }}
+            </option>
+          </select>
+          <UiButton
+            size="sm"
+            variant="primary"
+            :icon="Plus"
+            :disabled="newRuleType !== 'MATCH' && !newRuleMatch.trim()"
+            @click="addQuickRule"
+          >
+            添加规则
+          </UiButton>
+        </div>
+
+        <div class="routing-list">
+          <p v-if="!parsedRules.length" class="routing-empty">
+            暂无分流规则，可在上方勾选预设分类或手动添加规则
+          </p>
+          <div
+            v-for="row in parsedRules"
+            :key="`${row.lineIndex}-${row.raw}`"
+            class="routing-row"
+          >
+            <span class="rule-type-badge mono">{{ row.type }}</span>
+            <span class="rule-match-text mono" :title="row.match">
+              {{ row.match }}
+              <em v-if="row.extra" class="rule-extra">,{{ row.extra }}</em>
+            </span>
+            <select
+              class="rule-select is-row-policy"
+              :value="row.policy"
+              :aria-label="`${row.type} ${row.match} 目标分组`"
+              @change="
+                updateRulePolicy(
+                  row,
+                  ($event.target as HTMLSelectElement).value
+                )
+              "
+            >
+              <option
+                v-if="!availablePolicies.includes(row.policy)"
+                :value="row.policy"
+              >
+                {{ row.policy }}（未定义分组）
+              </option>
+              <option v-for="p in availablePolicies" :key="p" :value="p">
+                {{ p }}
+              </option>
+            </select>
+            <RowIconButton
+              :icon="Delete"
+              :label="`删除规则 ${row.raw}`"
+              @click="removeRuleRow(row)"
+            />
+          </div>
+        </div>
+      </div>
 
       <div class="custom-rule-bar">
         <span class="mono">
-          当前包含 <strong>{{ form.rule_providers.length }}</strong> 个远程规则集 ·
-          <strong>{{ ruleLineCount }}</strong> 条分流规则
+          需要批量编辑原始规则文本或增删远程规则集 URL？
         </span>
         <div class="custom-actions">
           <UiButton variant="ghost" @click="router.push('/template/rules')">
@@ -192,11 +390,6 @@ const ruleLineCount = computed(
           </UiButton>
         </template>
       </UiDrawer>
-    </section>
-
-    <!-- Stage 03: 策略分组（100% 全宽编排画布） -->
-    <section v-else-if="step === 2" class="stage-panel">
-      <GroupBoard />
     </section>
   </div>
 </template>
@@ -466,11 +659,138 @@ const ruleLineCount = computed(
   align-items: center;
 }
 
+/* Rule-to-Group Routing Table */
+.rule-routing-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface);
+}
+
+.routing-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.routing-head strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.routing-head small {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.routing-count {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.rule-add-bar {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr) 168px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.rule-select,
+.rule-match-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 9px;
+  background: var(--c-surface-muted);
+  color: var(--c-ink);
+  font-size: 12.5px;
+  outline: none;
+}
+
+.rule-select:focus,
+.rule-match-input:focus {
+  border-color: var(--c-ink);
+}
+
+.routing-list {
+  display: grid;
+  gap: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.routing-empty {
+  margin: 18px 0;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--c-muted);
+}
+
+.routing-row {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr) 180px auto;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-surface-muted);
+}
+
+.rule-type-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--c-surface);
+  border: 1px solid var(--c-line);
+  color: var(--c-ink);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.rule-match-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--c-ink);
+}
+
+.rule-extra {
+  font-style: normal;
+  color: var(--c-muted);
+  font-size: 11px;
+}
+
+.rule-select.is-row-policy {
+  height: 30px;
+  background: var(--c-surface);
+  font-size: 12px;
+}
+
 @media (max-width: 820px) {
   .mode-grid,
   .cap-grid,
   .port-editor {
     grid-template-columns: 1fr;
+  }
+
+  .rule-add-bar,
+  .routing-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 </style>
