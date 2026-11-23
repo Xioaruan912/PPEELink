@@ -153,3 +153,28 @@ func TestParseBuilderYAMLDropsConfigLinesFromRules(t *testing.T) {
 		t.Fatalf("config lines must not become rules: %v", got.Rules)
 	}
 }
+
+func TestBuildClashYAMLPreservesEmptyGroupProxies(t *testing.T) {
+	req := defaultBuilderRequest()
+	req.Groups = []BuilderGroup{
+		{Name: "Google", Type: "select", IncludeAllProviders: true, Proxies: []string{}},
+	}
+	out, err := buildClashYAML(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(out, "- DIRECT") {
+		t.Fatalf("expected excluded DIRECT not to be forced back into group:\n%s", out)
+	}
+	if !strings.Contains(out, "proxies: []") {
+		t.Fatalf("expected empty proxies list in YAML:\n%s", out)
+	}
+	parsed, err := parseBuilderYAML("google.yaml", out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(parsed.Groups) != 1 || len(parsed.Groups[0].Proxies) != 0 {
+		t.Fatalf("expected round-trip to preserve 0 static proxies, got: %+v", parsed.Groups)
+	}
+}
+

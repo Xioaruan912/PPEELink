@@ -400,7 +400,7 @@ function createTemplateBuilder() {
   };
 
   const addGroup = (name = "") => {
-    form.groups.push(normalizeGroup({ name }));
+    form.groups.push(normalizeGroup({ name, include_all_providers: true }));
   };
   const removeGroup = (i: number) => {
     const [removed] = form.groups.splice(i, 1);

@@ -41,7 +41,7 @@ export function createClashPreview(
       const entry: Record<string, unknown> = {
         name: group.name,
         type: group.type,
-        proxies: group.proxies?.length ? group.proxies : ["DIRECT"],
+        proxies: group.proxies?.length ? group.proxies : [],
       };
       if (["url-test", "fallback"].includes(group.type)) {
         entry.url = form.test_url;

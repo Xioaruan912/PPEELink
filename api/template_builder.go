@@ -695,10 +695,14 @@ func buildClashYAML(req BuilderRequest) (string, error) {
 		if g.Name == "" {
 			continue
 		}
+		proxies := []string{}
+		if len(g.Proxies) > 0 {
+			proxies = g.Proxies
+		}
 		group := map[string]any{
 			"name":    g.Name,
 			"type":    g.Type,
-			"proxies": []string{"DIRECT"},
+			"proxies": proxies,
 		}
 		switch g.Type {
 		case "url-test", "fallback":
@@ -710,9 +714,6 @@ func buildClashYAML(req BuilderRequest) (string, error) {
 			group["include-all-providers"] = g.IncludeAllProviders
 		} else if g.IncludeAllProviders {
 			group["include-all-providers"] = true
-		}
-		if len(g.Proxies) > 0 {
-			group["proxies"] = g.Proxies
 		}
 		groups = append(groups, group)
 	}
