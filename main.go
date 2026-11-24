@@ -207,6 +207,7 @@ func Run(port int) {
 	routers.ShortLinks(r)        // 内部短链与一键导入
 	routers.Proxy(r)             // 自建节点与到期/用量告警
 	routers.Monitors(r)          // 服务器监控
+	routers.Probes(r)            // 用户 Agent 按需探针
 	routers.MonitorOperations(r) // SSH 文件与 Docker 管理
 	routers.NetworkTraces(r)     // 多地路由追踪
 	// 启动时合并旧的自建分组并同步单个「自建」分组。
