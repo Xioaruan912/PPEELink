@@ -24,7 +24,16 @@ import (
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.7"
+const agentVersion = "1.8"
+
+type userAgentConfigPatch struct {
+	PanelURL       string `json:"panelUrl,omitempty"`
+	Concurrency    int    `json:"concurrency,omitempty"`
+	ReportPublicIP *bool  `json:"reportPublicIp,omitempty"`
+	AllowClash     *bool  `json:"allowClash,omitempty"`
+	ClashAPI       string `json:"clashApi,omitempty"`
+	ClashSecret    string `json:"clashSecret,omitempty"`
+}
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -36,14 +45,15 @@ type probeNode struct {
 }
 
 type waitJob struct {
-	JobID      string      `json:"jobId"`
-	Action     string      `json:"action"`
-	TargetHost string      `json:"targetHost,omitempty"`
-	SpeedMode  string      `json:"speedMode,omitempty"`
-	ClashGroup string      `json:"clashGroup,omitempty"`
-	ClashNode  string      `json:"clashNode,omitempty"`
-	ClashNodes []string    `json:"clashNodes,omitempty"`
-	Nodes      []probeNode `json:"nodes"`
+	JobID      string                `json:"jobId"`
+	Action     string                `json:"action"`
+	TargetHost string                `json:"targetHost,omitempty"`
+	SpeedMode  string                `json:"speedMode,omitempty"`
+	ClashGroup string                `json:"clashGroup,omitempty"`
+	ClashNode  string                `json:"clashNode,omitempty"`
+	ClashNodes []string              `json:"clashNodes,omitempty"`
+	Config     *userAgentConfigPatch `json:"config,omitempty"`
+	Nodes      []probeNode           `json:"nodes"`
 }
 
 type waitEnvelope struct {
@@ -95,7 +105,12 @@ func main() {
 	tok := strings.TrimSpace(*token)
 	conc := *concurrency
 
-	if *daemon && (panelURL == "" || tok == "") {
+	reportPublicIP := true
+	allowClash := true
+	savedClashAPI := ""
+	savedClashSecret := ""
+
+	if *daemon || panelURL == "" || tok == "" {
 		if cfg, err := loadSavedConfig(); err == nil {
 			if panelURL == "" {
 				panelURL = strings.TrimRight(strings.TrimSpace(cfg.Panel), "/")
@@ -107,7 +122,15 @@ func main() {
 				conc = cfg.Concurrency
 			}
 			if cfg.ClashAPI != "" || cfg.ClashSecret != "" {
+				savedClashAPI = cfg.ClashAPI
+				savedClashSecret = cfg.ClashSecret
 				setClashConfig(cfg.ClashAPI, cfg.ClashSecret)
+			}
+			if cfg.ReportPublicIP != nil {
+				reportPublicIP = *cfg.ReportPublicIP
+			}
+			if cfg.AllowClash != nil {
+				allowClash = *cfg.AllowClash
 			}
 		}
 	}
@@ -189,7 +212,7 @@ func main() {
 		if ctx.Err() != nil {
 			return
 		}
-		job, err := waitForJob(ctx, client, panelURL, tok)
+		job, err := waitForJob(ctx, client, panelURL, tok, reportPublicIP, allowClash)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -255,7 +278,74 @@ func main() {
 			cancel()
 			payload.JobID = jobID
 			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/speedtest-report", tok, payload)
+		case "set-config":
+			if job.Config == nil {
+				_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "set-config", OK: false, Error: "配置参数缺失"})
+				continue
+			}
+			nextPanel := panelURL
+			if candidate := strings.TrimRight(strings.TrimSpace(job.Config.PanelURL), "/"); candidate != "" && candidate != panelURL {
+				u, uerr := url.Parse(candidate)
+				if uerr != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+					_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "set-config", OK: false, Error: "新面板地址格式无效"})
+					continue
+				}
+				// Pre-flight verify new panel URL accepts our token before switching!
+				pCtx, pCancel := context.WithTimeout(ctx, 8*time.Second)
+				pReq, _ := http.NewRequestWithContext(pCtx, http.MethodGet, candidate+"/api/v1/probe/jobs", nil)
+				pReq.Header.Set("Authorization", "Probe "+tok)
+				pResp, perr := client.Do(pReq)
+				pCancel()
+				if perr != nil || pResp == nil || pResp.StatusCode != http.StatusOK {
+					code := 0
+					if pResp != nil {
+						code = pResp.StatusCode
+						pResp.Body.Close()
+					}
+					_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "set-config", OK: false, Error: fmt.Sprintf("新地址预检失败 (HTTP %d)，已中止切换", code)})
+					continue
+				}
+				pResp.Body.Close()
+				nextPanel = candidate
+			}
+			if job.Config.Concurrency >= 1 && job.Config.Concurrency <= 8 {
+				conc = job.Config.Concurrency
+			}
+			if job.Config.ReportPublicIP != nil {
+				reportPublicIP = *job.Config.ReportPublicIP
+			}
+			if job.Config.AllowClash != nil {
+				allowClash = *job.Config.AllowClash
+			}
+			if job.Config.ClashAPI != "" || job.Config.ClashSecret != "" {
+				if job.Config.ClashAPI != "" {
+					savedClashAPI = strings.TrimSpace(job.Config.ClashAPI)
+				}
+				if job.Config.ClashSecret != "" {
+					savedClashSecret = strings.TrimSpace(job.Config.ClashSecret)
+				}
+				setClashConfig(savedClashAPI, savedClashSecret)
+			}
+			rpCopy := reportPublicIP
+			acCopy := allowClash
+			_ = writeSavedConfig(savedConfig{
+				Panel:          nextPanel,
+				Token:          tok,
+				Concurrency:    conc,
+				ClashAPI:       savedClashAPI,
+				ClashSecret:    savedClashSecret,
+				ReportPublicIP: &rpCopy,
+				AllowClash:     &acCopy,
+			})
+			_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "set-config", OK: true})
+			panelURL = nextPanel
 		case "clash-status":
+			if !allowClash {
+				_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, clashReportPayload{
+					JobID: jobID, Action: "clash-status", Status: &clashStatus{Connected: false, Error: "已关闭 Clash 控制权限"},
+				})
+				continue
+			}
 			cCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
 			st := detectClashStatus(cCtx)
 			cancel()
@@ -266,6 +356,12 @@ func main() {
 				Group:  st.Group,
 			})
 		case "clash-switch":
+			if !allowClash {
+				_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, clashReportPayload{
+					JobID: jobID, Action: "clash-switch", Error: "该设备已关闭 Clash 外部控制权限",
+				})
+				continue
+			}
 			cCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			st, swErr := switchClashProxy(cCtx, job.ClashGroup, job.ClashNode)
 			cancel()
@@ -281,6 +377,12 @@ func main() {
 			}
 			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, payload)
 		case "clash-batch":
+			if !allowClash {
+				_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, clashReportPayload{
+					JobID: jobID, Action: "clash-batch", Error: "该设备已关闭 Clash 外部控制权限",
+				})
+				continue
+			}
 			bCtx, cancel := context.WithTimeout(ctx, 110*time.Second)
 			payload := runClashBatchTest(bCtx, job.ClashGroup, job.ClashNodes)
 			cancel()
@@ -302,11 +404,14 @@ func main() {
 	}
 }
 
-func waitForJob(ctx context.Context, client *http.Client, panelURL, token string) (waitJob, error) {
+func waitForJob(ctx context.Context, client *http.Client, panelURL, token string, reportPublicIP, allowClash bool) (waitJob, error) {
 	env := detectLocalNetEnv()
-	csCtx, cancelCS := context.WithTimeout(ctx, 1200*time.Millisecond)
-	cs := detectClashStatus(csCtx)
-	cancelCS()
+	var cs clashStatus
+	if allowClash {
+		csCtx, cancelCS := context.WithTimeout(ctx, 1200*time.Millisecond)
+		cs = detectClashStatus(csCtx)
+		cancelCS()
+	}
 	q := url.Values{}
 	q.Set("timeout", "25")
 	q.Set("version", agentVersion)
@@ -315,16 +420,18 @@ func waitForJob(ctx context.Context, client *http.Client, panelURL, token string
 	} else {
 		q.Set("hasIpv6", "0")
 	}
-	if env.ISP != "" {
-		q.Set("isp", env.ISP)
+	if reportPublicIP {
+		if env.ISP != "" {
+			q.Set("isp", env.ISP)
+		}
+		if env.PublicIP != "" {
+			q.Set("publicIp", env.PublicIP)
+		}
 	}
 	if env.IfaceName != "" {
 		q.Set("iface", env.IfaceName)
 	}
-	if env.PublicIP != "" {
-		q.Set("publicIp", env.PublicIP)
-	}
-	if cs.Connected {
+	if allowClash && cs.Connected {
 		q.Set("clashNow", cs.Current)
 		q.Set("clashGroup", cs.Group)
 	}

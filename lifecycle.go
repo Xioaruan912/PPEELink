@@ -12,11 +12,13 @@ import (
 )
 
 type savedConfig struct {
-	Panel       string `json:"panel"`
-	Token       string `json:"token"`
-	Concurrency int    `json:"concurrency,omitempty"`
-	ClashAPI    string `json:"clashApi,omitempty"`
-	ClashSecret string `json:"clashSecret,omitempty"`
+	Panel          string `json:"panel"`
+	Token          string `json:"token"`
+	Concurrency    int    `json:"concurrency,omitempty"`
+	ClashAPI       string `json:"clashApi,omitempty"`
+	ClashSecret    string `json:"clashSecret,omitempty"`
+	ReportPublicIP *bool  `json:"reportPublicIp,omitempty"`
+	AllowClash     *bool  `json:"allowClash,omitempty"`
 }
 
 func installDir() (string, error) {
