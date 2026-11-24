@@ -12,17 +12,19 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.2"
+const agentVersion = "1.3"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -37,9 +39,10 @@ type waitEnvelope struct {
 	Code string `json:"code"`
 	Msg  string `json:"msg"`
 	Data struct {
-		JobID  string      `json:"jobId"`
-		Action string      `json:"action"`
-		Nodes  []probeNode `json:"nodes"`
+		JobID      string      `json:"jobId"`
+		Action     string      `json:"action"`
+		TargetHost string      `json:"targetHost,omitempty"`
+		Nodes      []probeNode `json:"nodes"`
 	} `json:"data"`
 }
 
@@ -164,13 +167,20 @@ func main() {
 		log.Printf("[用户 Agent v%s] 已启动，按需待命中（空闲时不向任何节点发包）", agentVersion)
 	}
 
+	var paused atomic.Bool
+	stopTray := startSystemTray(panelURL, &paused, stop)
+	defer stopTray()
+
+	// Warm up ISP detection in background on startup.
+	_ = detectLocalNetEnv()
+
 	backoff := 2 * time.Second
 	connected := false
 	for {
 		if ctx.Err() != nil {
 			return
 		}
-		jobID, action, nodes, err := waitForJob(ctx, client, panelURL, tok)
+		jobID, action, targetHost, nodes, err := waitForJob(ctx, client, panelURL, tok)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -200,6 +210,7 @@ func main() {
 		switch action {
 		case "uninstall":
 			_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "uninstall", OK: true})
+			stopTray()
 			performTracelessUninstall()
 			os.Exit(0)
 		case "update":
@@ -208,9 +219,22 @@ func main() {
 				continue
 			}
 			_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "update", OK: true})
+			stopTray()
 			os.Exit(0)
+		case "trace":
+			if strings.TrimSpace(targetHost) == "" {
+				continue
+			}
+			traceCtx, cancel := context.WithTimeout(ctx, 22*time.Second)
+			hops, traceErr := runOutboundTrace(traceCtx, targetHost)
+			cancel()
+			payload := traceReportPayload{JobID: jobID, Host: targetHost, Hops: hops}
+			if traceErr != nil {
+				payload.Error = traceErr.Error()
+			}
+			_ = sendTraceReport(ctx, client, panelURL, tok, payload)
 		case "probe", "":
-			if len(nodes) == 0 {
+			if len(nodes) == 0 || paused.Load() {
 				continue
 			}
 			results := runProbes(ctx, nodes, conc, *timeout)
@@ -224,30 +248,64 @@ func main() {
 	}
 }
 
-func waitForJob(ctx context.Context, client *http.Client, panelURL, token string) (string, string, []probeNode, error) {
-	url := fmt.Sprintf("%s/api/v1/probe/wait?timeout=25&version=%s", panelURL, agentVersion)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+func waitForJob(ctx context.Context, client *http.Client, panelURL, token string) (string, string, string, []probeNode, error) {
+	env := detectLocalNetEnv()
+	q := url.Values{}
+	q.Set("timeout", "25")
+	q.Set("version", agentVersion)
+	if env.HasIPv6 {
+		q.Set("hasIpv6", "1")
+	} else {
+		q.Set("hasIpv6", "0")
+	}
+	if env.ISP != "" {
+		q.Set("isp", env.ISP)
+	}
+	if env.IfaceName != "" {
+		q.Set("iface", env.IfaceName)
+	}
+	endpoint := fmt.Sprintf("%s/api/v1/probe/wait?%s", panelURL, q.Encode())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 	req.Header.Set("Authorization", "Probe "+token)
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return "", "", nil, errors.New("令牌无效或已停用")
+		return "", "", "", nil, errors.New("令牌无效或已停用")
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return "", "", "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
-	var env waitEnvelope
-	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
-		return "", "", nil, err
+	var envResp waitEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&envResp); err != nil {
+		return "", "", "", nil, err
 	}
-	return env.Data.JobID, env.Data.Action, env.Data.Nodes, nil
+	return envResp.Data.JobID, envResp.Data.Action, envResp.Data.TargetHost, envResp.Data.Nodes, nil
+}
+
+func sendTraceReport(ctx context.Context, client *http.Client, panelURL, token string, payload traceReportPayload) error {
+	raw, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, panelURL+"/api/v1/probe/trace-report", bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Probe "+token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return nil
 }
 
 func fetchJobs(ctx context.Context, client *http.Client, panelURL, token string) ([]probeNode, error) {
