@@ -48,6 +48,7 @@ func detectLocalNetEnv() localNetEnv {
 
 func currentISPAndIP(v4 *physicalInterface) (string, string) {
 	ispMu.Lock()
+	firstRun := cachedISPAt.IsZero()
 	isp := cachedISP
 	pubIP := cachedPublicIP
 	// Retry after 60s when either value is missing; otherwise refresh every 30m.
@@ -55,10 +56,20 @@ func currentISPAndIP(v4 *physicalInterface) (string, string) {
 	if isp == "" || pubIP == "" {
 		ttl = 60 * time.Second
 	}
-	stale := cachedISPAt.IsZero() || time.Since(cachedISPAt) > ttl
+	stale := firstRun || time.Since(cachedISPAt) > ttl
 	busy := ispRefreshIn
 	if stale && !busy {
 		ispRefreshIn = true
+		if firstRun {
+			// On startup, wait briefly (up to ~4s) so the very first heartbeat already carries real physical IP + ISP.
+			ispMu.Unlock()
+			refreshISPBg(v4)
+			ispMu.Lock()
+			isp = cachedISP
+			pubIP = cachedPublicIP
+			ispMu.Unlock()
+			return isp, pubIP
+		}
 		go refreshISPBg(v4)
 	}
 	ispMu.Unlock()
