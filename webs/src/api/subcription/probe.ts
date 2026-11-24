@@ -10,6 +10,8 @@ export interface Probe {
   online: boolean;
   lastSeenAt?: string | null;
   version?: string;
+  latestVersion?: string;
+  updateAvailable?: boolean;
 }
 
 export interface ProbeStatus {
@@ -47,10 +49,20 @@ export function addProbe(data: { name: string; region: string }) {
 }
 
 export function deleteProbe(id: number) {
-  return request({
+  return request<{ uninstalled?: boolean }>({
     url: "/api/v1/probes/delete",
     method: "post",
     data: { id },
+    timeout: 15000,
+  });
+}
+
+export function updateProbe(id: number) {
+  return request({
+    url: "/api/v1/probes/update",
+    method: "post",
+    data: { id },
+    timeout: 20000,
   });
 }
 

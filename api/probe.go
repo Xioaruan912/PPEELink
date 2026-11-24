@@ -21,6 +21,9 @@ import (
 // probeOnlineWindow 用户 Agent 每 25 秒长轮询一次，超过 60 秒无心跳视为离线。
 const probeOnlineWindow = 60 * time.Second
 
+// latestUserAgentVersion 与 userAgent 分支保持同步。
+const latestUserAgentVersion = "1.1"
+
 type probeNode struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
@@ -42,21 +45,27 @@ type probeReport struct {
 }
 
 type queuedProbeJob struct {
-	ID    string
-	Nodes []probeNode
+	ID     string
+	Action string
+	Nodes  []probeNode
 }
 
-// userProbeHub coordinates on-demand test dispatches to connected User Agents.
+type jobOutcome struct {
+	OK    bool
+	Error string
+}
+
+// userProbeHub coordinates on-demand test/update/uninstall dispatches to connected User Agents.
 // When idle, User Agents receive no jobs and send zero traffic to proxy nodes.
 type userProbeHub struct {
 	mu      sync.Mutex
 	waiters map[uint]chan queuedProbeJob
-	done    map[string]chan struct{}
+	done    map[string]chan jobOutcome
 }
 
 var probeHub = &userProbeHub{
 	waiters: map[uint]chan queuedProbeJob{},
-	done:    map[string]chan struct{}{},
+	done:    map[string]chan jobOutcome{},
 }
 
 func (h *userProbeHub) register(probeID uint) chan queuedProbeJob {
@@ -75,11 +84,11 @@ func (h *userProbeHub) unregister(probeID uint, ch chan queuedProbeJob) {
 	}
 }
 
-func (h *userProbeHub) dispatch(probeID uint, nodes []probeNode) (string, chan struct{}, bool) {
+func (h *userProbeHub) dispatchAction(probeID uint, action string, nodes []probeNode) (string, chan jobOutcome, bool) {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
 	jobID := hex.EncodeToString(b)
-	doneCh := make(chan struct{})
+	doneCh := make(chan jobOutcome, 1)
 
 	h.mu.Lock()
 	ch, online := h.waiters[probeID]
@@ -91,7 +100,7 @@ func (h *userProbeHub) dispatch(probeID uint, nodes []probeNode) (string, chan s
 	h.mu.Unlock()
 
 	select {
-	case ch <- queuedProbeJob{ID: jobID, Nodes: nodes}:
+	case ch <- queuedProbeJob{ID: jobID, Action: action, Nodes: nodes}:
 		return jobID, doneCh, true
 	default:
 		h.mu.Lock()
@@ -101,7 +110,15 @@ func (h *userProbeHub) dispatch(probeID uint, nodes []probeNode) (string, chan s
 	}
 }
 
+func (h *userProbeHub) dispatch(probeID uint, nodes []probeNode) (string, chan jobOutcome, bool) {
+	return h.dispatchAction(probeID, "probe", nodes)
+}
+
 func (h *userProbeHub) complete(jobID string) {
+	h.completeWith(jobID, jobOutcome{OK: true})
+}
+
+func (h *userProbeHub) completeWith(jobID string, outcome jobOutcome) {
 	if jobID == "" {
 		return
 	}
@@ -112,6 +129,10 @@ func (h *userProbeHub) complete(jobID string) {
 	}
 	h.mu.Unlock()
 	if ok {
+		select {
+		case ch <- outcome:
+		default:
+		}
 		close(ch)
 	}
 }
@@ -191,15 +212,15 @@ func probeInstallCommands(c *gin.Context, token string) gin.H {
 	panel := strings.TrimSuffix(baseURL(c), "/")
 	return gin.H{
 		"windows": fmt.Sprintf(
-			`$f="$env:USERPROFILE\ppeelink-user-agent.exe"; Invoke-WebRequest -Headers @{Authorization="Probe %s"} -Uri "%s/api/v1/probe/download?os=windows&arch=amd64" -OutFile $f; & $f -panel "%s" -token "%s"`,
+			`$f="$env:TEMP\ppeelink-ua-setup.exe"; Invoke-WebRequest -Headers @{Authorization="Probe %s"} -Uri "%s/api/v1/probe/download?os=windows&arch=amd64" -OutFile $f; Start-Process -Wait -FilePath $f -ArgumentList "-install","-panel","%s","-token","%s"; Write-Host "已后台安装并启动，可关闭此窗口" -ForegroundColor Green`,
 			token, panel, panel, token,
 		),
 		"macos": fmt.Sprintf(
-			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=darwin&arch=arm64' -o ~/ppeelink-user-agent && chmod +x ~/ppeelink-user-agent && ~/ppeelink-user-agent -panel '%s' -token '%s'`,
+			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=darwin&arch=arm64' -o /tmp/ppeelink-ua-setup && chmod +x /tmp/ppeelink-ua-setup && /tmp/ppeelink-ua-setup -install -panel '%s' -token '%s'`,
 			token, panel, panel, token,
 		),
 		"linux": fmt.Sprintf(
-			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=linux&arch=amd64' -o ./ppeelink-user-agent && chmod +x ./ppeelink-user-agent && ./ppeelink-user-agent -panel '%s' -token '%s'`,
+			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=linux&arch=amd64' -o /tmp/ppeelink-ua-setup && chmod +x /tmp/ppeelink-ua-setup && /tmp/ppeelink-ua-setup -install -panel '%s' -token '%s'`,
 			token, panel, panel, token,
 		),
 	}
@@ -224,6 +245,8 @@ func ProbeList(c *gin.Context) {
 		items = append(items, gin.H{
 			"id": p.ID, "name": p.Name, "region": p.Region, "enabled": p.Enabled,
 			"online": online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
+			"latestVersion":   latestUserAgentVersion,
+			"updateAvailable": p.Version != "" && p.Version != latestUserAgentVersion,
 		})
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": items, "msg": "用户 Agent 列表"})
@@ -255,7 +278,7 @@ func ProbeAdd(c *gin.Context) {
 	}, "msg": "用户 Agent 已创建，令牌只显示这一次"})
 }
 
-// ProbeDelete 管理端：删除用户 Agent。
+// ProbeDelete 管理端：删除用户 Agent；若在线则先下发无痕卸载指令清除本机所有文件与自启项。
 func ProbeDelete(c *gin.Context) {
 	var req struct {
 		ID uint `json:"id"`
@@ -264,13 +287,75 @@ func ProbeDelete(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "id 无效"})
 		return
 	}
+	uninstalled := false
+	if jobID, doneCh, ok := probeHub.dispatchAction(req.ID, "uninstall", nil); ok {
+		defer probeHub.cleanupDone(jobID)
+		select {
+		case <-doneCh:
+			uninstalled = true
+		case <-time.After(5 * time.Second):
+			uninstalled = true
+		}
+	}
 	models.DB.Where("probe_id = ?", req.ID).Delete(&models.ProbeResult{})
 	if err := models.DB.Delete(&models.Probe{}, req.ID).Error; err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "删除失败"})
 		return
 	}
 	InvalidateOverview()
-	c.JSON(200, gin.H{"code": "00000", "msg": "已删除"})
+	msg := "已从面板移除"
+	if uninstalled {
+		msg = "已通知本机无痕卸载所有文件与自启项，并从面板移除"
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"uninstalled": uninstalled}, "msg": msg})
+}
+
+// ProbeUpdate 管理端：向在线用户 Agent 下发远程静默更新指令。
+func ProbeUpdate(c *gin.Context) {
+	var req struct {
+		ID uint `json:"id"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.ID == 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "id 无效"})
+		return
+	}
+	jobID, doneCh, ok := probeHub.dispatchAction(req.ID, "update", nil)
+	if !ok {
+		c.JSON(400, gin.H{"code": "40000", "msg": "该用户 Agent 当前离线，无法远程更新"})
+		return
+	}
+	defer probeHub.cleanupDone(jobID)
+	select {
+	case res := <-doneCh:
+		if !res.OK {
+			c.JSON(500, gin.H{"code": "50000", "msg": "更新失败: " + res.Error})
+			return
+		}
+		c.JSON(200, gin.H{"code": "00000", "msg": "已下发更新，用户 Agent 正在静默重启升级至 v" + latestUserAgentVersion})
+	case <-time.After(15 * time.Second):
+		c.JSON(200, gin.H{"code": "00000", "msg": "已下发更新指令，请稍候刷新查看新版本"})
+	case <-c.Request.Context().Done():
+		return
+	}
+}
+
+// ProbeAck 用户 Agent 回报 update / uninstall 指令确认。
+func ProbeAck(c *gin.Context) {
+	if _, ok := currentProbe(c); !ok {
+		return
+	}
+	var req struct {
+		JobID  string `json:"jobId"`
+		Action string `json:"action"`
+		OK     bool   `json:"ok"`
+		Error  string `json:"error"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "格式错误"})
+		return
+	}
+	probeHub.completeWith(req.JobID, jobOutcome{OK: req.OK, Error: req.Error})
+	c.JSON(200, gin.H{"code": "00000", "msg": "ok"})
 }
 
 // ProbeResetToken 管理端：重置用户 Agent 令牌。
@@ -368,15 +453,21 @@ func ProbeWait(c *gin.Context) {
 
 	select {
 	case job := <-ch:
+		act := job.Action
+		if act == "" {
+			act = "probe"
+		}
 		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
-			"jobId": job.ID,
-			"nodes": job.Nodes,
+			"jobId":  job.ID,
+			"action": act,
+			"nodes":  job.Nodes,
 		}, "msg": "dispatched"})
 	case <-timer.C:
 		models.DB.Model(probe).Update("last_seen_at", time.Now())
 		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
-			"jobId": "",
-			"nodes": []probeNode{},
+			"jobId":  "",
+			"action": "",
+			"nodes":  []probeNode{},
 		}, "msg": "idle"})
 	case <-c.Request.Context().Done():
 		return

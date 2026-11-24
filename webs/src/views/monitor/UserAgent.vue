@@ -12,6 +12,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import {
   CopyDocument,
   Delete,
+  Download,
   Key,
   Plus,
   Refresh,
@@ -26,6 +27,7 @@ import {
   getProbes,
   resetProbeToken,
   triggerUserProbe,
+  updateProbe,
   type Probe,
   type ProbeCommands,
 } from "@/api/subcription/probe";
@@ -55,6 +57,7 @@ let gsapCtx: gsap.Context | null = null;
 const loading = ref(false);
 const probingAll = ref(false);
 const probingNodeId = ref<number | null>(null);
+const updatingProbeId = ref<number | null>(null);
 const probes = ref<Probe[]>([]);
 const nodes = ref<NodeCardItem[]>([]);
 const query = ref("");
@@ -249,15 +252,37 @@ async function handleResetToken(probe: Probe) {
   }
 }
 
+async function handleUpdateProbe(probe: Probe) {
+  if (!probe.online) {
+    ElMessage.warning("设备离线，无法远程更新");
+    return;
+  }
+  updatingProbeId.value = probe.id;
+  try {
+    const res = (await updateProbe(probe.id)) as any;
+    ElMessage.success(res?.msg || "已下发更新");
+    setTimeout(() => {
+      void refreshAll();
+    }, 3500);
+  } catch (err: any) {
+    ElMessage.error(err?.message || "更新失败");
+  } finally {
+    updatingProbeId.value = null;
+  }
+}
+
 async function handleDeleteProbe(probe: Probe) {
   try {
-    await ElMessageBox.confirm(`删除「${probe.name}」？`, "删除设备", {
+    const tip = probe.online
+      ? `将通知本机「${probe.name}」自动退出并无痕删除所有本地文件与开机自启项，同时从面板移除。`
+      : `删除「${probe.name}」？（当前离线，仅从面板移除）`;
+    await ElMessageBox.confirm(tip, "无痕卸载并删除", {
       type: "warning",
-      confirmButtonText: "删除",
+      confirmButtonText: probe.online ? "无痕卸载并删除" : "删除",
       cancelButtonText: "取消",
     });
-    await deleteProbe(probe.id);
-    ElMessage.success("已删除");
+    const res = (await deleteProbe(probe.id)) as any;
+    ElMessage.success(res?.msg || "已删除");
     await refreshAll();
   } catch (err: any) {
     if (err?.message) ElMessage.error(err.message);
@@ -370,6 +395,7 @@ onBeforeUnmount(() => {
               :label="p.online ? '在线' : '离线'"
             />
             <span v-if="p.region" class="device-region">{{ p.region }}</span>
+            <span v-if="p.version" class="device-ver mono">v{{ p.version }}</span>
             <span class="device-spacer"></span>
             <span class="device-time mono">{{ formatShortTime(p.lastSeenAt) }}</span>
           </div>
@@ -388,13 +414,24 @@ onBeforeUnmount(() => {
             </UiButton>
             <div class="device-icons">
               <RowIconButton
+                v-if="p.online"
+                :icon="Download"
+                :label="
+                  p.updateAvailable
+                    ? `更新至 v${p.latestVersion}`
+                    : '远程更新'
+                "
+                :disabled="updatingProbeId === p.id"
+                @click="handleUpdateProbe(p)"
+              />
+              <RowIconButton
                 :icon="Key"
                 label="重置令牌"
                 @click="handleResetToken(p)"
               />
               <RowIconButton
                 :icon="Delete"
-                label="删除设备"
+                :label="p.online ? '无痕卸载并删除' : '删除设备'"
                 @click="handleDeleteProbe(p)"
               />
             </div>
@@ -598,7 +635,7 @@ onBeforeUnmount(() => {
         <pre class="cmd-box mono">{{ setupCommands[setupOS] }}</pre>
 
         <div class="setup-bar">
-          <small>令牌仅显示一次，空闲时不发包。</small>
+          <small>静默后台运行并自启，执行后即可关闭终端。</small>
           <div class="setup-actions">
             <UiButton
               variant="ghost"
@@ -738,6 +775,11 @@ onBeforeUnmount(() => {
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--c-surface-2);
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.device-ver {
   font-size: 11px;
   color: var(--c-muted);
 }

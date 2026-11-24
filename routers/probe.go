@@ -11,6 +11,7 @@ func Probes(r *gin.Engine) {
 	r.GET("/api/v1/probe/wait", api.ProbeWait)
 	r.GET("/api/v1/probe/jobs", api.ProbeJobs)
 	r.POST("/api/v1/probe/report", api.ProbeReport)
+	r.POST("/api/v1/probe/ack", api.ProbeAck)
 	r.GET("/api/v1/probe/download", api.ProbeDownloadAuth)
 	r.GET("/api/v1/probe/binary", api.ProbeBinary)
 
@@ -22,6 +23,7 @@ func Probes(r *gin.Engine) {
 		g.POST("/delete", api.ProbeDelete)
 		g.POST("/reset-token", api.ProbeResetToken)
 		g.POST("/trigger", api.ProbeTrigger)
+		g.POST("/update", api.ProbeUpdate)
 		g.GET("/download", api.ProbeDownload)
 	}
 }
