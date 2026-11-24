@@ -259,15 +259,15 @@ func probeInstallCommands(c *gin.Context, token string) gin.H {
 	panel := strings.TrimSuffix(baseURL(c), "/")
 	return gin.H{
 		"windows": fmt.Sprintf(
-			`$f="$env:TEMP\ppeelink-ua-setup.exe"; Invoke-WebRequest -Headers @{Authorization="Probe %s"} -Uri "%s/api/v1/probe/download?os=windows&arch=amd64" -OutFile $f; Start-Process -Wait -FilePath $f -ArgumentList "-install","-panel","%s","-token","%s"; Write-Host "已后台安装并启动，可关闭此窗口" -ForegroundColor Green`,
+			`$f="$env:TEMP\ppeelink-ua-setup.exe"; $d="$env:LOCALAPPDATA\PPEELinkUserAgent"; Write-Host "正在下载并安装 PPEELink 用户 Agent..." -ForegroundColor Cyan; Invoke-WebRequest -UseBasicParsing -Headers @{Authorization="Probe %s"} -Uri "%s/api/v1/probe/download?os=windows&arch=amd64" -OutFile $f; $p=Start-Process -PassThru -FilePath $f -ArgumentList "-install","-panel","%s","-token","%s"; $null=$p.WaitForExit(15000); Remove-Item -Force -ErrorAction SilentlyContinue $f; if (Test-Path "$d\ppeelink-user-agent.exe") { Write-Host ""; Write-Host "==========================================" -ForegroundColor Green; Write-Host "  PPEELink 用户 Agent 安装成功" -ForegroundColor Green; Write-Host "==========================================" -ForegroundColor Green; Write-Host "  运行状态 : 已后台静默启动（无窗口，开机自启）"; Write-Host "  安装目录 : $d"; Write-Host "  主程序   : $d\ppeelink-user-agent.exe"; Write-Host "  配置文件 : $d\config.json"; Write-Host "  自启项   : HKCU\Software\Microsoft\Windows\CurrentVersion\Run"; Write-Host "  面板管理 : 可在网页端随时发起实测、远程更新或无痕卸载"; Write-Host "==========================================" -ForegroundColor Green } else { Write-Host "安装未完成，请检查网络或杀毒软件拦截后重试" -ForegroundColor Red }; Write-Host ""; Write-Host "按任意键关闭此窗口..." -ForegroundColor DarkGray; try { $null=$Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") } catch { Read-Host | Out-Null }; exit`,
 			token, panel, panel, token,
 		),
 		"macos": fmt.Sprintf(
-			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=darwin&arch=arm64' -o /tmp/ppeelink-ua-setup && chmod +x /tmp/ppeelink-ua-setup && /tmp/ppeelink-ua-setup -install -panel '%s' -token '%s'`,
+			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=darwin&arch=arm64' -o /tmp/ppeelink-ua-setup && chmod +x /tmp/ppeelink-ua-setup && /tmp/ppeelink-ua-setup -install -panel '%s' -token '%s' && printf "\n按回车键关闭..." && read _ && exit`,
 			token, panel, panel, token,
 		),
 		"linux": fmt.Sprintf(
-			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=linux&arch=amd64' -o /tmp/ppeelink-ua-setup && chmod +x /tmp/ppeelink-ua-setup && /tmp/ppeelink-ua-setup -install -panel '%s' -token '%s'`,
+			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=linux&arch=amd64' -o /tmp/ppeelink-ua-setup && chmod +x /tmp/ppeelink-ua-setup && /tmp/ppeelink-ua-setup -install -panel '%s' -token '%s' && printf "\n按回车键关闭..." && read _ && exit`,
 			token, panel, panel, token,
 		),
 	}
