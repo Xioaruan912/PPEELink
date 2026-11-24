@@ -95,6 +95,7 @@ func clashCandidates() ([]string, string) {
 	}
 	for _, u := range []string{
 		"http://127.0.0.1:9090",
+		"http://[::1]:9090",
 		"http://127.0.0.1:9097",
 		"http://127.0.0.1:9091",
 		"http://127.0.0.1:29090",
@@ -134,13 +135,13 @@ func isBuiltinClashProxy(name string) bool {
 
 func detectClashStatus(ctx context.Context) clashStatus {
 	cands, sec := clashCandidates()
-	client := clashHTTPClient(700 * time.Millisecond)
+	client := clashHTTPClient(2500 * time.Millisecond)
 
 	var baseURL, ver string
 	var authErrURL string
 	var authErrCode int
 	for _, cand := range cands {
-		pCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		pCtx, cancel := context.WithTimeout(ctx, 800*time.Millisecond)
 		resp, err := clashDoRequest(pCtx, client, http.MethodGet, cand+"/version", sec, nil)
 		if err == nil {
 			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -192,7 +193,7 @@ func detectClashStatus(ctx context.Context) clashStatus {
 			All  []string `json:"all"`
 		} `json:"proxies"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 512*1024)).Decode(&parsed); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4*1024*1024)).Decode(&parsed); err != nil {
 		return clashStatus{Connected: true, Controller: baseURL, Version: ver, Error: shortErr(err)}
 	}
 
