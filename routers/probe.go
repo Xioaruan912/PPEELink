@@ -24,6 +24,9 @@ func Probes(r *gin.Engine) {
 		g.POST("/reset-token", api.ProbeResetToken)
 		g.POST("/trigger", api.ProbeTrigger)
 		g.POST("/update", api.ProbeUpdate)
+		g.POST("/auto-toggle", api.ProbeAutoToggle)
+		g.GET("/sparklines", api.ProbeSparklines)
+		g.GET("/history", api.ProbeHistory)
 		g.GET("/download", api.ProbeDownload)
 	}
 }

@@ -7,11 +7,64 @@ export interface Probe {
   name: string;
   region: string;
   enabled: boolean;
+  autoProbe?: boolean;
   online: boolean;
   lastSeenAt?: string | null;
   version?: string;
   latestVersion?: string;
   updateAvailable?: boolean;
+}
+
+export interface HistoryPoint {
+  t: number;
+  rtt: number;
+  min?: number;
+  max?: number;
+  ok: boolean;
+  loss: number;
+}
+
+export interface HistoryStats {
+  current?: number | null;
+  avg: number;
+  min: number;
+  max: number;
+  uptime: number;
+  samples: number;
+}
+
+export interface PeakBand {
+  start: number;
+  end: number;
+}
+
+export interface SparklineSeries {
+  points: HistoryPoint[];
+  stats: HistoryStats;
+}
+
+export interface SparklinesResponse {
+  from: number;
+  to: number;
+  peakBands?: PeakBand[];
+  nodes: Record<string, SparklineSeries>;
+}
+
+export interface ProbeHistorySeries {
+  probeId: number;
+  probeName: string;
+  region: string;
+  stats: HistoryStats;
+  points: HistoryPoint[];
+}
+
+export interface NodeHistoryResponse {
+  nodeId: number;
+  range: "1h" | "6h" | "24h" | "7d";
+  from: number;
+  to: number;
+  peakBands?: PeakBand[];
+  series: ProbeHistorySeries[];
 }
 
 export interface ProbeStatus {
@@ -100,5 +153,36 @@ export function setNodeProbePolicy(id: number, policy: ProbePolicy) {
     url: "/api/v1/nodes/probe-policy",
     method: "post",
     data: { id, policy },
+  });
+}
+
+export function toggleProbeAuto(id: number, autoProbe: boolean) {
+  return request<{ id: number; autoProbe: boolean }>({
+    url: "/api/v1/probes/auto-toggle",
+    method: "post",
+    data: { id, autoProbe },
+  });
+}
+
+export function getProbeSparklines(params?: {
+  hours?: number;
+  probeId?: number;
+}) {
+  return request<SparklinesResponse>({
+    url: "/api/v1/probes/sparklines",
+    method: "get",
+    params,
+  });
+}
+
+export function getProbeHistory(params: {
+  nodeId: number;
+  range?: "1h" | "6h" | "24h" | "7d";
+  probeId?: number;
+}) {
+  return request<NodeHistoryResponse>({
+    url: "/api/v1/probes/history",
+    method: "get",
+    params,
   });
 }

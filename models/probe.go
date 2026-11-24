@@ -16,6 +16,7 @@ type Probe struct {
 	Region     string     `gorm:"size:32" json:"region"`
 	TokenHash  string     `gorm:"size:64;index;not null" json:"-"`
 	Enabled    bool       `gorm:"not null;default:true" json:"enabled"`
+	AutoProbe  bool       `gorm:"not null;default:false" json:"autoProbe"`
 	LastSeenAt *time.Time `json:"lastSeenAt"`
 	Version    string     `gorm:"size:32" json:"version"`
 }
@@ -71,5 +72,5 @@ func RecordAgentCheckResults(serverID uint, results []ProbeResult, now time.Time
 }
 
 func CleanupProbeResults(before time.Time) error {
-	return DB.Where("checked_at < ?", before).Delete(&ProbeResult{}).Error
+	return DB.Unscoped().Where("checked_at < ?", before).Delete(&ProbeResult{}).Error
 }

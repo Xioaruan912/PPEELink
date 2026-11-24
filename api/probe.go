@@ -291,7 +291,8 @@ func ProbeList(c *gin.Context) {
 		online := probeHub.isWaiting(p.ID) || (p.LastSeenAt != nil && now.Sub(*p.LastSeenAt) < probeOnlineWindow)
 		items = append(items, gin.H{
 			"id": p.ID, "name": p.Name, "region": p.Region, "enabled": p.Enabled,
-			"online": online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
+			"autoProbe": p.AutoProbe,
+			"online":    online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
 			"latestVersion":   latestUserAgentVersion,
 			"updateAvailable": p.Version != "" && p.Version != latestUserAgentVersion,
 		})

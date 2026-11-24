@@ -6,6 +6,7 @@ import {
   onBeforeUnmount,
   onMounted,
   ref,
+  watch,
 } from "vue";
 import gsap from "gsap";
 import { ElMessage, ElMessageBox } from "element-plus";
@@ -22,15 +23,22 @@ import { EmptyState, StatusDot, UiButton, UiDialog } from "@/ui";
 import CountryFlag from "@/ui/CountryFlag.vue";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { displayNodeName } from "@/utils/nodeDisplay";
+import LatencySparkline from "./components/LatencySparkline.vue";
+import LatencyDetailModal, {
+  type DetailNodeTarget,
+} from "./components/LatencyDetailModal.vue";
 import {
   addProbe,
   deleteProbe,
   getProbes,
+  getProbeSparklines,
   resetProbeToken,
+  toggleProbeAuto,
   triggerUserProbe,
   updateProbe,
   type Probe,
   type ProbeCommands,
+  type SparklinesResponse,
 } from "@/api/subcription/probe";
 import { getNodeOverview } from "@/api/subcription/node";
 
@@ -80,11 +88,16 @@ const loading = ref(false);
 const probingAll = ref(false);
 const probingNodeId = ref<number | null>(null);
 const updatingProbeId = ref<number | null>(null);
+const togglingAutoId = ref<number | null>(null);
 const selectedProbeId = ref<number | null>(null);
 const probes = ref<Probe[]>([]);
 const nodes = ref<NodeCardItem[]>([]);
+const sparklines = ref<SparklinesResponse | null>(null);
+const detailOpen = ref(false);
+const detailNode = ref<DetailNodeTarget | null>(null);
 const query = ref("");
 const statusFilter = ref<"all" | "ok" | "fail" | "untested">("all");
+let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const addDialogVisible = ref(false);
 const creating = ref(false);
@@ -231,6 +244,18 @@ function animateEntrance() {
   }, rootEl.value);
 }
 
+async function fetchSparklines() {
+  try {
+    const res = await getProbeSparklines({
+      hours: 24,
+      probeId: selectedProbeId.value || undefined,
+    });
+    sparklines.value = res.data || null;
+  } catch {
+    // Non-blocking: cards still render current RTT cleanly.
+  }
+}
+
 async function refreshAll() {
   loading.value = true;
   try {
@@ -246,11 +271,49 @@ async function refreshAll() {
       selectedProbeId.value = null;
     }
     nodes.value = (nodeRes.data || []) as NodeCardItem[];
+    await fetchSparklines();
   } catch (err: any) {
     ElMessage.error(err?.message || "加载失败");
   } finally {
     loading.value = false;
   }
+}
+
+async function handleToggleAuto(probe: Probe) {
+  togglingAutoId.value = probe.id;
+  const nextVal = !probe.autoProbe;
+  try {
+    const res = (await toggleProbeAuto(probe.id, nextVal)) as any;
+    probe.autoProbe = nextVal;
+    ElMessage.success(res?.msg || (nextVal ? "已开启 1 分钟定时记录" : "已关闭定时记录"));
+    if (nextVal && probe.online) {
+      setTimeout(() => {
+        void refreshAll();
+      }, 3000);
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "切换失败");
+  } finally {
+    togglingAutoId.value = null;
+  }
+}
+
+function openNodeDetail(item: NodeCardItem) {
+  const v = resolveNodeView(item);
+  detailNode.value = {
+    id: item.id,
+    name: item.name,
+    server: item.server,
+    port: item.port,
+    country: item.country,
+    countryCode: item.countryCode,
+    kind: v.kind,
+  };
+  detailOpen.value = true;
+}
+
+function nodeSparkline(nodeId: number) {
+  return sparklines.value?.nodes?.[String(nodeId)] || null;
 }
 
 async function copyText(text: string, label = "已复制") {
@@ -438,15 +501,28 @@ async function runTestOne(node: NodeCardItem) {
   }
 }
 
+watch(selectedProbeId, () => {
+  void fetchSparklines();
+});
+
 onMounted(async () => {
   await refreshAll();
   await nextTick();
   animateEntrance();
+  autoRefreshTimer = setInterval(() => {
+    if (probes.value.some((p) => p.autoProbe && p.online)) {
+      void refreshAll();
+    }
+  }, 60000);
 });
 
 onActivated(refreshAll);
 
 onBeforeUnmount(() => {
+  if (autoRefreshTimer) {
+    clearInterval(autoRefreshTimer);
+    autoRefreshTimer = null;
+  }
   gsapCtx?.revert();
   gsapCtx = null;
 });
@@ -534,7 +610,24 @@ onBeforeUnmount(() => {
             }}</span>
           </div>
 
-          <strong class="device-name">{{ p.name }}</strong>
+          <div class="device-title-row">
+            <strong class="device-name">{{ p.name }}</strong>
+            <button
+              type="button"
+              class="auto-pill"
+              :class="{ 'is-on': p.autoProbe }"
+              :disabled="togglingAutoId === p.id"
+              :title="
+                p.autoProbe
+                  ? '已开启 1 分钟定时记录（保留 7 天曲线），点击关闭'
+                  : '开启 1 分钟定时记录，自动生成 7 天高峰/低峰曲线'
+              "
+              @click.stop="handleToggleAuto(p)"
+            >
+              <span class="auto-dot" aria-hidden="true"></span>
+              <span>{{ p.autoProbe ? "1m 记录中" : "1m 曲线" }}</span>
+            </button>
+          </div>
 
           <footer class="device-foot" @click.stop>
             <UiButton
@@ -643,12 +736,13 @@ onBeforeUnmount(() => {
         <article
           v-for="item in filteredNodes"
           :key="item.id"
-          class="node-card"
+          class="node-card is-interactive"
           :class="{
             'is-ok': resolveNodeView(item).checked && resolveNodeView(item).valid,
             'is-bad': resolveNodeView(item).checked && !resolveNodeView(item).valid,
           }"
           data-stagger-card
+          @click="openNodeDetail(item)"
         >
           <header class="nc-head">
             <div class="nc-identity">
@@ -662,40 +756,76 @@ onBeforeUnmount(() => {
 
           <!-- Focal Metric Centerpiece -->
           <div class="nc-metric">
-            <template
-              v-if="
+            <div class="nc-metric-top">
+              <template
+                v-if="
+                  resolveNodeView(item).checked && resolveNodeView(item).valid
+                "
+              >
+                <div
+                  class="nc-rtt mono"
+                  :class="rttTone(resolveNodeView(item).rtt)"
+                >
+                  <span>{{ resolveNodeView(item).rtt ?? 0 }}</span>
+                  <small>ms</small>
+                </div>
+              </template>
+
+              <template
+                v-else-if="
+                  resolveNodeView(item).checked && !resolveNodeView(item).valid
+                "
+              >
+                <div class="nc-fail">
+                  <strong>不可达</strong>
+                  <small>{{ resolveNodeView(item).error || "超时" }}</small>
+                </div>
+              </template>
+
+              <template v-else>
+                <div class="nc-idle mono">—</div>
+              </template>
+
+              <span
+                v-if="nodeSparkline(item.id)?.stats.samples"
+                class="nc-uptime mono"
+                :title="`近 24 小时可用率（${nodeSparkline(item.id)?.stats.samples} 次采样）`"
+              >
+                {{ nodeSparkline(item.id)?.stats.uptime }}%
+              </span>
+            </div>
+
+            <!-- Bespoke Monotone Cubic Sparkline (hover to scrub, click card for 7d detail) -->
+            <div
+              v-if="nodeSparkline(item.id)?.points.length"
+              class="nc-spark"
+            >
+              <LatencySparkline
+                :uid="item.id"
+                :points="nodeSparkline(item.id)!.points"
+                :from="sparklines!.from"
+                :to="sparklines!.to"
+                :peak-bands="sparklines!.peakBands"
+                :tone="
+                  resolveNodeView(item).checked && !resolveNodeView(item).valid
+                    ? 'is-bad'
+                    : rttTone(resolveNodeView(item).rtt)
+                "
+              />
+            </div>
+
+            <div
+              v-else-if="
                 resolveNodeView(item).checked && resolveNodeView(item).valid
               "
+              class="nc-bar"
+              aria-hidden="true"
             >
-              <div
-                class="nc-rtt mono"
+              <i
                 :class="rttTone(resolveNodeView(item).rtt)"
-              >
-                <span>{{ resolveNodeView(item).rtt ?? 0 }}</span>
-                <small>ms</small>
-              </div>
-              <div class="nc-bar" aria-hidden="true">
-                <i
-                  :class="rttTone(resolveNodeView(item).rtt)"
-                  :style="{ width: `${rttRatio(resolveNodeView(item).rtt)}%` }"
-                ></i>
-              </div>
-            </template>
-
-            <template
-              v-else-if="
-                resolveNodeView(item).checked && !resolveNodeView(item).valid
-              "
-            >
-              <div class="nc-fail">
-                <strong>不可达</strong>
-                <small>{{ resolveNodeView(item).error || "超时" }}</small>
-              </div>
-            </template>
-
-            <template v-else>
-              <div class="nc-idle mono">—</div>
-            </template>
+                :style="{ width: `${rttRatio(resolveNodeView(item).rtt)}%` }"
+              ></i>
+            </div>
 
             <!-- 多设备并排对比胶囊（全部对比模式下自动展示） -->
             <div
@@ -706,6 +836,7 @@ onBeforeUnmount(() => {
                 item.probes.length > 0
               "
               class="nc-compare"
+              @click.stop
             >
               <button
                 v-for="pr in item.probes"
@@ -723,7 +854,7 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <footer class="nc-foot">
+          <footer class="nc-foot" @click.stop>
             <span class="nc-host mono" :title="`${item.server}:${item.port}`">
               {{ item.server }}:{{ item.port }}
             </span>
@@ -837,6 +968,12 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </UiDialog>
+    <!-- 7天精度延迟曲线详情抽屉 -->
+    <LatencyDetailModal
+      v-model="detailOpen"
+      :node="detailNode"
+      :initial-probe-id="selectedProbeId"
+    />
   </div>
 </template>
 
@@ -992,11 +1129,64 @@ onBeforeUnmount(() => {
   color: var(--c-muted);
 }
 
+.device-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .device-name {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 180ms var(--ease-out),
+    border-color 180ms var(--ease-out),
+    color 180ms var(--ease-out);
+}
+
+.auto-pill:hover {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+
+.auto-pill.is-on {
+  border-color: color-mix(in srgb, var(--c-ok) 45%, var(--c-line));
+  background: color-mix(in srgb, var(--c-ok) 10%, var(--c-surface));
+  color: var(--c-ok);
+}
+
+.auto-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.auto-pill.is-on .auto-dot {
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-ok) 22%, transparent);
 }
 
 .device-foot {
@@ -1134,6 +1324,10 @@ onBeforeUnmount(() => {
     transform 180ms var(--ease-out);
 }
 
+.node-card.is-interactive {
+  cursor: pointer;
+}
+
 .node-card:hover {
   border-color: var(--c-ink);
   transform: translateY(-2px);
@@ -1177,6 +1371,23 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 48px;
   align-content: center;
+}
+
+.nc-metric-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.nc-uptime {
+  font-size: 11px;
+  color: var(--c-muted);
+  opacity: 0.85;
+}
+
+.nc-spark {
+  margin-top: 2px;
 }
 
 .nc-rtt {

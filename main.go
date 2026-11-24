@@ -224,7 +224,8 @@ func Run(port int) {
 		Updates(map[string]any{"ssh_host": "", "ssh_port": 22, "ssh_user": "", "ssh_password_enc": ""}).Error
 	// 启动后台定时测活任务 (Cron)
 	cronScheduler := StartCronTasks()
-	api.StartLocalProxy() // 有本机自建服务器时启动 xray 同步
+	api.StartLocalProxy()        // 有本机自建服务器时启动 xray 同步
+	api.StartUserProbeScheduler() // 用户 Agent 1 分钟定时曲线采样 + 7 天历史清理
 
 	srv := &http.Server{
 		Addr:              fmt.Sprintf("0.0.0.0:%d", port),
