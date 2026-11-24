@@ -29,6 +29,7 @@ func runAgent(args []string) {
 	if err := os.MkdirAll(*dir, 0o700); err != nil {
 		log.Fatal(err)
 	}
+	loadAgentSecurityPolicy(*dir)
 	xraycore.AgentVersion = agentversion.Current
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

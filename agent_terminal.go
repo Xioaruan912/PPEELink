@@ -146,6 +146,10 @@ func serveAgentTerminal(ctx context.Context, conn *websocket.Conn) error {
 		}
 		switch msg.Type {
 		case "term.open":
+			if !currentAgentPolicy().TerminalEnabled {
+				_ = write(agentTermMessage{Type: "term.exit", ID: msg.ID, Code: 1, Error: "该服务器已关闭 WebShell 终端功能（可在 Agent 管理中开启）"})
+				continue
+			}
 			var session *agentPTY
 			var err error
 			if msg.SessionID != "" || msg.Owner != 0 {
@@ -281,10 +285,17 @@ type agentDockerRequest struct {
 }
 
 func handleAgentOp(ctx context.Context, op string, payload json.RawMessage) (json.RawMessage, error) {
+	pol := currentAgentPolicy()
 	switch op {
 	case "terminal":
+		if !pol.TerminalEnabled {
+			return nil, errors.New("该服务器已关闭 WebShell 终端功能")
+		}
 		return handleTerminalOp(ctx, payload)
 	case "docker":
+		if !pol.DockerEnabled {
+			return nil, errors.New("该服务器已关闭 Docker 管理功能")
+		}
 		var req agentDockerRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
 			return nil, errors.New("Docker 请求格式无效")
@@ -295,6 +306,9 @@ func handleAgentOp(ctx context.Context, op string, payload json.RawMessage) (jso
 		}
 		return json.Marshal(map[string]any{"output": output, "truncated": truncated})
 	case "files":
+		if !pol.FilesEnabled {
+			return nil, errors.New("该服务器已关闭文件管理与上传功能")
+		}
 		var req agentFileRequest
 		if err := json.Unmarshal(payload, &req); err != nil {
 			return nil, errors.New("文件请求格式无效")

@@ -13,17 +13,19 @@ import (
 )
 
 type agentOpsJob struct {
-	JobID   string   `json:"jobId"`
-	Action  string   `json:"action"`  // tune-network | upgrade-core | fetch-logs | check-port | sni-check | security-audit | security-ban | security-unban
-	Source  string   `json:"source"`  // xray | agent (for fetch-logs)
-	Lines   int      `json:"lines"`   // for fetch-logs
-	Filter  string   `json:"filter"`  // for fetch-logs
-	Version string   `json:"version"` // for upgrade-core
-	Port    int      `json:"port"`    // for check-port
-	Proto   string   `json:"proto"`   // tcp | udp (for check-port)
-	Targets []string `json:"targets"` // for sni-check
-	Ports   []int    `json:"ports"`   // for security-audit
-	IP      string   `json:"ip"`      // for security-ban / security-unban
+	JobID    string               `json:"jobId"`
+	Action   string               `json:"action"` // tune-network | upgrade-core | fetch-logs | check-port | sni-check | security-audit | security-ban | security-unban | unlock-check | set-panel-url | set-policy
+	Source   string               `json:"source"`
+	Lines    int                  `json:"lines"`
+	Filter   string               `json:"filter"`
+	Version  string               `json:"version"`
+	Port     int                  `json:"port"`
+	Proto    string               `json:"proto"`
+	Targets  []string             `json:"targets"`
+	Ports    []int                `json:"ports"`
+	IP       string               `json:"ip"`
+	PanelURL string               `json:"panelUrl"`
+	Policy   *AgentSecurityPolicy `json:"policy"`
 }
 
 type agentOpsResult struct {
@@ -38,6 +40,7 @@ type agentOpsResult struct {
 	Wmem     int64                         `json:"wmemMax,omitempty"`
 	SNIs     []xraycore.SNICheckResult     `json:"snis,omitempty"`
 	Security *xraycore.SecurityAuditResult `json:"security,omitempty"`
+	Unlock   *xraycore.ServerUnlockReport  `json:"unlock,omitempty"`
 }
 
 func runAgentOpsLoop(ctx context.Context, client *http.Client, panel, token string, runner *xraycore.Runner) {
@@ -66,7 +69,7 @@ func runAgentOpsLoop(ctx context.Context, client *http.Client, panel, token stri
 		if job == nil || job.JobID == "" {
 			continue
 		}
-		res := executeAgentOpsJob(ctx, runner, *job)
+		res := executeAgentOpsJob(ctx, runner, token, *job)
 		_ = reportAgentOpsResult(ctx, client, panel, token, res)
 	}
 }
@@ -95,7 +98,7 @@ func waitAgentOpsJob(ctx context.Context, client *http.Client, panel, token stri
 	return &env.Data, nil
 }
 
-func executeAgentOpsJob(ctx context.Context, runner *xraycore.Runner, job agentOpsJob) agentOpsResult {
+func executeAgentOpsJob(ctx context.Context, runner *xraycore.Runner, token string, job agentOpsJob) agentOpsResult {
 	res := agentOpsResult{JobID: job.JobID}
 	switch job.Action {
 	case "tune-network":
@@ -154,6 +157,32 @@ func executeAgentOpsJob(ctx context.Context, runner *xraycore.Runner, job agentO
 		}
 		res.OK = true
 		res.Output = msg
+	case "unlock-check":
+		uCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		rep := xraycore.RunServerNativeUnlock(uCtx)
+		res.Unlock = &rep
+		res.OK = true
+		res.Output = "原生解锁检测完成"
+	case "set-panel-url":
+		msg, err := migrateAgentPanelURL(ctx, job.PanelURL, token)
+		if err != nil {
+			res.Error = err.Error()
+			return res
+		}
+		res.OK = true
+		res.Output = msg
+	case "set-policy":
+		if job.Policy == nil {
+			res.Error = "策略参数缺失"
+			return res
+		}
+		if err := saveAgentSecurityPolicy(*job.Policy); err != nil {
+			res.Error = err.Error()
+			return res
+		}
+		res.OK = true
+		res.Output = "安全与能力策略已实时生效"
 	default:
 		res.Error = "不支持的运维指令: " + job.Action
 	}
