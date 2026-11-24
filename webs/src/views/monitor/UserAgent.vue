@@ -17,12 +17,14 @@ import {
   Key,
   Plus,
   Refresh,
+  Setting,
   VideoPlay,
 } from "@element-plus/icons-vue";
 import { EmptyState, StatusDot, UiButton, UiDialog } from "@/ui";
 import CountryFlag from "@/ui/CountryFlag.vue";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { displayNodeName } from "@/utils/nodeDisplay";
+import AgentManagerDrawer from "./components/AgentManagerDrawer.vue";
 import LatencySparkline from "./components/LatencySparkline.vue";
 import LatencyDetailModal, {
   type DetailNodeTarget,
@@ -97,6 +99,7 @@ const nodes = ref<NodeCardItem[]>([]);
 const sparklines = ref<SparklinesResponse | null>(null);
 const detailOpen = ref(false);
 const detailNode = ref<DetailNodeTarget | null>(null);
+const managerOpen = ref(false);
 const query = ref("");
 const statusFilter = ref<"all" | "ok" | "fail" | "untested">("all");
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -113,6 +116,9 @@ const setupCommands = ref<ProbeCommands>({ windows: "", macos: "", linux: "" });
 const setupOS = ref<"windows" | "macos" | "linux">("windows");
 
 const onlineProbes = computed(() => probes.value.filter((p) => p.online));
+const updatableCount = computed(
+  () => probes.value.filter((p) => p.online && p.updateAvailable).length
+);
 const hasOnlineProbe = computed(() => onlineProbes.value.length > 0);
 const selectedProbe = computed(
   () => probes.value.find((p) => p.id === selectedProbeId.value) || null
@@ -587,6 +593,16 @@ onBeforeUnmount(() => {
           aria-label="刷新"
           @click="refreshAll"
         />
+        <UiButton
+          variant="ghost"
+          :icon="Setting"
+          @click="managerOpen = true"
+        >
+          <span>Agent 管理</span>
+          <span v-if="updatableCount > 0" class="mgr-badge mono">
+            {{ updatableCount }}
+          </span>
+        </UiButton>
         <UiButton variant="ghost" :icon="Plus" @click="addDialogVisible = true">
           添加设备
         </UiButton>
@@ -1055,6 +1071,14 @@ onBeforeUnmount(() => {
       :node="detailNode"
       :initial-probe-id="selectedProbeId"
     />
+
+    <!-- 用户 Agent 批量管理与一键升级抽屉 -->
+    <AgentManagerDrawer
+      v-model="managerOpen"
+      :probes="probes"
+      @refresh="refreshAll"
+      @reset-token="handleResetToken"
+    />
   </div>
 </template>
 
@@ -1124,6 +1148,21 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.mgr-badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 5px;
+  border-radius: 999px;
+  background: var(--c-warn, #d97706);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .top-rule {
