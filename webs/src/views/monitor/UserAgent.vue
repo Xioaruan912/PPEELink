@@ -35,6 +35,17 @@ import { getNodeOverview } from "@/api/subcription/node";
 
 defineOptions({ name: "UserAgent" });
 
+interface NodeProbeItem {
+  id: number;
+  name: string;
+  region?: string;
+  kind?: string;
+  success: boolean;
+  rtt: number;
+  error?: string;
+  checkedAt?: string;
+}
+
 interface NodeCardItem {
   id: number;
   name: string;
@@ -43,12 +54,22 @@ interface NodeCardItem {
   country: string;
   countryCode: string;
   valid: boolean;
+  probes?: NodeProbeItem[];
   userValid?: boolean;
   userRtt?: number;
   userKind?: string;
   userError?: string;
   userCheckedAt?: string;
   userProbeName?: string;
+}
+
+interface ResolvedNodeView {
+  checked: boolean;
+  valid: boolean;
+  rtt?: number;
+  kind?: string;
+  error?: string;
+  probeName?: string;
 }
 
 const rootEl = ref<HTMLElement>();
@@ -58,6 +79,7 @@ const loading = ref(false);
 const probingAll = ref(false);
 const probingNodeId = ref<number | null>(null);
 const updatingProbeId = ref<number | null>(null);
+const selectedProbeId = ref<number | null>(null);
 const probes = ref<Probe[]>([]);
 const nodes = ref<NodeCardItem[]>([]);
 const query = ref("");
@@ -76,14 +98,64 @@ const setupOS = ref<"windows" | "macos" | "linux">("windows");
 
 const onlineProbes = computed(() => probes.value.filter((p) => p.online));
 const hasOnlineProbe = computed(() => onlineProbes.value.length > 0);
+const selectedProbe = computed(
+  () => probes.value.find((p) => p.id === selectedProbeId.value) || null
+);
+
+function resolveNodeView(n: NodeCardItem): ResolvedNodeView {
+  if (selectedProbeId.value !== null) {
+    const matched = n.probes?.find((p) => p.id === selectedProbeId.value);
+    if (!matched) {
+      return { checked: false, valid: false, kind: n.userKind };
+    }
+    return {
+      checked: true,
+      valid: matched.success,
+      rtt: matched.rtt,
+      kind: matched.kind || n.userKind,
+      error: matched.error,
+      probeName: matched.name,
+    };
+  }
+  if (n.probes && n.probes.length > 0) {
+    const reachable = n.probes.filter((p) => p.success && p.rtt > 0);
+    const best = reachable.length
+      ? reachable.reduce((a, b) => (b.rtt < a.rtt ? b : a))
+      : n.probes[0];
+    return {
+      checked: true,
+      valid: best.success,
+      rtt: best.rtt,
+      kind: best.kind || n.userKind,
+      error: best.error,
+      probeName: best.name,
+    };
+  }
+  if (!n.userCheckedAt) {
+    return { checked: false, valid: false, kind: n.userKind };
+  }
+  return {
+    checked: true,
+    valid: Boolean(n.userValid),
+    rtt: n.userRtt,
+    kind: n.userKind,
+    error: n.userError,
+    probeName: n.userProbeName,
+  };
+}
+
+function toggleSelectProbe(id: number) {
+  selectedProbeId.value = selectedProbeId.value === id ? null : id;
+}
 
 const summary = computed(() => {
   let ok = 0;
   let fail = 0;
   let untested = 0;
   for (const n of nodes.value) {
-    if (!n.userCheckedAt) untested++;
-    else if (n.userValid) ok++;
+    const v = resolveNodeView(n);
+    if (!v.checked) untested++;
+    else if (v.valid) ok++;
     else fail++;
   }
   return { total: nodes.value.length, ok, fail, untested };
@@ -92,11 +164,10 @@ const summary = computed(() => {
 const filteredNodes = computed(() => {
   const q = query.value.trim().toLowerCase();
   return nodes.value.filter((n) => {
-    if (statusFilter.value === "ok" && !(n.userCheckedAt && n.userValid))
-      return false;
-    if (statusFilter.value === "fail" && !(n.userCheckedAt && !n.userValid))
-      return false;
-    if (statusFilter.value === "untested" && n.userCheckedAt) return false;
+    const v = resolveNodeView(n);
+    if (statusFilter.value === "ok" && !(v.checked && v.valid)) return false;
+    if (statusFilter.value === "fail" && !(v.checked && !v.valid)) return false;
+    if (statusFilter.value === "untested" && v.checked) return false;
     if (!q) return true;
     return `${n.name} ${n.server} ${n.country}`.toLowerCase().includes(q);
   });
@@ -167,6 +238,12 @@ async function refreshAll() {
       getNodeOverview(false),
     ]);
     probes.value = probeRes.data || [];
+    if (
+      selectedProbeId.value !== null &&
+      !probes.value.some((p) => p.id === selectedProbeId.value)
+    ) {
+      selectedProbeId.value = null;
+    }
     nodes.value = (nodeRes.data || []) as NodeCardItem[];
   } catch (err: any) {
     ElMessage.error(err?.message || "加载失败");
@@ -294,10 +371,26 @@ async function runTestAll(probeId?: number) {
     ElMessage.warning("请先在本机启动用户 Agent");
     return;
   }
+  const targetId = probeId ?? selectedProbeId.value ?? undefined;
+  if (targetId && !probes.value.find((p) => p.id === targetId)?.online) {
+    ElMessage.warning("当前选中设备离线，无法实测");
+    return;
+  }
   probingAll.value = true;
   try {
-    const res = (await triggerUserProbe(probeId ? { probeId } : {})) as any;
-    ElMessage.success(res?.msg || "实测完成");
+    if (targetId) {
+      const res = (await triggerUserProbe({ probeId: targetId })) as any;
+      ElMessage.success(res?.msg || "实测完成");
+    } else if (onlineProbes.value.length > 1) {
+      const settled = await Promise.allSettled(
+        onlineProbes.value.map((p) => triggerUserProbe({ probeId: p.id }))
+      );
+      const okCount = settled.filter((r) => r.status === "fulfilled").length;
+      ElMessage.success(`已完成 ${okCount}/${onlineProbes.value.length} 台设备实测`);
+    } else {
+      const res = (await triggerUserProbe({})) as any;
+      ElMessage.success(res?.msg || "实测完成");
+    }
     await refreshAll();
   } catch (err: any) {
     ElMessage.error(err?.message || "实测失败");
@@ -311,10 +404,31 @@ async function runTestOne(node: NodeCardItem) {
     ElMessage.warning("请先在本机启动用户 Agent");
     return;
   }
+  const targetId = selectedProbeId.value ?? undefined;
+  if (targetId && !probes.value.find((p) => p.id === targetId)?.online) {
+    ElMessage.warning("当前选中设备离线，无法实测");
+    return;
+  }
   probingNodeId.value = node.id;
   try {
-    const res = (await triggerUserProbe({ nodeIds: [node.id] })) as any;
-    ElMessage.success(res?.msg || "实测完成");
+    if (targetId) {
+      const res = (await triggerUserProbe({
+        probeId: targetId,
+        nodeIds: [node.id],
+      })) as any;
+      ElMessage.success(res?.msg || "实测完成");
+    } else if (onlineProbes.value.length > 1) {
+      const settled = await Promise.allSettled(
+        onlineProbes.value.map((p) =>
+          triggerUserProbe({ probeId: p.id, nodeIds: [node.id] })
+        )
+      );
+      const okCount = settled.filter((r) => r.status === "fulfilled").length;
+      ElMessage.success(`已完成 ${okCount}/${onlineProbes.value.length} 台设备实测`);
+    } else {
+      const res = (await triggerUserProbe({ nodeIds: [node.id] })) as any;
+      ElMessage.success(res?.msg || "实测完成");
+    }
     await refreshAll();
   } catch (err: any) {
     ElMessage.error(err?.message || "实测失败");
@@ -372,7 +486,13 @@ onBeforeUnmount(() => {
           :disabled="!hasOnlineProbe || !nodes.length"
           @click="runTestAll()"
         >
-          本机实测
+          {{
+            selectedProbe
+              ? `实测 · ${selectedProbe.name}`
+              : onlineProbes.length > 1
+                ? "全部设备实测"
+                : "本机实测"
+          }}
         </UiButton>
       </div>
     </header>
@@ -386,8 +506,13 @@ onBeforeUnmount(() => {
           v-for="p in probes"
           :key="p.id"
           class="device-card"
-          :class="{ 'is-online': p.online }"
+          :class="{
+            'is-online': p.online,
+            'is-selected': selectedProbeId === p.id,
+            'is-clickable': probes.length > 1,
+          }"
           data-stagger-card
+          @click="probes.length > 1 && toggleSelectProbe(p.id)"
         >
           <div class="device-head">
             <StatusDot
@@ -397,12 +522,20 @@ onBeforeUnmount(() => {
             <span v-if="p.region" class="device-region">{{ p.region }}</span>
             <span v-if="p.version" class="device-ver mono">v{{ p.version }}</span>
             <span class="device-spacer"></span>
-            <span class="device-time mono">{{ formatShortTime(p.lastSeenAt) }}</span>
+            <span
+              v-if="selectedProbeId === p.id"
+              class="device-active-tag"
+            >
+              当前视角
+            </span>
+            <span v-else class="device-time mono">{{
+              formatShortTime(p.lastSeenAt)
+            }}</span>
           </div>
 
           <strong class="device-name">{{ p.name }}</strong>
 
-          <footer class="device-foot">
+          <footer class="device-foot" @click.stop>
             <UiButton
               size="sm"
               variant="secondary"
@@ -483,6 +616,17 @@ onBeforeUnmount(() => {
           >
             未测 <span class="mono">{{ summary.untested }}</span>
           </button>
+
+          <button
+            v-if="selectedProbe"
+            type="button"
+            class="view-pill"
+            title="点击返回全部设备对比"
+            @click="selectedProbeId = null"
+          >
+            视角：{{ selectedProbe.name }}
+            <span aria-hidden="true">×</span>
+          </button>
         </div>
 
         <input
@@ -500,8 +644,8 @@ onBeforeUnmount(() => {
           :key="item.id"
           class="node-card"
           :class="{
-            'is-ok': item.userCheckedAt && item.userValid,
-            'is-bad': item.userCheckedAt && !item.userValid,
+            'is-ok': resolveNodeView(item).checked && resolveNodeView(item).valid,
+            'is-bad': resolveNodeView(item).checked && !resolveNodeView(item).valid,
           }"
           data-stagger-card
         >
@@ -510,36 +654,72 @@ onBeforeUnmount(() => {
               <CountryFlag :code="item.countryCode" :label="item.country" />
               <strong :title="item.name">{{ item.name }}</strong>
             </div>
-            <span v-if="item.userKind" class="nc-proto mono">
-              {{ item.userKind.toUpperCase() }}
+            <span v-if="resolveNodeView(item).kind" class="nc-proto mono">
+              {{ resolveNodeView(item).kind?.toUpperCase() }}
             </span>
           </header>
 
           <!-- Focal Metric Centerpiece -->
           <div class="nc-metric">
-            <template v-if="item.userCheckedAt && item.userValid">
-              <div class="nc-rtt mono" :class="rttTone(item.userRtt)">
-                <span>{{ item.userRtt ?? 0 }}</span>
+            <template
+              v-if="
+                resolveNodeView(item).checked && resolveNodeView(item).valid
+              "
+            >
+              <div
+                class="nc-rtt mono"
+                :class="rttTone(resolveNodeView(item).rtt)"
+              >
+                <span>{{ resolveNodeView(item).rtt ?? 0 }}</span>
                 <small>ms</small>
               </div>
               <div class="nc-bar" aria-hidden="true">
                 <i
-                  :class="rttTone(item.userRtt)"
-                  :style="{ width: `${rttRatio(item.userRtt)}%` }"
+                  :class="rttTone(resolveNodeView(item).rtt)"
+                  :style="{ width: `${rttRatio(resolveNodeView(item).rtt)}%` }"
                 ></i>
               </div>
             </template>
 
-            <template v-else-if="item.userCheckedAt && !item.userValid">
+            <template
+              v-else-if="
+                resolveNodeView(item).checked && !resolveNodeView(item).valid
+              "
+            >
               <div class="nc-fail">
                 <strong>不可达</strong>
-                <small>{{ item.userError || "超时" }}</small>
+                <small>{{ resolveNodeView(item).error || "超时" }}</small>
               </div>
             </template>
 
             <template v-else>
               <div class="nc-idle mono">—</div>
             </template>
+
+            <!-- 多设备并排对比胶囊（全部对比模式下自动展示） -->
+            <div
+              v-if="
+                selectedProbeId === null &&
+                probes.length > 1 &&
+                item.probes &&
+                item.probes.length > 0
+              "
+              class="nc-compare"
+            >
+              <button
+                v-for="pr in item.probes"
+                :key="pr.id"
+                type="button"
+                class="nc-probe-chip"
+                :class="pr.success ? rttTone(pr.rtt) : 'is-bad'"
+                :title="`切换到「${pr.name}」视角`"
+                @click="selectedProbeId = pr.id"
+              >
+                <i aria-hidden="true"></i>
+                <span>{{ pr.name }}</span>
+                <b class="mono">{{ pr.success ? `${pr.rtt}ms` : "不可达" }}</b>
+              </button>
+            </div>
           </div>
 
           <footer class="nc-foot">
@@ -765,6 +945,24 @@ onBeforeUnmount(() => {
   border-color: color-mix(in srgb, var(--c-ok) 38%, var(--c-line));
 }
 
+.device-card.is-clickable {
+  cursor: pointer;
+}
+
+.device-card.is-selected {
+  border-color: var(--c-ink);
+  box-shadow: 0 0 0 1px var(--c-ink);
+}
+
+.device-active-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-size: 11px;
+  font-weight: 500;
+}
+
 .device-head {
   display: flex;
   align-items: center;
@@ -875,6 +1073,25 @@ onBeforeUnmount(() => {
   background: var(--c-ink);
   border-color: var(--c-ink);
   color: var(--c-surface);
+}
+
+.view-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid color-mix(in srgb, var(--c-ink) 32%, var(--c-line));
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms var(--ease-out), border-color 150ms var(--ease-out);
+}
+
+.view-pill:hover {
+  border-color: var(--c-ink);
 }
 
 .search-input {
@@ -1039,6 +1256,57 @@ onBeforeUnmount(() => {
   font-size: 26px;
   color: var(--c-muted);
   opacity: 0.5;
+}
+
+.nc-compare {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.nc-probe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease-out), color 150ms var(--ease-out);
+}
+
+.nc-probe-chip:hover {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+
+.nc-probe-chip i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--c-ok);
+}
+
+.nc-probe-chip.is-warn i {
+  background: var(--c-warn, #d97706);
+}
+
+.nc-probe-chip.is-bad i {
+  background: var(--c-bad);
+}
+
+.nc-probe-chip b {
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.nc-probe-chip.is-bad b {
+  color: var(--c-bad);
 }
 
 .nc-foot {

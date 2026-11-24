@@ -52,6 +52,7 @@ type ProbeStatus struct {
 	ID        uint       `json:"id"`
 	Name      string     `json:"name"`
 	Region    string     `json:"region"`
+	Kind      string     `json:"kind,omitempty"`
 	Success   bool       `json:"success"`
 	RTT       int        `json:"rtt"`
 	Error     string     `json:"error,omitempty"`
@@ -109,9 +110,18 @@ func applyProbeResults(items []NodeOverviewItem) {
 		return
 	}
 	latestByNode := make(map[int]models.ProbeResult, len(nodeIDs))
+	byNodeProbe := make(map[int]map[uint]models.ProbeResult, len(nodeIDs))
 	for _, row := range rows {
 		if _, exists := latestByNode[row.NodeID]; !exists {
 			latestByNode[row.NodeID] = row
+		}
+		pm := byNodeProbe[row.NodeID]
+		if pm == nil {
+			pm = make(map[uint]models.ProbeResult)
+			byNodeProbe[row.NodeID] = pm
+		}
+		if _, exists := pm[row.ProbeID]; !exists {
+			pm[row.ProbeID] = row
 		}
 	}
 	for i := range items {
@@ -119,6 +129,25 @@ func applyProbeResults(items []NodeOverviewItem) {
 		row, ok := latestByNode[item.ID]
 		if !ok {
 			continue
+		}
+		pm := byNodeProbe[item.ID]
+		statuses := make([]ProbeStatus, 0, len(pm))
+		for _, p := range probes {
+			r, has := pm[p.ID]
+			if !has {
+				continue
+			}
+			ts := r.CheckedAt
+			statuses = append(statuses, ProbeStatus{
+				ID:        r.ProbeID,
+				Name:      p.Name,
+				Region:    p.Region,
+				Kind:      r.Kind,
+				Success:   r.Success,
+				RTT:       r.RTT,
+				Error:     r.Error,
+				CheckedAt: &ts,
+			})
 		}
 		valid := row.Success
 		rtt := row.RTT
@@ -132,15 +161,7 @@ func applyProbeResults(items []NodeOverviewItem) {
 		item.UserProbeName = probeName
 		item.Valid = row.Success
 		item.rtt = row.RTT
-		item.Probes = []ProbeStatus{{
-			ID:        row.ProbeID,
-			Name:      probeName,
-			Region:    probeByID[row.ProbeID].Region,
-			Success:   row.Success,
-			RTT:       row.RTT,
-			Error:     row.Error,
-			CheckedAt: &checkedAt,
-		}}
+		item.Probes = statuses
 	}
 }
 
