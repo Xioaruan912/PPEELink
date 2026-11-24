@@ -17,13 +17,15 @@ type localNetEnv struct {
 	HasIPv6   bool
 	IfaceName string
 	ISP       string
+	PublicIP  string
 }
 
 var (
-	ispMu        sync.Mutex
-	cachedISP    string
-	cachedISPAt  time.Time
-	ispRefreshIn bool
+	ispMu          sync.Mutex
+	cachedISP      string
+	cachedPublicIP string
+	cachedISPAt    time.Time
+	ispRefreshIn   bool
 )
 
 func detectLocalNetEnv() localNetEnv {
@@ -38,13 +40,14 @@ func detectLocalNetEnv() localNetEnv {
 	} else if v6 != nil {
 		env.IfaceName = v6.Name
 	}
-	env.ISP = currentISPName(v4)
+	env.ISP, env.PublicIP = currentISPAndIP(v4)
 	return env
 }
 
-func currentISPName(v4 *physicalInterface) string {
+func currentISPAndIP(v4 *physicalInterface) (string, string) {
 	ispMu.Lock()
 	isp := cachedISP
+	pubIP := cachedPublicIP
 	stale := time.Since(cachedISPAt) > 30*time.Minute
 	busy := ispRefreshIn
 	if stale && !busy {
@@ -52,7 +55,7 @@ func currentISPName(v4 *physicalInterface) string {
 		go refreshISPBg(v4)
 	}
 	ispMu.Unlock()
-	return isp
+	return isp, pubIP
 }
 
 func refreshISPBg(iface *physicalInterface) {
@@ -79,21 +82,24 @@ func refreshISPBg(iface *physicalInterface) {
 		},
 	}
 
-	isp := queryISP(client)
+	isp, pubIP := queryISPAndIP(client)
 	ispMu.Lock()
 	if isp != "" {
 		cachedISP = isp
+	}
+	if pubIP != "" {
+		cachedPublicIP = pubIP
 	}
 	cachedISPAt = time.Now()
 	ispMu.Unlock()
 }
 
-func queryISP(client *http.Client) string {
+func queryISPAndIP(client *http.Client) (string, string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3500*time.Millisecond)
 	defer cancel()
 
-	// Primary: ip-api.com (direct physical NIC, returns localized Chinese ISP).
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ip-api.com/json/?fields=status,isp,org,as&lang=zh-CN", nil)
+	// Primary: ip-api.com (direct physical NIC, returns localized Chinese ISP + public IP).
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ip-api.com/json/?fields=status,query,isp,org,as&lang=zh-CN", nil)
 	if err == nil {
 		if resp, err := client.Do(req); err == nil {
 			defer resp.Body.Close()
@@ -101,26 +107,26 @@ func queryISP(client *http.Client) string {
 				raw, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 				var res struct {
 					Status string `json:"status"`
+					Query  string `json:"query"`
 					ISP    string `json:"isp"`
 					Org    string `json:"org"`
 					AS     string `json:"as"`
 				}
 				if json.Unmarshal(raw, &res) == nil && res.Status == "success" {
-					if label := normalizeISPLabel(res.ISP + " " + res.Org + " " + res.AS); label != "" {
-						return label
-					}
-					if s := strings.TrimSpace(res.ISP); s != "" {
-						if len(s) > 24 {
-							return s[:24]
+					isp := normalizeISPLabel(res.ISP + " " + res.Org + " " + res.AS)
+					if isp == "" {
+						isp = strings.TrimSpace(res.ISP)
+						if len(isp) > 24 {
+							isp = isp[:24]
 						}
-						return s
 					}
+					return isp, strings.TrimSpace(res.Query)
 				}
 			}
 		}
 	}
 
-	// Fallback: myip.ipip.net (returns plain Chinese text like "当前 IP：x.x.x.x  来自于：中国 福建 福州  电信")
+	// Fallback: myip.ipip.net
 	req2, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://myip.ipip.net", nil)
 	if err == nil {
 		req2.Header.Set("User-Agent", "curl/8.0")
@@ -129,12 +135,12 @@ func queryISP(client *http.Client) string {
 			if resp.StatusCode == http.StatusOK {
 				raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 				if label := normalizeISPLabel(string(raw)); label != "" {
-					return label
+					return label, ""
 				}
 			}
 		}
 	}
-	return ""
+	return "", ""
 }
 
 func normalizeISPLabel(raw string) string {

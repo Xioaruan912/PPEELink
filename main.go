@@ -24,7 +24,7 @@ import (
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.3"
+const agentVersion = "1.4"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -42,6 +42,7 @@ type waitEnvelope struct {
 		JobID      string      `json:"jobId"`
 		Action     string      `json:"action"`
 		TargetHost string      `json:"targetHost,omitempty"`
+		SpeedMode  string      `json:"speedMode,omitempty"`
 		Nodes      []probeNode `json:"nodes"`
 	} `json:"data"`
 }
@@ -180,7 +181,7 @@ func main() {
 		if ctx.Err() != nil {
 			return
 		}
-		jobID, action, targetHost, nodes, err := waitForJob(ctx, client, panelURL, tok)
+		jobID, action, targetHost, speedMode, nodes, err := waitForJob(ctx, client, panelURL, tok)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -232,7 +233,19 @@ func main() {
 			if traceErr != nil {
 				payload.Error = traceErr.Error()
 			}
-			_ = sendTraceReport(ctx, client, panelURL, tok, payload)
+			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/trace-report", tok, payload)
+		case "unlock":
+			unlockCtx, cancel := context.WithTimeout(ctx, 24*time.Second)
+			payload := runNativeUnlock(unlockCtx)
+			cancel()
+			payload.JobID = jobID
+			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/unlock-report", tok, payload)
+		case "speedtest":
+			stCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+			payload := runUserSpeedtest(stCtx, speedMode)
+			cancel()
+			payload.JobID = jobID
+			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/speedtest-report", tok, payload)
 		case "probe", "":
 			if len(nodes) == 0 || paused.Load() {
 				continue
@@ -248,7 +261,7 @@ func main() {
 	}
 }
 
-func waitForJob(ctx context.Context, client *http.Client, panelURL, token string) (string, string, string, []probeNode, error) {
+func waitForJob(ctx context.Context, client *http.Client, panelURL, token string) (string, string, string, string, []probeNode, error) {
 	env := detectLocalNetEnv()
 	q := url.Values{}
 	q.Set("timeout", "25")
@@ -264,37 +277,40 @@ func waitForJob(ctx context.Context, client *http.Client, panelURL, token string
 	if env.IfaceName != "" {
 		q.Set("iface", env.IfaceName)
 	}
+	if env.PublicIP != "" {
+		q.Set("publicIp", env.PublicIP)
+	}
 	endpoint := fmt.Sprintf("%s/api/v1/probe/wait?%s", panelURL, q.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", "", nil, err
 	}
 	req.Header.Set("Authorization", "Probe "+token)
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", "", nil, err
+		return "", "", "", "", nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return "", "", "", nil, errors.New("令牌无效或已停用")
+		return "", "", "", "", nil, errors.New("令牌无效或已停用")
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", "", "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return "", "", "", "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var envResp waitEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envResp); err != nil {
-		return "", "", "", nil, err
+		return "", "", "", "", nil, err
 	}
-	return envResp.Data.JobID, envResp.Data.Action, envResp.Data.TargetHost, envResp.Data.Nodes, nil
+	return envResp.Data.JobID, envResp.Data.Action, envResp.Data.TargetHost, envResp.Data.SpeedMode, envResp.Data.Nodes, nil
 }
 
-func sendTraceReport(ctx context.Context, client *http.Client, panelURL, token string, payload traceReportPayload) error {
+func sendJSONReport(ctx context.Context, client *http.Client, endpoint, token string, payload any) error {
 	raw, err := json.Marshal(payload)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, panelURL+"/api/v1/probe/trace-report", bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
