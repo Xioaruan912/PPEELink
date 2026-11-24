@@ -383,6 +383,9 @@ func NodeDel(c *gin.Context) {
 		return
 	}
 	x, _ := strconv.Atoi(id)
+	var existing models.Node
+	_ = models.DB.First(&existing, x).Error
+
 	n.ID = x
 	err := n.Del()
 	if err != nil {
@@ -391,13 +394,28 @@ func NodeDel(c *gin.Context) {
 		})
 		return
 	}
-	if n.Name != "" {
-		_ = removeFromNodeOrders(models.DB, map[string]bool{n.Name: true})
+	deletedName := n.Name
+	if deletedName == "" {
+		deletedName = existing.Name
+	}
+	if deletedName != "" {
+		_ = removeFromNodeOrders(models.DB, map[string]bool{deletedName: true})
+	}
+	deletedInbounds := 0
+	if deletedName != "" {
+		if cnt, err := deleteLinkedSelfHostedInbounds(deletedName); err == nil && cnt > 0 {
+			deletedInbounds = cnt
+			NotifyProxyChanged()
+		}
 	}
 	InvalidateOverview() // 节点变更，使概览缓存失效
+	msg := "删除成功"
+	if deletedInbounds > 0 {
+		msg = "已删除节点并同步移除对应自建入站"
+	}
 	c.JSON(200, gin.H{
 		"code": "00000",
-		"msg":  "删除成功",
+		"msg":  msg,
 	})
 }
 

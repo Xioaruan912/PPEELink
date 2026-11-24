@@ -3,6 +3,7 @@ import { CopyDocument, Edit, MoreFilled } from "@element-plus/icons-vue";
 import { StatusDot } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import CountryFlag from "@/ui/CountryFlag.vue";
+import { displayNodeName } from "@/utils/nodeDisplay";
 import { formatDateTime } from "@/utils/date";
 import { useNodes, validState, validText, type OverviewItem } from "./useNodes";
 
@@ -73,7 +74,7 @@ const {
             :aria-label="`查看 ${node.name} 详情`"
             @click="emit('inspect', node.id)"
           >
-            {{ node.name }}
+            {{ displayNodeName(node.name) }}
           </button>
           <span
             v-if="node.blocked"

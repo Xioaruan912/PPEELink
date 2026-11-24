@@ -21,6 +21,7 @@ import {
 import { EmptyState, StatusDot, UiButton, UiDialog } from "@/ui";
 import CountryFlag from "@/ui/CountryFlag.vue";
 import RowIconButton from "@/ui/RowIconButton.vue";
+import { displayNodeName } from "@/utils/nodeDisplay";
 import {
   addProbe,
   deleteProbe,
@@ -652,7 +653,7 @@ onBeforeUnmount(() => {
           <header class="nc-head">
             <div class="nc-identity">
               <CountryFlag :code="item.countryCode" :label="item.country" />
-              <strong :title="item.name">{{ item.name }}</strong>
+              <strong :title="item.name">{{ displayNodeName(item.name) }}</strong>
             </div>
             <span v-if="resolveNodeView(item).kind" class="nc-proto mono">
               {{ resolveNodeView(item).kind?.toUpperCase() }}

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import { UiDrawer, UiButton, UiSegmented, StatusDot, EmptyState } from "@/ui";
 import CountryFlag from "@/ui/CountryFlag.vue";
+import { displayNodeName } from "@/utils/nodeDisplay";
 import IconCopy from "~icons/ph/copy";
 import IconPencil from "~icons/ph/pencil-simple";
 import IconPulse from "~icons/ph/pulse";
@@ -103,7 +104,7 @@ function openAction(command: string, selected: OverviewItem) {
             <CountryFlag :code="node.countryCode" :label="node.country" />
           </div>
           <div class="inspection-title">
-            <h3>{{ node.name }}</h3>
+            <h3>{{ displayNodeName(node.name) }}</h3>
             <p class="inspection-host mono">
               {{ node.server || "未指定主机地址" }}
             </p>

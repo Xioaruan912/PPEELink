@@ -1,6 +1,8 @@
 package api
 
 import (
+	"strings"
+
 	"gorm.io/gorm"
 	"ppeelink/models"
 )
@@ -149,4 +151,38 @@ func backfillManagedSources(tx *gorm.DB) error {
 		}
 	}
 	return nil
+}
+
+// deleteLinkedSelfHostedInbounds 在节点页删除自建节点时，同步删除 #/subcription/servers 中
+// 对应的 ProxyInbound 记录，避免需要两边分别删除。
+func deleteLinkedSelfHostedInbounds(nodeName string) (int, error) {
+	nodeName = strings.TrimSpace(nodeName)
+	if nodeName == "" {
+		return 0, nil
+	}
+	var servers []models.ProxyServer
+	var inbounds []models.ProxyInbound
+	if err := models.DB.Find(&servers).Error; err != nil {
+		return 0, err
+	}
+	if err := models.DB.Find(&inbounds).Error; err != nil {
+		return 0, err
+	}
+	byServer := make(map[uint]models.ProxyServer, len(servers))
+	for _, s := range servers {
+		byServer[s.ID] = s
+	}
+	matchedIDs := make([]uint, 0, 2)
+	for _, in := range inbounds {
+		if s, ok := byServer[in.ServerID]; ok && inboundName(s, in) == nodeName {
+			matchedIDs = append(matchedIDs, in.ID)
+		}
+	}
+	if len(matchedIDs) == 0 {
+		return 0, nil
+	}
+	if err := models.DB.Delete(&models.ProxyInbound{}, matchedIDs).Error; err != nil {
+		return 0, err
+	}
+	return len(matchedIDs), nil
 }
