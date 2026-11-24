@@ -26,12 +26,14 @@ import {
   listProxyAccounts,
   listProxyServers,
   resetServerToken,
+  runProxyServerUnlockCheck,
   saveProxyInbound,
   saveProxyServer,
   type DailyTraffic,
   type ProxyAccount,
   type ProxyInbound,
   type ProxyServer,
+  type ServerUnlockItem,
 } from "@/api/proxy";
 import {
   EmptyState,
@@ -376,6 +378,47 @@ function openAccount(a: ProxyAccount) {
 }
 const usageRatio = (a: ProxyAccount) =>
   a.trafficLimit ? Math.min(a.trafficUsed / a.trafficLimit, 1) : 0;
+
+// ---- 原生解锁矩阵 ----
+const checkingUnlock = ref(false);
+const shortUnlockLabel: Record<string, string> = {
+  chatgpt: "GPT",
+  claude: "Claude",
+  gemini: "Gemini",
+  netflix: "NF",
+  disney: "Disney+",
+  youtube: "YT",
+  tiktok: "TT",
+  spotify: "Spotify",
+};
+function visibleUnlockItems(items?: ServerUnlockItem[]) {
+  if (!items?.length) return [];
+  return items.filter(
+    (it) => it.status === "available" || it.status === "originals"
+  );
+}
+function formatUnlockBadge(it: ServerUnlockItem) {
+  const base = shortUnlockLabel[it.key] || it.name;
+  if (it.status === "originals") return `${base}自制`;
+  return it.region ? `${base} ${it.region}` : base;
+}
+async function checkServerUnlock(serverId?: number) {
+  if (checkingUnlock.value) return;
+  checkingUnlock.value = true;
+  try {
+    const { data } = await runProxyServerUnlockCheck(
+      serverId ? { serverId } : { all: true }
+    );
+    ElMessage.success(
+      `解锁检测完成：${data?.okCount || 0}/${data?.total || 0} 台已更新`
+    );
+    await load(true);
+  } catch (err: any) {
+    ElMessage.error(err?.message || "解锁检测失败");
+  } finally {
+    checkingUnlock.value = false;
+  }
+}
 </script>
 <template>
   <div class="servers-page server-experience">
@@ -406,6 +449,14 @@ const usageRatio = (a: ProxyAccount) =>
       <div class="masthead-actions">
         <UiButton variant="primary" :icon="IconPlus" @click="openServer()">
           添加代理节点
+        </UiButton>
+        <UiButton
+          v-if="servers.length"
+          variant="ghost"
+          :loading="checkingUnlock"
+          @click="checkServerUnlock()"
+        >
+          测全服解锁
         </UiButton>
         <UiButton variant="ghost" :icon="IconRefresh" :loading="loading" @click="load()">
           刷新
@@ -532,6 +583,19 @@ const usageRatio = (a: ProxyAccount) =>
               </dd>
             </div>
           </dl>
+          <div
+            v-if="visibleUnlockItems(s.unlock?.items).length"
+            class="unlock-strip"
+          >
+            <span
+              v-for="it in visibleUnlockItems(s.unlock?.items)"
+              :key="it.key"
+              class="unlock-pill"
+              :class="it.status === 'available' ? 'is-ok' : 'is-warn'"
+            >
+              {{ formatUnlockBadge(it) }}
+            </span>
+          </div>
           <p v-if="s.lastError" class="error-line">
             <IconWarning />{{ s.lastError }}
           </p>
@@ -614,6 +678,12 @@ const usageRatio = (a: ProxyAccount) =>
                 <el-dropdown-menu>
                   <el-dropdown-item @click="openServer(s)">
                     <span class="dd-item"><IconPencil />编辑服务器</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item
+                    v-if="s.kind === 'agent' && s.online"
+                    @click="checkServerUnlock(s.id)"
+                  >
+                    <span class="dd-item"><IconRefresh />检测原生解锁</span>
                   </el-dropdown-item>
                   <el-dropdown-item
                     v-if="s.kind === 'agent'"
@@ -1088,6 +1158,27 @@ const usageRatio = (a: ProxyAccount) =>
 .meta dd {
   margin: 2px 0 0;
   font-size: 13px;
+}
+.unlock-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.unlock-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+.unlock-pill.is-ok {
+  background: color-mix(in srgb, var(--c-ok) 12%, transparent);
+  color: var(--c-ok);
+}
+.unlock-pill.is-warn {
+  background: color-mix(in srgb, var(--c-warn) 14%, transparent);
+  color: var(--c-warn-ink);
 }
 .error-line {
   display: flex;

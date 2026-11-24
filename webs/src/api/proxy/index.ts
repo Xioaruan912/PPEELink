@@ -43,6 +43,24 @@ export interface ProxyInbound {
   method?: string;
   enabled: boolean;
 }
+export interface ServerUnlockItem {
+  key: string;
+  name: string;
+  status: "available" | "originals" | "blocked" | "unknown";
+  region?: string;
+  note?: string;
+}
+
+export interface ServerUnlockReport {
+  ip?: string;
+  country?: string;
+  isp?: string;
+  asn?: string;
+  hosting?: boolean;
+  checkedAt?: string;
+  items: ServerUnlockItem[];
+}
+
 export interface ProxyServer {
   id: number;
   name: string;
@@ -52,6 +70,12 @@ export interface ProxyServer {
   xrayVersion: string;
   agentVersion: string;
   proxyFeatures?: number;
+  unlock?: ServerUnlockReport;
+  unlockCheckedAt?: string | null;
+  terminalEnabled?: boolean;
+  filesEnabled?: boolean;
+  dockerEnabled?: boolean;
+  allowAutoUpdate?: boolean;
   /** 程序完整性摘要；Agent 的展示版本独立递增。 */
   agentHash?: string;
   arch: string;
@@ -321,6 +345,63 @@ export const unbanProxyServerIP = (serverId: number, ip: string) =>
     method: "post",
     data: { serverId, ip },
     timeout: 18000,
+  });
+
+export const runProxyServerUnlockCheck = (data: {
+  serverId?: number;
+  all?: boolean;
+}) =>
+  request<{
+    results: {
+      serverId: number;
+      serverName: string;
+      ok: boolean;
+      unlock?: ServerUnlockReport;
+      error?: string;
+    }[];
+    okCount: number;
+    total: number;
+  }>({
+    url: "/api/v1/proxy/servers/unlock-check",
+    method: "post",
+    data,
+    timeout: 32000,
+  });
+
+export const migrateProxyServerURL = (data: {
+  panelUrl: string;
+  serverIds?: number[];
+}) =>
+  request<{
+    results: {
+      serverId: number;
+      serverName: string;
+      ok: boolean;
+      message: string;
+    }[];
+    okCount: number;
+    total: number;
+  }>({
+    url: "/api/v1/proxy/servers/migrate-url",
+    method: "post",
+    data,
+    timeout: 26000,
+  });
+
+export const saveProxyServerPolicy = (data: {
+  serverIds?: number[];
+  terminalEnabled?: boolean;
+  filesEnabled?: boolean;
+  dockerEnabled?: boolean;
+  allowAutoUpdate?: boolean;
+  autoFirewall?: boolean;
+  websiteTrafficEnabled?: boolean;
+}) =>
+  request<{ updated: number; pushed: number }>({
+    url: "/api/v1/proxy/servers/policy",
+    method: "post",
+    data,
+    timeout: 20000,
   });
 export const listProxyAccounts = () =>
   request<ProxyAccount[]>({ url: "/api/v1/proxy/accounts", method: "get" });

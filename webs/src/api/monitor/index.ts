@@ -51,6 +51,12 @@ export interface MonitorItem {
   sshConfigured: boolean;
   proxyServerId?: number | null;
   linked?: boolean;
+  terminalEnabled?: boolean;
+  filesEnabled?: boolean;
+  dockerEnabled?: boolean;
+  allowAutoUpdate?: boolean;
+  autoFirewall?: boolean;
+  websiteTrafficEnabled?: boolean;
   sshHost: string;
   sshPort: number;
   sshUser: string;

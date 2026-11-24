@@ -155,6 +155,12 @@ func MonitorList(c *gin.Context) {
 				item["agentUpgradeable"] = server.Kind == models.ServerKindAgent
 				item["ownsAgent"] = server.Kind == models.ServerKindAgent && server.AgentToken == ""
 				item["removing"] = server.Removing
+				item["terminalEnabled"] = server.TerminalEnabled == nil || *server.TerminalEnabled
+				item["filesEnabled"] = server.FilesEnabled == nil || *server.FilesEnabled
+				item["dockerEnabled"] = server.DockerEnabled == nil || *server.DockerEnabled
+				item["allowAutoUpdate"] = server.AllowAutoUpdate == nil || *server.AllowAutoUpdate
+				item["autoFirewall"] = server.AutoFirewall
+				item["websiteTrafficEnabled"] = server.WebsiteTrafficEnabled
 				if m.Group == "" || m.Group == "自建节点" {
 					region := inferMonitorRegion(m.Name, server.PublicHost)
 					item["group"] = region

@@ -48,6 +48,14 @@ type ProxyServer struct {
 	WmemMax int64  `json:"wmemMax"`
 	// AgentUpdateRequested 面板已请求 agent 自更新，agent 回报新版本摘要后清除。
 	AgentUpdateRequested bool `gorm:"not null;default:false" json:"agentUpdateRequested"`
+	// 原生流媒体/AI 解锁矩阵缓存（由 Server Agent v1.22+ 就地检测回报）
+	UnlockJSON      string     `gorm:"type:text" json:"unlockJson,omitempty"`
+	UnlockCheckedAt *time.Time `json:"unlockCheckedAt,omitempty"`
+	// 主机安全与能力策略（空值默认开启，便于平滑升级）
+	TerminalEnabled *bool `json:"terminalEnabled,omitempty"`
+	FilesEnabled    *bool `json:"filesEnabled,omitempty"`
+	DockerEnabled   *bool `json:"dockerEnabled,omitempty"`
+	AllowAutoUpdate *bool `json:"allowAutoUpdate,omitempty"`
 	// 月流量上限（字节，0 不限）与每月重置日：超出后停止 xray、节点暂不下发，到重置日自动恢复
 	TrafficLimit int64     `json:"trafficLimit"`
 	ResetDay     int       `json:"resetDay"`

@@ -12,6 +12,10 @@ export interface Probe {
   isp?: string;
   iface?: string;
   publicIp?: string;
+  reportPublicIp?: boolean;
+  allowClash?: boolean;
+  concurrency?: number;
+  clashApi?: string;
   clashGroup?: string;
   clashNow?: string;
   online: boolean;
@@ -496,5 +500,31 @@ export function getProbeTopology() {
     url: "/api/v1/probes/topology",
     method: "get",
     timeout: 12000,
+  });
+}
+
+export function pushProbeConfig(data: {
+  probeIds?: number[];
+  panelUrl?: string;
+  concurrency?: number;
+  reportPublicIp?: boolean;
+  allowClash?: boolean;
+  clashApi?: string;
+  clashSecret?: string;
+}) {
+  return request<{
+    results: {
+      probeId: number;
+      probeName: string;
+      ok: boolean;
+      message: string;
+    }[];
+    okCount: number;
+    total: number;
+  }>({
+    url: "/api/v1/probes/push-config",
+    method: "post",
+    data,
+    timeout: 24000,
   });
 }

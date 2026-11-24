@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -28,7 +29,8 @@ type serverView struct {
 	Users     int                   `json:"users"`
 	Quota     serverQuotaState      `json:"quota"`
 	// AgentHash 用于校验程序完整性；展示版本使用实际上报的 AgentVersion。
-	AgentHash string `json:"agentHash"`
+	AgentHash string                 `json:"agentHash"`
+	Unlock    *serverOpsUnlockReport `json:"unlock,omitempty"`
 }
 
 // ProxyServerList 服务器、入站与今日流量。agent 超过 3 分钟没回报视为离线。
@@ -42,6 +44,12 @@ func ProxyServerList(c *gin.Context) {
 	views := make([]serverView, 0, len(servers))
 	for _, s := range servers {
 		v := serverView{ProxyServer: s, Inbounds: []models.ProxyInbound{}}
+		if s.UnlockJSON != "" {
+			var rep serverOpsUnlockReport
+			if json.Unmarshal([]byte(s.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
+				v.Unlock = &rep
+			}
+		}
 		models.DB.Where("server_id = ?", s.ID).Order("id asc").Find(&v.Inbounds)
 		v.Online = s.LastSeenAt != nil && time.Since(*s.LastSeenAt) < 3*time.Minute
 		var sum struct{ Up, Down int64 }

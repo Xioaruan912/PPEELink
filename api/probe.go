@@ -23,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.7"
+const latestUserAgentVersion = "1.8"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -46,6 +46,15 @@ type probeReport struct {
 	} `json:"results"`
 }
 
+type userAgentConfigPatchDTO struct {
+	PanelURL       string `json:"panelUrl,omitempty"`
+	Concurrency    int    `json:"concurrency,omitempty"`
+	ReportPublicIP *bool  `json:"reportPublicIp,omitempty"`
+	AllowClash     *bool  `json:"allowClash,omitempty"`
+	ClashAPI       string `json:"clashApi,omitempty"`
+	ClashSecret    string `json:"clashSecret,omitempty"`
+}
+
 type queuedProbeJob struct {
 	ID         string
 	Action     string
@@ -54,6 +63,7 @@ type queuedProbeJob struct {
 	ClashGroup string
 	ClashNode  string
 	ClashNodes []string
+	Config     *userAgentConfigPatchDTO
 	Nodes      []probeNode
 }
 
@@ -302,7 +312,11 @@ func ProbeList(c *gin.Context) {
 		items = append(items, gin.H{
 			"id": p.ID, "name": p.Name, "region": p.Region, "enabled": p.Enabled,
 			"autoProbe": p.AutoProbe, "hasIpv6": p.HasIPv6, "isp": p.ISP, "iface": p.IfaceName, "publicIp": p.PublicIP,
-			"clashGroup": cGroup, "clashNow": cNow,
+			"reportPublicIp": p.ReportPublicIP == nil || *p.ReportPublicIP,
+			"allowClash":     p.AllowClash == nil || *p.AllowClash,
+			"concurrency":    p.Concurrency,
+			"clashApi":       p.ClashAPI,
+			"clashGroup":     cGroup, "clashNow": cNow,
 			"online": online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
 			"latestVersion":   latestUserAgentVersion,
 			"updateAvailable": p.Version != "" && p.Version != latestUserAgentVersion,
@@ -556,6 +570,7 @@ func ProbeWait(c *gin.Context) {
 			"clashGroup": job.ClashGroup,
 			"clashNode":  job.ClashNode,
 			"clashNodes": job.ClashNodes,
+			"config":     job.Config,
 			"nodes":      job.Nodes,
 		}, "msg": "dispatched"})
 	case <-timer.C:

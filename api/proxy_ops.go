@@ -49,18 +49,45 @@ type serverOpsSecurityAudit struct {
 	BannedIPs       []string                  `json:"bannedIps"`
 }
 
+type serverOpsPolicy struct {
+	TerminalEnabled bool `json:"terminalEnabled"`
+	FilesEnabled    bool `json:"filesEnabled"`
+	DockerEnabled   bool `json:"dockerEnabled"`
+	AllowAutoUpdate bool `json:"allowAutoUpdate"`
+}
+
+type serverOpsUnlockItem struct {
+	Key    string `json:"key"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Region string `json:"region,omitempty"`
+	Note   string `json:"note,omitempty"`
+}
+
+type serverOpsUnlockReport struct {
+	IP        string                `json:"ip,omitempty"`
+	Country   string                `json:"country,omitempty"`
+	ISP       string                `json:"isp,omitempty"`
+	ASN       string                `json:"asn,omitempty"`
+	Hosting   bool                  `json:"hosting"`
+	CheckedAt string                `json:"checkedAt"`
+	Items     []serverOpsUnlockItem `json:"items"`
+}
+
 type serverOpsJob struct {
-	JobID   string   `json:"jobId"`
-	Action  string   `json:"action"` // tune-network | upgrade-core | fetch-logs | check-port | sni-check | security-audit | security-ban | security-unban
-	Source  string   `json:"source,omitempty"`
-	Lines   int      `json:"lines,omitempty"`
-	Filter  string   `json:"filter,omitempty"`
-	Version string   `json:"version,omitempty"`
-	Port    int      `json:"port,omitempty"`
-	Proto   string   `json:"proto,omitempty"`
-	Targets []string `json:"targets,omitempty"`
-	Ports   []int    `json:"ports,omitempty"`
-	IP      string   `json:"ip,omitempty"`
+	JobID    string           `json:"jobId"`
+	Action   string           `json:"action"` // tune-network | upgrade-core | fetch-logs | check-port | sni-check | security-audit | security-ban | security-unban | unlock-check | set-panel-url | set-policy
+	Source   string           `json:"source,omitempty"`
+	Lines    int              `json:"lines,omitempty"`
+	Filter   string           `json:"filter,omitempty"`
+	Version  string           `json:"version,omitempty"`
+	Port     int              `json:"port,omitempty"`
+	Proto    string           `json:"proto,omitempty"`
+	Targets  []string         `json:"targets,omitempty"`
+	Ports    []int            `json:"ports,omitempty"`
+	IP       string           `json:"ip,omitempty"`
+	PanelURL string           `json:"panelUrl,omitempty"`
+	Policy   *serverOpsPolicy `json:"policy,omitempty"`
 }
 
 type serverOpsResult struct {
@@ -75,6 +102,7 @@ type serverOpsResult struct {
 	Wmem     int64                   `json:"wmemMax,omitempty"`
 	SNIs     []serverOpsSNIResult    `json:"snis,omitempty"`
 	Security *serverOpsSecurityAudit `json:"security,omitempty"`
+	Unlock   *serverOpsUnlockReport  `json:"unlock,omitempty"`
 }
 
 var serverOpsHub = &struct {

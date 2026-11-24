@@ -37,6 +37,7 @@ func Probes(r *gin.Engine) {
 		g.POST("/clash/status", api.ProbeClashStatus)
 		g.POST("/clash/switch", api.ProbeClashSwitch)
 		g.POST("/clash/batch-test", api.ProbeClashBatchTest)
+		g.POST("/push-config", api.ProbePushConfig)
 		g.GET("/topology", api.ProbeTopology)
 		g.POST("/apply-sort", api.ProbeApplySort)
 		g.GET("/sparklines", api.ProbeSparklines)

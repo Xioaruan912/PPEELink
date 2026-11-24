@@ -12,6 +12,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// SmartUnlockFilter optionally refines Clash proxy-groups (ChatGPT / Gemini / Claude / AI / Netflix / Disney+ / TikTok)
+// using verified Server Agent native unlock results. Returns (matchedProxies, true) when applied.
+var SmartUnlockFilter func(groupName string, allProxies []string, fallbackRegex *regexp.Regexp) ([]string, bool)
+
 type Proxy struct {
 	Fingerprint        string                 `yaml:"fingerprint,omitempty"`
 	Name               string                 `yaml:"name,omitempty"`
@@ -725,6 +729,17 @@ func DecodeClash(proxys []Proxy, yamlfile string) ([]byte, error) {
 				filterRegex = re
 			} else {
 				log.Printf("filter 正则编译失败 %q: %v", filterStr, rerr)
+			}
+		}
+		groupName, _ := proxyGroup["name"].(string)
+		if SmartUnlockFilter != nil && groupName != "" {
+			if smartList, applied := SmartUnlockFilter(groupName, ProxiesNameList, filterRegex); applied && len(smartList) > 0 {
+				for _, np := range smartList {
+					validProxies = append(validProxies, np)
+				}
+				proxyGroup["proxies"] = validProxies
+				proxyGroups[i] = proxyGroup
+				continue
 			}
 		}
 		if filterRegex != nil {

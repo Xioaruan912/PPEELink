@@ -18,7 +18,6 @@ import {
   EmptyState,
   UiButton,
   UiDialog,
-  UiDrawer,
   UiSegmented,
   UiSkeleton,
   UiTag,
@@ -26,6 +25,7 @@ import {
 import IconChartLine from "~icons/ph/chart-line";
 import IconCheckCircle from "~icons/ph/check-circle";
 import MetricChart from "@/components/monitor/MetricChart.vue";
+import ServerAgentManagerDrawer from "./components/ServerAgentManagerDrawer.vue";
 import { formatBytes } from "@/utils/traffic";
 import { formatDateTime } from "@/utils/date";
 import {
@@ -377,25 +377,6 @@ function formatUptime(seconds?: number) {
   return `${minutes} 分`;
 }
 
-function agentLabel(item: MonitorItem) {
-  return item.agentVersion
-    ? `v${item.agentVersion}`
-    : item.version || item.agentHash
-      ? "旧版本"
-      : "等待上报";
-}
-
-function agentState(item: MonitorItem) {
-  if (item.removing) return "等待卸载";
-  if (item.agentUpdateError) return "升级失败";
-  if (item.agentUpdateRequested)
-    return item.online ? "等待更新回报" : "等待服务器上线";
-  if (item.agentUpgradeable === false) return "随面板更新";
-  if (item.agentUpdateConfirmed) return "已是最新";
-  if (item.agentUpdateAvailable) return "有可用更新";
-  return "等待上报";
-}
-
 const currentPercent = (used?: number, total?: number) =>
   total ? percent(used, total).toFixed(1) : "0.0";
 
@@ -628,104 +609,20 @@ async function resetToken(item: MonitorItem | null) {
       </article>
     </div>
 
-    <!-- Clean Agent Manager Drawer (Zero Bottom Fine-Print Clutter) -->
-    <UiDrawer
+    <!-- Server Agent Fleet Manager Drawer -->
+    <ServerAgentManagerDrawer
       v-model="agentManagerVisible"
-      title="Agent 管理"
-      size="min(620px, 100vw)"
-    >
-      <div class="agent-manager">
-        <div class="agent-release">
-          <div>
-            <span>当前发布版本</span>
-            <strong class="mono">
-              {{ latestAgentVersion ? `v${latestAgentVersion}` : "等待获取" }}
-            </strong>
-          </div>
-          <UiButton
-            variant="ghost"
-            :icon="Refresh"
-            :loading="checkingAgents"
-            @click="checkAgents"
-          >
-            检查更新
-          </UiButton>
-        </div>
-
-        <p v-if="error" class="agent-error" role="alert">{{ error }}</p>
-
-        <EmptyState
-          v-if="!items.length"
-          size="inline"
-          description="添加服务器后，可在这里统一管理 Agent 版本。"
-        />
-
-        <div v-else class="agent-list">
-          <article v-for="item in items" :key="item.id" class="agent-row">
-            <div class="agent-row-main">
-              <div class="agent-row-top">
-                <strong>{{ item.name }}</strong>
-                <UiTag :tone="item.online ? 'ok' : 'neutral'">
-                  {{ item.online ? "在线" : "离线" }}
-                </UiTag>
-              </div>
-              <div class="agent-version-line mono">
-                <span>{{ agentLabel(item) }}</span>
-                <span
-                  class="agent-state"
-                  :class="{ failed: !!item.agentUpdateError }"
-                >
-                  {{ agentState(item) }}
-                </span>
-              </div>
-              <p v-if="item.agentUpdateError" class="agent-error">
-                {{ item.agentUpdateError }}
-              </p>
-            </div>
-
-            <div class="agent-row-actions">
-              <UiButton
-                v-if="
-                  item.agentUpgradeable !== false &&
-                  (item.agentUpdateAvailable ||
-                    item.agentUpdateRequested ||
-                    item.agentUpdateError)
-                "
-                size="sm"
-                :variant="item.agentUpdateRequested ? 'ghost' : 'primary'"
-                :loading="upgrading === item.id"
-                :disabled="upgrading !== null || item.removing"
-                @click="
-                  upgrade(
-                    item,
-                    !!item.agentUpdateRequested && !item.agentUpdateError
-                  )
-                "
-              >
-                {{
-                  item.agentUpdateError
-                    ? "重试升级"
-                    : item.agentUpdateRequested
-                      ? "撤销升级"
-                      : "升级 Agent"
-                }}
-              </UiButton>
-              <UiButton
-                v-if="item.proxyServerId"
-                size="sm"
-                variant="ghost"
-                @click="
-                  agentManagerVisible = false;
-                  router.push({ name: 'ProxyServers' });
-                "
-              >
-                代理配置
-              </UiButton>
-            </div>
-          </article>
-        </div>
-      </div>
-    </UiDrawer>
+      :items="items"
+      :latest-agent-version="latestAgentVersion"
+      :checking-agents="checkingAgents"
+      :upgrading-id="upgrading"
+      @refresh="checkAgents"
+      @upgrade="(item, cancel) => upgrade(item, cancel)"
+      @open-proxy="
+        agentManagerVisible = false;
+        router.push({ name: 'ProxyServers' });
+      "
+    />
 
     <!-- Add Server Monitor Dialog -->
     <UiDialog
