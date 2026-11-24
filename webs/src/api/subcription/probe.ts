@@ -277,6 +277,7 @@ export interface UserSpeedSample {
 
 export interface UserSpeedChannel {
   mode: "proxy" | "direct";
+  target?: string;
   downloadMbps: number;
   peakMbps: number;
   uploadMbps: number;

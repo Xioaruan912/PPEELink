@@ -57,6 +57,7 @@ type userSpeedSample struct {
 
 type userSpeedChannel struct {
 	Mode         string            `json:"mode"`
+	Target       string            `json:"target,omitempty"`
 	DownloadMbps float64           `json:"downloadMbps"`
 	PeakMbps     float64           `json:"peakMbps"`
 	UploadMbps   float64           `json:"uploadMbps"`

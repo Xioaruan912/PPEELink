@@ -331,6 +331,15 @@ onBeforeUnmount(stopTicker);
           <span class="meta-dot" aria-hidden="true"></span>
           <strong>{{ result.probeName }}</strong>
           <span class="meta-tag">{{ modeLabel[result.mode] }}</span>
+          <span v-if="primaryChannel.target" class="meta-tag">
+            目标：{{ primaryChannel.target }}
+          </span>
+          <span
+            v-if="secondaryChannel?.target && secondaryChannel.target !== primaryChannel.target"
+            class="meta-tag"
+          >
+            基线：{{ secondaryChannel.target }}
+          </span>
           <span
             v-if="result.retentionPct !== undefined && result.mode === 'both'"
             class="retention-pill mono"
@@ -342,6 +351,20 @@ onBeforeUnmount(stopTicker);
           >
             宽带保留率 {{ result.retentionPct.toFixed(1) }}%
           </span>
+        </div>
+
+        <div
+          v-if="primaryChannel.error || secondaryChannel?.error"
+          class="inline-notice is-warn"
+        >
+          {{
+            [
+              primaryChannel.error ? `${primaryChannel.mode === 'direct' ? '物理直连' : '代理通道'}异常：${primaryChannel.error}` : "",
+              secondaryChannel?.error ? `物理直连基线异常：${secondaryChannel.error}` : "",
+            ]
+              .filter(Boolean)
+              .join(" · ")
+          }}
         </div>
 
         <div class="kpi-grid">
@@ -377,7 +400,7 @@ onBeforeUnmount(stopTicker);
               {{ primaryChannel.ttfbMs || 0 }}
               <small>ms</small>
             </strong>
-            <span class="kpi-sub">Cloudflare 边缘响应</span>
+            <span class="kpi-sub">{{ primaryChannel.target || "测速边缘响应" }}</span>
           </article>
 
           <article class="kpi-card">
