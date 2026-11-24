@@ -335,6 +335,20 @@ func extractRealPublicIP(c *gin.Context) string {
 	return ipv6Fallback
 }
 
+// isKnownProxyServerIP returns true if ip belongs to any panel-managed ProxyServer
+// (so a control connection routed through Clash TUN isn't mistaken for the user's physical ISP IP).
+func isKnownProxyServerIP(ip string) bool {
+	ip = strings.TrimSpace(ip)
+	if ip == "" || models.DB == nil {
+		return false
+	}
+	var cnt int64
+	if err := models.DB.Model(&models.ProxyServer{}).Where("public_host = ?", ip).Count(&cnt).Error; err == nil && cnt > 0 {
+		return true
+	}
+	return false
+}
+
 var probeISPEnrichGuard = struct {
 	mu   sync.Mutex
 	seen map[uint]time.Time
@@ -483,8 +497,12 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 	matchedServer := matchReturnTraceServer(host, port)
 
 	clientPubIP := strings.TrimSpace(targetProbe.PublicIP)
-	if clientPubIP == "" || isPrivateOrLAN(clientPubIP) {
-		clientPubIP = extractRealPublicIP(c)
+	if clientPubIP == "" || isPrivateOrLAN(clientPubIP) || isKnownProxyServerIP(clientPubIP) {
+		if realIP := extractRealPublicIP(c); realIP != "" && !isKnownProxyServerIP(realIP) {
+			clientPubIP = realIP
+		} else {
+			clientPubIP = ""
+		}
 	}
 
 	var (
@@ -610,7 +628,7 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 	} else if matchedServer == nil {
 		retErr = "该节点非自建服务器或代理 Agent 离线，仅执行本机去程追踪"
 	} else {
-		retErr = "尚未识别本机公网 IP（请确认用户 Agent 在线后重试）"
+		retErr = "尚未识别本机真实物理公网 IP（请在「Agent 管理」一键升级用户 Agent 至 v1.5，即可绕过代理自动上报）"
 	}
 
 	wg.Wait()

@@ -508,7 +508,7 @@ func ProbeWait(c *gin.Context) {
 	}
 	pubIP := strings.TrimSpace(c.Query("publicIp"))
 	if pubIP == "" || isPrivateOrLAN(pubIP) {
-		if realIP := extractRealPublicIP(c); realIP != "" {
+		if realIP := extractRealPublicIP(c); realIP != "" && !isKnownProxyServerIP(realIP) {
 			pubIP = realIP
 		}
 	}
