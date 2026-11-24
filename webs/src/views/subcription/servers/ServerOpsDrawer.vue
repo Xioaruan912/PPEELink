@@ -5,12 +5,16 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { CopyDocument, Download, Refresh } from "@element-plus/icons-vue";
 import { UiButton, UiDrawer } from "@/ui";
 import {
+  banProxyServerIP,
   getProxyServerLogs,
+  getProxyServerSecurity,
   tuneProxyServer,
+  unbanProxyServerIP,
   upgradeProxyCore,
   type ParsedLogEntry,
   type ParsedLogSummary,
   type ProxyServer,
+  type ServerSecurityAudit,
 } from "@/api/proxy";
 
 const props = defineProps<{
@@ -28,10 +32,13 @@ const visible = computed({
   set: (v: boolean) => emit("update:modelValue", v),
 });
 
-const activeTab = ref<"logs" | "tune">("logs");
+const activeTab = ref<"logs" | "tune" | "security">("logs");
 const tuning = ref(false);
 const upgrading = ref(false);
 const loadingLogs = ref(false);
+const loadingSec = ref(false);
+const actingIP = ref("");
+const securityAudit = ref<ServerSecurityAudit | null>(null);
 const logSource = ref<"xray" | "agent">("xray");
 const logFilter = ref("");
 const levelFilter = ref<"all" | "error" | "warn" | "info">("all");
@@ -115,10 +122,54 @@ function animateLogRows() {
   });
 }
 
-function selectTab(tab: "logs" | "tune") {
+function selectTab(tab: "logs" | "tune" | "security") {
   if (activeTab.value === tab) return;
   activeTab.value = tab;
   void nextTick(() => moveSegThumb(true));
+  if (tab === "security" && !securityAudit.value && props.server?.online) {
+    void fetchSecurity();
+  }
+}
+
+async function fetchSecurity() {
+  if (!props.server) return;
+  loadingSec.value = true;
+  try {
+    const res = await getProxyServerSecurity(props.server.id);
+    securityAudit.value = res.data || null;
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.msg || err?.message || "读取安全状态失败（需服务器 Agent v1.21+）");
+  } finally {
+    loadingSec.value = false;
+  }
+}
+
+async function handleBanIP(ip: string) {
+  if (!props.server || actingIP.value) return;
+  actingIP.value = ip;
+  try {
+    const res = (await banProxyServerIP(props.server.id, ip)) as any;
+    ElMessage.success(res?.msg || `已封禁 ${ip}`);
+    await fetchSecurity();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.msg || err?.message || "封禁失败");
+  } finally {
+    actingIP.value = "";
+  }
+}
+
+async function handleUnbanIP(ip: string) {
+  if (!props.server || actingIP.value) return;
+  actingIP.value = ip;
+  try {
+    const res = (await unbanProxyServerIP(props.server.id, ip)) as any;
+    ElMessage.success(res?.msg || `已解封 ${ip}`);
+    await fetchSecurity();
+  } catch (err: any) {
+    ElMessage.error(err?.response?.data?.msg || err?.message || "解封失败");
+  } finally {
+    actingIP.value = "";
+  }
 }
 
 async function copyText(text: string, label = "已复制") {
@@ -266,6 +317,15 @@ watch(
             @click="selectTab('tune')"
           >
             BBR 调优与内核升级
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="ops-seg-btn"
+            :data-tab-active="activeTab === 'security'"
+            @click="selectTab('security')"
+          >
+            安全防护
           </button>
         </div>
 
@@ -487,7 +547,7 @@ watch(
       </div>
 
       <!-- TAB 2: BBR Tuning + Core Hot Upgrade -->
-      <div v-else class="tune-pane">
+      <div v-else-if="activeTab === 'tune'" class="tune-pane">
         <!-- 1. BBR + UDP Buffer Tuning -->
         <section class="ops-card">
           <header class="ops-head">
@@ -562,6 +622,104 @@ watch(
               热升级至最新版
             </UiButton>
           </header>
+        </section>
+      </div>
+
+      <!-- TAB 3: Inbound Security Guard (Active IPs / Probe Alerts / Firewall Ban) -->
+      <div v-else-if="activeTab === 'security'" class="sec-pane">
+        <div class="sec-bar">
+          <div class="sec-kpis mono">
+            <span class="sec-kpi">活跃连接 <strong>{{ securityAudit?.activeConns ?? 0 }}</strong></span>
+            <span class="sec-kpi">在线 IP <strong>{{ securityAudit?.uniqueClientIps ?? 0 }}</strong></span>
+            <span class="sec-kpi">已封禁 <strong>{{ securityAudit?.bannedIps?.length ?? 0 }}</strong></span>
+          </div>
+          <UiButton
+            variant="ghost"
+            size="sm"
+            :icon="Refresh"
+            :loading="loadingSec"
+            :disabled="!server.online"
+            @click="fetchSecurity"
+          >
+            刷新
+          </UiButton>
+        </div>
+
+        <section class="ops-card">
+          <header class="ops-head">
+            <h3>异常探测来源 IP</h3>
+          </header>
+          <div v-if="securityAudit?.alerts?.length" class="sec-list">
+            <div v-for="a in securityAudit.alerts" :key="a.ip" class="sec-row">
+              <div class="sec-row-left">
+                <strong class="mono">{{ a.ip }}</strong>
+                <span class="sec-reason">{{ a.lastReason }}</span>
+                <span class="sec-cnt mono">×{{ a.hits }}</span>
+              </div>
+              <button
+                v-if="!a.banned"
+                type="button"
+                class="ban-btn"
+                :disabled="actingIP === a.ip"
+                @click="handleBanIP(a.ip)"
+              >
+                封禁
+              </button>
+              <button
+                v-else
+                type="button"
+                class="unban-btn"
+                :disabled="actingIP === a.ip"
+                @click="handleUnbanIP(a.ip)"
+              >
+                解封
+              </button>
+            </div>
+          </div>
+          <div v-else class="sec-empty">暂无异常探测记录</div>
+        </section>
+
+        <section class="ops-card">
+          <header class="ops-head">
+            <h3>当前活跃来源 IP</h3>
+          </header>
+          <div v-if="securityAudit?.clients?.length" class="sec-list">
+            <div v-for="c in securityAudit.clients" :key="c.ip" class="sec-row">
+              <div class="sec-row-left">
+                <strong class="mono">{{ c.ip }}</strong>
+                <span class="sec-cnt mono">{{ c.conns }} 连接</span>
+                <span class="sec-reason mono">:{{ c.ports.join(", :") }}</span>
+              </div>
+              <button
+                type="button"
+                class="ban-btn"
+                :disabled="actingIP === c.ip"
+                @click="handleBanIP(c.ip)"
+              >
+                封禁
+              </button>
+            </div>
+          </div>
+          <div v-else class="sec-empty">当前无活跃入站连接</div>
+        </section>
+
+        <section v-if="securityAudit?.bannedIps?.length" class="ops-card">
+          <header class="ops-head">
+            <h3>防火墙封禁列表 (PPEELINK_BAN)</h3>
+          </header>
+          <div class="sec-list">
+            <div v-for="ip in securityAudit.bannedIps" :key="ip" class="sec-row">
+              <strong class="mono">{{ ip }}</strong>
+              <button
+                type="button"
+                class="unban-btn"
+                :disabled="actingIP === ip"
+                @click="handleUnbanIP(ip)"
+              >
+                解封
+              </button>
+            </div>
+          </div>
         </section>
       </div>
     </div>
@@ -1186,6 +1344,105 @@ watch(
 
 .kv-bar i.is-warn {
   background: var(--c-warn, #d97706);
+}
+
+.sec-pane {
+  display: grid;
+  gap: 14px;
+}
+
+.sec-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sec-kpis {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sec-kpi {
+  padding: 5px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.sec-kpi strong {
+  color: var(--c-ink);
+  margin-left: 4px;
+}
+
+.sec-list {
+  display: grid;
+  gap: 6px;
+}
+
+.sec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--c-surface-muted);
+  font-size: 12.5px;
+}
+
+.sec-row-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sec-reason {
+  font-size: 11.5px;
+  color: var(--c-muted);
+}
+
+.sec-cnt {
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: var(--c-surface);
+  font-size: 11px;
+  color: var(--c-ink);
+}
+
+.ban-btn,
+.unban-btn {
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11.5px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ban-btn {
+  border: 1px solid color-mix(in srgb, var(--c-bad) 36%, transparent);
+  background: color-mix(in srgb, var(--c-bad) 10%, transparent);
+  color: var(--c-bad);
+}
+
+.unban-btn {
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  color: var(--c-ink);
+}
+
+.sec-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--c-muted);
 }
 
 @media (max-width: 640px) {

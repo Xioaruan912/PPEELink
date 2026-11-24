@@ -255,6 +255,73 @@ export const checkProxyServerPort = (
     data: { serverId, port, proto },
     timeout: 15000,
   });
+
+export interface ServerSNICheckItem {
+  host: string;
+  target: string;
+  ok: boolean;
+  tls13: boolean;
+  h2: boolean;
+  rttMs: number;
+  issuer?: string;
+  validDays?: number;
+  score: number;
+  grade: "best" | "ok" | "bad";
+  reason?: string;
+}
+
+export const checkProxyServerSNI = (serverId: number, targets?: string[]) =>
+  request<{ items: ServerSNICheckItem[] }>({
+    url: "/api/v1/proxy/servers/check-sni",
+    method: "post",
+    data: { serverId, targets: targets?.filter(Boolean) || [] },
+    timeout: 24000,
+  });
+
+export interface ServerSecurityClient {
+  ip: string;
+  conns: number;
+  ports: number[];
+}
+
+export interface ServerSecurityAlert {
+  ip: string;
+  hits: number;
+  lastReason: string;
+  banned: boolean;
+}
+
+export interface ServerSecurityAudit {
+  activeConns: number;
+  uniqueClientIps: number;
+  clients: ServerSecurityClient[];
+  alerts: ServerSecurityAlert[];
+  bannedIps: string[];
+}
+
+export const getProxyServerSecurity = (id: number) =>
+  request<ServerSecurityAudit>({
+    url: "/api/v1/proxy/servers/security",
+    method: "get",
+    params: { id },
+    timeout: 24000,
+  });
+
+export const banProxyServerIP = (serverId: number, ip: string) =>
+  request({
+    url: "/api/v1/proxy/servers/security/ban",
+    method: "post",
+    data: { serverId, ip },
+    timeout: 18000,
+  });
+
+export const unbanProxyServerIP = (serverId: number, ip: string) =>
+  request({
+    url: "/api/v1/proxy/servers/security/unban",
+    method: "post",
+    data: { serverId, ip },
+    timeout: 18000,
+  });
 export const listProxyAccounts = () =>
   request<ProxyAccount[]>({ url: "/api/v1/proxy/accounts", method: "get" });
 export const saveProxyAccount = (data: {

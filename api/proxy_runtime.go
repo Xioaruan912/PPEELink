@@ -260,7 +260,7 @@ func applyAgentMonitor(tx *gorm.DB, server models.ProxyServer, report xraycore.R
 		}
 		if err == gorm.ErrRecordNotFound || err != nil || monitor.ID == 0 {
 			monitor = models.Monitor{
-				Name: server.Name, Group: "自建节点", ProxyServerID: &serverID, Enabled: true,
+				Name: server.Name, Group: inferMonitorRegion(server.Name, server.PublicHost), ProxyServerID: &serverID, Enabled: true,
 			}
 			if err := tx.Create(&monitor).Error; err != nil {
 				return err
@@ -289,9 +289,17 @@ func applyAgentMonitor(tx *gorm.DB, server models.ProxyServer, report xraycore.R
 	if err := tx.Create(&metric).Error; err != nil {
 		return err
 	}
-	return tx.Model(&monitor).Updates(map[string]any{
+	updates := map[string]any{
 		"name": server.Name, "last_seen_at": now, "os": "linux", "arch": report.Arch,
-	}).Error
+	}
+	if monitor.Group == "" || monitor.Group == "自建节点" {
+		if region := inferMonitorRegion(server.Name, server.PublicHost); region != "" {
+			updates["group"] = region
+		} else if monitor.Group == "自建节点" {
+			updates["group"] = ""
+		}
+	}
+	return tx.Model(&monitor).Updates(updates).Error
 }
 
 // ---- 本机服务器：面板进程内直接驱动 ------------------------------------------

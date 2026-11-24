@@ -23,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.6"
+const latestUserAgentVersion = "1.7"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -51,6 +51,9 @@ type queuedProbeJob struct {
 	Action     string
 	TargetHost string
 	SpeedMode  string
+	ClashGroup string
+	ClashNode  string
+	ClashNodes []string
 	Nodes      []probeNode
 }
 
@@ -295,10 +298,12 @@ func ProbeList(c *gin.Context) {
 	items := make([]gin.H, 0, len(probes))
 	for _, p := range probes {
 		online := probeHub.isWaiting(p.ID) || (p.LastSeenAt != nil && now.Sub(*p.LastSeenAt) < probeOnlineWindow)
+		cGroup, cNow := getProbeClashLive(p.ID)
 		items = append(items, gin.H{
 			"id": p.ID, "name": p.Name, "region": p.Region, "enabled": p.Enabled,
 			"autoProbe": p.AutoProbe, "hasIpv6": p.HasIPv6, "isp": p.ISP, "iface": p.IfaceName, "publicIp": p.PublicIP,
-			"online":    online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
+			"clashGroup": cGroup, "clashNow": cNow,
+			"online": online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
 			"latestVersion":   latestUserAgentVersion,
 			"updateAvailable": p.Version != "" && p.Version != latestUserAgentVersion,
 		})
@@ -519,6 +524,9 @@ func ProbeWait(c *gin.Context) {
 	if _, hasISP := updates["isp"]; !hasISP && strings.TrimSpace(probe.ISP) == "" && pubIP != "" {
 		go enrichProbeISPAsync(probe.ID, pubIP)
 	}
+	if cNow := strings.TrimSpace(c.Query("clashNow")); cNow != "" || c.Query("clashGroup") != "" {
+		recordProbeClashLive(probe.ID, strings.TrimSpace(c.Query("clashGroup")), cNow)
+	}
 
 	waitSec, _ := strconv.Atoi(c.DefaultQuery("timeout", "25"))
 	if waitSec < 5 {
@@ -545,6 +553,9 @@ func ProbeWait(c *gin.Context) {
 			"action":     act,
 			"targetHost": job.TargetHost,
 			"speedMode":  job.SpeedMode,
+			"clashGroup": job.ClashGroup,
+			"clashNode":  job.ClashNode,
+			"clashNodes": job.ClashNodes,
 			"nodes":      job.Nodes,
 		}, "msg": "dispatched"})
 	case <-timer.C:

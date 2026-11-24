@@ -16,6 +16,17 @@
           <i aria-hidden="true"></i>
           {{ summary.valid }}/{{ summary.total }} 在线 · {{ validRate }}%
         </span>
+        <button
+          v-for="item in topologyAnomalies"
+          :key="item.title"
+          type="button"
+          class="anomaly-pill"
+          :class="`is-${item.tone}`"
+          @click="router.push(item.target)"
+        >
+          <i aria-hidden="true"></i>
+          <span>{{ item.title }}</span>
+        </button>
       </div>
 
       <div class="masthead-actions">
@@ -44,6 +55,8 @@
       <WorldMap
         class="dash-hero-map"
         :points="mapPoints"
+        :origins="topologyOrigins"
+        :live-arcs="liveFlightArcs"
         :loading="loading"
         :selected-name="selectedPoint?.name"
         @select="onMapSelect"
@@ -190,10 +203,17 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import gsap from "gsap";
 import { getNodeMap } from "@/api/total";
 import { getNodeOverview, getNodeQualitySummary } from "@/api/subcription/node";
+import {
+  getProbeTopology,
+  type ProbeTopologyAnomaly,
+  type ProbeTopologyArc,
+  type ProbeTopologyOrigin,
+} from "@/api/subcription/probe";
 import type { OverviewItem } from "@/views/subcription/nodes/useNodes";
 import { Check, Close, CopyDocument, Refresh } from "@element-plus/icons-vue";
 import { UiButton, StatusDot } from "@/ui";
@@ -209,6 +229,7 @@ interface MapPoint {
   server?: string;
 }
 
+const router = useRouter();
 const rootEl = ref<HTMLElement>();
 let gsapCtx: gsap.Context | null = null;
 
@@ -217,6 +238,45 @@ const loadError = ref("");
 const summary = ref({ total: 0, valid: 0, invalid: 0 });
 const mapPoints = ref<MapPoint[]>([]);
 const nodes = ref<OverviewItem[]>([]);
+const topologyOrigins = ref<ProbeTopologyOrigin[]>([]);
+const topologyRawArcs = ref<ProbeTopologyArc[]>([]);
+const topologyAnomalies = ref<ProbeTopologyAnomaly[]>([]);
+
+const liveFlightArcs = computed(() => {
+  if (!topologyOrigins.value.length || !topologyRawArcs.value.length) return [];
+  const originMap = new Map(topologyOrigins.value.map((o) => [o.id, o]));
+  const nodeNameById = new Map(nodes.value.map((n) => [n.id, n.name]));
+  const ptByName = new Map(mapPoints.value.map((p) => [p.name, p]));
+
+  const out: {
+    key: string;
+    fromLat: number;
+    fromLng: number;
+    toLat: number;
+    toLng: number;
+    rtt: number;
+    success: boolean;
+    title: string;
+  }[] = [];
+
+  for (const arc of topologyRawArcs.value) {
+    const orig = originMap.get(arc.probeId);
+    const name = nodeNameById.get(arc.nodeId);
+    const pt = name ? ptByName.get(name) : undefined;
+    if (!orig || !pt) continue;
+    out.push({
+      key: `${arc.probeId}-${arc.nodeId}`,
+      fromLat: orig.lat,
+      fromLng: orig.lon,
+      toLat: pt.lat,
+      toLng: pt.lng,
+      rtt: arc.rtt,
+      success: arc.success,
+      title: `${orig.name} → ${pt.name} · ${arc.success ? `${arc.rtt} ms` : "不可达"}`,
+    });
+  }
+  return out;
+});
 const selectedPoint = ref<MapPoint | undefined>(undefined);
 const copiedName = ref("");
 let copyTimer: ReturnType<typeof setTimeout> | null = null;
@@ -311,8 +371,9 @@ async function loadOverview() {
     getNodeQualitySummary(),
     getNodeMap(),
     getNodeOverview(),
+    getProbeTopology(),
   ]);
-  const [quality, map, overview] = results;
+  const [quality, map, overview, topo] = results;
   if (quality.status === "fulfilled")
     summary.value = { ...summary.value, ...quality.value.data };
   if (map.status === "fulfilled") {
@@ -326,7 +387,12 @@ async function loadOverview() {
   }
   if (overview.status === "fulfilled")
     nodes.value = Array.isArray(overview.value.data) ? overview.value.data : [];
-  if (results.some((r) => r.status === "rejected"))
+  if (topo.status === "fulfilled" && topo.value.data) {
+    topologyOrigins.value = topo.value.data.origins || [];
+    topologyRawArcs.value = topo.value.data.arcs || [];
+    topologyAnomalies.value = topo.value.data.anomalies || [];
+  }
+  if (results.slice(0, 3).some((r) => r.status === "rejected"))
     loadError.value = "部分网络数据暂时无法加载，请稍后重试。";
   loading.value = false;
   inFlight = false;
@@ -781,6 +847,41 @@ onBeforeUnmount(() => {
 
 .pill-dot.is-bad {
   background: var(--c-bad);
+}
+
+.anomaly-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 150ms ease;
+}
+
+.anomaly-pill:active {
+  transform: scale(0.97);
+}
+
+.anomaly-pill i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.anomaly-pill.is-warn {
+  border-color: color-mix(in srgb, var(--c-warn) 40%, transparent);
+  color: var(--c-warn);
+}
+
+.anomaly-pill.is-bad {
+  border-color: color-mix(in srgb, var(--c-bad) 40%, transparent);
+  color: var(--c-bad);
 }
 
 @media (max-width: 780px) {

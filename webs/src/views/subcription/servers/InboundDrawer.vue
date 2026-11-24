@@ -6,12 +6,14 @@ import IconShuffle from "~icons/ph/shuffle";
 import IconCheck from "~icons/ph/seal-check";
 import {
   checkProxyServerPort,
+  checkProxyServerSNI,
   checkRealityTarget,
   getProxyEgressOptions,
   saveProxyInbound,
   type InboundTemplate,
   type ProxyInbound,
   type DomainRoute,
+  type ServerSNICheckItem,
   type TargetCheck,
 } from "@/api/proxy";
 import { UiButton, UiDrawer } from "@/ui";
@@ -279,6 +281,9 @@ function pickTarget(host: string) {
   error.value = "";
 }
 
+const sniAuditing = ref(false);
+const sniResults = ref<ServerSNICheckItem[]>([]);
+
 async function runCheck() {
   checking.value = true;
   error.value = "";
@@ -288,6 +293,24 @@ async function runCheck() {
     error.value = e?.message || "检测失败";
   } finally {
     checking.value = false;
+  }
+}
+
+async function runServerSNIAudit() {
+  if (!props.serverId || sniAuditing.value) return;
+  sniAuditing.value = true;
+  error.value = "";
+  try {
+    const custom = [form.sni, form.target].filter(Boolean);
+    const res = await checkProxyServerSNI(props.serverId, custom);
+    sniResults.value = res.data?.items || [];
+    if (!sniResults.value.length) {
+      ElMessage.warning("未返回体检结果");
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || e?.message || "就地体检失败（需服务器 Agent v1.21+）");
+  } finally {
+    sniAuditing.value = false;
   }
 }
 
@@ -550,6 +573,14 @@ async function save() {
             >
               检测目标可用性 & CF 校验
             </UiButton>
+            <UiButton
+              v-if="!identityLocked && props.serverId"
+              variant="ghost"
+              :loading="sniAuditing"
+              @click="runServerSNIAudit"
+            >
+              VPS 就地推荐 SNI
+            </UiButton>
             <Transition name="pop">
               <span
                 v-if="check"
@@ -567,6 +598,25 @@ async function save() {
                 {{ check.message }}
               </span>
             </Transition>
+          </div>
+
+          <div v-if="sniResults.length" class="sni-audit-list">
+            <button
+              v-for="item in sniResults"
+              :key="item.host"
+              type="button"
+              class="sni-row"
+              :class="{ 'is-active': form.sni === item.host }"
+              @click="pickTarget(item.host)"
+            >
+              <strong class="mono">{{ item.host }}</strong>
+              <span class="sni-badges mono">
+                <em v-if="item.tls13" class="is-ok">TLS1.3</em>
+                <em v-if="item.h2" class="is-ok">H2</em>
+                <em v-if="item.rttMs">{{ item.rttMs }} ms</em>
+                <em :class="`is-${item.grade}`">{{ item.score }}分</em>
+              </span>
+            </button>
           </div>
         </section>
 
@@ -1203,6 +1253,62 @@ async function save() {
 .pop-enter-from {
   opacity: 0;
   transform: scale(0.92);
+}
+
+.sni-audit-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.sni-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 10px;
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.sni-row:hover {
+  border-color: var(--c-ink);
+}
+
+.sni-row.is-active {
+  border-color: var(--c-ok);
+  background: color-mix(in srgb, var(--c-ok) 8%, var(--c-surface));
+}
+
+.sni-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sni-badges em {
+  font-style: normal;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--c-surface-muted);
+  color: var(--c-muted);
+  font-size: 11px;
+}
+
+.sni-badges em.is-ok,
+.sni-badges em.is-best {
+  background: color-mix(in srgb, var(--c-ok) 14%, transparent);
+  color: var(--c-ok);
+}
+
+.sni-badges em.is-bad {
+  background: color-mix(in srgb, var(--c-bad) 12%, transparent);
+  color: var(--c-bad);
 }
 
 @media (max-width: 640px) {

@@ -25,6 +25,7 @@ import CountryFlag from "@/ui/CountryFlag.vue";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { displayNodeName } from "@/utils/nodeDisplay";
 import AgentManagerDrawer from "./components/AgentManagerDrawer.vue";
+import ClashBatchDrawer from "./components/ClashBatchDrawer.vue";
 import LatencySparkline from "./components/LatencySparkline.vue";
 import LatencyDetailModal, {
   type DetailNodeTarget,
@@ -100,6 +101,7 @@ const sparklines = ref<SparklinesResponse | null>(null);
 const detailOpen = ref(false);
 const detailNode = ref<DetailNodeTarget | null>(null);
 const managerOpen = ref(false);
+const clashOpen = ref(false);
 const query = ref("");
 const statusFilter = ref<"all" | "ok" | "fail" | "untested">("all");
 let autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -595,6 +597,13 @@ onBeforeUnmount(() => {
         />
         <UiButton
           variant="ghost"
+          :disabled="!hasOnlineProbe"
+          @click="clashOpen = true"
+        >
+          Clash 联动
+        </UiButton>
+        <UiButton
+          variant="ghost"
           :icon="Setting"
           @click="managerOpen = true"
         >
@@ -1078,6 +1087,14 @@ onBeforeUnmount(() => {
       :probes="probes"
       @refresh="refreshAll"
       @reset-token="handleResetToken"
+    />
+
+    <!-- Clash 外部控制与全节点批量实测抽屉 -->
+    <ClashBatchDrawer
+      v-model="clashOpen"
+      :probes="probes"
+      :active-probe-id="selectedProbeId || undefined"
+      @refresh="refreshAll"
     />
   </div>
 </template>

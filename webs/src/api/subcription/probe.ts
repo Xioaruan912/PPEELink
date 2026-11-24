@@ -11,6 +11,9 @@ export interface Probe {
   hasIpv6?: boolean | null;
   isp?: string;
   iface?: string;
+  publicIp?: string;
+  clashGroup?: string;
+  clashNow?: string;
   online: boolean;
   lastSeenAt?: string | null;
   version?: string;
@@ -383,5 +386,115 @@ export function applyProbeSortToSubs(probeId?: number) {
     url: "/api/v1/probes/apply-sort",
     method: "post",
     data: probeId ? { probeId } : {},
+  });
+}
+
+export interface ClashStatus {
+  connected: boolean;
+  controller?: string;
+  version?: string;
+  group?: string;
+  current?: string;
+  proxies?: string[];
+  error?: string;
+}
+
+export interface ClashNodeTestItem {
+  name: string;
+  egressIp?: string;
+  country?: string;
+  ttfbMs: number;
+  downloadMbps: number;
+  chatgpt: string;
+  claude: string;
+  gemini: string;
+  netflix: string;
+  disney: string;
+  youtube: string;
+  error?: string;
+}
+
+export interface ClashReport {
+  jobId: string;
+  probeName?: string;
+  action: string;
+  status?: ClashStatus;
+  group?: string;
+  original?: string;
+  switched?: string;
+  items?: ClashNodeTestItem[];
+  error?: string;
+}
+
+export function getProbeClashStatus(probeId?: number) {
+  return request<ClashReport>({
+    url: "/api/v1/probes/clash/status",
+    method: "post",
+    data: probeId ? { probeId } : {},
+    timeout: 14000,
+  });
+}
+
+export function switchProbeClashNode(data: {
+  probeId?: number;
+  group?: string;
+  node: string;
+}) {
+  return request<ClashReport>({
+    url: "/api/v1/probes/clash/switch",
+    method: "post",
+    data,
+    timeout: 14000,
+  });
+}
+
+export function runProbeClashBatchTest(data: {
+  probeId?: number;
+  group?: string;
+  nodes?: string[];
+}) {
+  return request<ClashReport>({
+    url: "/api/v1/probes/clash/batch-test",
+    method: "post",
+    data,
+    timeout: 130000,
+  });
+}
+
+export interface ProbeTopologyOrigin {
+  id: number;
+  name: string;
+  isp?: string;
+  publicIp?: string;
+  clashNow?: string;
+  lat: number;
+  lon: number;
+}
+
+export interface ProbeTopologyArc {
+  probeId: number;
+  nodeId: number;
+  success: boolean;
+  rtt: number;
+  kind: string;
+}
+
+export interface ProbeTopologyAnomaly {
+  tone: "warn" | "bad";
+  title: string;
+  target: string;
+}
+
+export interface ProbeTopologyResponse {
+  origins: ProbeTopologyOrigin[];
+  arcs: ProbeTopologyArc[];
+  anomalies: ProbeTopologyAnomaly[];
+}
+
+export function getProbeTopology() {
+  return request<ProbeTopologyResponse>({
+    url: "/api/v1/probes/topology",
+    method: "get",
+    timeout: 12000,
   });
 }

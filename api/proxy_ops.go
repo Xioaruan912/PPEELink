@@ -14,27 +14,67 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type serverOpsSNIResult struct {
+	Host      string `json:"host"`
+	Target    string `json:"target"`
+	OK        bool   `json:"ok"`
+	TLS13     bool   `json:"tls13"`
+	H2        bool   `json:"h2"`
+	RTTMs     int    `json:"rttMs"`
+	Issuer    string `json:"issuer,omitempty"`
+	ValidDays int    `json:"validDays,omitempty"`
+	Score     int    `json:"score"`
+	Grade     string `json:"grade"`
+	Reason    string `json:"reason,omitempty"`
+}
+
+type serverOpsSecurityClient struct {
+	IP    string `json:"ip"`
+	Conns int    `json:"conns"`
+	Ports []int  `json:"ports"`
+}
+
+type serverOpsSecurityAlert struct {
+	IP         string `json:"ip"`
+	Hits       int    `json:"hits"`
+	LastReason string `json:"lastReason"`
+	Banned     bool   `json:"banned"`
+}
+
+type serverOpsSecurityAudit struct {
+	ActiveConns     int                       `json:"activeConns"`
+	UniqueClientIPs int                       `json:"uniqueClientIps"`
+	Clients         []serverOpsSecurityClient `json:"clients"`
+	Alerts          []serverOpsSecurityAlert  `json:"alerts"`
+	BannedIPs       []string                  `json:"bannedIps"`
+}
+
 type serverOpsJob struct {
-	JobID   string `json:"jobId"`
-	Action  string `json:"action"` // tune-network | upgrade-core | fetch-logs | check-port
-	Source  string `json:"source,omitempty"`
-	Lines   int    `json:"lines,omitempty"`
-	Filter  string `json:"filter,omitempty"`
-	Version string `json:"version,omitempty"`
-	Port    int    `json:"port,omitempty"`
-	Proto   string `json:"proto,omitempty"`
+	JobID   string   `json:"jobId"`
+	Action  string   `json:"action"` // tune-network | upgrade-core | fetch-logs | check-port | sni-check | security-audit | security-ban | security-unban
+	Source  string   `json:"source,omitempty"`
+	Lines   int      `json:"lines,omitempty"`
+	Filter  string   `json:"filter,omitempty"`
+	Version string   `json:"version,omitempty"`
+	Port    int      `json:"port,omitempty"`
+	Proto   string   `json:"proto,omitempty"`
+	Targets []string `json:"targets,omitempty"`
+	Ports   []int    `json:"ports,omitempty"`
+	IP      string   `json:"ip,omitempty"`
 }
 
 type serverOpsResult struct {
-	JobID  string `json:"jobId"`
-	OK     bool   `json:"ok"`
-	Output string `json:"output,omitempty"`
-	Error  string `json:"error,omitempty"`
-	InUse  bool   `json:"inUse,omitempty"`
-	BBR    string `json:"bbr,omitempty"`
-	Qdisc  string `json:"qdisc,omitempty"`
-	Rmem   int64  `json:"rmemMax,omitempty"`
-	Wmem   int64  `json:"wmemMax,omitempty"`
+	JobID    string                  `json:"jobId"`
+	OK       bool                    `json:"ok"`
+	Output   string                  `json:"output,omitempty"`
+	Error    string                  `json:"error,omitempty"`
+	InUse    bool                    `json:"inUse,omitempty"`
+	BBR      string                  `json:"bbr,omitempty"`
+	Qdisc    string                  `json:"qdisc,omitempty"`
+	Rmem     int64                   `json:"rmemMax,omitempty"`
+	Wmem     int64                   `json:"wmemMax,omitempty"`
+	SNIs     []serverOpsSNIResult    `json:"snis,omitempty"`
+	Security *serverOpsSecurityAudit `json:"security,omitempty"`
 }
 
 var serverOpsHub = &struct {
@@ -325,4 +365,105 @@ func ProxyServerCheckPort(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"inUse": res.InUse, "detail": res.Output}, "msg": res.Output})
+}
+
+// ProxyServerCheckSNI 由目标 VPS 就地检测 Reality 伪装目标（TLS 1.3 / H2 / 握手延迟）并智能推荐。
+func ProxyServerCheckSNI(c *gin.Context) {
+	var req struct {
+		ServerID uint     `json:"serverId"`
+		Targets  []string `json:"targets"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.ServerID == 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "服务器 ID 无效"})
+		return
+	}
+	_, res, ok := runServerOpsRPC(c, req.ServerID, serverOpsJob{
+		Action:  "sni-check",
+		Targets: req.Targets,
+	}, 20*time.Second)
+	if !ok {
+		return
+	}
+	if !res.OK {
+		c.JSON(500, gin.H{"code": "50000", "msg": res.Error})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"items": res.SNIs}, "msg": res.Output})
+}
+
+// ProxyServerSecurityAudit 拉取目标服务器的入站在线连接 IP、近期异常探测聚合及防火墙封禁列表。
+func ProxyServerSecurityAudit(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Query("id"), 10, 64)
+	if err != nil || id == 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "服务器 ID 无效"})
+		return
+	}
+	var inbs []models.ProxyInbound
+	_ = models.DB.Where("server_id = ? AND enabled = ?", uint(id), true).Find(&inbs).Error
+	ports := make([]int, 0, len(inbs))
+	for _, inb := range inbs {
+		if inb.Port > 0 {
+			ports = append(ports, inb.Port)
+		}
+	}
+	_, res, ok := runServerOpsRPC(c, uint(id), serverOpsJob{
+		Action: "security-audit",
+		Ports:  ports,
+	}, 20*time.Second)
+	if !ok {
+		return
+	}
+	if !res.OK {
+		c.JSON(500, gin.H{"code": "50000", "msg": res.Error})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": res.Security, "msg": "ok"})
+}
+
+// ProxyServerSecurityBan 一键通过服务器 Agent 的 iptables 封禁链丢弃指定异常来源 IP。
+func ProxyServerSecurityBan(c *gin.Context) {
+	var req struct {
+		ServerID uint   `json:"serverId"`
+		IP       string `json:"ip"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.ServerID == 0 || strings.TrimSpace(req.IP) == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "参数无效"})
+		return
+	}
+	_, res, ok := runServerOpsRPC(c, req.ServerID, serverOpsJob{
+		Action: "security-ban",
+		IP:     strings.TrimSpace(req.IP),
+	}, 15*time.Second)
+	if !ok {
+		return
+	}
+	if !res.OK {
+		c.JSON(400, gin.H{"code": "40000", "msg": res.Error})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": res.Output})
+}
+
+// ProxyServerSecurityUnban 解除指定来源 IP 的服务器防火墙封禁。
+func ProxyServerSecurityUnban(c *gin.Context) {
+	var req struct {
+		ServerID uint   `json:"serverId"`
+		IP       string `json:"ip"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.ServerID == 0 || strings.TrimSpace(req.IP) == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "参数无效"})
+		return
+	}
+	_, res, ok := runServerOpsRPC(c, req.ServerID, serverOpsJob{
+		Action: "security-unban",
+		IP:     strings.TrimSpace(req.IP),
+	}, 15*time.Second)
+	if !ok {
+		return
+	}
+	if !res.OK {
+		c.JSON(400, gin.H{"code": "40000", "msg": res.Error})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "msg": res.Output})
 }

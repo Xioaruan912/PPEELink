@@ -73,6 +73,49 @@ func monitorOnline(monitor models.Monitor, now time.Time) bool {
 	return monitor.LastSeenAt != nil && now.Sub(*monitor.LastSeenAt) < monitorOnlineWindow
 }
 
+// inferMonitorRegion derives a clean Chinese region label from cached GeoIP or
+// server name suffixes (e.g. DMIT_USA -> 美国, wawo_HK -> 香港, NB_JP -> 日本).
+func inferMonitorRegion(name, host string) string {
+	host = strings.TrimSpace(host)
+	if host != "" {
+		hopGeoCache.mu.RLock()
+		info, ok := hopGeoCache.data[host]
+		hopGeoCache.mu.RUnlock()
+		if ok && info.Location != "" {
+			fields := strings.Fields(info.Location)
+			if len(fields) > 0 && fields[0] != "" {
+				return fields[0]
+			}
+		}
+	}
+	upper := strings.ToUpper("_" + strings.TrimSpace(name) + "_")
+	patterns := []struct {
+		keys  []string
+		label string
+	}{
+		{[]string{"_HK_", "HK_", "_HK", "香港", "HONGKONG", "HONG KONG"}, "香港"},
+		{[]string{"_JP_", "JP_", "_JP", "日本", "JAPAN", "TOKYO", "OSAKA"}, "日本"},
+		{[]string{"_USA_", "_US_", "USA_", "US_", "_USA", "_US", "美国", "UNITED STATES", "LA_", "LAX", "SJC", "DMIT"}, "美国"},
+		{[]string{"_SG_", "SG_", "_SG", "新加坡", "SINGAPORE"}, "新加坡"},
+		{[]string{"_TW_", "TW_", "_TW", "台湾", "TAIWAN"}, "台湾"},
+		{[]string{"_KR_", "KR_", "_KR", "韩国", "KOREA", "SEOUL"}, "韩国"},
+		{[]string{"_UK_", "_GB_", "英国", "LONDON"}, "英国"},
+		{[]string{"_DE_", "德国", "FRANKFURT"}, "德国"},
+		{[]string{"_NL_", "荷兰", "AMSTERDAM"}, "荷兰"},
+		{[]string{"_FR_", "法国", "PARIS"}, "法国"},
+		{[]string{"_CA_", "加拿大", "CANADA"}, "加拿大"},
+		{[]string{"_AU_", "澳大利亚", "澳洲", "SYDNEY"}, "澳大利亚"},
+	}
+	for _, p := range patterns {
+		for _, k := range p.keys {
+			if strings.Contains(upper, k) {
+				return p.label
+			}
+		}
+	}
+	return ""
+}
+
 // MonitorList 管理端：服务器列表 + 最新指标。
 func MonitorList(c *gin.Context) {
 	var monitors []models.Monitor
@@ -112,6 +155,13 @@ func MonitorList(c *gin.Context) {
 				item["agentUpgradeable"] = server.Kind == models.ServerKindAgent
 				item["ownsAgent"] = server.Kind == models.ServerKindAgent && server.AgentToken == ""
 				item["removing"] = server.Removing
+				if m.Group == "" || m.Group == "自建节点" {
+					region := inferMonitorRegion(m.Name, server.PublicHost)
+					item["group"] = region
+					if region != m.Group {
+						models.DB.Model(&models.Monitor{}).Where("id = ?", m.ID).Update("group", region)
+					}
+				}
 			}
 			var last models.ProbeResult
 			if err := models.DB.Where("agent_server_id = ? AND checked_at >= ?", *m.ProxyServerID, now.Add(-probeResultTTL)).

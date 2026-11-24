@@ -127,15 +127,61 @@
             </path>
           </g>
 
-          <!-- Subtle Great-Circle Fiber Mesh Arcs Connecting Active Nodes -->
+          <!-- Live End-to-End Flight Arcs (from online User Agents -> Global Nodes) or Fallback Mesh -->
           <g class="fiber-arcs" aria-hidden="true">
-            <path
-              v-for="arc in meshArcs"
-              :key="arc.key"
-              :d="arc.d"
-              class="fiber-arc"
-              vector-effect="non-scaling-stroke"
+            <template v-if="projectedLiveArcs.length">
+              <path
+                v-for="arc in projectedLiveArcs"
+                :key="arc.key"
+                :d="arc.d"
+                class="fiber-arc live-arc"
+                :class="`tone-${arc.tone}`"
+                vector-effect="non-scaling-stroke"
+              >
+                <title>{{ arc.title }}</title>
+              </path>
+            </template>
+            <template v-else>
+              <path
+                v-for="arc in meshArcs"
+                :key="arc.key"
+                :d="arc.d"
+                class="fiber-arc"
+                vector-effect="non-scaling-stroke"
+              />
+            </template>
+          </g>
+
+          <!-- Online User Agent Origin Beacons -->
+          <g
+            v-for="orig in projectedOrigins"
+            :key="`orig-${orig.id}`"
+            class="origin-node"
+          >
+            <title>
+              {{ orig.name }}{{ orig.isp ? ` · ${orig.isp}` : "" }}{{ orig.clashNow ? ` · Clash: ${orig.clashNow}` : "" }}
+            </title>
+            <circle
+              class="origin-pulse"
+              :cx="orig.x"
+              :cy="orig.y"
+              :r="13 / zoom"
             />
+            <circle
+              class="origin-core"
+              :cx="orig.x"
+              :cy="orig.y"
+              :r="4.6 / zoom"
+              filter="url(#wm-pin-shadow)"
+            />
+            <text
+              class="origin-label"
+              :x="orig.x + 8 / zoom"
+              :y="orig.y + 3 / zoom"
+              :font-size="10 / zoom"
+            >
+              {{ orig.name }}
+            </text>
           </g>
 
           <!-- Interactive 3D-Elevated Node Location Pins -->
@@ -252,8 +298,30 @@ interface ProjectedPoint extends MapPoint {
   y: number;
 }
 
+interface OriginPoint {
+  id: number;
+  name: string;
+  isp?: string;
+  clashNow?: string;
+  lat: number;
+  lon: number;
+}
+
+interface LiveArcInput {
+  key: string;
+  fromLat: number;
+  fromLng: number;
+  toLat: number;
+  toLng: number;
+  rtt: number;
+  success: boolean;
+  title: string;
+}
+
 const props = defineProps<{
   points?: MapPoint[];
+  origins?: OriginPoint[];
+  liveArcs?: LiveArcInput[];
   loading?: boolean;
   selectedName?: string;
 }>();
@@ -305,6 +373,42 @@ const projected = computed<ProjectedPoint[]>(() => {
       };
     })
   );
+});
+
+const projectedOrigins = computed(() =>
+  (props.origins || [])
+    .filter((o) => Number.isFinite(o.lat) && Number.isFinite(o.lon))
+    .map((o) => ({
+      ...o,
+      x: ((o.lon + 180) / 360) * 1000,
+      y: ((90 - o.lat) / 180) * 500,
+    }))
+);
+
+const projectedLiveArcs = computed(() => {
+  const list = props.liveArcs || [];
+  return list.map((a) => {
+    const x1 = ((a.fromLng + 180) / 360) * 1000;
+    const y1 = ((90 - a.fromLat) / 180) * 500;
+    const x2 = ((a.toLng + 180) / 360) * 1000;
+    const y2 = ((90 - a.toLat) / 180) * 500;
+    const dx = Math.abs(x2 - x1);
+    const mx = (x1 + x2) / 2;
+    const my = (y1 + y2) / 2 - Math.min(68, Math.max(18, dx * 0.22));
+    const tone = !a.success
+      ? "bad"
+      : a.rtt <= 80
+        ? "ok"
+        : a.rtt <= 180
+          ? "info"
+          : "warn";
+    return {
+      key: a.key,
+      d: `M${x1.toFixed(1)},${y1.toFixed(1)} Q${mx.toFixed(1)},${my.toFixed(1)} ${x2.toFixed(1)},${y2.toFixed(1)}`,
+      tone,
+      title: a.title,
+    };
+  });
 });
 
 // Connect consecutive unique locations with subtle great-circle curves
@@ -637,10 +741,60 @@ onBeforeUnmount(() => {
   }
 }
 
+.live-arc {
+  fill: none;
+  stroke-width: 1.65;
+  stroke-dasharray: 5 5;
+  animation: fiberFlow 1.8s linear infinite;
+  opacity: 0.78;
+}
+
+.live-arc.tone-ok {
+  stroke: var(--c-ok, #15b85a);
+}
+
+.live-arc.tone-info {
+  stroke: #2563eb;
+}
+
+.live-arc.tone-warn {
+  stroke: var(--c-warn, #d97706);
+}
+
+.live-arc.tone-bad {
+  stroke: var(--c-bad, #ef4444);
+  stroke-dasharray: 2 5;
+  opacity: 0.55;
+}
+
+.origin-pulse {
+  fill: none;
+  stroke: #15b85a;
+  stroke-width: 1.6;
+  animation: haloPulse 2.2s ease-out infinite;
+}
+
+.origin-core {
+  fill: #15b85a;
+  stroke: #ffffff;
+  stroke-width: 1.6;
+}
+
+.origin-label {
+  fill: var(--c-ink);
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: var(--c-surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
 .is-paused .fiber-arc,
 .is-paused .node-halo,
+.is-paused .origin-pulse,
 .is-reduced .fiber-arc,
-.is-reduced .node-halo {
+.is-reduced .node-halo,
+.is-reduced .origin-pulse {
   animation: none;
 }
 </style>
