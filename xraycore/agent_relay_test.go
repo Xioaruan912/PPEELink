@@ -57,7 +57,7 @@ func TestAgentRelaySurvivesFetchFailureAndBadRuleThenDisables(t *testing.T) {
 		t.Fatalf("reports=%d", len(source.reports))
 	}
 	for i, r := range source.reports {
-		if r.ProxyFeatures != 5 {
+		if r.ProxyFeatures != 7 {
 			t.Fatal("relay capability not advertised")
 		}
 		s := r.Relays[rule.ID]

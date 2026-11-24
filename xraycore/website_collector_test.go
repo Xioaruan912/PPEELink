@@ -18,7 +18,7 @@ import (
 )
 
 func websiteTestSpec() Spec {
-	return Spec{Enabled: true, APIPort: 18085, WebsiteTraffic: &WebsiteTrafficSpec{Enabled: true}, Inbounds: []InboundSpec{{Tag: "in-7", Template: TemplateRealityVision, Port: 18443, Target: "www.apple.com:443", SNI: "www.apple.com", PrivateKey: "test", ShortID: "a1b2"}, {Tag: "in-8", Template: TemplateRealityVision, Port: 18444, Target: "www.apple.com:443", SNI: "www.apple.com", PrivateKey: "test", ShortID: "a1b2"}}}
+	return Spec{Enabled: true, APIPort: 18085, WebsiteTraffic: &WebsiteTrafficSpec{Enabled: true}, Inbounds: []InboundSpec{{Tag: "in-7", Template: TemplateRealityVision, Port: 18443, Target: "www.apple.com:443", SNI: "www.apple.com", PrivateKey: testRealityKey, ShortID: "a1b2"}, {Tag: "in-8", Template: TemplateRealityVision, Port: 18444, Target: "www.apple.com:443", SNI: "www.apple.com", PrivateKey: testRealityKey, ShortID: "a1b2"}}}
 }
 func websiteTestCollector(t *testing.T, s Spec) *WebsiteCollector {
 	t.Helper()
@@ -597,3 +597,6 @@ func TestWebsiteXraySOCKSE2E(t *testing.T) {
 		t.Fatalf("Xray real counters: %+v", b)
 	}
 }
+
+// testRealityKey is a valid base64url X25519 private key (32 bytes) for config-generation fixtures.
+const testRealityKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8"
