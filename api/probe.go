@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -22,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.1"
+const latestUserAgentVersion = "1.2"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -30,6 +31,7 @@ type probeNode struct {
 	Host   string `json:"host"`
 	Port   int    `json:"port"`
 	Scheme string `json:"scheme,omitempty"`
+	SNI    string `json:"sni,omitempty"`
 }
 
 type probeReport struct {
@@ -60,11 +62,13 @@ type jobOutcome struct {
 type userProbeHub struct {
 	mu      sync.Mutex
 	waiters map[uint]chan queuedProbeJob
+	pending map[uint][]queuedProbeJob
 	done    map[string]chan jobOutcome
 }
 
 var probeHub = &userProbeHub{
 	waiters: map[uint]chan queuedProbeJob{},
+	pending: map[uint][]queuedProbeJob{},
 	done:    map[string]chan jobOutcome{},
 }
 
@@ -72,6 +76,15 @@ func (h *userProbeHub) register(probeID uint) chan queuedProbeJob {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	ch := make(chan queuedProbeJob, 1)
+	if q := h.pending[probeID]; len(q) > 0 {
+		ch <- q[0]
+		if len(q) == 1 {
+			delete(h.pending, probeID)
+		} else {
+			h.pending[probeID] = q[1:]
+		}
+		return ch
+	}
 	h.waiters[probeID] = ch
 	return ch
 }
@@ -84,34 +97,46 @@ func (h *userProbeHub) unregister(probeID uint, ch chan queuedProbeJob) {
 	}
 }
 
-func (h *userProbeHub) dispatchAction(probeID uint, action string, nodes []probeNode) (string, chan jobOutcome, bool) {
+func (h *userProbeHub) dispatchAction(probeID uint, action string, nodes []probeNode, allowQueue bool) (string, chan jobOutcome, bool) {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
 	jobID := hex.EncodeToString(b)
 	doneCh := make(chan jobOutcome, 1)
+	job := queuedProbeJob{ID: jobID, Action: action, Nodes: nodes}
 
 	h.mu.Lock()
-	ch, online := h.waiters[probeID]
-	if !online {
+	ch, waiting := h.waiters[probeID]
+	if waiting {
+		delete(h.waiters, probeID)
+		h.done[jobID] = doneCh
 		h.mu.Unlock()
-		return "", nil, false
+		select {
+		case ch <- job:
+			return jobID, doneCh, true
+		default:
+			h.mu.Lock()
+			if allowQueue && len(h.pending[probeID]) < 4 {
+				h.pending[probeID] = append(h.pending[probeID], job)
+				h.mu.Unlock()
+				return jobID, doneCh, true
+			}
+			delete(h.done, jobID)
+			h.mu.Unlock()
+			return "", nil, false
+		}
 	}
-	h.done[jobID] = doneCh
-	h.mu.Unlock()
-
-	select {
-	case ch <- queuedProbeJob{ID: jobID, Action: action, Nodes: nodes}:
+	if allowQueue && len(h.pending[probeID]) < 4 {
+		h.done[jobID] = doneCh
+		h.pending[probeID] = append(h.pending[probeID], job)
+		h.mu.Unlock()
 		return jobID, doneCh, true
-	default:
-		h.mu.Lock()
-		delete(h.done, jobID)
-		h.mu.Unlock()
-		return "", nil, false
 	}
+	h.mu.Unlock()
+	return "", nil, false
 }
 
-func (h *userProbeHub) dispatch(probeID uint, nodes []probeNode) (string, chan jobOutcome, bool) {
-	return h.dispatchAction(probeID, "probe", nodes)
+func (h *userProbeHub) dispatch(probeID uint, nodes []probeNode, allowQueue bool) (string, chan jobOutcome, bool) {
+	return h.dispatchAction(probeID, "probe", nodes, allowQueue)
 }
 
 func (h *userProbeHub) complete(jobID string) {
@@ -150,10 +175,31 @@ func (h *userProbeHub) isWaiting(probeID uint) bool {
 	return ok
 }
 
+func isProbeRecentlyOnline(p *models.Probe) bool {
+	if p == nil {
+		return false
+	}
+	return probeHub.isWaiting(p.ID) || (p.LastSeenAt != nil && time.Since(*p.LastSeenAt) < probeOnlineWindow)
+}
+
 func extractNodeScheme(link string) string {
 	link = strings.TrimSpace(link)
 	if idx := strings.Index(link, "://"); idx > 0 {
 		return strings.ToLower(strings.TrimSpace(link[:idx]))
+	}
+	return ""
+}
+
+func extractNodeSNI(link string) string {
+	u, err := url.Parse(strings.TrimSpace(link))
+	if err != nil {
+		return ""
+	}
+	q := u.Query()
+	for _, k := range []string{"sni", "servername", "peer"} {
+		if v := strings.TrimSpace(q.Get(k)); v != "" {
+			return v
+		}
 	}
 	return ""
 }
@@ -184,6 +230,7 @@ func buildProbeNodes(filterIDs []int) ([]probeNode, error) {
 			Host:   host,
 			Port:   port,
 			Scheme: extractNodeScheme(n.Link),
+			SNI:    extractNodeSNI(n.Link),
 		})
 	}
 	return items, nil
@@ -287,8 +334,10 @@ func ProbeDelete(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "id 无效"})
 		return
 	}
+	var probe models.Probe
+	_ = models.DB.First(&probe, req.ID).Error
 	uninstalled := false
-	if jobID, doneCh, ok := probeHub.dispatchAction(req.ID, "uninstall", nil); ok {
+	if jobID, doneCh, ok := probeHub.dispatchAction(req.ID, "uninstall", nil, isProbeRecentlyOnline(&probe)); ok {
 		defer probeHub.cleanupDone(jobID)
 		select {
 		case <-doneCh:
@@ -319,7 +368,12 @@ func ProbeUpdate(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "id 无效"})
 		return
 	}
-	jobID, doneCh, ok := probeHub.dispatchAction(req.ID, "update", nil)
+	var probe models.Probe
+	if err := models.DB.First(&probe, req.ID).Error; err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "用户 Agent 不存在"})
+		return
+	}
+	jobID, doneCh, ok := probeHub.dispatchAction(req.ID, "update", nil, isProbeRecentlyOnline(&probe))
 	if !ok {
 		c.JSON(400, gin.H{"code": "40000", "msg": "该用户 Agent 当前离线，无法远程更新"})
 		return
@@ -506,6 +560,7 @@ func ProbeTrigger(c *gin.Context) {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取用户 Agent 失败"})
 		return
 	}
+	var fallback *models.Probe
 	for i := range probes {
 		p := &probes[i]
 		if req.ProbeID > 0 && p.ID != req.ProbeID {
@@ -515,6 +570,12 @@ func ProbeTrigger(c *gin.Context) {
 			target = p
 			break
 		}
+		if fallback == nil && isProbeRecentlyOnline(p) {
+			fallback = p
+		}
+	}
+	if target == nil {
+		target = fallback
 	}
 	if target == nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": "没有在线的用户 Agent，请先在本机启动用户 Agent"})
@@ -529,9 +590,9 @@ func ProbeTrigger(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "没有可测试的节点"})
 		return
 	}
-	jobID, doneCh, ok := probeHub.dispatch(target.ID, nodes)
+	jobID, doneCh, ok := probeHub.dispatch(target.ID, nodes, true)
 	if !ok {
-		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 正在执行上一轮测试，请稍后再试"})
+		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 待处理任务过多，请稍后再试"})
 		return
 	}
 	defer probeHub.cleanupDone(jobID)
