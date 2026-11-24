@@ -668,27 +668,40 @@ func SyncSelfHostedNodes() error {
 	}
 	if err := models.DB.Transaction(func(tx *gorm.DB) error {
 		var group models.GroupNode
+		hasGroup := true
 		err := tx.Preload("Nodes").Where("name = ?", selfHostedGroupName).First(&group).Error
 		if err == gorm.ErrRecordNotFound {
 			if len(want) == 0 {
-				return nil
-			}
-			group = models.GroupNode{Name: selfHostedGroupName}
-			if err := tx.Create(&group).Error; err != nil {
-				return err
+				hasGroup = false
+			} else {
+				group = models.GroupNode{Name: selfHostedGroupName}
+				if err := tx.Create(&group).Error; err != nil {
+					return err
+				}
 			}
 		} else if err != nil {
 			return err
 		}
-		if err := backfillManagedSources(tx); err != nil {
-			return err
+		if hasGroup {
+			if err := backfillManagedSources(tx); err != nil {
+				return err
+			}
+			if err := tx.Preload("Nodes").First(&group, group.ID).Error; err != nil {
+				return err
+			}
 		}
-		if err := tx.Preload("Nodes").First(&group, group.ID).Error; err != nil {
+		var managedNodes []models.Node
+		if err := tx.Where("source = ?", selfHostedSource).Find(&managedNodes).Error; err != nil {
 			return err
 		}
 		byName := map[string]models.Node{}
 		for _, n := range group.Nodes {
 			byName[n.Name] = n
+		}
+		for _, n := range managedNodes {
+			if _, ok := byName[n.Name]; !ok {
+				byName[n.Name] = n
+			}
 		}
 		wanted := map[string]bool{}
 		for _, n := range want {
@@ -699,7 +712,7 @@ func SyncSelfHostedNodes() error {
 			if _, ok := byName[n.Name]; !ok {
 				identity := selfHostedIdentity(n.Link)
 				var matches []models.Node
-				for _, candidate := range group.Nodes {
+				for _, candidate := range managedNodes {
 					if candidate.Source == selfHostedSource && identity != "" && selfHostedIdentity(candidate.Link) == identity {
 						matches = append(matches, candidate)
 					}
@@ -738,8 +751,10 @@ func SyncSelfHostedNodes() error {
 				if err := tx.Model(&models.Node{}).Where("id = ?", existing.ID).Updates(updates).Error; err != nil {
 					return err
 				}
-				if err := tx.Model(&group).Association("Nodes").Append(&existing); err != nil {
-					return err
+				if hasGroup {
+					if err := tx.Model(&group).Association("Nodes").Append(&existing); err != nil {
+						return err
+					}
 				}
 				continue
 			}
@@ -751,14 +766,18 @@ func SyncSelfHostedNodes() error {
 			if err := tx.Create(&fresh).Error; err != nil {
 				return err
 			}
-			if err := tx.Model(&fresh).Association("GroupNodes").Append(&group); err != nil {
-				return err
+			if hasGroup {
+				if err := tx.Model(&fresh).Association("GroupNodes").Append(&group); err != nil {
+					return err
+				}
 			}
 		}
-		for _, n := range group.Nodes {
+		removedNames := map[string]bool{}
+		for _, n := range managedNodes {
 			if n.Source != selfHostedSource || wanted[n.Name] {
 				continue
 			}
+			removedNames[n.Name] = true
 			if err := tx.Exec("DELETE FROM group_node_nodes WHERE node_id = ?", n.ID).Error; err != nil {
 				return err
 			}
@@ -766,6 +785,11 @@ func SyncSelfHostedNodes() error {
 				return err
 			}
 			if err := tx.Unscoped().Delete(&models.Node{}, n.ID).Error; err != nil {
+				return err
+			}
+		}
+		if len(removedNames) > 0 {
+			if err := removeFromNodeOrders(tx, removedNames); err != nil {
 				return err
 			}
 		}

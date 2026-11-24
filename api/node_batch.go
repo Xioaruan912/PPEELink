@@ -140,6 +140,58 @@ func NodeBatch(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"changes": changes}, "msg": fmt.Sprintf("已更新 %d 个节点", len(changes))})
 }
 
+// removeFromNodeOrders 删除节点后，同步从订阅的 node_order 与 last_good_snapshot 中移除其名称。
+func removeFromNodeOrders(tx *gorm.DB, removed map[string]bool) error {
+	if len(removed) == 0 {
+		return nil
+	}
+	var subs []models.Subcription
+	if err := tx.Find(&subs).Error; err != nil {
+		return err
+	}
+	for _, sub := range subs {
+		updates := map[string]any{}
+		if sub.NodeOrder != "" {
+			parts := strings.Split(sub.NodeOrder, ",")
+			kept := make([]string, 0, len(parts))
+			changed := false
+			for _, p := range parts {
+				name := strings.TrimSpace(p)
+				if name == "" || removed[name] {
+					changed = true
+					continue
+				}
+				kept = append(kept, name)
+			}
+			if changed {
+				updates["node_order"] = strings.Join(kept, ",")
+			}
+		}
+		if sub.LastGoodSnapshot != "" {
+			lines := strings.Split(sub.LastGoodSnapshot, "\n")
+			kept := make([]string, 0, len(lines))
+			changed := false
+			for _, l := range lines {
+				name := strings.TrimSpace(l)
+				if name == "" || removed[name] {
+					changed = true
+					continue
+				}
+				kept = append(kept, name)
+			}
+			if changed {
+				updates["last_good_snapshot"] = strings.Join(kept, "\n")
+			}
+		}
+		if len(updates) > 0 {
+			if err := tx.Model(&models.Subcription{}).Where("id = ?", sub.ID).Updates(updates).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // renameInNodeOrders 订阅的节点顺序按名称保存，改名后同步替换。
 func renameInNodeOrders(tx *gorm.DB, before, after string) error {
 	var subs []models.Subcription

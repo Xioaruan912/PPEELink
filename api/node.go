@@ -391,6 +391,9 @@ func NodeDel(c *gin.Context) {
 		})
 		return
 	}
+	if n.Name != "" {
+		_ = removeFromNodeOrders(models.DB, map[string]bool{n.Name: true})
+	}
 	InvalidateOverview() // 节点变更，使概览缓存失效
 	c.JSON(200, gin.H{
 		"code": "00000",

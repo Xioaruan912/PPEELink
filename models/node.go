@@ -191,6 +191,7 @@ func (n *Node) Del() error {
 			return err
 		}
 	}
+	_ = DB.Exec("DELETE FROM subcription_nodes WHERE node_id = ?", n.ID).Error
 	IsGroupNotDel(gns)
 	// 如果分组节点没有关联的节点则删除分组节点
 	// for _, gn := range gns {

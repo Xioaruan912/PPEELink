@@ -4,6 +4,7 @@ import {
   reactive,
   computed,
   onMounted,
+  onActivated,
   onBeforeUnmount,
   inject,
   provide,
@@ -495,6 +496,10 @@ export function createSubscriptions() {
       metadataError.value = "节点、分组或模板未完整加载，请重试";
   };
   onMounted(() => {
+    getsubs();
+    loadMetadata();
+  });
+  onActivated(() => {
     getsubs();
     loadMetadata();
   });
