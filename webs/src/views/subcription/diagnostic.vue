@@ -645,7 +645,7 @@ onBeforeUnmount(() => {
       <header class="two-seg-head">
         <div class="two-seg-title">
           <span class="seg-dot" aria-hidden="true"></span>
-          <strong>两段式双视角定位（用户 Agent + 面板）</strong>
+          <strong>两段式链路定位</strong>
         </div>
         <span v-if="localDiag?.probeName" class="two-seg-probe mono">
           {{ localDiag.probeName }}{{ localDiag.probeIsp ? ` · ${localDiag.probeIsp}` : "" }}
@@ -654,9 +654,8 @@ onBeforeUnmount(() => {
 
       <div class="three-node-rail">
         <div class="seg-node">
-          <span class="seg-kicker">段 1 起点</span>
-          <strong>你的电脑</strong>
-          <small class="mono">{{ localDiag?.probeIsp || "本机物理宽带" }}</small>
+          <strong>本机</strong>
+          <small v-if="localDiag?.probeIsp" class="mono">{{ localDiag.probeIsp }}</small>
         </div>
 
         <div
@@ -673,21 +672,20 @@ onBeforeUnmount(() => {
           <span class="seg-badge mono">
             {{
               localLoading
-                ? "直连实测中…"
+                ? "探测中"
                 : localDiag?.ipv6Mismatch
-                  ? "本机无 IPv6"
+                  ? "无 IPv6"
                   : localDiag?.success
                     ? `${localDiag.rtt || 0} ms · ${(localDiag.kind || "tcp").toUpperCase()}`
-                    : "本机不可达"
+                    : "不可达"
             }}
           </span>
         </div>
 
         <div class="seg-node">
-          <span class="seg-kicker">中继入口</span>
-          <strong>节点服务器</strong>
-          <small class="mono">
-            {{ localDiag?.host ? `${localDiag.host}:${localDiag.port || ""}` : "目标节点" }}
+          <strong>节点</strong>
+          <small v-if="localDiag?.host" class="mono">
+            {{ `${localDiag.host}:${localDiag.port || ""}` }}
           </small>
         </div>
 
@@ -707,26 +705,23 @@ onBeforeUnmount(() => {
           <span class="seg-badge mono">
             {{
               seg2Status === "scanning"
-                ? "出口验证中…"
+                ? "验证中"
                 : seg2Status === "passed"
-                  ? `出口畅通 · ${totalMillis(result)} ms`
+                  ? `${totalMillis(result)} ms`
                   : seg2Status === "failed"
-                    ? "握手/出口失败"
+                    ? "出口失败"
                     : "待确认"
             }}
           </span>
         </div>
 
         <div class="seg-node">
-          <span class="seg-kicker">段 2 终点</span>
           <strong>{{ target.toUpperCase() }}</strong>
-          <small>目标站点</small>
         </div>
       </div>
 
       <div v-if="twoSegmentVerdict" class="root-cause-box">
         <strong>{{ twoSegmentVerdict.title }}</strong>
-        <p>{{ twoSegmentVerdict.detail }}</p>
       </div>
     </section>
 

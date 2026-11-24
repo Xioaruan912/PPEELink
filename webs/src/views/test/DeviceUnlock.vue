@@ -313,7 +313,7 @@ onBeforeUnmount(() => {
             v-if="egress.hosting !== undefined"
             class="egress-tag"
           >
-            {{ egress.hosting ? "机房 IP" : "非机房/原生倾向" }}
+            {{ egress.hosting ? "机房" : "住宅倾向" }}
           </span>
           <span v-if="egress.matchedNode" class="egress-node">
             命中节点：{{ egress.matchedNode }}
@@ -408,7 +408,6 @@ onBeforeUnmount(() => {
       <span class="s-ok">● 解锁 / 支持 {{ stats.unlocked }}</span>
       <span class="s-info">● 可访问 {{ stats.reachable }}</span>
       <span class="s-bad">● 受限 / 拒绝 {{ stats.blocked }}</span>
-      <span class="s-hint">点击任意卡片查看出口与返回详情</span>
     </div>
 
     <EmptyState
@@ -461,13 +460,7 @@ onBeforeUnmount(() => {
       <div class="radar-ring" :class="{ 'is-scanning': loading }" aria-hidden="true">
         <span></span>
       </div>
-      <p>
-        {{
-          engine === "agent"
-            ? `点击「开始检测」，由本机用户 Agent 绕过浏览器 CORS，对当前代理出口逐项发起原生 HTTP 流媒体与 AI 解锁检测`
-            : `点击「开始检测」，以当前浏览器代理逐项探测 ${targets.length} 项流媒体与 AI 服务`
-        }}
-      </p>
+      <p>点击「开始检测」探测 {{ targets.length }} 项流媒体与 AI 服务</p>
     </div>
 
     <!-- Rich Click-to-Inspect Service Detail Card -->

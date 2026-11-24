@@ -39,13 +39,6 @@ const activeProbe = computed(() =>
   onlineProbes.value[0]
 );
 
-const versionWarning = computed(() => {
-  const v = (activeProbe.value?.version || "").replace(/^v/i, "");
-  if (!v) return false;
-  const parts = v.split(".").map((n) => parseInt(n, 10) || 0);
-  return parts[0] < 1 || (parts[0] === 1 && (parts[1] || 0) < 4);
-});
-
 async function loadProbes() {
   loadingProbes.value = true;
   try {
@@ -265,7 +258,7 @@ onBeforeUnmount(stopTicker);
           </option>
         </select>
         <span v-else-if="!loadingProbes" class="offline-hint">
-          暂无在线用户 Agent（请前往「Agent 管理」安装或启动）
+          无在线 Agent
         </span>
       </div>
 
@@ -277,7 +270,7 @@ onBeforeUnmount(stopTicker);
           :disabled="running"
           @click="loadProbes"
         >
-          刷新设备
+          刷新
         </UiButton>
         <UiButton
           variant="primary"
@@ -288,18 +281,14 @@ onBeforeUnmount(stopTicker);
         >
           {{
             running
-              ? `测速中 ${elapsedSec}s…`
+              ? `测速中 ${elapsedSec}s`
               : result
                 ? "重新测速"
-                : "开始本机测速"
+                : "开始测速"
           }}
         </UiButton>
       </div>
     </section>
-
-    <div v-if="versionWarning" class="inline-notice is-warn">
-      当前选中的用户 Agent 版本为 v{{ activeProbe?.version }}，本机测速需要 v1.4+。请前往「监控 → Agent 管理」一键批量升级。
-    </div>
 
     <div v-if="errorMsg" class="inline-notice is-bad">
       {{ errorMsg }}
@@ -308,18 +297,7 @@ onBeforeUnmount(stopTicker);
     <!-- Running Pulse Stage -->
     <section v-if="running" class="running-card">
       <div class="pulse-ring" aria-hidden="true"><span></span></div>
-      <div class="running-copy">
-        <strong>正在通过 {{ activeProbe?.name || "用户 Agent" }} 压测真实带宽…</strong>
-        <p class="muted">
-          {{
-            mode === "both"
-              ? "将依次完成「当前代理通道」与「物理直连基线」的 5 秒下载 + 2.8 秒上传采样（约 16 秒）"
-              : mode === "proxy"
-                ? "正在经由你本机当前代理节点（TUN / 系统代理）发起 3 线程下载 + 上传测速（约 8 秒）"
-                : "正在绕过 TUN 直连本机物理网卡测量宽带基线（约 8 秒）"
-          }}
-        </p>
-      </div>
+      <strong class="running-title">正在测速…</strong>
       <span class="running-sec mono">{{ elapsedSec }}s</span>
     </section>
 
@@ -400,7 +378,6 @@ onBeforeUnmount(stopTicker);
               {{ primaryChannel.ttfbMs || 0 }}
               <small>ms</small>
             </strong>
-            <span class="kpi-sub">{{ primaryChannel.target || "测速边缘响应" }}</span>
           </article>
 
           <article class="kpi-card">
@@ -409,7 +386,6 @@ onBeforeUnmount(stopTicker);
               {{ primaryChannel.jitterMs || 0 }}
               <small>ms</small>
             </strong>
-            <span class="kpi-sub">3 次探针波动均值</span>
           </article>
         </div>
       </section>
@@ -418,8 +394,7 @@ onBeforeUnmount(stopTicker);
       <section v-if="chartData" class="curve-card">
         <div class="curve-head">
           <div class="curve-title">
-            <strong>实时速率曲线</strong>
-            <span class="muted">下载阶段 350ms 周期采样</span>
+            <strong>速率曲线</strong>
           </div>
           <div class="curve-legend">
             <span class="legend-item">
@@ -518,8 +493,7 @@ onBeforeUnmount(stopTicker);
       <!-- Dual-Channel Side-by-Side Comparison Table -->
       <section v-if="result.proxy && result.direct" class="compare-card">
         <div class="compare-head">
-          <strong>双通道实测对比</strong>
-          <span class="muted">同设备同网络环境下的真实代理损耗评估</span>
+          <strong>双通道对比</strong>
         </div>
         <div class="compare-grid mono">
           <div class="cmp-row is-head">
@@ -553,10 +527,7 @@ onBeforeUnmount(stopTicker);
     <!-- Calm Ready Blueprint -->
     <section v-else class="ready-card">
       <div class="ready-icon mono">Mbps</div>
-      <strong>测量你本机真实可用带宽</strong>
-      <p class="muted">
-        由你电脑上的用户 Agent 直接执行多流下载与上传采样，支持单独测「当前代理节点」、绕过 TUN 测「物理宽带基线」，或一键双通道对比计算宽带保留率。
-      </p>
+      <strong>本机真实带宽测速</strong>
     </section>
   </div>
 </template>

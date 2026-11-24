@@ -627,9 +627,9 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 			retErr = "服务器回程追踪等待超时"
 		}(*matchedServer, clientPubIP, family)
 	} else if matchedServer == nil {
-		retErr = "该节点非自建服务器或代理 Agent 离线，仅执行本机去程追踪"
+		retErr = "暂无回程数据"
 	} else {
-		retErr = "尚未识别本机真实物理公网 IP（请在「Agent 管理」一键升级用户 Agent 至 v1.5，即可绕过代理自动上报）"
+		retErr = "未获取本机公网 IP"
 	}
 
 	wg.Wait()

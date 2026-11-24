@@ -189,7 +189,7 @@ onBeforeUnmount(stopTicker);
           </option>
         </select>
         <span v-else-if="!loadingMeta" class="offline-hint">
-          暂无在线用户 Agent（请先启动本机用户 Agent）
+          无在线 Agent
         </span>
       </div>
 
@@ -212,10 +212,10 @@ onBeforeUnmount(stopTicker);
         >
           {{
             running
-              ? `双向探测中 ${elapsedSec}s…`
+              ? `追踪中 ${elapsedSec}s`
               : result
-                ? "重新双向追踪"
-                : "发起双向追踪"
+                ? "重新追踪"
+                : "开始追踪"
           }}
         </UiButton>
       </div>
@@ -226,12 +226,7 @@ onBeforeUnmount(stopTicker);
     <!-- Running State -->
     <section v-if="running" class="running-card">
       <div class="pulse-ring" aria-hidden="true"><span></span></div>
-      <div class="running-copy">
-        <strong>正在并发采集「去程 + 回程」真实路由…</strong>
-        <p class="muted">
-          去程由本机用户 Agent 绕过 TUN 物理网卡直发；回程由目标节点对应的服务器 Agent 反向追踪至你的本机公网 IP（约 6–14 秒）。
-        </p>
-      </div>
+      <strong class="running-title">正在并发追踪去程与回程…</strong>
       <span class="running-sec mono">{{ elapsedSec }}s</span>
     </section>
 
@@ -241,14 +236,14 @@ onBeforeUnmount(stopTicker);
       <section class="verdict-banner" :class="`tone-${verdictTone(result.verdict)}`">
         <div class="verdict-main">
           <span class="verdict-dot" aria-hidden="true"></span>
-          <strong>{{ result.verdict || "双向路由采集完成" }}</strong>
+          <strong>{{ result.verdict || "双向路由" }}</strong>
         </div>
         <div class="verdict-meta mono">
-          <span>节点：{{ result.nodeName }} ({{ result.nodeHost }})</span>
+          <span>{{ result.nodeName }} · {{ result.nodeHost }}</span>
           <span v-if="result.clientIp">
-            本机公网：{{ result.clientIp }}{{ result.probeIsp ? ` · ${result.probeIsp}` : "" }}
+            {{ result.clientIp }}{{ result.probeIsp ? ` · ${result.probeIsp}` : "" }}
           </span>
-          <span v-if="result.returnServer">回程探针：{{ result.returnServer }}</span>
+          <span v-if="result.returnServer">{{ result.returnServer }}</span>
         </div>
       </section>
 
@@ -259,17 +254,18 @@ onBeforeUnmount(stopTicker);
           <header class="path-head">
             <div class="path-title">
               <span class="dir-pill">去程</span>
-              <strong>本机 ({{ result.probeName }}) → 节点</strong>
+              <strong>{{ result.probeName }} → 节点</strong>
             </div>
             <span
+              v-if="result.outbound?.line"
               class="line-badge"
-              :class="`tone-${lineTone(result.outbound?.line)}`"
+              :class="`tone-${lineTone(result.outbound.line)}`"
             >
-              {{ result.outbound?.line || "未识别线路" }}
+              {{ result.outbound.line }}
             </span>
           </header>
 
-          <div v-if="result.outbound?.error" class="side-error">
+          <div v-if="result.outbound?.error" class="side-empty">
             {{ result.outbound.error }}
           </div>
 
@@ -299,7 +295,7 @@ onBeforeUnmount(stopTicker);
               </div>
               <div class="hop-rtt-col">
                 <span class="hop-rtt mono">
-                  {{ h.timeout ? "超时" : `${h.rtt} ms` }}
+                  {{ h.timeout ? "—" : `${h.rtt} ms` }}
                 </span>
                 <div class="rtt-track" aria-hidden="true">
                   <i :style="{ width: hopWidth(h, outMaxRtt) }"></i>
@@ -308,7 +304,7 @@ onBeforeUnmount(stopTicker);
             </div>
           </div>
 
-          <div v-else class="side-empty">未返回去程跳点数据</div>
+          <div v-else class="side-empty">暂无数据</div>
         </article>
 
         <!-- Return Path Card -->
@@ -317,18 +313,19 @@ onBeforeUnmount(stopTicker);
             <div class="path-title">
               <span class="dir-pill is-ret">回程</span>
               <strong>
-                {{ result.returnServer || "节点服务器" }} → 本机公网
+                {{ result.returnServer || "节点" }} → 本机
               </strong>
             </div>
             <span
+              v-if="result.returnPath?.line"
               class="line-badge"
-              :class="`tone-${lineTone(result.returnPath?.line)}`"
+              :class="`tone-${lineTone(result.returnPath.line)}`"
             >
-              {{ result.returnPath?.line || "待绑定服务器 Agent" }}
+              {{ result.returnPath.line }}
             </span>
           </header>
 
-          <div v-if="result.returnPath?.error" class="side-error">
+          <div v-if="result.returnPath?.error" class="side-empty">
             {{ result.returnPath.error }}
           </div>
 
@@ -358,7 +355,7 @@ onBeforeUnmount(stopTicker);
               </div>
               <div class="hop-rtt-col">
                 <span class="hop-rtt mono">
-                  {{ h.timeout ? "超时" : `${h.rtt} ms` }}
+                  {{ h.timeout ? "—" : `${h.rtt} ms` }}
                 </span>
                 <div class="rtt-track" aria-hidden="true">
                   <i :style="{ width: hopWidth(h, retMaxRtt) }"></i>
@@ -367,7 +364,7 @@ onBeforeUnmount(stopTicker);
             </div>
           </div>
 
-          <div v-else class="side-empty">未返回回程跳点数据</div>
+          <div v-else class="side-empty">暂无数据</div>
         </article>
       </section>
     </template>
@@ -375,10 +372,7 @@ onBeforeUnmount(stopTicker);
     <!-- Ready State -->
     <section v-else class="ready-card">
       <div class="ready-icon mono">去程 ⇄ 回程</div>
-      <strong>一眼看清节点是否真 CN2 GIA / 9929 / CMIN2</strong>
-      <p class="muted">
-        选择一个面板节点，系统将并发触发「本机用户 Agent 绕过 TUN 去程」与「服务器 Agent 回程追踪至你的公网 IP」，同屏对比逐跳路由与骨干网线路标签。
-      </p>
+      <strong>选择节点发起双向路由对比</strong>
     </section>
   </div>
 </template>
@@ -552,10 +546,10 @@ onBeforeUnmount(stopTicker);
 }
 
 .path-card {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-content: start;
-  padding: 16px 18px;
+  padding: 18px 20px;
   border: 1px solid var(--c-line);
   border-radius: 18px;
   background: var(--c-surface);
@@ -720,20 +714,22 @@ onBeforeUnmount(stopTicker);
   border-radius: 3px;
 }
 
-.side-error {
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--c-surface-muted);
+.side-empty {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 13px;
   color: var(--c-muted);
-  font-size: 12.5px;
-  line-height: 1.55;
+  letter-spacing: -0.01em;
 }
 
-.side-empty {
-  padding: 28px 12px;
-  text-align: center;
-  font-size: 12.5px;
-  color: var(--c-muted);
+.running-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--c-ink);
 }
 
 .ready-card {
