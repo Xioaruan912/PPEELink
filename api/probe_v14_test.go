@@ -10,6 +10,7 @@ import (
 
 	"ppeelink/middlewares"
 	"ppeelink/models"
+	"ppeelink/tracecore"
 
 	"github.com/gin-gonic/gin"
 )
@@ -243,12 +244,22 @@ func TestProbeV14BidirectionalTraceEndToEnd(t *testing.T) {
 			r.ServeHTTP(jw, jreq)
 			var jenv struct {
 				Data []struct {
-					ID     uint   `json:"id"`
-					Target string `json:"target"`
+					ID       uint   `json:"id"`
+					Target   string `json:"target"`
+					Protocol string `json:"protocol"`
+					Port     int    `json:"port"`
+					Family   string `json:"family"`
 				} `json:"data"`
 			}
 			_ = json.Unmarshal(jw.Body.Bytes(), &jenv)
 			if len(jenv.Data) > 0 {
+				if _, err := tracecore.NormalizeOptions(jenv.Data[0].Target, tracecore.Options{
+					Protocol: jenv.Data[0].Protocol,
+					Port:     jenv.Data[0].Port,
+					Family:   jenv.Data[0].Family,
+				}); err != nil {
+					t.Errorf("server agent tracecore.NormalizeOptions rejected return job: %v", err)
+				}
 				rep, _ := json.Marshal(map[string]any{
 					"id":     jenv.Data[0].ID,
 					"tool":   "traceroute",

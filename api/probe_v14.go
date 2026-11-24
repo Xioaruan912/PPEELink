@@ -564,7 +564,7 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 			now := time.Now()
 			run := models.NetworkTraceRun{
 				Protocol:  "icmp",
-				Port:      443,
+				Port:      0,
 				Family:    fam,
 				Target:    dstIP,
 				CreatedAt: now,
