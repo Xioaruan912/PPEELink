@@ -49,6 +49,11 @@ const META: Record<string, { icon: Component; hint?: string; label?: string }> =
       label: "服务器管理",
       hint: "WebShell 终端、远程文件与 Docker 容器管理",
     },
+    "/monitor/user-agent": {
+      icon: IconGauge,
+      label: "用户 Agent",
+      hint: "从你的本机按需实测到各节点服务器的连通性与延迟",
+    },
     "/network": { icon: IconNodes },
     "/network/traceroute": {
       icon: IconGauge,
@@ -178,6 +183,7 @@ const GROUPS = [
       "/subcription/relays",
       "/monitor/index",
       "/monitor/workspace",
+      "/monitor/user-agent",
     ],
   },
   {

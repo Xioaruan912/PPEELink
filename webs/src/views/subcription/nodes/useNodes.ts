@@ -44,6 +44,13 @@ export interface OverviewItem {
   deliveryEnabled: boolean;
   /** 检测策略 */
   probePolicy?: "panel" | "any" | "all" | "manual";
+  /** 最近一次用户 Agent 实测结果 */
+  userValid?: boolean;
+  userRtt?: number;
+  userKind?: string;
+  userError?: string;
+  userCheckedAt?: string;
+  userProbeName?: string;
   /** 最近一次各探针结果 */
   probes?: {
     id: number;

@@ -31,10 +31,17 @@ type NodeOverviewItem struct {
 	// ForceDeliver 为 true 时检测无效也照常下发
 	ForceDeliver    bool `json:"forceDeliver,omitempty"`
 	DeliveryEnabled bool `json:"deliveryEnabled"`
-	// ProbePolicy 检测策略：panel / any / all / manual
+	// ProbePolicy 检测策略（保留字段兼容，已改由用户 Agent 实测为准）
 	ProbePolicy string `json:"probePolicy"`
-	// Probes 最近一次各探针结果
+	// Probes 最近一次用户 Agent 实测结果
 	Probes []ProbeStatus `json:"probes,omitempty"`
+	// 用户 Agent（从用户主机出发）最近一次按需实测结果
+	UserValid     *bool      `json:"userValid,omitempty"`
+	UserRTT       *int       `json:"userRtt,omitempty"`
+	UserKind      string     `json:"userKind,omitempty"`
+	UserError     string     `json:"userError,omitempty"`
+	UserCheckedAt *time.Time `json:"userCheckedAt,omitempty"`
+	UserProbeName string     `json:"userProbeName,omitempty"`
 	// 暂不下发的原因（为空表示正常下发）
 	Blocked *deliveryBlock `json:"blocked,omitempty"`
 	rtt     int            // 本次连接耗时，-1 失败；仅用于记录与健康事件
@@ -76,95 +83,64 @@ func InvalidateOverview() {
 // probeResultTTL 检测结果有效期：agent 每 5 分钟回报，允许漏掉一轮。
 const probeResultTTL = 12 * time.Minute
 
-// applyProbeResults 按节点检测策略合并面板与自建服务器 agent 结果。
+// applyProbeResults 合并用户 Agent（probe_id > 0）的按需实测结果。
+// 不再使用海外服务器 Agent 互测结果判定用户可达性。
 func applyProbeResults(items []NodeOverviewItem) {
-	var agents []models.ProxyServer
-	if err := models.DB.Where("kind = ? AND enabled = ?", models.ServerKindAgent, true).Order("id").Find(&agents).Error; err != nil || len(agents) == 0 {
+	if len(items) == 0 {
 		return
 	}
-	ids := make([]int, 0, len(items))
+	probes, err := models.GetProbes(true)
+	if err != nil || len(probes) == 0 {
+		return
+	}
+	probeByID := make(map[uint]models.Probe, len(probes))
+	probeIDs := make([]uint, 0, len(probes))
+	for _, p := range probes {
+		probeByID[p.ID] = p
+		probeIDs = append(probeIDs, p.ID)
+	}
+	nodeIDs := make([]int, 0, len(items))
 	for _, item := range items {
-		ids = append(ids, item.ID)
-	}
-	if len(ids) == 0 {
-		return
-	}
-	agentIDs := make([]uint, 0, len(agents))
-	for _, agent := range agents {
-		agentIDs = append(agentIDs, agent.ID)
+		nodeIDs = append(nodeIDs, item.ID)
 	}
 	var rows []models.ProbeResult
-	models.DB.Where("agent_server_id IN ? AND node_id IN ? AND checked_at >= ?", agentIDs, ids, time.Now().Add(-probeResultTTL)).
-		Order("id desc").Find(&rows)
-	reported := make(map[uint]bool, len(agents))
-	latest := make(map[int]map[uint]models.ProbeResult, len(ids))
-	for _, row := range rows {
-		reported[row.AgentServerID] = true
-		byAgent, ok := latest[row.NodeID]
-		if !ok {
-			byAgent = map[uint]models.ProbeResult{}
-			latest[row.NodeID] = byAgent
-		}
-		if _, exists := byAgent[row.AgentServerID]; !exists {
-			byAgent[row.AgentServerID] = row
-		}
-	}
-	activeAgents := make([]models.ProxyServer, 0, len(agents))
-	for _, agent := range agents {
-		if reported[agent.ID] {
-			activeAgents = append(activeAgents, agent)
-		}
-	}
-	if len(activeAgents) == 0 {
+	if err := models.DB.Where("probe_id IN ? AND node_id IN ?", probeIDs, nodeIDs).
+		Order("checked_at desc, id desc").Find(&rows).Error; err != nil || len(rows) == 0 {
 		return
 	}
-	agents = activeAgents
-
+	latestByNode := make(map[int]models.ProbeResult, len(nodeIDs))
+	for _, row := range rows {
+		if _, exists := latestByNode[row.NodeID]; !exists {
+			latestByNode[row.NodeID] = row
+		}
+	}
 	for i := range items {
 		item := &items[i]
-		panelValid := item.Valid
-		policy := item.ProbePolicy
-		if policy == "" {
-			// 默认任一视角（面板或任一在线 Agent）连通即有效，兼容仅限国内入口的专线节点。
-			policy = "any"
+		row, ok := latestByNode[item.ID]
+		if !ok {
+			continue
 		}
-		statuses := make([]ProbeStatus, 0, len(agents))
-		allOK, anyOK, bestRTT := true, false, 0
-		for _, agent := range agents {
-			status := ProbeStatus{ID: agent.ID, Name: agent.Name}
-			if row, ok := latest[item.ID][agent.ID]; ok {
-				status.Success = row.Success
-				status.RTT = row.RTT
-				status.Error = row.Error
-				t := row.CheckedAt
-				status.CheckedAt = &t
-				if row.Success {
-					anyOK = true
-					if row.RTT > 0 && (bestRTT == 0 || row.RTT < bestRTT) {
-						bestRTT = row.RTT
-					}
-				} else {
-					allOK = false
-				}
-			} else {
-				allOK = false
-			}
-			statuses = append(statuses, status)
-		}
-		switch policy {
-		case "manual":
-			item.Valid = true
-		case "any":
-			item.Valid = panelValid || anyOK
-		case "all":
-			item.Valid = panelValid && allOK
-		default:
-			item.Valid = panelValid
-		}
-		if item.Valid && item.rtt < 0 && bestRTT > 0 {
-			item.rtt = bestRTT
-		}
-		item.Probes = statuses
+		valid := row.Success
+		rtt := row.RTT
+		checkedAt := row.CheckedAt
+		probeName := probeByID[row.ProbeID].Name
+		item.UserValid = &valid
+		item.UserRTT = &rtt
+		item.UserKind = row.Kind
+		item.UserError = row.Error
+		item.UserCheckedAt = &checkedAt
+		item.UserProbeName = probeName
+		item.Valid = row.Success
+		item.rtt = row.RTT
+		item.Probes = []ProbeStatus{{
+			ID:        row.ProbeID,
+			Name:      probeName,
+			Region:    probeByID[row.ProbeID].Region,
+			Success:   row.Success,
+			RTT:       row.RTT,
+			Error:     row.Error,
+			CheckedAt: &checkedAt,
+		}}
 	}
 }
 

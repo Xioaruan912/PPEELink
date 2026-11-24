@@ -83,21 +83,12 @@ const {
             暂不下发 · {{ blockLabel(node) }}
           </span>
           <span
-            v-if="node.probes?.length"
+            v-if="node.userCheckedAt"
             class="meta-pill mono"
-            :class="{ 'is-bad': !node.probes.some((probe) => probe.success) }"
-            :title="probeTitle(node)"
+            :class="{ 'is-bad': !node.userValid }"
+            :title="`${node.userProbeName || '用户 Agent'} 实测${node.userError ? '：' + node.userError : ''}`"
           >
-            探针 {{ node.probes.filter((probe) => probe.success).length }}/{{
-              node.probes.length
-            }}
-          </span>
-          <span
-            v-if="node.probePolicy && node.probePolicy !== 'panel'"
-            class="meta-pill"
-            :title="`检测策略：${policyLabel(node.probePolicy)}`"
-          >
-            {{ policyLabel(node.probePolicy) }}
+            本机 {{ node.userValid ? `${node.userRtt ?? 0} ms` : "不可达" }}
           </span>
         </div>
 
@@ -176,9 +167,6 @@ const {
             <el-dropdown-item command="tcp">国内可达性检测</el-dropdown-item>
             <el-dropdown-item command="unlock">流媒体 / AI 解锁</el-dropdown-item>
             <el-dropdown-item command="temp">生成临时订阅</el-dropdown-item>
-            <el-dropdown-item command="probe-policy"
-              >检测策略…</el-dropdown-item
-            >
             <el-dropdown-item
               v-if="node.blocked?.kind === 'paused'"
               command="resume"

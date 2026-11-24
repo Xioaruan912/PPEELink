@@ -1,9 +1,15 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"ppeelink/models"
@@ -12,17 +18,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// probeOnlineWindow 超过这个时间没有回报视为离线。
-const probeOnlineWindow = 3 * time.Minute
+// probeOnlineWindow 用户 Agent 每 25 秒长轮询一次，超过 60 秒无心跳视为离线。
+const probeOnlineWindow = 60 * time.Second
 
 type probeNode struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-	Host string `json:"host"`
-	Port int    `json:"port"`
+	ID     int    `json:"id"`
+	Name   string `json:"name"`
+	Host   string `json:"host"`
+	Port   int    `json:"port"`
+	Scheme string `json:"scheme,omitempty"`
 }
 
 type probeReport struct {
+	JobID   string `json:"jobId,omitempty"`
 	Results []struct {
 		NodeID    int    `json:"nodeId"`
 		Kind      string `json:"kind"`
@@ -33,71 +41,202 @@ type probeReport struct {
 	} `json:"results"`
 }
 
+type queuedProbeJob struct {
+	ID    string
+	Nodes []probeNode
+}
+
+// userProbeHub coordinates on-demand test dispatches to connected User Agents.
+// When idle, User Agents receive no jobs and send zero traffic to proxy nodes.
+type userProbeHub struct {
+	mu      sync.Mutex
+	waiters map[uint]chan queuedProbeJob
+	done    map[string]chan struct{}
+}
+
+var probeHub = &userProbeHub{
+	waiters: map[uint]chan queuedProbeJob{},
+	done:    map[string]chan struct{}{},
+}
+
+func (h *userProbeHub) register(probeID uint) chan queuedProbeJob {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ch := make(chan queuedProbeJob, 1)
+	h.waiters[probeID] = ch
+	return ch
+}
+
+func (h *userProbeHub) unregister(probeID uint, ch chan queuedProbeJob) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if cur, ok := h.waiters[probeID]; ok && cur == ch {
+		delete(h.waiters, probeID)
+	}
+}
+
+func (h *userProbeHub) dispatch(probeID uint, nodes []probeNode) (string, chan struct{}, bool) {
+	b := make([]byte, 6)
+	_, _ = rand.Read(b)
+	jobID := hex.EncodeToString(b)
+	doneCh := make(chan struct{})
+
+	h.mu.Lock()
+	ch, online := h.waiters[probeID]
+	if !online {
+		h.mu.Unlock()
+		return "", nil, false
+	}
+	h.done[jobID] = doneCh
+	h.mu.Unlock()
+
+	select {
+	case ch <- queuedProbeJob{ID: jobID, Nodes: nodes}:
+		return jobID, doneCh, true
+	default:
+		h.mu.Lock()
+		delete(h.done, jobID)
+		h.mu.Unlock()
+		return "", nil, false
+	}
+}
+
+func (h *userProbeHub) complete(jobID string) {
+	if jobID == "" {
+		return
+	}
+	h.mu.Lock()
+	ch, ok := h.done[jobID]
+	if ok {
+		delete(h.done, jobID)
+	}
+	h.mu.Unlock()
+	if ok {
+		close(ch)
+	}
+}
+
+func (h *userProbeHub) cleanupDone(jobID string) {
+	h.mu.Lock()
+	delete(h.done, jobID)
+	h.mu.Unlock()
+}
+
+func (h *userProbeHub) isWaiting(probeID uint) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	_, ok := h.waiters[probeID]
+	return ok
+}
+
+func extractNodeScheme(link string) string {
+	link = strings.TrimSpace(link)
+	if idx := strings.Index(link, "://"); idx > 0 {
+		return strings.ToLower(strings.TrimSpace(link[:idx]))
+	}
+	return ""
+}
+
+func buildProbeNodes(filterIDs []int) ([]probeNode, error) {
+	nodes, err := models.GetNodeList()
+	if err != nil {
+		return nil, err
+	}
+	filter := make(map[int]bool, len(filterIDs))
+	for _, id := range filterIDs {
+		if id > 0 {
+			filter[id] = true
+		}
+	}
+	items := make([]probeNode, 0, len(nodes))
+	for _, n := range nodes {
+		if len(filter) > 0 && !filter[n.ID] {
+			continue
+		}
+		host, port := node.ExtractServerHost(n.Link)
+		if host == "" || port <= 0 {
+			continue
+		}
+		items = append(items, probeNode{
+			ID:     n.ID,
+			Name:   n.Name,
+			Host:   host,
+			Port:   port,
+			Scheme: extractNodeScheme(n.Link),
+		})
+	}
+	return items, nil
+}
+
 func currentProbe(c *gin.Context) (*models.Probe, bool) {
 	auth := strings.TrimSpace(c.GetHeader("Authorization"))
 	token := strings.TrimSpace(strings.TrimPrefix(auth, "Probe "))
 	if token == "" {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 40100, "msg": "缺少探针令牌"})
+		token = strings.TrimSpace(c.Query("token"))
+	}
+	if token == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 40100, "msg": "缺少用户 Agent 令牌"})
 		return nil, false
 	}
 	var probe models.Probe
 	if err := models.DB.Where("token_hash = ? AND enabled = ?", models.HashProbeToken(token), true).
 		First(&probe).Error; err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 40100, "msg": "探针令牌无效"})
+		c.JSON(http.StatusUnauthorized, gin.H{"code": 40100, "msg": "用户 Agent 令牌无效"})
 		return nil, false
 	}
 	return &probe, true
 }
 
-func probeInstallCommand(c *gin.Context, token string) string {
+func probeInstallCommands(c *gin.Context, token string) gin.H {
 	panel := strings.TrimSuffix(baseURL(c), "/")
-	return fmt.Sprintf(`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/binary' -o /usr/local/bin/ppeelink-probe
-chmod +x /usr/local/bin/ppeelink-probe
-cat >/etc/systemd/system/ppeelink-probe.service <<'UNIT'
-[Unit]
-Description=PPEELink probe
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-ExecStart=/usr/local/bin/ppeelink-probe probe -panel '%s' -token '%s' -interval 5m
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-UNIT
-systemctl daemon-reload
-systemctl enable --now ppeelink-probe`, token, panel, panel, token)
+	return gin.H{
+		"windows": fmt.Sprintf(
+			`$f="$env:USERPROFILE\ppeelink-user-agent.exe"; Invoke-WebRequest -Headers @{Authorization="Probe %s"} -Uri "%s/api/v1/probe/download?os=windows&arch=amd64" -OutFile $f; & $f -panel "%s" -token "%s"`,
+			token, panel, panel, token,
+		),
+		"macos": fmt.Sprintf(
+			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=darwin&arch=arm64' -o ~/ppeelink-user-agent && chmod +x ~/ppeelink-user-agent && ~/ppeelink-user-agent -panel '%s' -token '%s'`,
+			token, panel, panel, token,
+		),
+		"linux": fmt.Sprintf(
+			`curl -fsSL -H 'Authorization: Probe %s' '%s/api/v1/probe/download?os=linux&arch=amd64' -o ./ppeelink-user-agent && chmod +x ./ppeelink-user-agent && ./ppeelink-user-agent -panel '%s' -token '%s'`,
+			token, panel, panel, token,
+		),
+	}
 }
 
-// ProbeList 管理端：探针列表。
+func probeInstallCommand(c *gin.Context, token string) string {
+	cmds := probeInstallCommands(c, token)
+	return cmds["linux"].(string)
+}
+
+// ProbeList 管理端：用户 Agent 列表。
 func ProbeList(c *gin.Context) {
 	probes, err := models.GetProbes(false)
 	if err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取探针失败"})
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取用户 Agent 失败"})
 		return
 	}
 	now := time.Now()
 	items := make([]gin.H, 0, len(probes))
 	for _, p := range probes {
-		online := p.LastSeenAt != nil && now.Sub(*p.LastSeenAt) < probeOnlineWindow
+		online := probeHub.isWaiting(p.ID) || (p.LastSeenAt != nil && now.Sub(*p.LastSeenAt) < probeOnlineWindow)
 		items = append(items, gin.H{
 			"id": p.ID, "name": p.Name, "region": p.Region, "enabled": p.Enabled,
 			"online": online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
 		})
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": items, "msg": "探针列表"})
+	c.JSON(200, gin.H{"code": "00000", "data": items, "msg": "用户 Agent 列表"})
 }
 
-// ProbeAdd 管理端：新建探针，令牌只返回一次。
+// ProbeAdd 管理端：新建用户 Agent，令牌只返回一次。
 func ProbeAdd(c *gin.Context) {
 	var req struct {
 		Name   string `json:"name"`
 		Region string `json:"region"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Name) == "" {
-		c.JSON(400, gin.H{"code": "40000", "msg": "探针名称不能为空"})
+		c.JSON(400, gin.H{"code": "40000", "msg": "名称不能为空"})
 		return
 	}
 	token := models.GenerateToken()
@@ -106,45 +245,46 @@ func ProbeAdd(c *gin.Context) {
 		TokenHash: models.HashProbeToken(token), Enabled: true,
 	}
 	if err := models.DB.Create(&probe).Error; err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "创建探针失败"})
+		c.JSON(500, gin.H{"code": "50000", "msg": "创建失败"})
 		return
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"id": probe.ID, "name": probe.Name, "token": token,
-		"install": probeInstallCommand(c, token),
-	}, "msg": "探针已创建，令牌只显示这一次"})
+		"install":  probeInstallCommand(c, token),
+		"commands": probeInstallCommands(c, token),
+	}, "msg": "用户 Agent 已创建，令牌只显示这一次"})
 }
 
-// ProbeDelete 管理端：删除探针。
+// ProbeDelete 管理端：删除用户 Agent。
 func ProbeDelete(c *gin.Context) {
 	var req struct {
 		ID uint `json:"id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.ID == 0 {
-		c.JSON(400, gin.H{"code": "40000", "msg": "探针 id 无效"})
+		c.JSON(400, gin.H{"code": "40000", "msg": "id 无效"})
 		return
 	}
 	models.DB.Where("probe_id = ?", req.ID).Delete(&models.ProbeResult{})
 	if err := models.DB.Delete(&models.Probe{}, req.ID).Error; err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "删除探针失败"})
+		c.JSON(500, gin.H{"code": "50000", "msg": "删除失败"})
 		return
 	}
 	InvalidateOverview()
-	c.JSON(200, gin.H{"code": "00000", "msg": "探针已删除"})
+	c.JSON(200, gin.H{"code": "00000", "msg": "已删除"})
 }
 
-// ProbeResetToken 管理端：重置探针令牌。
+// ProbeResetToken 管理端：重置用户 Agent 令牌。
 func ProbeResetToken(c *gin.Context) {
 	var req struct {
 		ID uint `json:"id"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil || req.ID == 0 {
-		c.JSON(400, gin.H{"code": "40000", "msg": "探针 id 无效"})
+		c.JSON(400, gin.H{"code": "40000", "msg": "id 无效"})
 		return
 	}
 	var probe models.Probe
 	if err := models.DB.First(&probe, req.ID).Error; err != nil {
-		c.JSON(404, gin.H{"code": "40400", "msg": "探针不存在"})
+		c.JSON(404, gin.H{"code": "40400", "msg": "用户 Agent 不存在"})
 		return
 	}
 	token := models.GenerateToken()
@@ -153,42 +293,170 @@ func ProbeResetToken(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
-		"token": token, "install": probeInstallCommand(c, token),
+		"token":    token,
+		"install":  probeInstallCommand(c, token),
+		"commands": probeInstallCommands(c, token),
 	}, "msg": "令牌已重置"})
 }
 
-// ProbeBinary serves the standalone Agent's compatible probe subcommand.
+// ProbeDownload serves the cross-platform standalone User Agent binary.
+func ProbeDownload(c *gin.Context) {
+	osName := strings.ToLower(strings.TrimSpace(c.DefaultQuery("os", "linux")))
+	arch := strings.ToLower(strings.TrimSpace(c.DefaultQuery("arch", "amd64")))
+	allowed := map[string]string{
+		"windows/amd64": "ppeelink-user-agent-windows-amd64.exe",
+		"darwin/arm64":  "ppeelink-user-agent-darwin-arm64",
+		"darwin/amd64":  "ppeelink-user-agent-darwin-amd64",
+		"linux/amd64":   "ppeelink-user-agent-linux-amd64",
+		"linux/arm64":   "ppeelink-user-agent-linux-arm64",
+	}
+	filename, ok := allowed[osName+"/"+arch]
+	if !ok {
+		c.JSON(400, gin.H{"code": "40000", "msg": "不支持的系统架构"})
+		return
+	}
+	fullPath := filepath.Join("downloads", "user-agent", filename)
+	if _, err := os.Stat(fullPath); err != nil {
+		c.JSON(404, gin.H{"code": "40400", "msg": "服务器上尚未放置用户 Agent 二进制文件: " + filename})
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.File(fullPath)
+}
+
+// ProbeDownloadAuth wraps ProbeDownload with Probe <token> authentication.
+func ProbeDownloadAuth(c *gin.Context) {
+	if _, ok := currentProbe(c); !ok {
+		return
+	}
+	ProbeDownload(c)
+}
+
+// ProbeBinary serves the standalone User Agent binary for legacy callers.
 func ProbeBinary(c *gin.Context) {
 	if _, ok := currentProbe(c); !ok {
 		return
 	}
-	serveAgentArtifact(c, "ppeelink-probe")
+	ProbeDownload(c)
 }
 
-// ProbeJobs 探针拉取待检测节点。
+// ProbeWait 长轮询等待管理端触发按需实测任务（空闲时不返回节点、不发包）。
+func ProbeWait(c *gin.Context) {
+	probe, ok := currentProbe(c)
+	if !ok {
+		return
+	}
+	updates := map[string]any{"last_seen_at": time.Now()}
+	if v := strings.TrimSpace(c.Query("version")); v != "" && len(v) <= 32 {
+		updates["version"] = v
+	}
+	models.DB.Model(probe).Updates(updates)
+
+	waitSec, _ := strconv.Atoi(c.DefaultQuery("timeout", "25"))
+	if waitSec < 5 {
+		waitSec = 5
+	}
+	if waitSec > 30 {
+		waitSec = 30
+	}
+
+	ch := probeHub.register(probe.ID)
+	defer probeHub.unregister(probe.ID, ch)
+
+	timer := time.NewTimer(time.Duration(waitSec) * time.Second)
+	defer timer.Stop()
+
+	select {
+	case job := <-ch:
+		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
+			"jobId": job.ID,
+			"nodes": job.Nodes,
+		}, "msg": "dispatched"})
+	case <-timer.C:
+		models.DB.Model(probe).Update("last_seen_at", time.Now())
+		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
+			"jobId": "",
+			"nodes": []probeNode{},
+		}, "msg": "idle"})
+	case <-c.Request.Context().Done():
+		return
+	}
+}
+
+// ProbeJobs 单次模式（-once）直接拉取待测节点列表。
 func ProbeJobs(c *gin.Context) {
 	probe, ok := currentProbe(c)
 	if !ok {
 		return
 	}
-	nodes, err := models.GetNodeList()
+	items, err := buildProbeNodes(nil)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点失败"})
 		return
 	}
-	items := make([]probeNode, 0, len(nodes))
-	for _, n := range nodes {
-		host, port := node.ExtractServerHost(n.Link)
-		if host == "" || port <= 0 {
-			continue
-		}
-		items = append(items, probeNode{ID: n.ID, Name: n.Name, Host: host, Port: port})
-	}
 	models.DB.Model(probe).Update("last_seen_at", time.Now())
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{
 		"probe": gin.H{"id": probe.ID, "name": probe.Name},
-		"nodes": items, "intervalSeconds": 300,
+		"nodes": items,
 	}, "msg": "探针任务"})
+}
+
+// ProbeTrigger 管理端：按需触发一次用户主机实测（仅在用户点击时执行）。
+func ProbeTrigger(c *gin.Context) {
+	var req struct {
+		ProbeID uint  `json:"probeId"`
+		NodeIDs []int `json:"nodeIds"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	var target *models.Probe
+	probes, err := models.GetProbes(true)
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取用户 Agent 失败"})
+		return
+	}
+	for i := range probes {
+		p := &probes[i]
+		if req.ProbeID > 0 && p.ID != req.ProbeID {
+			continue
+		}
+		if probeHub.isWaiting(p.ID) {
+			target = p
+			break
+		}
+	}
+	if target == nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "没有在线的用户 Agent，请先在本机启动用户 Agent"})
+		return
+	}
+	nodes, err := buildProbeNodes(req.NodeIDs)
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取节点列表失败"})
+		return
+	}
+	if len(nodes) == 0 {
+		c.JSON(400, gin.H{"code": "40000", "msg": "没有可测试的节点"})
+		return
+	}
+	jobID, doneCh, ok := probeHub.dispatch(target.ID, nodes)
+	if !ok {
+		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 正在执行上一轮测试，请稍后再试"})
+		return
+	}
+	defer probeHub.cleanupDone(jobID)
+
+	select {
+	case <-doneCh:
+		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
+			"jobId": jobID, "completed": true, "probeName": target.Name, "count": len(nodes),
+		}, "msg": fmt.Sprintf("「%s」已完成 %d 个节点实测", target.Name, len(nodes))})
+	case <-time.After(18 * time.Second):
+		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
+			"jobId": jobID, "completed": false, "probeName": target.Name, "count": len(nodes),
+		}, "msg": "已下发给用户 Agent，结果稍后自动更新"})
+	case <-c.Request.Context().Done():
+		return
+	}
 }
 
 // ProbeReport 探针回报检测结果。
@@ -227,10 +495,11 @@ func ProbeReport(c *gin.Context) {
 		return
 	}
 	InvalidateOverview()
+	probeHub.complete(report.JobID)
 	c.JSON(200, gin.H{"code": "00000", "msg": "ok"})
 }
 
-// NodeProbePolicy 管理端：设置节点的检测策略。
+// NodeProbePolicy 兼容保留接口（前端已移除旧多视角策略选择，统一以用户 Agent 实测为准）。
 func NodeProbePolicy(c *gin.Context) {
 	var req struct {
 		ID     int    `json:"id"`

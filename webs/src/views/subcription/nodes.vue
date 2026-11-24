@@ -16,7 +16,6 @@ import NodeDrawers from "./nodes/NodeDrawers.vue";
 import NodeTools from "./nodes/NodeTools.vue";
 import CompatibilityReport from "@/components/share/CompatibilityReport.vue";
 import PauseDialog from "./nodes/PauseDialog.vue";
-import ProbePolicyDialog from "./nodes/ProbePolicyDialog.vue";
 
 defineOptions({ name: "NodesPage" });
 
@@ -500,7 +499,6 @@ function leaveBar(element: Element, done: () => void) {
     <NodeInspector v-model="inspectedId" />
     <NodeDrawers />
     <PauseDialog />
-    <ProbePolicyDialog />
     <NodeTools />
     <NodeUnlockDialog
       v-if="testNode"

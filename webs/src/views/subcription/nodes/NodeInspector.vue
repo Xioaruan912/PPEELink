@@ -212,18 +212,28 @@ function openAction(command: string, selected: OverviewItem) {
         >
           <div class="spec-tray">
             <header class="spec-tray__head">
-              <h4>可用性策略与即时诊断</h4>
+              <h4>用户主机实测与诊断</h4>
             </header>
             <dl class="bento-specs">
               <div class="bento-spec-cell">
-                <dt>判定策略</dt>
-                <dd>{{ policies[node.probePolicy || "any"] }}</dd>
-              </div>
-              <div class="bento-spec-cell">
-                <dt>最近检测</dt>
+                <dt>本机实测</dt>
                 <dd class="tabular">
                   {{
-                    node.checkedAt ? formatDateTime(node.checkedAt) : "暂无记录"
+                    node.userCheckedAt
+                      ? node.userValid
+                        ? `${node.userRtt ?? 0} ms (${node.userProbeName || "用户 Agent"})`
+                        : `${node.userError || "不可达"} (${node.userProbeName || "用户 Agent"})`
+                      : "未实测（前往 服务器 → 用户 Agent）"
+                  }}
+                </dd>
+              </div>
+              <div class="bento-spec-cell">
+                <dt>最近实测时间</dt>
+                <dd class="tabular">
+                  {{
+                    node.userCheckedAt
+                      ? formatDateTime(node.userCheckedAt)
+                      : "暂无记录"
                   }}
                 </dd>
               </div>
@@ -235,23 +245,15 @@ function openAction(command: string, selected: OverviewItem) {
               <UiButton :icon="IconFlask" @click="openAction('unlock', node)"
                 >解锁检测</UiButton
               >
-              <UiButton
-                variant="ghost"
-                :icon="IconSliders"
-                @click="openAction('probe-policy', node)"
-                >修改检测策略</UiButton
-              >
             </div>
           </div>
 
           <div class="spec-tray">
             <header class="spec-tray__head">
-              <h4>多视角 Agent 连通状态</h4>
+              <h4>用户 Agent 实测记录</h4>
               <span v-if="node.probes?.length" class="probe-summary tabular">
                 {{
-                  probeCount > 0
-                    ? `${probeCount} 个入口可达`
-                    : "暂无 Agent 连通"
+                  probeCount > 0 ? "本机可达" : "本机不可达"
                 }}
               </span>
             </header>

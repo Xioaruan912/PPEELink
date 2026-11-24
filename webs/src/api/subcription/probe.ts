@@ -22,12 +22,24 @@ export interface ProbeStatus {
   checkedAt?: string;
 }
 
+export interface ProbeCommands {
+  windows: string;
+  macos: string;
+  linux: string;
+}
+
 export function getProbes() {
   return request<Probe[]>({ url: "/api/v1/probes/list", method: "get" });
 }
 
 export function addProbe(data: { name: string; region: string }) {
-  return request<{ id: number; name: string; token: string; install: string }>({
+  return request<{
+    id: number;
+    name: string;
+    token: string;
+    install: string;
+    commands?: ProbeCommands;
+  }>({
     url: "/api/v1/probes/add",
     method: "post",
     data,
@@ -43,10 +55,31 @@ export function deleteProbe(id: number) {
 }
 
 export function resetProbeToken(id: number) {
-  return request<{ token: string; install: string }>({
+  return request<{
+    token: string;
+    install: string;
+    commands?: ProbeCommands;
+  }>({
     url: "/api/v1/probes/reset-token",
     method: "post",
     data: { id },
+  });
+}
+
+export function triggerUserProbe(data?: {
+  probeId?: number;
+  nodeIds?: number[];
+}) {
+  return request<{
+    jobId: string;
+    completed: boolean;
+    probeName: string;
+    count: number;
+  }>({
+    url: "/api/v1/probes/trigger",
+    method: "post",
+    data: data || {},
+    timeout: 25000,
   });
 }
 
