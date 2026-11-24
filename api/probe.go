@@ -23,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.4"
+const latestUserAgentVersion = "1.5"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -506,10 +506,19 @@ func ProbeWait(c *gin.Context) {
 	if iface := strings.TrimSpace(c.Query("iface")); iface != "" && len(iface) <= 64 {
 		updates["iface_name"] = iface
 	}
-	if pubIP := strings.TrimSpace(c.Query("publicIp")); pubIP != "" && len(pubIP) <= 64 {
+	pubIP := strings.TrimSpace(c.Query("publicIp"))
+	if pubIP == "" || isPrivateOrLAN(pubIP) {
+		if realIP := extractRealPublicIP(c); realIP != "" {
+			pubIP = realIP
+		}
+	}
+	if pubIP != "" && len(pubIP) <= 64 {
 		updates["public_ip"] = pubIP
 	}
 	models.DB.Model(probe).Updates(updates)
+	if _, hasISP := updates["isp"]; !hasISP && strings.TrimSpace(probe.ISP) == "" && pubIP != "" {
+		go enrichProbeISPAsync(probe.ID, pubIP)
+	}
 
 	waitSec, _ := strconv.Atoi(c.DefaultQuery("timeout", "25"))
 	if waitSec < 5 {

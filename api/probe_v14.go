@@ -296,11 +296,156 @@ func summarizePathQuality(hops []userTraceHop) string {
 		}
 	}
 	for _, h := range hops {
-		if h.LineTag == "电信 163" || h.LineTag == "Cogent" {
+		if h.LineTag == "电信 163" || h.LineTag == "Cogent" || h.LineTag == "教育网 CERNET" {
 			return h.LineTag
 		}
 	}
 	return ""
+}
+
+// extractRealPublicIP extracts the true public IP behind Nginx / Cloudflare / reverse proxies.
+func extractRealPublicIP(c *gin.Context) string {
+	candidates := make([]string, 0, 4)
+	if xri := strings.TrimSpace(c.GetHeader("X-Real-IP")); xri != "" {
+		candidates = append(candidates, xri)
+	}
+	if xff := strings.TrimSpace(c.GetHeader("X-Forwarded-For")); xff != "" {
+		for _, part := range strings.Split(xff, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				candidates = append(candidates, p)
+			}
+		}
+	}
+	if cip := strings.TrimSpace(c.ClientIP()); cip != "" {
+		candidates = append(candidates, cip)
+	}
+	var ipv6Fallback string
+	for _, raw := range candidates {
+		ip := net.ParseIP(raw)
+		if ip == nil || isPrivateOrLAN(raw) {
+			continue
+		}
+		if ip.To4() != nil {
+			return ip.String()
+		}
+		if ipv6Fallback == "" {
+			ipv6Fallback = ip.String()
+		}
+	}
+	return ipv6Fallback
+}
+
+var probeISPEnrichGuard = struct {
+	mu   sync.Mutex
+	seen map[uint]time.Time
+}{
+	seen: map[uint]time.Time{},
+}
+
+func normalizeProbeISPLabel(raw string) string {
+	low := strings.ToLower(raw)
+	switch {
+	case strings.Contains(low, "chinanet") || strings.Contains(low, "chinatelecom") || strings.Contains(low, "china telecom") || strings.Contains(raw, "电信") || strings.Contains(low, "as4134") || strings.Contains(low, "as4809"):
+		return "中国电信"
+	case strings.Contains(low, "unicom") || strings.Contains(raw, "联通") || strings.Contains(low, "as4837") || strings.Contains(low, "as9929"):
+		return "中国联通"
+	case strings.Contains(low, "china mobile") || strings.Contains(low, "cmnet") || strings.Contains(raw, "移动") || strings.Contains(low, "as9808") || strings.Contains(low, "as56040"):
+		return "中国移动"
+	case strings.Contains(low, "cernet") || strings.Contains(low, "as4538") || strings.Contains(raw, "教育网") || strings.Contains(low, "education"):
+		return "教育网"
+	case strings.Contains(raw, "广电") || strings.Contains(low, "cbn"):
+		return "中国广电"
+	default:
+		return ""
+	}
+}
+
+func enrichProbeISPAsync(probeID uint, ip string) {
+	probeISPEnrichGuard.mu.Lock()
+	if last, ok := probeISPEnrichGuard.seen[probeID]; ok && time.Since(last) < 10*time.Minute {
+		probeISPEnrichGuard.mu.Unlock()
+		return
+	}
+	probeISPEnrichGuard.seen[probeID] = time.Now()
+	probeISPEnrichGuard.mu.Unlock()
+
+	hops := []userTraceHop{{TTL: 1, IP: ip, RTT: 1}}
+	enrichTraceHops(hops)
+	if hops[0].ISP == "" && hops[0].ASN == "" {
+		return
+	}
+	label := normalizeProbeISPLabel(hops[0].ISP + " " + hops[0].ASN)
+	if label == "" {
+		label = strings.TrimSpace(hops[0].ISP)
+		if len(label) > 24 {
+			label = label[:24]
+		}
+	}
+	if label != "" {
+		models.DB.Model(&models.Probe{}).Where("id = ? AND (isp = '' OR isp IS NULL)", probeID).Update("isp", label)
+	}
+}
+
+func matchReturnTraceServer(host string, port int) *models.ProxyServer {
+	var servers []models.ProxyServer
+	if models.DB.Where("removing = ?", false).Find(&servers).Error != nil || len(servers) == 0 {
+		return nil
+	}
+	onlineByID := map[uint]*models.ProxyServer{}
+	for i := range servers {
+		s := &servers[i]
+		if s.LastSeenAt != nil && time.Since(*s.LastSeenAt) < 2*time.Minute {
+			onlineByID[s.ID] = s
+		}
+	}
+	if len(onlineByID) == 0 {
+		return nil
+	}
+
+	trimmedHost := strings.TrimSpace(host)
+	// 1. Exact PublicHost match.
+	for _, s := range onlineByID {
+		if strings.EqualFold(strings.TrimSpace(s.PublicHost), trimmedHost) {
+			return s
+		}
+	}
+
+	// 2. Match via ProxyInbound SNI / Host + Port (handles custom domains like hy2.subl.in).
+	if port > 0 && trimmedHost != "" {
+		var inbs []models.ProxyInbound
+		if models.DB.Where("port = ?", port).Find(&inbs).Error == nil {
+			for _, inb := range inbs {
+				if strings.EqualFold(strings.TrimSpace(inb.SNI), trimmedHost) ||
+					strings.EqualFold(strings.TrimSpace(inb.Host), trimmedHost) {
+					if srv, ok := onlineByID[inb.ServerID]; ok {
+						return srv
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Resolved IP match (handles node domain -> server PublicHost IP).
+	hostIPs := map[string]bool{}
+	if ip := net.ParseIP(trimmedHost); ip != nil {
+		hostIPs[ip.String()] = true
+	} else if ips, err := net.LookupIP(trimmedHost); err == nil {
+		for _, ip := range ips {
+			hostIPs[ip.String()] = true
+		}
+	}
+	if len(hostIPs) > 0 {
+		for _, s := range onlineByID {
+			sh := strings.TrimSpace(s.PublicHost)
+			if sh == "" {
+				continue
+			}
+			if ip := net.ParseIP(sh); ip != nil && hostIPs[ip.String()] {
+				return s
+			}
+		}
+	}
+	return nil
 }
 
 // ProbeBidirectionalTrace 并行发起「本机去程（User Agent → 节点）」与「服务器回程（代理 Agent → 本机公网 IP）」。
@@ -318,7 +463,7 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 		c.JSON(404, gin.H{"code": "40400", "msg": "节点不存在"})
 		return
 	}
-	host, _ := node.ExtractServerHost(n.Link)
+	host, port := node.ExtractServerHost(n.Link)
 	if host == "" {
 		c.JSON(400, gin.H{"code": "40000", "msg": "无法解析节点主机地址"})
 		return
@@ -335,25 +480,11 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 	}
 
 	// Find matching online self-hosted ProxyServer for return-path tracing.
-	var matchedServer *models.ProxyServer
-	var servers []models.ProxyServer
-	if models.DB.Where("kind = ? AND removing = ?", models.ServerKindAgent, false).Find(&servers).Error == nil {
-		for i := range servers {
-			s := &servers[i]
-			if strings.EqualFold(strings.TrimSpace(s.PublicHost), strings.TrimSpace(host)) &&
-				s.LastSeenAt != nil && time.Since(*s.LastSeenAt) < 2*time.Minute {
-				matchedServer = s
-				break
-			}
-		}
-	}
+	matchedServer := matchReturnTraceServer(host, port)
 
 	clientPubIP := strings.TrimSpace(targetProbe.PublicIP)
-	if clientPubIP == "" {
-		cip := strings.TrimSpace(c.ClientIP())
-		if ip := net.ParseIP(cip); ip != nil && ip.To4() != nil && !isPrivateOrLAN(cip) {
-			clientPubIP = cip
-		}
+	if clientPubIP == "" || isPrivateOrLAN(clientPubIP) {
+		clientPubIP = extractRealPublicIP(c)
 	}
 
 	var (
@@ -404,14 +535,20 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 	// 2. Return (Server Agent -> Local Public IP)
 	if matchedServer != nil && clientPubIP != "" {
 		retServer = matchedServer.Name
+		family := "4"
+		if ip := net.ParseIP(clientPubIP); ip != nil && ip.To4() == nil {
+			family = "6"
+		}
 		wg.Add(1)
-		go func(srv models.ProxyServer, dstIP string) {
+		go func(srv models.ProxyServer, dstIP, fam string) {
 			defer wg.Done()
+			now := time.Now()
 			run := models.NetworkTraceRun{
-				Protocol: "icmp",
-				Port:     443,
-				Family:   "4",
-				Target:   dstIP,
+				Protocol:  "icmp",
+				Port:      443,
+				Family:    fam,
+				Target:    dstIP,
+				CreatedAt: now,
 			}
 			if err := models.DB.Create(&run).Error; err != nil {
 				retErr = "创建回程追踪任务失败"
@@ -422,12 +559,13 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 				AgentServerID: srv.ID,
 				SourceName:    srv.Name,
 				Status:        "queued",
+				CreatedAt:     now,
 			}
 			if err := models.DB.Create(&view).Error; err != nil {
 				retErr = "创建回程视图失败"
 				return
 			}
-			deadline := time.Now().Add(22 * time.Second)
+			deadline := time.Now().Add(24 * time.Second)
 			for time.Now().Before(deadline) {
 				if c.Request.Context().Err() != nil {
 					retErr = "已取消"
@@ -435,7 +573,7 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 				}
 				var cur models.NetworkTraceView
 				if models.DB.First(&cur, view.ID).Error == nil {
-					if cur.Status == "done" || cur.Status == "failed" || cur.Status == "unsupported" {
+					if cur.Status == "completed" || cur.Status == "done" || cur.Status == "failed" || cur.Status == "unsupported" || cur.Status == "timeout" {
 						if cur.Error != "" && cur.Output == "" {
 							retErr = cur.Error
 							return
@@ -451,12 +589,12 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 								rtt = max(int(math.Round(*h.RTT)), 1)
 							}
 							hops = append(hops, userTraceHop{
-								TTL:     h.TTL,
-								IP:      h.IP,
-								RTT:     rtt,
-								Timeout: !h.Responded || h.IP == "",
-								ASN:     h.ASN,
-								ISP:     h.ISP,
+								TTL:      h.TTL,
+								IP:       h.IP,
+								RTT:      rtt,
+								Timeout:  !h.Responded || h.IP == "",
+								ASN:      h.ASN,
+								ISP:      h.ISP,
 								Location: strings.TrimSpace(strings.Join([]string{h.Country, h.City}, " ")),
 							})
 						}
@@ -465,14 +603,14 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 						return
 					}
 				}
-				time.Sleep(700 * time.Millisecond)
+				time.Sleep(500 * time.Millisecond)
 			}
 			retErr = "服务器回程追踪等待超时"
-		}(*matchedServer, clientPubIP)
+		}(*matchedServer, clientPubIP, family)
 	} else if matchedServer == nil {
 		retErr = "该节点非自建服务器或代理 Agent 离线，仅执行本机去程追踪"
 	} else {
-		retErr = "尚未识别本机公网 IP（升级用户 Agent 至 v1.4 后自动上报）"
+		retErr = "尚未识别本机公网 IP（请确认用户 Agent 在线后重试）"
 	}
 
 	wg.Wait()
@@ -482,7 +620,11 @@ func ProbeBidirectionalTrace(c *gin.Context) {
 	verdict := "双向路由追踪完成"
 	switch {
 	case outLine != "" && retLine != "":
-		verdict = fmt.Sprintf("去程 %s · 回程 %s", outLine, retLine)
+		if outLine == retLine {
+			verdict = fmt.Sprintf("去程 %s ↔ 回程 %s（双向对称）", outLine, retLine)
+		} else {
+			verdict = fmt.Sprintf("去程 %s ↔ 回程 %s（去回不对称）", outLine, retLine)
+		}
 	case outLine != "":
 		verdict = fmt.Sprintf("去程 %s", outLine)
 	case retLine != "":

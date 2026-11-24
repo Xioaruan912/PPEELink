@@ -211,8 +211,10 @@ func classifyCarrierLine(ipStr, asText, ispText string) (string, string) {
 		return "移动 CMI", "info"
 	case strings.Contains(combined, "as4837"):
 		return "联通 4837", "info"
-	case strings.HasPrefix(ipStr, "202.97.") || strings.Contains(combined, "as4134"):
+	case strings.HasPrefix(ipStr, "202.97.") || strings.Contains(combined, "as4134") || strings.Contains(combined, "as4812"):
 		return "电信 163", "warn"
+	case strings.Contains(combined, "as4538") || strings.Contains(combined, "cernet") || strings.Contains(combined, "education and research"):
+		return "教育网 CERNET", "info"
 	case strings.Contains(combined, "as2914") || strings.Contains(combined, "ntt"):
 		return "NTT", "info"
 	case strings.Contains(combined, "as2497") || strings.Contains(combined, "iij"):
