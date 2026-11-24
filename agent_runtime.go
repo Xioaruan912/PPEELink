@@ -37,7 +37,10 @@ func runAgent(args []string) {
 	agentClient := &http.Client{Timeout: 20 * time.Second}
 	go runAgentTraceLoop(ctx, agentClient, *panel, *token)
 	go runAgentThroughputLoop(ctx, agentClient, *panel, *token)
-	go runAgentCheckLoop(ctx, agentClient, *panel, *token)
+	if os.Getenv("PPEELINK_ENABLE_LEGACY_CHECK") == "1" {
+		go runAgentCheckLoop(ctx, agentClient, *panel, *token)
+	}
+	go runAgentOpsLoop(ctx, agentClient, *panel, *token, runner)
 	go runAgentTerminal(ctx, *panel, *token)
 	if xraycore.RunLoop(ctx, &xraycore.HTTPSource{Panel: *panel, Token: *token, Client: agentClient}, runner, *interval) {
 		log.Printf("[agent] 服务器已在面板删除，xray 已卸载，正在移除 agent")

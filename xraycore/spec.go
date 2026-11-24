@@ -103,6 +103,8 @@ type Spec struct {
 	// 防滥用：阻断访问内网与 BT 流量
 	BlockPrivate    bool `json:"blockPrivate"`
 	BlockBitTorrent bool `json:"blockBitTorrent"`
+	// 自动放行入站端口（ufw/iptables），删除入站或卸载时自动回收
+	AutoFirewall bool `json:"autoFirewall,omitempty"`
 	// 服务器已在面板删除：停止并卸载 xray，agent 随后移除自身
 	Uninstall bool `json:"uninstall,omitempty"`
 	// Monitor 为服务器监控开关；开启后 agent 会在回报里附带指标。
@@ -148,6 +150,7 @@ type InboundSpec struct {
 	Tag          string            `json:"tag"`
 	Template     string            `json:"template"`
 	Port         int               `json:"port"`
+	PortHopping  string            `json:"portHopping,omitempty"`
 	Target       string            `json:"target"`
 	SNI          string            `json:"sni"`
 	PrivateKey   string            `json:"privateKey"`
@@ -186,6 +189,10 @@ type Report struct {
 	ProxyFeatures  int                         `json:"proxyFeatures"`
 	Rev            string                      `json:"rev"`
 	XrayVersion    string                      `json:"xrayVersion"`
+	BBR            string                      `json:"bbr,omitempty"`
+	Qdisc          string                      `json:"qdisc,omitempty"`
+	RmemMax        int64                       `json:"rmemMax,omitempty"`
+	WmemMax        int64                       `json:"wmemMax,omitempty"`
 	AgentVersion   string                      `json:"agentVersion,omitempty"`
 	AgentHash      string                      `json:"agentHash,omitempty"`
 	Arch           string                      `json:"arch"`

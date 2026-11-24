@@ -67,6 +67,8 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 	if !spec.Enabled || len(spec.Inbounds) == 0 {
 		r.stopLocked()
 		r.stopWebsiteLocked()
+		ClearPortHopping()
+		ClearAutoFirewall()
 		if r.runningLocked() {
 			r.lastErr = "xray did not stop"
 			return fmt.Errorf("%s", r.lastErr)
@@ -129,13 +131,29 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 		r.lastErr = "配置自检失败: " + lastLines(string(out), 3)
 		return fmt.Errorf("%s", r.lastErr)
 	}
+	goodBackup := filepath.Join(r.Dir, "config.json.good")
+	hadGood := false
+	if curRaw, err := os.ReadFile(r.configPath()); err == nil && len(curRaw) > 0 {
+		if os.WriteFile(goodBackup, curRaw, 0o600) == nil {
+			hadGood = true
+		}
+	}
 	if err := os.Rename(candidate, r.configPath()); err != nil {
 		return err
 	}
 	if err := r.restartLocked(); err != nil {
-		r.lastErr = err.Error()
-		return err
+		// 配置启动失败时自动回滚至上一版可用配置，防止整机节点宕机。
+		if hadGood {
+			if prevRaw, readErr := os.ReadFile(goodBackup); readErr == nil {
+				_ = os.WriteFile(r.configPath(), prevRaw, 0o600)
+				_ = r.restartLocked()
+			}
+		}
+		r.lastErr = "新配置启动失败（已自动回滚）: " + err.Error()
+		return fmt.Errorf("%s", r.lastErr)
 	}
+	SyncPortHopping(spec.Inbounds)
+	SyncAutoFirewall(spec.AutoFirewall, spec.Inbounds)
 	r.stopWebsiteLocked()
 	r.website = nextWebsite
 	r.certificates = certificates

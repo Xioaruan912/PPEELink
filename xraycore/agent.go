@@ -222,6 +222,11 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 		}
 		report.Relays = relays.Status()
 		report.XrayVersion = runner.Version()
+		tuning := ReadNetworkTuning()
+		report.BBR = tuning.BBR
+		report.Qdisc = tuning.Qdisc
+		report.RmemMax = tuning.RmemMax
+		report.WmemMax = tuning.WmemMax
 		report.Certificates = runner.CertificateReports()
 		if err := src.Report(ctx, report); err != nil {
 			log.Printf("[xray] 回报失败（流量将在下一轮补报）: %v", err)
