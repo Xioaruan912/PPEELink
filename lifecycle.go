@@ -15,6 +15,8 @@ type savedConfig struct {
 	Panel       string `json:"panel"`
 	Token       string `json:"token"`
 	Concurrency int    `json:"concurrency,omitempty"`
+	ClashAPI    string `json:"clashApi,omitempty"`
+	ClashSecret string `json:"clashSecret,omitempty"`
 }
 
 func installDir() (string, error) {

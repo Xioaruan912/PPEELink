@@ -24,7 +24,7 @@ import (
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.6"
+const agentVersion = "1.7"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -35,16 +35,21 @@ type probeNode struct {
 	SNI    string `json:"sni,omitempty"`
 }
 
+type waitJob struct {
+	JobID      string      `json:"jobId"`
+	Action     string      `json:"action"`
+	TargetHost string      `json:"targetHost,omitempty"`
+	SpeedMode  string      `json:"speedMode,omitempty"`
+	ClashGroup string      `json:"clashGroup,omitempty"`
+	ClashNode  string      `json:"clashNode,omitempty"`
+	ClashNodes []string    `json:"clashNodes,omitempty"`
+	Nodes      []probeNode `json:"nodes"`
+}
+
 type waitEnvelope struct {
-	Code string `json:"code"`
-	Msg  string `json:"msg"`
-	Data struct {
-		JobID      string      `json:"jobId"`
-		Action     string      `json:"action"`
-		TargetHost string      `json:"targetHost,omitempty"`
-		SpeedMode  string      `json:"speedMode,omitempty"`
-		Nodes      []probeNode `json:"nodes"`
-	} `json:"data"`
+	Code string  `json:"code"`
+	Msg  string  `json:"msg"`
+	Data waitJob `json:"data"`
 }
 
 type probeResult struct {
@@ -100,6 +105,9 @@ func main() {
 			}
 			if cfg.Concurrency > 0 {
 				conc = cfg.Concurrency
+			}
+			if cfg.ClashAPI != "" || cfg.ClashSecret != "" {
+				setClashConfig(cfg.ClashAPI, cfg.ClashSecret)
 			}
 		}
 	}
@@ -181,7 +189,7 @@ func main() {
 		if ctx.Err() != nil {
 			return
 		}
-		jobID, action, targetHost, speedMode, nodes, err := waitForJob(ctx, client, panelURL, tok)
+		job, err := waitForJob(ctx, client, panelURL, tok)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
@@ -208,7 +216,8 @@ func main() {
 			}
 		}
 
-		switch action {
+		jobID := job.JobID
+		switch job.Action {
 		case "uninstall":
 			_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "uninstall", OK: true})
 			stopTray()
@@ -223,13 +232,13 @@ func main() {
 			stopTray()
 			os.Exit(0)
 		case "trace":
-			if strings.TrimSpace(targetHost) == "" {
+			if strings.TrimSpace(job.TargetHost) == "" {
 				continue
 			}
 			traceCtx, cancel := context.WithTimeout(ctx, 22*time.Second)
-			hops, traceErr := runOutboundTrace(traceCtx, targetHost)
+			hops, traceErr := runOutboundTrace(traceCtx, job.TargetHost)
 			cancel()
-			payload := traceReportPayload{JobID: jobID, Host: targetHost, Hops: hops}
+			payload := traceReportPayload{JobID: jobID, Host: job.TargetHost, Hops: hops}
 			if traceErr != nil {
 				payload.Error = traceErr.Error()
 			}
@@ -242,15 +251,47 @@ func main() {
 			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/unlock-report", tok, payload)
 		case "speedtest":
 			stCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
-			payload := runUserSpeedtest(stCtx, speedMode)
+			payload := runUserSpeedtest(stCtx, job.SpeedMode)
 			cancel()
 			payload.JobID = jobID
 			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/speedtest-report", tok, payload)
+		case "clash-status":
+			cCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
+			st := detectClashStatus(cCtx)
+			cancel()
+			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, clashReportPayload{
+				JobID:  jobID,
+				Action: "clash-status",
+				Status: &st,
+				Group:  st.Group,
+			})
+		case "clash-switch":
+			cCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			st, swErr := switchClashProxy(cCtx, job.ClashGroup, job.ClashNode)
+			cancel()
+			payload := clashReportPayload{
+				JobID:    jobID,
+				Action:   "clash-switch",
+				Status:   &st,
+				Group:    st.Group,
+				Switched: st.Current,
+			}
+			if swErr != nil {
+				payload.Error = swErr.Error()
+			}
+			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, payload)
+		case "clash-batch":
+			bCtx, cancel := context.WithTimeout(ctx, 110*time.Second)
+			payload := runClashBatchTest(bCtx, job.ClashGroup, job.ClashNodes)
+			cancel()
+			payload.JobID = jobID
+			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, payload)
 		case "probe", "":
-			if len(nodes) == 0 || paused.Load() {
+			if len(job.Nodes) == 0 || paused.Load() {
 				continue
 			}
-			results := runProbes(ctx, nodes, conc, *timeout)
+			results := runProbes(ctx, job.Nodes, conc, *timeout)
+			updateTrayTopNodes(job.Nodes, results)
 			if err := sendReport(ctx, client, panelURL, tok, jobID, results); err != nil {
 				continue
 			}
@@ -261,8 +302,11 @@ func main() {
 	}
 }
 
-func waitForJob(ctx context.Context, client *http.Client, panelURL, token string) (string, string, string, string, []probeNode, error) {
+func waitForJob(ctx context.Context, client *http.Client, panelURL, token string) (waitJob, error) {
 	env := detectLocalNetEnv()
+	csCtx, cancelCS := context.WithTimeout(ctx, 1200*time.Millisecond)
+	cs := detectClashStatus(csCtx)
+	cancelCS()
 	q := url.Values{}
 	q.Set("timeout", "25")
 	q.Set("version", agentVersion)
@@ -280,29 +324,33 @@ func waitForJob(ctx context.Context, client *http.Client, panelURL, token string
 	if env.PublicIP != "" {
 		q.Set("publicIp", env.PublicIP)
 	}
+	if cs.Connected {
+		q.Set("clashNow", cs.Current)
+		q.Set("clashGroup", cs.Group)
+	}
 	endpoint := fmt.Sprintf("%s/api/v1/probe/wait?%s", panelURL, q.Encode())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", "", "", "", nil, err
+		return waitJob{}, err
 	}
 	req.Header.Set("Authorization", "Probe "+token)
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", "", "", "", nil, err
+		return waitJob{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return "", "", "", "", nil, errors.New("令牌无效或已停用")
+		return waitJob{}, errors.New("令牌无效或已停用")
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return "", "", "", "", nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return waitJob{}, fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	var envResp waitEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&envResp); err != nil {
-		return "", "", "", "", nil, err
+		return waitJob{}, err
 	}
-	return envResp.Data.JobID, envResp.Data.Action, envResp.Data.TargetHost, envResp.Data.SpeedMode, envResp.Data.Nodes, nil
+	return envResp.Data, nil
 }
 
 func sendJSONReport(ctx context.Context, client *http.Client, endpoint, token string, payload any) error {

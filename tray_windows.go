@@ -3,60 +3,67 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os/exec"
 	"runtime"
+	"sort"
+	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
 var (
-	modUser32              = syscall.NewLazyDLL("user32.dll")
-	modShell32             = syscall.NewLazyDLL("shell32.dll")
-	modKernel32            = syscall.NewLazyDLL("kernel32.dll")
-	procGetModuleHandleW   = modKernel32.NewProc("GetModuleHandleW")
-	procRegisterClassExW   = modUser32.NewProc("RegisterClassExW")
-	procCreateWindowExW    = modUser32.NewProc("CreateWindowExW")
-	procDefWindowProcW     = modUser32.NewProc("DefWindowProcW")
-	procGetMessageW        = modUser32.NewProc("GetMessageW")
-	procTranslateMessage   = modUser32.NewProc("TranslateMessage")
-	procDispatchMessageW   = modUser32.NewProc("DispatchMessageW")
-	procPostQuitMessage    = modUser32.NewProc("PostQuitMessage")
-	procPostMessageW       = modUser32.NewProc("PostMessageW")
-	procDestroyWindow      = modUser32.NewProc("DestroyWindow")
-	procCreatePopupMenu    = modUser32.NewProc("CreatePopupMenu")
-	procAppendMenuW        = modUser32.NewProc("AppendMenuW")
-	procTrackPopupMenu     = modUser32.NewProc("TrackPopupMenu")
-	procDestroyMenu        = modUser32.NewProc("DestroyMenu")
-	procGetCursorPos       = modUser32.NewProc("GetCursorPos")
-	procSetForegroundWin   = modUser32.NewProc("SetForegroundWindow")
-	procCreateIconFromRes  = modUser32.NewProc("CreateIconFromResourceEx")
-	procDestroyIcon        = modUser32.NewProc("DestroyIcon")
-	procShellNotifyIconW   = modShell32.NewProc("Shell_NotifyIconW")
+	modUser32             = syscall.NewLazyDLL("user32.dll")
+	modShell32            = syscall.NewLazyDLL("shell32.dll")
+	modKernel32           = syscall.NewLazyDLL("kernel32.dll")
+	procGetModuleHandleW  = modKernel32.NewProc("GetModuleHandleW")
+	procRegisterClassExW  = modUser32.NewProc("RegisterClassExW")
+	procCreateWindowExW   = modUser32.NewProc("CreateWindowExW")
+	procDefWindowProcW    = modUser32.NewProc("DefWindowProcW")
+	procGetMessageW       = modUser32.NewProc("GetMessageW")
+	procTranslateMessage  = modUser32.NewProc("TranslateMessage")
+	procDispatchMessageW  = modUser32.NewProc("DispatchMessageW")
+	procPostQuitMessage   = modUser32.NewProc("PostQuitMessage")
+	procPostMessageW      = modUser32.NewProc("PostMessageW")
+	procDestroyWindow     = modUser32.NewProc("DestroyWindow")
+	procCreatePopupMenu   = modUser32.NewProc("CreatePopupMenu")
+	procAppendMenuW       = modUser32.NewProc("AppendMenuW")
+	procTrackPopupMenu    = modUser32.NewProc("TrackPopupMenu")
+	procDestroyMenu       = modUser32.NewProc("DestroyMenu")
+	procGetCursorPos      = modUser32.NewProc("GetCursorPos")
+	procSetForegroundWin  = modUser32.NewProc("SetForegroundWindow")
+	procCreateIconFromRes = modUser32.NewProc("CreateIconFromResourceEx")
+	procDestroyIcon       = modUser32.NewProc("DestroyIcon")
+	procShellNotifyIconW  = modShell32.NewProc("Shell_NotifyIconW")
 )
 
 const (
-	wmDestroy        = 0x0002
-	wmCommand        = 0x0111
-	wmApp            = 0x8000
-	wmTrayCallback   = wmApp + 1
-	wmLButtonDblClk  = 0x0203
-	wmRButtonUp      = 0x0205
-	nimAdd           = 0x00000000
-	nimDelete        = 0x00000002
-	nifMessage       = 0x00000001
-	nifIcon          = 0x00000002
-	nifTip           = 0x00000004
-	mfString         = 0x00000000
-	mfSeparator      = 0x00000800
-	mfGrayed         = 0x00000001
-	tpmRightButton   = 0x0002
-	tpmBottomAlign   = 0x0020
-	cmdOpenPanel     = 1001
-	cmdTogglePause   = 1002
-	cmdExitAgent     = 1003
+	wmDestroy       = 0x0002
+	wmCommand       = 0x0111
+	wmApp           = 0x8000
+	wmTrayCallback  = wmApp + 1
+	wmLButtonDblClk = 0x0203
+	wmRButtonUp     = 0x0205
+	nimAdd          = 0x00000000
+	nimModify       = 0x00000001
+	nimDelete       = 0x00000002
+	nifMessage      = 0x00000001
+	nifIcon         = 0x00000002
+	nifTip          = 0x00000004
+	mfString        = 0x00000000
+	mfSeparator     = 0x00000800
+	mfGrayed        = 0x00000001
+	tpmRightButton  = 0x0002
+	tpmBottomAlign  = 0x0020
+	cmdOpenPanel    = 1001
+	cmdOpenSpeed    = 1002
+	cmdTogglePause  = 1003
+	cmdExitAgent    = 1004
+	cmdTopNodeBase  = 1100 // 1100, 1101, 1102 -> click to switch Clash to top-3 fastest nodes
 )
 
 type wndClassExW struct {
@@ -98,6 +105,11 @@ type notifyIconDataW struct {
 	SzTip            [128]uint16
 }
 
+type trayTopNode struct {
+	Name string
+	RTT  int
+}
+
 type trayController struct {
 	panelURL string
 	paused   *atomic.Bool
@@ -106,7 +118,42 @@ type trayController struct {
 	hIcon    uintptr
 }
 
-var activeTray *trayController
+var (
+	activeTray     *trayController
+	trayStateMu    sync.RWMutex
+	trayTopNodes   []trayTopNode
+	trayClashGroup string
+	trayClashNow   string
+)
+
+func updateTrayTopNodes(nodes []probeNode, results []probeResult) {
+	byID := make(map[int]string, len(nodes))
+	for _, n := range nodes {
+		byID[n.ID] = n.Name
+	}
+	top := make([]trayTopNode, 0, len(results))
+	for _, r := range results {
+		if r.Success && r.RTT > 0 {
+			if name := byID[r.NodeID]; name != "" {
+				top = append(top, trayTopNode{Name: name, RTT: r.RTT})
+			}
+		}
+	}
+	sort.Slice(top, func(i, j int) bool { return top[i].RTT < top[j].RTT })
+	if len(top) > 3 {
+		top = top[:3]
+	}
+	trayStateMu.Lock()
+	trayTopNodes = top
+	trayStateMu.Unlock()
+}
+
+func updateTrayClashState(group, now string, _ []string) {
+	trayStateMu.Lock()
+	trayClashGroup = group
+	trayClashNow = now
+	trayStateMu.Unlock()
+}
 
 func startSystemTray(panelURL string, paused *atomic.Bool, onQuit func()) func() {
 	tc := &trayController{
@@ -164,7 +211,7 @@ func (tc *trayController) run(ready chan struct{}) {
 		UCallbackMessage: wmTrayCallback,
 		HIcon:            tc.hIcon,
 	}
-	tip, _ := syscall.UTF16FromString(fmt.Sprintf("PPEELink 用户 Agent v%s（在线待命中）", agentVersion))
+	tip, _ := syscall.UTF16FromString(fmt.Sprintf("PPEELink 用户 Agent v%s", agentVersion))
 	copy(nid.SzTip[:], tip)
 	procShellNotifyIconW.Call(nimAdd, uintptr(unsafe.Pointer(&nid)))
 
@@ -200,16 +247,35 @@ func trayWndProc(hwnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 		return 0
 	case wmCommand:
 		if activeTray != nil {
-			switch uint32(wParam & 0xffff) {
-			case cmdOpenPanel:
+			cmd := uint32(wParam & 0xffff)
+			switch {
+			case cmd == cmdOpenPanel:
 				openBrowserURL(activeTray.panelURL + "/#/monitor/user-agent")
-			case cmdTogglePause:
+			case cmd == cmdOpenSpeed:
+				openBrowserURL(activeTray.panelURL + "/#/network/throughput")
+			case cmd == cmdTogglePause:
 				activeTray.paused.Store(!activeTray.paused.Load())
-			case cmdExitAgent:
+			case cmd == cmdExitAgent:
 				if activeTray.onQuit != nil {
 					activeTray.onQuit()
 				}
 				procDestroyWindow.Call(hwnd)
+			case cmd >= cmdTopNodeBase && cmd < cmdTopNodeBase+3:
+				idx := int(cmd - cmdTopNodeBase)
+				trayStateMu.RLock()
+				var targetName, group string
+				if idx < len(trayTopNodes) {
+					targetName = trayTopNodes[idx].Name
+				}
+				group = trayClashGroup
+				trayStateMu.RUnlock()
+				if targetName != "" {
+					go func(g, n string) {
+						ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+						defer cancel()
+						_, _ = switchClashProxy(ctx, g, n)
+					}(group, targetName)
+				}
 			}
 		}
 		return 0
@@ -228,16 +294,50 @@ func (tc *trayController) showContextMenu(hwnd uintptr) {
 	}
 	defer procDestroyMenu.Call(menu)
 
-	statusLabel := fmt.Sprintf("PPEELink 用户 Agent v%s · 运行中", agentVersion)
+	ispMu.Lock()
+	pubIP, isp := cachedPublicIP, cachedISP
+	ispMu.Unlock()
+
+	trayStateMu.RLock()
+	topCopy := append([]trayTopNode(nil), trayTopNodes...)
+	cNow := trayClashNow
+	trayStateMu.RUnlock()
+
+	header := fmt.Sprintf("PPEELink v%s", agentVersion)
+	if pubIP != "" && isp != "" {
+		header = fmt.Sprintf("%s · %s (%s)", header, pubIP, isp)
+	} else if pubIP != "" {
+		header = fmt.Sprintf("%s · %s", header, pubIP)
+	} else if tc.paused.Load() {
+		header += " · 已暂停"
+	} else {
+		header += " · 运行中"
+	}
+	appendMenuText(menu, mfString|mfGrayed, 0, header)
+
+	if cNow != "" {
+		appendMenuText(menu, mfString|mfGrayed, 0, fmt.Sprintf("Clash: %s", cNow))
+	}
+
+	if len(topCopy) > 0 {
+		procAppendMenuW.Call(menu, mfSeparator, 0, 0)
+		for i, n := range topCopy {
+			flags := uint32(mfString)
+			if cNow == "" {
+				flags = mfString | mfGrayed
+			}
+			appendMenuText(menu, flags, uintptr(cmdTopNodeBase+i), fmt.Sprintf("⚡ %s · %d ms", n.Name, n.RTT))
+		}
+	}
+
 	pauseLabel := "暂停定时采样"
 	if tc.paused.Load() {
-		statusLabel = fmt.Sprintf("PPEELink 用户 Agent v%s · 已暂停", agentVersion)
 		pauseLabel = "恢复运行"
 	}
 
-	appendMenuText(menu, mfString|mfGrayed, 0, statusLabel)
 	procAppendMenuW.Call(menu, mfSeparator, 0, 0)
 	appendMenuText(menu, mfString, cmdOpenPanel, "打开面板")
+	appendMenuText(menu, mfString, cmdOpenSpeed, "本机测速")
 	appendMenuText(menu, mfString, cmdTogglePause, pauseLabel)
 	procAppendMenuW.Call(menu, mfSeparator, 0, 0)
 	appendMenuText(menu, mfString, cmdExitAgent, "退出")
@@ -268,15 +368,13 @@ func buildEmeraldTrayIcon() uintptr {
 	maskBytes := maskRowBytes * size
 	buf := make([]byte, headerSize+pixelBytes+maskBytes)
 
-	// BITMAPINFOHEADER
 	binary.LittleEndian.PutUint32(buf[0:4], uint32(headerSize))
 	binary.LittleEndian.PutUint32(buf[4:8], uint32(size))
-	binary.LittleEndian.PutUint32(buf[8:12], uint32(size*2)) // height * 2 for XOR+AND masks
-	binary.LittleEndian.PutUint16(buf[12:14], 1)             // planes
-	binary.LittleEndian.PutUint16(buf[14:16], 32)            // 32bpp BGRA
+	binary.LittleEndian.PutUint32(buf[8:12], uint32(size*2))
+	binary.LittleEndian.PutUint16(buf[12:14], 1)
+	binary.LittleEndian.PutUint16(buf[14:16], 32)
 	binary.LittleEndian.PutUint32(buf[20:24], uint32(pixelBytes))
 
-	// Draw crisp anti-aliased emerald ring with bright center (Apple status dot aesthetic).
 	cx, cy := 7.5, 7.5
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
@@ -284,18 +382,17 @@ func buildEmeraldTrayIcon() uintptr {
 			dy := float64(y) - cy
 			dist := dx*dx + dy*dy
 			off := headerSize + (y*size+x)*4
-			if dist <= 36.0 { // radius 6px
-				// Outer emerald (#10b981 -> B=0x81, G=0xb9, R=0x10), inner highlight
+			if dist <= 36.0 {
 				if dist <= 9.0 {
-					buf[off+0] = 0xbb // B
-					buf[off+1] = 0xf7 // G
-					buf[off+2] = 0x6e // R
-					buf[off+3] = 0xff // A
+					buf[off+0] = 0xbb
+					buf[off+1] = 0xf7
+					buf[off+2] = 0x6e
+					buf[off+3] = 0xff
 				} else {
-					buf[off+0] = 0x81 // B
-					buf[off+1] = 0xb9 // G
-					buf[off+2] = 0x10 // R
-					buf[off+3] = 0xff // A
+					buf[off+0] = 0x81
+					buf[off+1] = 0xb9
+					buf[off+2] = 0x10
+					buf[off+3] = 0xff
 				}
 			}
 		}
@@ -304,7 +401,7 @@ func buildEmeraldTrayIcon() uintptr {
 	hIcon, _, _ := procCreateIconFromRes.Call(
 		uintptr(unsafe.Pointer(&buf[0])),
 		uintptr(len(buf)),
-		1, // fIcon = TRUE
+		1,
 		0x00030000,
 		size,
 		size,
