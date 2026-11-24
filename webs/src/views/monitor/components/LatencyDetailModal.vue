@@ -2,13 +2,16 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import gsap from "gsap";
 import { Close } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import CountryFlag from "@/ui/CountryFlag.vue";
 import { displayNodeName } from "@/utils/nodeDisplay";
 import {
   getProbeHistory,
+  traceNodeFromUserAgent,
   type HistoryPoint,
   type NodeHistoryResponse,
   type ProbeHistorySeries,
+  type UserTraceResponse,
 } from "@/api/subcription/probe";
 import { buildAreaPath, buildMonotonePath, type PlotPoint } from "./spline";
 
@@ -59,9 +62,12 @@ const PLOT_W = W - PAD_L - PAD_R;
 const PLOT_H = H - PAD_T - PAD_B;
 const BASE_Y = PAD_T + PLOT_H;
 
+const mode = ref<"curve" | "trace">("curve");
 const range = ref<RangeKey>("24h");
 const loading = ref(false);
 const history = ref<NodeHistoryResponse | null>(null);
+const tracing = ref(false);
+const traceResult = ref<UserTraceResponse | null>(null);
 const hiddenProbeIds = ref<Set<number>>(new Set());
 const scrubTime = ref<number | null>(null);
 
@@ -219,10 +225,26 @@ const scrubbedSnapshots = computed(() => {
 const aggregateStats = computed(() => {
   const list = visibleSeries.value;
   if (!list.length) {
-    return { current: null as number | null, avg: 0, min: 0, max: 0, uptime: 0, samples: 0 };
+    return {
+      current: null as number | null,
+      avg: 0,
+      min: 0,
+      max: 0,
+      jitter: 0,
+      peakAvg: 0,
+      offPeakAvg: 0,
+      uptime: 0,
+      samples: 0,
+    };
   }
   let sumAvg = 0;
   let avgCnt = 0;
+  let sumJitter = 0;
+  let jitterCnt = 0;
+  let sumPeak = 0;
+  let peakCnt = 0;
+  let sumOff = 0;
+  let offCnt = 0;
   let min = Infinity;
   let max = 0;
   let sumUp = 0;
@@ -236,6 +258,18 @@ const aggregateStats = computed(() => {
       sumAvg += s.stats.avg;
       avgCnt++;
     }
+    if ((s.stats.jitter ?? 0) > 0) {
+      sumJitter += s.stats.jitter!;
+      jitterCnt++;
+    }
+    if ((s.stats.peakAvg ?? 0) > 0) {
+      sumPeak += s.stats.peakAvg!;
+      peakCnt++;
+    }
+    if ((s.stats.offPeakAvg ?? 0) > 0) {
+      sumOff += s.stats.offPeakAvg!;
+      offCnt++;
+    }
     if (s.stats.min > 0 && s.stats.min < min) min = s.stats.min;
     if (s.stats.max > max) max = s.stats.max;
     if (s.stats.current != null && (current === null || s.stats.current < current)) {
@@ -247,10 +281,55 @@ const aggregateStats = computed(() => {
     avg: avgCnt ? Math.round(sumAvg / avgCnt) : 0,
     min: min === Infinity ? 0 : min,
     max,
+    jitter: jitterCnt ? Math.round(sumJitter / jitterCnt) : 0,
+    peakAvg: peakCnt ? Math.round(sumPeak / peakCnt) : 0,
+    offPeakAvg: offCnt ? Math.round(sumOff / offCnt) : 0,
     uptime: Math.round((sumUp / list.length) * 10) / 10,
     samples,
   };
 });
+
+const maxTraceRTT = computed(() => {
+  const hops = traceResult.value?.hops || [];
+  let m = 50;
+  for (const h of hops) {
+    if (!h.timeout && h.rtt > m) m = h.rtt;
+  }
+  return m;
+});
+
+async function runTrace() {
+  if (!props.node) return;
+  tracing.value = true;
+  try {
+    const res = await traceNodeFromUserAgent({
+      nodeId: props.node.id,
+      probeId: props.initialProbeId || undefined,
+    });
+    traceResult.value = res.data || null;
+    await nextTick();
+    if (
+      sheetEl.value &&
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      const rows = sheetEl.value.querySelectorAll("[data-trace-hop]");
+      if (rows.length) {
+        gsap.from(rows, {
+          y: 8,
+          opacity: 0,
+          duration: 0.32,
+          stagger: 0.025,
+          ease: "expo.out",
+          clearProps: "transform,opacity",
+        });
+      }
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "路由追踪失败");
+  } finally {
+    tracing.value = false;
+  }
+}
 
 const heroReadout = computed(() => {
   if (scrubTime.value !== null && scrubbedSnapshots.value.length > 0) {
@@ -415,6 +494,8 @@ watch(
   () => [props.modelValue, props.node?.id] as const,
   async ([open]) => {
     if (open) {
+      mode.value = "curve";
+      traceResult.value = null;
       window.addEventListener("keydown", onKeydown);
       await nextTick();
       moveSegThumb(false);
@@ -467,7 +548,32 @@ onBeforeUnmount(() => {
             </div>
 
             <div class="ts-head-right">
-              <div ref="segTrackEl" class="seg-control" role="tablist" aria-label="时间范围">
+              <div class="mode-switch" role="tablist" aria-label="视图切换">
+                <button
+                  type="button"
+                  role="tab"
+                  :class="{ 'is-active': mode === 'curve' }"
+                  @click="mode = 'curve'"
+                >
+                  延迟曲线
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  :class="{ 'is-active': mode === 'trace' }"
+                  @click="mode = 'trace'"
+                >
+                  去程路由
+                </button>
+              </div>
+
+              <div
+                v-show="mode === 'curve'"
+                ref="segTrackEl"
+                class="seg-control"
+                role="tablist"
+                aria-label="时间范围"
+              >
                 <span ref="segThumbEl" class="seg-thumb" aria-hidden="true"></span>
                 <button
                   v-for="r in RANGES"
@@ -494,6 +600,8 @@ onBeforeUnmount(() => {
             </div>
           </header>
 
+          <!-- Mode 1: Latency Curve -->
+          <template v-if="mode === 'curve'">
           <!-- Apple Stocks Live Hero Readout -->
           <div class="ts-hero">
             <div class="ts-hero-metric">
@@ -697,19 +805,37 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <!-- 4 Precision KPI Tiles -->
+          <!-- 5 Precision KPI Tiles (Peak vs Off-Peak + Jitter + Uptime) -->
           <footer class="ts-kpis">
             <div class="kpi-tile">
-              <span>平均延迟</span>
-              <strong class="mono">{{ aggregateStats.avg ? `${aggregateStats.avg} ms` : "—" }}</strong>
+              <span>晚高峰均值</span>
+              <strong class="mono">{{
+                aggregateStats.peakAvg ? `${aggregateStats.peakAvg} ms` : "—"
+              }}</strong>
             </div>
             <div class="kpi-tile">
-              <span>最低延迟</span>
-              <strong class="mono">{{ aggregateStats.min ? `${aggregateStats.min} ms` : "—" }}</strong>
+              <span>平峰均值</span>
+              <strong class="mono">{{
+                aggregateStats.offPeakAvg
+                  ? `${aggregateStats.offPeakAvg} ms`
+                  : aggregateStats.avg
+                    ? `${aggregateStats.avg} ms`
+                    : "—"
+              }}</strong>
             </div>
             <div class="kpi-tile">
-              <span>峰值延迟</span>
-              <strong class="mono">{{ aggregateStats.max ? `${aggregateStats.max} ms` : "—" }}</strong>
+              <span>最低 / 峰值</span>
+              <strong class="mono">{{
+                aggregateStats.min
+                  ? `${aggregateStats.min} / ${aggregateStats.max} ms`
+                  : "—"
+              }}</strong>
+            </div>
+            <div class="kpi-tile">
+              <span>抖动</span>
+              <strong class="mono">{{
+                aggregateStats.samples ? `${aggregateStats.jitter} ms` : "—"
+              }}</strong>
             </div>
             <div class="kpi-tile">
               <span>可用率</span>
@@ -729,6 +855,72 @@ onBeforeUnmount(() => {
               </strong>
             </div>
           </footer>
+          </template>
+
+          <!-- Mode 2: On-Demand Outbound Traceroute -->
+          <div v-else class="trace-panel">
+            <div class="trace-toolbar">
+              <span class="trace-hint">
+                {{
+                  traceResult
+                    ? `由「${traceResult.probeName}」经物理网卡直连追踪 · 共 ${traceResult.hops.length} 跳`
+                    : "按需从本机物理网卡直连追踪去程路由（自动绕过 TUN）"
+                }}
+              </span>
+              <button
+                type="button"
+                class="trace-run-btn"
+                :disabled="tracing"
+                @click="runTrace"
+              >
+                {{ tracing ? "追踪中（约 5-15 秒）…" : traceResult ? "重新追踪" : "发起去程追踪" }}
+              </button>
+            </div>
+
+            <div v-if="traceResult?.hops?.length" class="trace-list">
+              <div
+                v-for="hop in traceResult.hops"
+                :key="hop.ttl"
+                class="trace-row"
+                :class="{ 'is-timeout': hop.timeout }"
+                data-trace-hop
+              >
+                <span class="hop-ttl mono">{{ String(hop.ttl).padStart(2, "0") }}</span>
+                <span class="hop-ip mono">{{ hop.timeout ? "*" : hop.ip }}</span>
+                <span
+                  v-if="hop.lineTag"
+                  class="hop-tag"
+                  :class="`is-${hop.lineTone || 'muted'}`"
+                >
+                  {{ hop.lineTag }}
+                </span>
+                <span v-else class="hop-tag-spacer"></span>
+                <span class="hop-loc" :title="`${hop.location || ''} ${hop.isp || ''}`">
+                  {{
+                    hop.timeout
+                      ? "请求超时"
+                      : [hop.location, hop.asn].filter(Boolean).join(" · ") || "—"
+                  }}
+                </span>
+                <div class="hop-rtt-col">
+                  <div v-if="!hop.timeout" class="hop-bar" aria-hidden="true">
+                    <i
+                      :style="{
+                        width: `${Math.min(100, Math.max(8, Math.round((hop.rtt / maxTraceRTT) * 100)))}%`,
+                      }"
+                    ></i>
+                  </div>
+                  <span class="hop-rtt mono">{{
+                    hop.timeout ? "—" : `${hop.rtt} ms`
+                  }}</span>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="!tracing" class="trace-empty">
+              点击右上角「发起去程追踪」，查看从本地宽带到节点的真实每一跳与线路（CN2 / 9929 / 163 / CMI）。
+            </div>
+          </div>
         </section>
       </div>
     </transition>
@@ -811,7 +1003,33 @@ onBeforeUnmount(() => {
 .ts-head-right {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mode-switch {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  border: 1px solid var(--c-line);
+}
+
+.mode-switch button {
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.mode-switch button.is-active {
+  background: var(--c-ink);
+  color: var(--c-surface);
 }
 
 /* Apple iOS Segmented Control */
@@ -1031,10 +1249,156 @@ onBeforeUnmount(() => {
 /* KPI Strip */
 .ts-kpis {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   padding-top: 16px;
   border-top: 1px solid var(--c-line);
+}
+
+/* Outbound Trace Panel */
+.trace-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.trace-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.trace-hint {
+  font-size: 12.5px;
+  color: var(--c-muted);
+}
+
+.trace-run-btn {
+  padding: 7px 15px;
+  border: 1px solid var(--c-ink);
+  border-radius: 999px;
+  background: var(--c-ink);
+  color: var(--c-surface);
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.trace-run-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.trace-list {
+  display: grid;
+  gap: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.trace-row {
+  display: grid;
+  grid-template-columns: 26px 132px 74px minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--c-surface-2);
+  font-size: 12.5px;
+}
+
+.trace-row.is-timeout {
+  opacity: 0.55;
+}
+
+.hop-ttl {
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.hop-ip {
+  font-weight: 500;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hop-tag {
+  justify-self: start;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.hop-tag.is-ok {
+  background: color-mix(in srgb, var(--c-ok) 14%, var(--c-surface));
+  color: var(--c-ok);
+}
+
+.hop-tag.is-info {
+  background: rgba(37, 99, 235, 0.12);
+  color: #2563eb;
+}
+
+.hop-tag.is-warn {
+  background: color-mix(in srgb, var(--c-warn, #d97706) 14%, var(--c-surface));
+  color: var(--c-warn, #d97706);
+}
+
+.hop-tag.is-muted {
+  background: var(--c-surface);
+  color: var(--c-muted);
+}
+
+.hop-loc {
+  font-size: 12px;
+  color: var(--c-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hop-rtt-col {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hop-bar {
+  width: 58px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--c-line);
+  overflow: hidden;
+}
+
+.hop-bar i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--c-ok);
+}
+
+.hop-rtt {
+  min-width: 48px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.trace-empty {
+  padding: 44px 20px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--c-muted);
+  border: 1px dashed var(--c-line);
+  border-radius: 16px;
 }
 
 .kpi-tile {

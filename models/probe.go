@@ -17,6 +17,9 @@ type Probe struct {
 	TokenHash  string     `gorm:"size:64;index;not null" json:"-"`
 	Enabled    bool       `gorm:"not null;default:true" json:"enabled"`
 	AutoProbe  bool       `gorm:"not null;default:false" json:"autoProbe"`
+	HasIPv6    *bool      `json:"hasIpv6"`
+	ISP        string     `gorm:"size:64" json:"isp"`
+	IfaceName  string     `gorm:"size:64" json:"iface"`
 	LastSeenAt *time.Time `json:"lastSeenAt"`
 	Version    string     `gorm:"size:32" json:"version"`
 }

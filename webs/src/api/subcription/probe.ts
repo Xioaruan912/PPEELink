@@ -8,6 +8,9 @@ export interface Probe {
   region: string;
   enabled: boolean;
   autoProbe?: boolean;
+  hasIpv6?: boolean | null;
+  isp?: string;
+  iface?: string;
   online: boolean;
   lastSeenAt?: string | null;
   version?: string;
@@ -29,8 +32,21 @@ export interface HistoryStats {
   avg: number;
   min: number;
   max: number;
+  jitter?: number;
+  peakAvg?: number;
+  offPeakAvg?: number;
+  peakUptime?: number;
   uptime: number;
   samples: number;
+}
+
+export interface BestPeakSummary {
+  nodeId: number;
+  nodeName: string;
+  avg: number;
+  peakAvg?: number;
+  jitter: number;
+  uptime: number;
 }
 
 export interface PeakBand {
@@ -47,7 +63,27 @@ export interface SparklinesResponse {
   from: number;
   to: number;
   peakBands?: PeakBand[];
+  bestPeak?: BestPeakSummary | null;
   nodes: Record<string, SparklineSeries>;
+}
+
+export interface UserTraceHop {
+  ttl: number;
+  ip: string;
+  rtt: number;
+  timeout: boolean;
+  asn?: string;
+  isp?: string;
+  location?: string;
+  lineTag?: string;
+  lineTone?: "ok" | "info" | "warn" | "muted" | "";
+}
+
+export interface UserTraceResponse {
+  probeName: string;
+  host: string;
+  hops: UserTraceHop[];
+  error?: string;
 }
 
 export interface ProbeHistorySeries {
@@ -184,5 +220,25 @@ export function getProbeHistory(params: {
     url: "/api/v1/probes/history",
     method: "get",
     params,
+  });
+}
+
+export function traceNodeFromUserAgent(data: {
+  nodeId: number;
+  probeId?: number;
+}) {
+  return request<UserTraceResponse>({
+    url: "/api/v1/probes/trace",
+    method: "post",
+    data,
+    timeout: 30000,
+  });
+}
+
+export function applyProbeSortToSubs(probeId?: number) {
+  return request<{ updatedSubscriptions: number }>({
+    url: "/api/v1/probes/apply-sort",
+    method: "post",
+    data: probeId ? { probeId } : {},
   });
 }

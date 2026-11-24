@@ -23,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.2"
+const latestUserAgentVersion = "1.3"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -47,9 +47,10 @@ type probeReport struct {
 }
 
 type queuedProbeJob struct {
-	ID     string
-	Action string
-	Nodes  []probeNode
+	ID         string
+	Action     string
+	TargetHost string
+	Nodes      []probeNode
 }
 
 type jobOutcome struct {
@@ -98,11 +99,15 @@ func (h *userProbeHub) unregister(probeID uint, ch chan queuedProbeJob) {
 }
 
 func (h *userProbeHub) dispatchAction(probeID uint, action string, nodes []probeNode, allowQueue bool) (string, chan jobOutcome, bool) {
+	return h.dispatchJob(probeID, queuedProbeJob{Action: action, Nodes: nodes}, allowQueue)
+}
+
+func (h *userProbeHub) dispatchJob(probeID uint, job queuedProbeJob, allowQueue bool) (string, chan jobOutcome, bool) {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
 	jobID := hex.EncodeToString(b)
 	doneCh := make(chan jobOutcome, 1)
-	job := queuedProbeJob{ID: jobID, Action: action, Nodes: nodes}
+	job.ID = jobID
 
 	h.mu.Lock()
 	ch, waiting := h.waiters[probeID]
@@ -291,7 +296,7 @@ func ProbeList(c *gin.Context) {
 		online := probeHub.isWaiting(p.ID) || (p.LastSeenAt != nil && now.Sub(*p.LastSeenAt) < probeOnlineWindow)
 		items = append(items, gin.H{
 			"id": p.ID, "name": p.Name, "region": p.Region, "enabled": p.Enabled,
-			"autoProbe": p.AutoProbe,
+			"autoProbe": p.AutoProbe, "hasIpv6": p.HasIPv6, "isp": p.ISP, "iface": p.IfaceName,
 			"online":    online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
 			"latestVersion":   latestUserAgentVersion,
 			"updateAvailable": p.Version != "" && p.Version != latestUserAgentVersion,
@@ -490,6 +495,16 @@ func ProbeWait(c *gin.Context) {
 	if v := strings.TrimSpace(c.Query("version")); v != "" && len(v) <= 32 {
 		updates["version"] = v
 	}
+	if v6 := strings.TrimSpace(c.Query("hasIpv6")); v6 == "1" || v6 == "0" {
+		b := v6 == "1"
+		updates["has_ipv6"] = b
+	}
+	if isp := strings.TrimSpace(c.Query("isp")); isp != "" && len(isp) <= 64 {
+		updates["isp"] = isp
+	}
+	if iface := strings.TrimSpace(c.Query("iface")); iface != "" && len(iface) <= 64 {
+		updates["iface_name"] = iface
+	}
 	models.DB.Model(probe).Updates(updates)
 
 	waitSec, _ := strconv.Atoi(c.DefaultQuery("timeout", "25"))
@@ -513,9 +528,10 @@ func ProbeWait(c *gin.Context) {
 			act = "probe"
 		}
 		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
-			"jobId":  job.ID,
-			"action": act,
-			"nodes":  job.Nodes,
+			"jobId":      job.ID,
+			"action":     act,
+			"targetHost": job.TargetHost,
+			"nodes":      job.Nodes,
 		}, "msg": "dispatched"})
 	case <-timer.C:
 		models.DB.Model(probe).Update("last_seen_at", time.Now())

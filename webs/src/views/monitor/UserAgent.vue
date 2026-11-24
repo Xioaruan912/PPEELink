@@ -29,6 +29,7 @@ import LatencyDetailModal, {
 } from "./components/LatencyDetailModal.vue";
 import {
   addProbe,
+  applyProbeSortToSubs,
   deleteProbe,
   getProbes,
   getProbeSparklines,
@@ -89,6 +90,7 @@ const probingAll = ref(false);
 const probingNodeId = ref<number | null>(null);
 const updatingProbeId = ref<number | null>(null);
 const togglingAutoId = ref<number | null>(null);
+const applyingSort = ref(false);
 const selectedProbeId = ref<number | null>(null);
 const probes = ref<Probe[]>([]);
 const nodes = ref<NodeCardItem[]>([]);
@@ -115,6 +117,38 @@ const hasOnlineProbe = computed(() => onlineProbes.value.length > 0);
 const selectedProbe = computed(
   () => probes.value.find((p) => p.id === selectedProbeId.value) || null
 );
+
+// True if the active perspective explicitly lacks public IPv6.
+const activeLacksIPv6 = computed(() => {
+  if (selectedProbe.value) {
+    return selectedProbe.value.hasIpv6 === false;
+  }
+  const list = onlineProbes.value.length ? onlineProbes.value : probes.value;
+  return list.length > 0 && list.every((p) => p.hasIpv6 === false);
+});
+
+function isIPv6Mismatch(item: NodeCardItem, view: ResolvedNodeView): boolean {
+  return (
+    activeLacksIPv6.value &&
+    item.server.includes(":") &&
+    view.checked &&
+    !view.valid
+  );
+}
+
+async function handleApplySort() {
+  applyingSort.value = true;
+  try {
+    const res = (await applyProbeSortToSubs(
+      selectedProbeId.value || undefined
+    )) as any;
+    ElMessage.success(res?.msg || "已按本机实测延迟重排订阅顺序");
+  } catch (err: any) {
+    ElMessage.error(err?.message || "排序失败");
+  } finally {
+    applyingSort.value = false;
+  }
+}
 
 function resolveNodeView(n: NodeCardItem): ResolvedNodeView {
   if (selectedProbeId.value !== null) {
@@ -629,6 +663,17 @@ onBeforeUnmount(() => {
             </button>
           </div>
 
+          <div v-if="p.isp || p.hasIpv6 !== null && p.hasIpv6 !== undefined" class="device-env">
+            <span v-if="p.isp" class="env-chip">{{ p.isp }}</span>
+            <span
+              v-if="p.hasIpv6 !== null && p.hasIpv6 !== undefined"
+              class="env-chip mono"
+              :class="p.hasIpv6 ? 'is-v6' : 'is-v4'"
+            >
+              {{ p.hasIpv6 ? "IPv4 + IPv6" : "仅 IPv4" }}
+            </span>
+          </div>
+
           <footer class="device-foot" @click.stop>
             <UiButton
               size="sm"
@@ -676,6 +721,35 @@ onBeforeUnmount(() => {
 
     <!-- Section 2: 节点实测卡片网格 -->
     <section class="ua-section" aria-label="节点实测结果">
+      <!-- Peak Insight Editorial Strip -->
+      <div
+        v-if="sparklines?.bestPeak && sparklines.bestPeak.nodeName"
+        class="insight-strip"
+        data-stagger-card
+      >
+        <div class="insight-main">
+          <span class="insight-tag">
+            {{ sparklines.bestPeak.peakAvg ? "晚高峰最稳" : "当前最稳" }}
+          </span>
+          <strong class="insight-name">{{
+            displayNodeName(sparklines.bestPeak.nodeName)
+          }}</strong>
+          <span class="insight-metrics mono">
+            {{ sparklines.bestPeak.peakAvg || sparklines.bestPeak.avg }}ms · 抖动
+            {{ sparklines.bestPeak.jitter }}ms ·
+            {{ sparklines.bestPeak.uptime }}%
+          </span>
+        </div>
+        <button
+          type="button"
+          class="insight-sort-btn"
+          :disabled="applyingSort"
+          @click="handleApplySort"
+        >
+          {{ applyingSort ? "重排中…" : "按实测重排订阅" }}
+        </button>
+      </div>
+
       <header class="nodes-bar">
         <div class="filter-pills" role="group" aria-label="状态筛选">
           <button
@@ -776,7 +850,14 @@ onBeforeUnmount(() => {
                   resolveNodeView(item).checked && !resolveNodeView(item).valid
                 "
               >
-                <div class="nc-fail">
+                <div
+                  v-if="isIPv6Mismatch(item, resolveNodeView(item))"
+                  class="nc-fail is-v6-warn"
+                >
+                  <strong>无 IPv6</strong>
+                  <small>当前本地网络不支持 IPv6</small>
+                </div>
+                <div v-else class="nc-fail">
                   <strong>不可达</strong>
                   <small>{{ resolveNodeView(item).error || "超时" }}</small>
                 </div>
@@ -1189,6 +1270,93 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-ok) 22%, transparent);
 }
 
+.device-env {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: -4px;
+}
+
+.env-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 11px;
+}
+
+.env-chip.is-v6 {
+  color: var(--c-ok);
+  background: color-mix(in srgb, var(--c-ok) 10%, var(--c-surface));
+}
+
+.env-chip.is-v4 {
+  color: var(--c-warn, #d97706);
+  background: color-mix(in srgb, var(--c-warn, #d97706) 10%, var(--c-surface));
+}
+
+.insight-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface);
+}
+
+.insight-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.insight-tag {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-ok) 12%, var(--c-surface));
+  color: var(--c-ok);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.insight-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+
+.insight-metrics {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.insight-sort-btn {
+  padding: 6px 13px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 150ms var(--ease-out), background 150ms var(--ease-out);
+}
+
+.insight-sort-btn:hover:not(:disabled) {
+  border-color: var(--c-ink);
+  background: var(--c-surface);
+}
+
+.insight-sort-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .device-foot {
   display: flex;
   align-items: center;
@@ -1457,6 +1625,10 @@ onBeforeUnmount(() => {
   font-size: 20px;
   font-weight: 600;
   color: var(--c-bad);
+}
+
+.nc-fail.is-v6-warn strong {
+  color: var(--c-warn, #d97706);
 }
 
 .nc-fail small {

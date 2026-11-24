@@ -131,12 +131,25 @@ type historyPoint struct {
 }
 
 type historyStats struct {
-	Current *int    `json:"current,omitempty"`
-	Avg     int     `json:"avg"`
-	Min     int     `json:"min"`
-	Max     int     `json:"max"`
-	Uptime  float64 `json:"uptime"`
-	Samples int     `json:"samples"`
+	Current    *int    `json:"current,omitempty"`
+	Avg        int     `json:"avg"`
+	Min        int     `json:"min"`
+	Max        int     `json:"max"`
+	Jitter     int     `json:"jitter"`
+	PeakAvg    int     `json:"peakAvg,omitempty"`
+	OffPeakAvg int     `json:"offPeakAvg,omitempty"`
+	PeakUptime float64 `json:"peakUptime,omitempty"`
+	Uptime     float64 `json:"uptime"`
+	Samples    int     `json:"samples"`
+}
+
+type bestPeakSummary struct {
+	NodeID   int     `json:"nodeId"`
+	NodeName string  `json:"nodeName"`
+	Avg      int     `json:"avg"`
+	PeakAvg  int     `json:"peakAvg,omitempty"`
+	Jitter   int     `json:"jitter"`
+	Uptime   float64 `json:"uptime"`
 }
 
 type sparklineSeries struct {
@@ -190,6 +203,16 @@ func computePeakBands(from, to time.Time) []peakBand {
 	return bands
 }
 
+func isEveningPeak(t time.Time) bool {
+	loc := time.Local
+	if sh, err := time.LoadLocation("Asia/Shanghai"); err == nil {
+		loc = sh
+	}
+	lt := t.In(loc)
+	mins := lt.Hour()*60 + lt.Minute()
+	return mins >= 20*60 && mins <= 23*60+30
+}
+
 func aggregateProbeRows(rows []models.ProbeResult, bucketDur time.Duration) ([]historyPoint, historyStats) {
 	if len(rows) == 0 {
 		return []historyPoint{}, historyStats{}
@@ -199,10 +222,18 @@ func aggregateProbeRows(rows []models.ProbeResult, bucketDur time.Duration) ([]h
 	})
 
 	var totalOK, sumRTT, minRTT, maxRTT int
+	var peakCnt, peakOK, peakSum int
+	var offOK, offSum int
+	var jitterSum, jitterCnt int
+	prevRTT := -1
 	minRTT = math.MaxInt32
 	var lastOK *int
 
 	for _, r := range rows {
+		peak := isEveningPeak(r.CheckedAt)
+		if peak {
+			peakCnt++
+		}
 		if r.Success && r.RTT > 0 {
 			totalOK++
 			sumRTT += r.RTT
@@ -211,6 +242,22 @@ func aggregateProbeRows(rows []models.ProbeResult, bucketDur time.Duration) ([]h
 			}
 			if r.RTT > maxRTT {
 				maxRTT = r.RTT
+			}
+			if prevRTT > 0 {
+				diff := r.RTT - prevRTT
+				if diff < 0 {
+					diff = -diff
+				}
+				jitterSum += diff
+				jitterCnt++
+			}
+			prevRTT = r.RTT
+			if peak {
+				peakOK++
+				peakSum += r.RTT
+			} else {
+				offOK++
+				offSum += r.RTT
 			}
 			v := r.RTT
 			lastOK = &v
@@ -225,6 +272,18 @@ func aggregateProbeRows(rows []models.ProbeResult, bucketDur time.Duration) ([]h
 		stats.Avg = int(math.Round(float64(sumRTT) / float64(totalOK)))
 		stats.Min = minRTT
 		stats.Max = maxRTT
+	}
+	if jitterCnt > 0 {
+		stats.Jitter = int(math.Round(float64(jitterSum) / float64(jitterCnt)))
+	}
+	if peakCnt > 0 {
+		stats.PeakUptime = math.Round(float64(peakOK)*1000/float64(peakCnt)) / 10
+	}
+	if peakOK > 0 {
+		stats.PeakAvg = int(math.Round(float64(peakSum) / float64(peakOK)))
+	}
+	if offOK > 0 {
+		stats.OffPeakAvg = int(math.Round(float64(offSum) / float64(offOK)))
 	}
 
 	if bucketDur <= 0 {
@@ -348,9 +407,37 @@ func ProbeSparklines(c *gin.Context) {
 	}
 
 	out := make(map[int]sparklineSeries, len(byNode))
+	nodeNames := map[int]string{}
+	if allNodes, err := models.GetNodeList(); err == nil {
+		for _, n := range allNodes {
+			nodeNames[n.ID] = n.Name
+		}
+	}
+	var bestPeak *bestPeakSummary
+	bestScore := math.MaxFloat64
 	for nodeID, list := range byNode {
 		pts, stats := aggregateProbeRows(list, bucketDur)
 		out[nodeID] = sparklineSeries{Points: pts, Stats: stats}
+		if stats.Avg <= 0 || stats.Uptime < 80 {
+			continue
+		}
+		refRTT := float64(stats.Avg)
+		if stats.PeakAvg > 0 {
+			refRTT = float64(stats.PeakAvg)
+		}
+		// Composite score: lower RTT + lower jitter + higher uptime wins.
+		score := refRTT + float64(stats.Jitter)*1.5 + (100.0-stats.Uptime)*4.0
+		if score < bestScore {
+			bestScore = score
+			bestPeak = &bestPeakSummary{
+				NodeID:   nodeID,
+				NodeName: nodeNames[nodeID],
+				Avg:      stats.Avg,
+				PeakAvg:  stats.PeakAvg,
+				Jitter:   stats.Jitter,
+				Uptime:   stats.Uptime,
+			}
+		}
 	}
 
 	c.JSON(200, gin.H{
@@ -359,6 +446,7 @@ func ProbeSparklines(c *gin.Context) {
 			"from":      since.UnixMilli(),
 			"to":        now.UnixMilli(),
 			"peakBands": computePeakBands(since, now),
+			"bestPeak":  bestPeak,
 			"nodes":     out,
 		},
 		"msg": "ok",
