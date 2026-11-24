@@ -2,8 +2,11 @@
 set -euo pipefail
 mkdir -p dist
 
+# Windows built with -H=windowsgui so background daemon never opens a console window.
+echo "Building windows/amd64 -> dist/ppeelink-user-agent-windows-amd64.exe"
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-w -s -H=windowsgui" -o "dist/ppeelink-user-agent-windows-amd64.exe" .
+
 targets=(
-  "windows amd64 ppeelink-user-agent-windows-amd64.exe"
   "darwin arm64 ppeelink-user-agent-darwin-arm64"
   "darwin amd64 ppeelink-user-agent-darwin-amd64"
   "linux amd64 ppeelink-user-agent-linux-amd64"
