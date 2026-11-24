@@ -17,6 +17,7 @@ import IconWarning from "~icons/ph/warning";
 import IconPower from "~icons/ph/power";
 import IconRefresh from "~icons/ph/arrows-clockwise";
 import IconWrench from "~icons/ph/wrench";
+import IconDots from "~icons/ph/dots-three";
 import {
   deleteProxyInbound,
   deleteProxyServer,
@@ -601,41 +602,50 @@ const usageRatio = (a: ProxyAccount) =>
                 >内核运维</UiButton
               >
             </div>
-            <div class="act-icons">
-              <RowIconButton
-                :icon="IconPencil"
-                :label="`编辑服务器 ${s.name}`"
-                @click="openServer(s)"
-              />
-              <RowIconButton
-                v-if="s.kind === 'agent'"
-                :icon="IconRefresh"
-                :class="{ 'is-on': s.agentUpdateRequested }"
-                :label="
-                  s.agentUpdateRequested
-                    ? `撤销 ${s.name} 的 Agent 更新`
-                    : `更新 ${s.name} 的 Agent`
-                "
-                @click="updateAgent(s)"
-              />
-              <RowIconButton
-                v-if="s.kind === 'agent'"
-                :icon="IconTerminal"
-                :label="`重新生成 ${s.name} 安装命令`"
-                @click="showInstall(s)"
-              />
-              <RowIconButton
-                :icon="IconPower"
-                :label="`${s.enabled ? '停用' : '启用'}服务器 ${s.name}`"
-                :class="{ 'is-on': s.enabled }"
-                @click="toggleServer(s)"
-              />
-              <RowIconButton
-                :icon="IconTrash"
-                :label="`删除服务器 ${s.name}`"
-                @click="removeServer(s)"
-              />
-            </div>
+            <el-dropdown trigger="click" placement="bottom-end">
+              <button
+                type="button"
+                class="more-trigger"
+                :aria-label="`更多操作 ${s.name}`"
+              >
+                <IconDots />
+              </button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="openServer(s)">
+                    <span class="dd-item"><IconPencil />编辑服务器</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item
+                    v-if="s.kind === 'agent'"
+                    @click="updateAgent(s)"
+                  >
+                    <span class="dd-item">
+                      <IconRefresh />
+                      {{
+                        s.agentUpdateRequested
+                          ? "撤销 Agent 更新"
+                          : "更新 Agent"
+                      }}
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item
+                    v-if="s.kind === 'agent'"
+                    @click="showInstall(s)"
+                  >
+                    <span class="dd-item"><IconTerminal />重新生成安装命令</span>
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="toggleServer(s)">
+                    <span class="dd-item">
+                      <IconPower />
+                      {{ s.enabled ? "停用服务器" : "启用服务器" }}
+                    </span>
+                  </el-dropdown-item>
+                  <el-dropdown-item divided @click="removeServer(s)">
+                    <span class="dd-item is-danger"><IconTrash />删除服务器</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </footer>
         </article>
       </div>
@@ -1144,8 +1154,9 @@ const usageRatio = (a: ProxyAccount) =>
 }
 .card-actions {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding-top: 12px;
   margin-top: auto;
   border-top: 1px solid var(--c-line);
@@ -1153,21 +1164,44 @@ const usageRatio = (a: ProxyAccount) =>
 .card-primary-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
-.act-icons {
-  display: flex;
+.more-trigger {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--c-muted);
+  cursor: pointer;
+  transition:
+    background 150ms var(--ease-out),
+    color 150ms var(--ease-out),
+    border-color 150ms var(--ease-out);
+}
+.more-trigger:hover {
+  background: var(--c-surface-2);
+  border-color: var(--c-line);
+  color: var(--c-ink);
+}
+.more-trigger svg {
+  width: 18px;
+  height: 18px;
+}
+.dd-item {
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 4px;
-  width: 100%;
-  overflow: visible;
+  gap: 8px;
+  font-size: 13px;
 }
-.act-icons :deep(button) {
-  border-radius: 999px;
+.dd-item svg {
+  width: 15px;
+  height: 15px;
 }
-.act-icons .is-on {
-  color: var(--c-ok);
+.dd-item.is-danger {
+  color: var(--c-bad);
 }
 .lower-grid {
   display: grid;

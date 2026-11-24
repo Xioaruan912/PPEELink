@@ -35,6 +35,8 @@ func Proxy(r *gin.Engine) {
 	r.GET("/api/v1/my/self-hosted", api.MySelfHosted)
 	r.GET("/api/v1/agent/spec", api.AgentSpec)
 	r.POST("/api/v1/agent/report", api.AgentReport)
+	r.GET("/api/v1/agent/ops/wait", api.AgentOpsWait)
+	r.POST("/api/v1/agent/ops/result", api.AgentOpsResult)
 	r.GET("/api/v1/proxy/agent/ops/wait", api.AgentOpsWait)
 	r.POST("/api/v1/proxy/agent/ops/result", api.AgentOpsResult)
 	r.GET("/api/v1/agent/ws", api.AgentWebSocket)
