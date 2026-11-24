@@ -35,9 +35,7 @@ const blockLabel = (node: OverviewItem) => {
       ? "已暂停"
       : b.kind === "server-quota"
         ? "服务器流量用完"
-        : b.kind === "delivery-disabled"
-          ? "已关闭下发"
-          : "连续检测无效";
+        : "已关闭下发";
   return b.until ? `${short}，${b.until.slice(5, 10)} 恢复` : short;
 };
 
@@ -83,13 +81,6 @@ const {
             :title="node.blocked.reason"
           >
             暂不下发 · {{ blockLabel(node) }}
-          </span>
-          <span
-            v-if="node.forceDeliver"
-            class="meta-pill is-ink"
-            title="检测无效时也不会从订阅中排除"
-          >
-            始终下发
           </span>
           <span
             v-if="node.probes?.length"
@@ -188,13 +179,6 @@ const {
             <el-dropdown-item command="probe-policy"
               >检测策略…</el-dropdown-item
             >
-            <el-dropdown-item command="deliver">
-              {{
-                node.forceDeliver
-                  ? "恢复按检测结果下发"
-                  : "始终下发（忽略检测）"
-              }}
-            </el-dropdown-item>
             <el-dropdown-item
               v-if="node.blocked?.kind === 'paused'"
               command="resume"

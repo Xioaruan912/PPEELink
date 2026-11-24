@@ -12,14 +12,13 @@ import (
 )
 
 // 暂不下发：下面几种情况下节点不会出现在订阅里，条件解除后自动恢复。
+//   - 手动关闭订阅下发滑块；
 //   - 手动暂停到某个日期（例如节点本月流量用完）；
-//   - 自建服务器本月流量超出上限，到重置日恢复；
-//   - 面板连续多次检测无效（健康事件为 down），检测恢复后自动下发。
+//   - 自建服务器本月流量超出上限，到重置日恢复。
 
 const (
 	blockPaused   = "paused"
 	blockServer   = "server-quota"
-	blockHealth   = "health"
 	blockDisabled = "delivery-disabled"
 )
 
@@ -67,27 +66,6 @@ func undeliverableNodes(now time.Time) map[int]deliveryBlock {
 		}
 	}
 
-	// 自动判定关闭时，检测结果只作展示，不再拦住下发。
-	setting := currentAlertSetting()
-	if setting.AutoBlockInvalid {
-		// 手动设了“始终下发”的节点跳过健康检测这一条。
-		var forced []int
-		models.DB.Model(&models.Node{}).Where("force_deliver = ?", true).Pluck("id", &forced)
-		skip := make(map[int]bool, len(forced))
-		for _, id := range forced {
-			skip[id] = true
-		}
-		// 每个节点最近一次健康事件为 down，说明已连续多次检测无效
-		var downs []models.NodeHealthEvent
-		models.DB.Where("id IN (?)", models.DB.Model(&models.NodeHealthEvent{}).Select("MAX(id)").Group("node_id")).
-			Where("type = ?", "down").Find(&downs)
-		for _, e := range downs {
-			if skip[e.NodeID] {
-				continue
-			}
-			add(e.NodeID, deliveryBlock{Kind: blockHealth, Reason: "连续多次检测无效"})
-		}
-	}
 	return blocks
 }
 
@@ -177,28 +155,16 @@ type excludedNode struct {
 	deliveryBlock
 }
 
-// filterDeliverable 去掉暂不下发的节点。只因“检测无效”被拦下的节点在全部被拦时仍保留：
-// 那多半是面板自己的网络出了问题，不应让订阅变空。
+// filterDeliverable 去掉手动关闭下发、手动暂停或服务器流量超限的节点。
 func filterDeliverable(nodes []models.Node, blocks map[int]deliveryBlock) ([]models.Node, []excludedNode) {
 	kept := make([]models.Node, 0, len(nodes))
 	excluded := []excludedNode{}
-	healthOnly := []models.Node{}
 	for _, n := range nodes {
-		b, ok := blocks[n.ID]
-		switch {
-		case !ok:
-			kept = append(kept, n)
-		case b.Kind == blockHealth:
-			healthOnly = append(healthOnly, n)
-		default:
+		if b, ok := blocks[n.ID]; ok {
 			excluded = append(excluded, excludedNode{ID: n.ID, Name: n.Name, deliveryBlock: b})
+			continue
 		}
-	}
-	if len(kept) == 0 && len(healthOnly) > 0 {
-		return append(kept, healthOnly...), excluded
-	}
-	for _, n := range healthOnly {
-		excluded = append(excluded, excludedNode{ID: n.ID, Name: n.Name, deliveryBlock: blocks[n.ID]})
+		kept = append(kept, n)
 	}
 	return kept, excluded
 }

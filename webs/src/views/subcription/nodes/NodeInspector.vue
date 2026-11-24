@@ -340,9 +340,6 @@ function openAction(command: string, selected: OverviewItem) {
                 @click="openAction('pause', node)"
                 >暂停下发</UiButton
               >
-              <UiButton :disabled="busy" @click="nodeCommand('deliver', node)">{{
-                node.forceDeliver ? "恢复按检测结果下发" : "设置始终下发"
-              }}</UiButton>
               <UiButton @click="openAction('temp', node)">临时订阅</UiButton>
             </div>
           </div>
