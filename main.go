@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -18,9 +18,11 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.1"
+const agentVersion = "1.2"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -28,6 +30,7 @@ type probeNode struct {
 	Host   string `json:"host"`
 	Port   int    `json:"port"`
 	Scheme string `json:"scheme,omitempty"`
+	SNI    string `json:"sni,omitempty"`
 }
 
 type waitEnvelope struct {
@@ -125,7 +128,13 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	client := &http.Client{Timeout: 40 * time.Second}
+	// Proxy: nil explicitly ignores HTTP/SOCKS system proxy settings.
+	client := &http.Client{
+		Timeout: 40 * time.Second,
+		Transport: &http.Transport{
+			Proxy: nil,
+		},
+	}
 	log.SetFlags(log.Ltime)
 
 	if *once {
@@ -338,9 +347,32 @@ func probeOne(ctx context.Context, target probeNode, timeout time.Duration) prob
 
 func probeTCP(ctx context.Context, target probeNode, timeout time.Duration) probeResult {
 	addr := net.JoinHostPort(target.Host, fmt.Sprintf("%d", target.Port))
-	dialer := &net.Dialer{Timeout: timeout}
+	wantV6 := targetIsIPv6(target.Host)
+	var iface *physicalInterface
+	if !isLoopbackHost(target.Host) {
+		iface = findPhysicalInterface(wantV6)
+	}
+	dialer := &net.Dialer{
+		Timeout: timeout,
+		Control: func(network, _ string, c syscall.RawConn) error {
+			return bindSocketToInterface(network, c, iface)
+		},
+	}
+	if iface != nil {
+		if wantV6 && iface.IPv6 != nil {
+			dialer.LocalAddr = &net.TCPAddr{IP: iface.IPv6}
+		} else if !wantV6 && iface.IPv4 != nil {
+			dialer.LocalAddr = &net.TCPAddr{IP: iface.IPv4}
+		}
+	}
+	network := "tcp"
+	if wantV6 {
+		network = "tcp6"
+	} else if iface != nil && iface.IPv4 != nil {
+		network = "tcp4"
+	}
 	start := time.Now()
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
+	conn, err := dialer.DialContext(ctx, network, addr)
 	if err != nil {
 		return probeResult{NodeID: target.ID, Kind: "tcp", Success: false, RTT: -1, Error: shortErr(err)}
 	}
@@ -350,46 +382,71 @@ func probeTCP(ctx context.Context, target probeNode, timeout time.Duration) prob
 	return probeResult{NodeID: target.ID, Kind: "tcp", Success: true, RTT: rtt, IPVersion: ipVer}
 }
 
-func buildQUICVersionProbe() []byte {
-	pkt := make([]byte, 1200)
-	pkt[0] = 0xc0
-	pkt[1], pkt[2], pkt[3], pkt[4] = 0x0a, 0x0a, 0x0a, 0x0a
-	pkt[5] = 8
-	_, _ = rand.Read(pkt[6:14])
-	pkt[14] = 8
-	_, _ = rand.Read(pkt[15:23])
-	return pkt
-}
-
 func probeQUIC(ctx context.Context, target probeNode, timeout time.Duration) probeResult {
-	addr := net.JoinHostPort(target.Host, fmt.Sprintf("%d", target.Port))
-	dialer := &net.Dialer{Timeout: timeout}
-	conn, err := dialer.DialContext(ctx, "udp", addr)
+	wantV6 := targetIsIPv6(target.Host)
+	var iface *physicalInterface
+	if !isLoopbackHost(target.Host) {
+		iface = findPhysicalInterface(wantV6)
+	}
+	udpNet := "udp4"
+	localBind := "0.0.0.0:0"
+	if wantV6 {
+		udpNet = "udp6"
+		localBind = "[::]:0"
+		if iface != nil && iface.IPv6 != nil {
+			localBind = net.JoinHostPort(iface.IPv6.String(), "0")
+		}
+	} else if iface != nil && iface.IPv4 != nil {
+		localBind = net.JoinHostPort(iface.IPv4.String(), "0")
+	}
+
+	resolveCtx, cancelResolve := context.WithTimeout(ctx, timeout)
+	defer cancelResolve()
+	remoteAddr, err := net.ResolveUDPAddr(udpNet, net.JoinHostPort(target.Host, fmt.Sprintf("%d", target.Port)))
 	if err != nil {
 		return probeResult{NodeID: target.ID, Kind: "quic", Success: false, RTT: -1, Error: shortErr(err)}
 	}
-	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(timeout))
-	pkt := buildQUICVersionProbe()
-	start := time.Now()
-	if _, err := conn.Write(pkt); err != nil {
+
+	lc := net.ListenConfig{
+		Control: func(network, _ string, c syscall.RawConn) error {
+			return bindSocketToInterface(network, c, iface)
+		},
+	}
+	pc, err := lc.ListenPacket(resolveCtx, udpNet, localBind)
+	if err != nil {
 		return probeResult{NodeID: target.ID, Kind: "quic", Success: false, RTT: -1, Error: shortErr(err)}
 	}
-	buf := make([]byte, 1500)
-	n, err := conn.Read(buf)
-	if err != nil || n < 5 {
-		if err == nil {
-			err = errors.New("无有效 QUIC 响应")
-		}
+	defer pc.Close()
+
+	sni := strings.TrimSpace(target.SNI)
+	if sni == "" {
+		sni = target.Host
+	}
+	tlsConf := &tls.Config{
+		InsecureSkipVerify: true,
+		ServerName:         sni,
+		NextProtos:         []string{"h3"},
+	}
+	quicConf := &quic.Config{
+		HandshakeIdleTimeout: timeout,
+		MaxIdleTimeout:       timeout,
+	}
+
+	dialCtx, cancelDial := context.WithTimeout(ctx, timeout)
+	defer cancelDial()
+	start := time.Now()
+	conn, err := quic.Dial(dialCtx, pc, remoteAddr, tlsConf, quicConf)
+	if err != nil {
 		return probeResult{NodeID: target.ID, Kind: "quic", Success: false, RTT: -1, Error: shortErr(err)}
 	}
 	rtt := max(int(time.Since(start).Milliseconds()), 1)
+	_ = conn.CloseWithError(0, "")
 	return probeResult{
 		NodeID:    target.ID,
 		Kind:      "quic",
 		Success:   true,
 		RTT:       rtt,
-		IPVersion: ipVersionOf(conn.RemoteAddr()),
+		IPVersion: ipVersionOf(remoteAddr),
 	}
 }
 
