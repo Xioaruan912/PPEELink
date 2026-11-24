@@ -292,7 +292,17 @@ func ProxyServerLogs(c *gin.Context) {
 		c.JSON(500, gin.H{"code": "50000", "msg": res.Error})
 		return
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"logs": res.Output, "source": source}, "msg": "ok"})
+	entries, summary := parseStructuredLogs(res.Output, source)
+	c.JSON(200, gin.H{
+		"code": "00000",
+		"data": gin.H{
+			"logs":    res.Output,
+			"source":  source,
+			"entries": entries,
+			"summary": summary,
+		},
+		"msg": "ok",
+	})
 }
 
 // ProxyServerCheckPort 保存入站前预检服务器端口是否已被占用。

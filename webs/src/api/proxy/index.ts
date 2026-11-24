@@ -200,13 +200,45 @@ export const upgradeProxyCore = (id: number, version = "") =>
     data: { id, version },
     timeout: 100000,
   });
+export interface ParsedLogEntry {
+  id: number;
+  time: string;
+  fullTime: string;
+  level: "error" | "warn" | "info";
+  module: string;
+  message: string;
+  hint?: string;
+  count: number;
+  raw: string;
+}
+
+export interface LogDiagnosticFinding {
+  level: "error" | "warn" | "ok";
+  title: string;
+  detail: string;
+  count: number;
+}
+
+export interface ParsedLogSummary {
+  total: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+  findings: LogDiagnosticFinding[];
+}
+
 export const getProxyServerLogs = (params: {
   id: number;
   source?: "xray" | "agent";
   filter?: string;
   lines?: number;
 }) =>
-  request<{ logs: string; source: string }>({
+  request<{
+    logs: string;
+    source: string;
+    entries?: ParsedLogEntry[];
+    summary?: ParsedLogSummary;
+  }>({
     url: "/api/v1/proxy/servers/logs",
     method: "get",
     params,
