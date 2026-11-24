@@ -381,6 +381,62 @@ const usageRatio = (a: ProxyAccount) =>
 
 // ---- 原生解锁矩阵 ----
 const checkingUnlock = ref(false);
+const batchUpdatingAgents = ref(false);
+const updatableAgentServers = computed(() =>
+  servers.value.filter((s) => {
+    if (s.kind !== "agent" || s.removing || !s.online || s.agentUpdateRequested)
+      return false;
+    if (s.allowAutoUpdate === false) return false;
+    if (s.latestAgentVersion && s.agentVersion) {
+      return s.agentVersion.replace(/^v/i, "") !== s.latestAgentVersion.replace(/^v/i, "");
+    }
+    return true;
+  })
+);
+async function updateAllAgents() {
+  const targets = [...updatableAgentServers.value];
+  if (!targets.length || batchUpdatingAgents.value) return;
+  const targetVer = targets[0]?.latestAgentVersion;
+  try {
+    await ElMessageBox.confirm(
+      `将向 ${targets.length} 台在线代理服务器下发 Agent 更新${targetVer ? `（至 v${targetVer}）` : ""}，更新期间节点可能短暂重连。`,
+      "一键更新全部 Agent",
+      {
+        type: "warning",
+        confirmButtonText: "立即更新全部",
+        cancelButtonText: "取消",
+      }
+    );
+  } catch {
+    return;
+  }
+  batchUpdatingAgents.value = true;
+  try {
+    let okCount = 0;
+    let firstErr = "";
+    await Promise.allSettled(
+      targets.map(async (s) => {
+        try {
+          await requestAgentUpdate(s.id, false);
+          okCount++;
+        } catch (err: any) {
+          if (!firstErr) firstErr = err?.message || "下发失败";
+        }
+      })
+    );
+    if (okCount === targets.length) {
+      ElMessage.success(`已向 ${okCount} 台服务器下发 Agent 更新`);
+    } else if (okCount > 0) {
+      ElMessage.warning(`已下发 ${okCount}/${targets.length} 台（${firstErr}）`);
+    } else {
+      ElMessage.error(firstErr || "批量更新下发失败");
+    }
+    await load(true);
+  } finally {
+    batchUpdatingAgents.value = false;
+  }
+}
+
 const shortUnlockLabel: Record<string, string> = {
   chatgpt: "GPT",
   claude: "Claude",
@@ -409,9 +465,18 @@ async function checkServerUnlock(serverId?: number) {
     const { data } = await runProxyServerUnlockCheck(
       serverId ? { serverId } : { all: true }
     );
-    ElMessage.success(
-      `解锁检测完成：${data?.okCount || 0}/${data?.total || 0} 台已更新`
-    );
+    const okCount = data?.okCount || 0;
+    const total = data?.total || 0;
+    if (okCount === 0 && total > 0) {
+      const firstErr =
+        data?.results?.find((r) => !r.ok && r.error)?.error ||
+        "请先更新服务器 Agent 至最新版本";
+      ElMessage.warning(`0/${total} 台检测成功：${firstErr}`);
+    } else if (okCount < total) {
+      ElMessage.warning(`解锁检测完成：${okCount}/${total} 台成功`);
+    } else {
+      ElMessage.success(`解锁检测完成：${okCount}/${total} 台已更新`);
+    }
     await load(true);
   } catch (err: any) {
     ElMessage.error(err?.message || "解锁检测失败");
@@ -449,6 +514,14 @@ async function checkServerUnlock(serverId?: number) {
       <div class="masthead-actions">
         <UiButton variant="primary" :icon="IconPlus" @click="openServer()">
           添加代理节点
+        </UiButton>
+        <UiButton
+          v-if="updatableAgentServers.length"
+          variant="ghost"
+          :loading="batchUpdatingAgents"
+          @click="updateAllAgents()"
+        >
+          更新全部 Agent ({{ updatableAgentServers.length }})
         </UiButton>
         <UiButton
           v-if="servers.length"

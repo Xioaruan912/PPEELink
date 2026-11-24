@@ -16,6 +16,7 @@ export interface Probe {
   allowClash?: boolean;
   concurrency?: number;
   clashApi?: string;
+  hasClashSecret?: boolean;
   clashGroup?: string;
   clashNow?: string;
   online: boolean;

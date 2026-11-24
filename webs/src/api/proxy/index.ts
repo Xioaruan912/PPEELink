@@ -69,6 +69,7 @@ export interface ProxyServer {
   enabled: boolean;
   xrayVersion: string;
   agentVersion: string;
+  latestAgentVersion?: string;
   proxyFeatures?: number;
   unlock?: ServerUnlockReport;
   unlockCheckedAt?: string | null;

@@ -489,6 +489,9 @@ func ProbePushConfig(c *gin.Context) {
 	if strings.TrimSpace(req.ClashAPI) != "" {
 		dbUpdates["clash_api"] = strings.TrimSpace(req.ClashAPI)
 	}
+	if strings.TrimSpace(req.ClashSecret) != "" {
+		dbUpdates["clash_secret"] = strings.TrimSpace(req.ClashSecret)
+	}
 	if len(dbUpdates) > 0 && len(probes) > 0 {
 		ids := make([]uint, 0, len(probes))
 		for _, p := range probes {

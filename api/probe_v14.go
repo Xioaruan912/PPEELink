@@ -130,13 +130,7 @@ func ProbeUnlock(c *gin.Context) {
 		return
 	}
 
-	jobID, _, ok := probeHub.dispatchJob(target.ID, queuedProbeJob{Action: "unlock"}, true)
-	if !ok {
-		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 繁忙，请稍后再试"})
-		return
-	}
-	defer probeHub.cleanupDone(jobID)
-
+	jobID := newProbeJobID()
 	resCh := make(chan userUnlockReport, 1)
 	unlockResultsHub.mu.Lock()
 	unlockResultsHub.waiters[jobID] = resCh
@@ -146,6 +140,13 @@ func ProbeUnlock(c *gin.Context) {
 		delete(unlockResultsHub.waiters, jobID)
 		unlockResultsHub.mu.Unlock()
 	}()
+
+	_, _, ok := probeHub.dispatchJob(target.ID, queuedProbeJob{ID: jobID, Action: "unlock"}, true)
+	if !ok {
+		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 繁忙，请稍后再试"})
+		return
+	}
+	defer probeHub.cleanupDone(jobID)
 
 	select {
 	case res := <-resCh:
@@ -221,16 +222,7 @@ func ProbeSpeedtest(c *gin.Context) {
 		return
 	}
 
-	jobID, _, ok := probeHub.dispatchJob(target.ID, queuedProbeJob{
-		Action:    "speedtest",
-		SpeedMode: mode,
-	}, true)
-	if !ok {
-		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 繁忙，请稍后再试"})
-		return
-	}
-	defer probeHub.cleanupDone(jobID)
-
+	jobID := newProbeJobID()
 	resCh := make(chan userSpeedtestReport, 1)
 	speedtestResultsHub.mu.Lock()
 	speedtestResultsHub.waiters[jobID] = resCh
@@ -240,6 +232,17 @@ func ProbeSpeedtest(c *gin.Context) {
 		delete(speedtestResultsHub.waiters, jobID)
 		speedtestResultsHub.mu.Unlock()
 	}()
+
+	_, _, ok := probeHub.dispatchJob(target.ID, queuedProbeJob{
+		ID:        jobID,
+		Action:    "speedtest",
+		SpeedMode: mode,
+	}, true)
+	if !ok {
+		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 繁忙，请稍后再试"})
+		return
+	}
+	defer probeHub.cleanupDone(jobID)
 
 	select {
 	case res := <-resCh:

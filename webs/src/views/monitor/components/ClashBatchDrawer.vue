@@ -5,6 +5,7 @@ import { Refresh, VideoPlay } from "@element-plus/icons-vue";
 import { UiButton, UiDrawer } from "@/ui";
 import {
   getProbeClashStatus,
+  pushProbeConfig,
   runProbeClashBatchTest,
   switchProbeClashNode,
   type ClashNodeTestItem,
@@ -36,6 +37,21 @@ const batchRunning = ref(false);
 const errorMsg = ref("");
 const status = ref<ClashStatus | null>(null);
 const results = ref<ClashNodeTestItem[]>([]);
+const showConfig = ref(false);
+const clashApiInput = ref("http://127.0.0.1:9090");
+const clashSecretInput = ref("");
+const savingConfig = ref(false);
+
+const activeProbe = computed(() =>
+  props.probes.find((p) => p.id === selectedProbeId.value)
+);
+
+function syncClashInputs() {
+  clashApiInput.value =
+    status.value?.controller ||
+    activeProbe.value?.clashApi ||
+    "http://127.0.0.1:9090";
+}
 
 async function fetchStatus() {
   if (!onlineProbes.value.length) return;
@@ -44,13 +60,48 @@ async function fetchStatus() {
   try {
     const res = await getProbeClashStatus(selectedProbeId.value);
     status.value = res.data?.status || { connected: false };
+    syncClashInputs();
     if (!status.value.connected) {
-      errorMsg.value = "未检测到本机 Clash / Mihomo 外部控制接口（9090 / 9097）";
+      errorMsg.value =
+        status.value.error ||
+        "未检测到本机 Clash / Mihomo 外部控制接口（9090 / 9097），如已设置访问密钥请在下方填写";
+      showConfig.value = true;
+    } else {
+      showConfig.value = false;
     }
   } catch (e: any) {
     errorMsg.value = e?.response?.data?.msg || e?.message || "读取 Clash 状态失败";
+    showConfig.value = true;
   } finally {
     loadingStatus.value = false;
+  }
+}
+
+async function saveAndReconnect() {
+  if (!selectedProbeId.value || savingConfig.value) return;
+  let api = clashApiInput.value.trim();
+  if (api && !api.startsWith("http://") && !api.startsWith("https://")) {
+    api = "http://" + api;
+    clashApiInput.value = api;
+  }
+  savingConfig.value = true;
+  try {
+    const { data } = await pushProbeConfig({
+      probeIds: [selectedProbeId.value],
+      clashApi: api,
+      clashSecret: clashSecretInput.value.trim(),
+    });
+    if ((data?.okCount || 0) > 0) {
+      ElMessage.success("Clash 连接参数已下发，正在重连…");
+    } else {
+      ElMessage.warning("参数已保存，请先将用户 Agent 升级至最新版本后重试");
+    }
+    emit("refresh");
+    await fetchStatus();
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || e?.message || "保存失败");
+  } finally {
+    savingConfig.value = false;
   }
 }
 
@@ -151,6 +202,13 @@ watch(
         <div class="bar-right">
           <UiButton
             variant="ghost"
+            :disabled="batchRunning"
+            @click="showConfig = !showConfig"
+          >
+            连接设置
+          </UiButton>
+          <UiButton
+            variant="ghost"
             :icon="Refresh"
             :loading="loadingStatus"
             :disabled="batchRunning"
@@ -171,6 +229,36 @@ watch(
       </header>
 
       <div v-if="errorMsg" class="err-strip">{{ errorMsg }}</div>
+
+      <section v-if="showConfig" class="clash-cfg-card">
+        <div class="clash-cfg-fields">
+          <el-input
+            v-model="clashApiInput"
+            placeholder="http://127.0.0.1:9090"
+            clearable
+          />
+          <el-input
+            v-model="clashSecretInput"
+            type="password"
+            show-password
+            :placeholder="
+              activeProbe?.hasClashSecret
+                ? 'API 访问密钥（已配置，留空保持不变）'
+                : 'API 访问密钥（如有）'
+            "
+            clearable
+            @keyup.enter="saveAndReconnect"
+          />
+          <UiButton
+            variant="primary"
+            size="sm"
+            :loading="savingConfig"
+            @click="saveAndReconnect"
+          >
+            保存并重连
+          </UiButton>
+        </div>
+      </section>
 
       <!-- Quick Node Selector Rail -->
       <section v-if="status?.connected && status.proxies?.length" class="node-rail">
@@ -304,6 +392,26 @@ watch(
   background: color-mix(in srgb, var(--c-bad) 8%, var(--c-surface));
   color: var(--c-bad);
   font-size: 12.5px;
+}
+
+.clash-cfg-card {
+  padding: 16px 18px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface-2);
+}
+
+.clash-cfg-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .clash-cfg-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .node-rail {

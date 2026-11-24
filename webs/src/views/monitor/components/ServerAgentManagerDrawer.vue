@@ -3,7 +3,7 @@ import { computed, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Refresh } from "@element-plus/icons-vue";
 import { EmptyState, StatusDot, UiButton, UiDrawer, UiTag } from "@/ui";
-import type { MonitorItem } from "@/api/monitor";
+import { updateMonitorAgent, type MonitorItem } from "@/api/monitor";
 import {
   listProxyServers,
   migrateProxyServerURL,
@@ -154,12 +154,30 @@ function agentState(item: MonitorItem) {
 }
 
 async function upgradeAll() {
-  if (!updatableItems.value.length || batchUpgrading.value) return;
+  const targets = [...updatableItems.value];
+  if (!targets.length || batchUpgrading.value) return;
   batchUpgrading.value = true;
   try {
-    for (const item of updatableItems.value) {
-      emit("upgrade", item, false);
+    let okCount = 0;
+    let firstErr = "";
+    await Promise.allSettled(
+      targets.map(async (item) => {
+        try {
+          await updateMonitorAgent(item.id, false);
+          okCount++;
+        } catch (err: any) {
+          if (!firstErr) firstErr = err?.message || "请求失败";
+        }
+      })
+    );
+    if (okCount === targets.length) {
+      ElMessage.success(`已向 ${okCount} 台服务器下发 Agent 更新`);
+    } else if (okCount > 0) {
+      ElMessage.warning(`已下发 ${okCount}/${targets.length} 台（${firstErr}）`);
+    } else {
+      ElMessage.error(firstErr || "批量升级失败");
     }
+    emit("refresh");
   } finally {
     batchUpgrading.value = false;
   }
@@ -243,9 +261,18 @@ async function handleUnlockCheck(serverId?: number) {
     const { data } = await runProxyServerUnlockCheck(
       serverId ? { serverId } : { all: true }
     );
-    ElMessage.success(
-      `解锁检测完成：${data?.okCount || 0}/${data?.total || 0} 台已更新`
-    );
+    const okCount = data?.okCount || 0;
+    const total = data?.total || 0;
+    if (okCount === 0 && total > 0) {
+      const firstErr =
+        data?.results?.find((r) => !r.ok && r.error)?.error ||
+        "请先升级服务器 Agent 至最新版本";
+      ElMessage.warning(`0/${total} 台检测成功：${firstErr}`);
+    } else if (okCount < total) {
+      ElMessage.warning(`解锁检测完成：${okCount}/${total} 台成功`);
+    } else {
+      ElMessage.success(`解锁检测完成：${okCount}/${total} 台已更新`);
+    }
     await loadProxyState();
   } catch (err: any) {
     ElMessage.error(err?.message || "解锁检测失败");

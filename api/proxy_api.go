@@ -29,8 +29,9 @@ type serverView struct {
 	Users     int                   `json:"users"`
 	Quota     serverQuotaState      `json:"quota"`
 	// AgentHash 用于校验程序完整性；展示版本使用实际上报的 AgentVersion。
-	AgentHash string                 `json:"agentHash"`
-	Unlock    *serverOpsUnlockReport `json:"unlock,omitempty"`
+	AgentHash          string                 `json:"agentHash"`
+	LatestAgentVersion string                 `json:"latestAgentVersion,omitempty"`
+	Unlock             *serverOpsUnlockReport `json:"unlock,omitempty"`
 }
 
 // ProxyServerList 服务器、入站与今日流量。agent 超过 3 分钟没回报视为离线。
@@ -40,10 +41,14 @@ func ProxyServerList(c *gin.Context) {
 		c.JSON(500, gin.H{"code": "50000", "msg": "读取服务器失败"})
 		return
 	}
+	latestVer := ""
+	if m, err := readAgentRelease(); err == nil {
+		latestVer = m.Version
+	}
 	day := time.Now().Format("2006-01-02")
 	views := make([]serverView, 0, len(servers))
 	for _, s := range servers {
-		v := serverView{ProxyServer: s, Inbounds: []models.ProxyInbound{}}
+		v := serverView{ProxyServer: s, Inbounds: []models.ProxyInbound{}, LatestAgentVersion: latestVer}
 		if s.UnlockJSON != "" {
 			var rep serverOpsUnlockReport
 			if json.Unmarshal([]byte(s.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
@@ -212,6 +217,10 @@ func ProxyServerUpdateAgent(c *gin.Context) {
 	}
 	requested := c.Query("cancel") != "1"
 	if requested {
+		if server.AllowAutoUpdate != nil && !*server.AllowAutoUpdate {
+			c.JSON(403, gin.H{"code": "40300", "msg": "该服务器已关闭远程自更新权限"})
+			return
+		}
 		if _, err := loadAgentArtifact(server.Arch); err != nil {
 			c.JSON(503, gin.H{"code": "50300", "msg": err.Error()})
 			return

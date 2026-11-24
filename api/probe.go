@@ -23,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.8"
+const latestUserAgentVersion = "1.9"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -56,15 +56,17 @@ type userAgentConfigPatchDTO struct {
 }
 
 type queuedProbeJob struct {
-	ID         string
-	Action     string
-	TargetHost string
-	SpeedMode  string
-	ClashGroup string
-	ClashNode  string
-	ClashNodes []string
-	Config     *userAgentConfigPatchDTO
-	Nodes      []probeNode
+	ID          string
+	Action      string
+	TargetHost  string
+	SpeedMode   string
+	ClashAPI    string
+	ClashSecret string
+	ClashGroup  string
+	ClashNode   string
+	ClashNodes  []string
+	Config      *userAgentConfigPatchDTO
+	Nodes       []probeNode
 }
 
 type jobOutcome struct {
@@ -116,10 +118,17 @@ func (h *userProbeHub) dispatchAction(probeID uint, action string, nodes []probe
 	return h.dispatchJob(probeID, queuedProbeJob{Action: action, Nodes: nodes}, allowQueue)
 }
 
-func (h *userProbeHub) dispatchJob(probeID uint, job queuedProbeJob, allowQueue bool) (string, chan jobOutcome, bool) {
+func newProbeJobID() string {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
-	jobID := hex.EncodeToString(b)
+	return hex.EncodeToString(b)
+}
+
+func (h *userProbeHub) dispatchJob(probeID uint, job queuedProbeJob, allowQueue bool) (string, chan jobOutcome, bool) {
+	jobID := job.ID
+	if jobID == "" {
+		jobID = newProbeJobID()
+	}
 	doneCh := make(chan jobOutcome, 1)
 	job.ID = jobID
 
@@ -316,6 +325,7 @@ func ProbeList(c *gin.Context) {
 			"allowClash":     p.AllowClash == nil || *p.AllowClash,
 			"concurrency":    p.Concurrency,
 			"clashApi":       p.ClashAPI,
+			"hasClashSecret": p.ClashSecret != "",
 			"clashGroup":     cGroup, "clashNow": cNow,
 			"online": online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
 			"latestVersion":   latestUserAgentVersion,
@@ -563,15 +573,17 @@ func ProbeWait(c *gin.Context) {
 			act = "probe"
 		}
 		c.JSON(200, gin.H{"code": "00000", "data": gin.H{
-			"jobId":      job.ID,
-			"action":     act,
-			"targetHost": job.TargetHost,
-			"speedMode":  job.SpeedMode,
-			"clashGroup": job.ClashGroup,
-			"clashNode":  job.ClashNode,
-			"clashNodes": job.ClashNodes,
-			"config":     job.Config,
-			"nodes":      job.Nodes,
+			"jobId":       job.ID,
+			"action":      act,
+			"targetHost":  job.TargetHost,
+			"speedMode":   job.SpeedMode,
+			"clashApi":    job.ClashAPI,
+			"clashSecret": job.ClashSecret,
+			"clashGroup":  job.ClashGroup,
+			"clashNode":   job.ClashNode,
+			"clashNodes":  job.ClashNodes,
+			"config":      job.Config,
+			"nodes":       job.Nodes,
 		}, "msg": "dispatched"})
 	case <-timer.C:
 		models.DB.Model(probe).Update("last_seen_at", time.Now())

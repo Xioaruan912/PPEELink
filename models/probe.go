@@ -25,6 +25,7 @@ type Probe struct {
 	AllowClash     *bool      `json:"allowClash,omitempty"`
 	Concurrency    int        `json:"concurrency,omitempty"`
 	ClashAPI       string     `gorm:"size:128" json:"clashApi,omitempty"`
+	ClashSecret    string     `gorm:"size:128" json:"-"`
 	LastSeenAt     *time.Time `json:"lastSeenAt"`
 	Version        string     `gorm:"size:32" json:"version"`
 }

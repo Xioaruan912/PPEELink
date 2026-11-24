@@ -102,13 +102,16 @@ func dispatchClashJob(c *gin.Context, probeID uint, job queuedProbeJob, timeout 
 		c.JSON(400, gin.H{"code": "40000", "msg": "没有在线的用户 Agent"})
 		return nil, false
 	}
-	jobID, _, ok := probeHub.dispatchJob(target.ID, job, true)
-	if !ok {
-		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 繁忙，请稍后再试"})
-		return nil, false
+	if job.ClashAPI == "" && target.ClashAPI != "" {
+		job.ClashAPI = target.ClashAPI
 	}
-	defer probeHub.cleanupDone(jobID)
+	if job.ClashSecret == "" && target.ClashSecret != "" {
+		job.ClashSecret = target.ClashSecret
+	}
+	jobID := newProbeJobID()
+	job.ID = jobID
 
+	// Register waiter BEFORE waking the probe so fast responses can never race past waiters[jobID].
 	resCh := make(chan clashReportDTO, 1)
 	clashResultsHub.mu.Lock()
 	clashResultsHub.waiters[jobID] = resCh
@@ -119,6 +122,13 @@ func dispatchClashJob(c *gin.Context, probeID uint, job queuedProbeJob, timeout 
 		clashResultsHub.mu.Unlock()
 	}()
 
+	_, _, ok := probeHub.dispatchJob(target.ID, job, true)
+	if !ok {
+		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 繁忙，请稍后再试"})
+		return nil, false
+	}
+	defer probeHub.cleanupDone(jobID)
+
 	select {
 	case res := <-resCh:
 		res.ProbeName = target.Name
@@ -127,7 +137,7 @@ func dispatchClashJob(c *gin.Context, probeID uint, job queuedProbeJob, timeout 
 		}
 		return &res, true
 	case <-time.After(timeout):
-		c.JSON(504, gin.H{"code": "50400", "msg": "Clash 指令超时，请确认本机用户 Agent 已升级至 v1.7"})
+		c.JSON(504, gin.H{"code": "50400", "msg": "Clash 指令超时，请确认设备在线并已升级至 v1.9"})
 		return nil, false
 	case <-c.Request.Context().Done():
 		return nil, false
