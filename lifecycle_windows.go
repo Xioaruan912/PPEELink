@@ -11,7 +11,11 @@ import (
 	"syscall"
 )
 
-const createNoWindow = 0x08000000
+const (
+	detachedProcess       = 0x00000008
+	createNewProcessGroup = 0x00000200
+	createNoWindow        = 0x08000000
+)
 
 func hideWindow(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -22,7 +26,13 @@ func hideWindow(cmd *exec.Cmd) {
 
 func spawnDetached(exe string, args ...string) error {
 	cmd := exec.Command(exe, args...)
-	hideWindow(cmd)
+	cmd.Stdin = nil
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow:    true,
+		CreationFlags: createNoWindow | createNewProcessGroup | detachedProcess,
+	}
 	return cmd.Start()
 }
 

@@ -116,7 +116,17 @@ func main() {
 			fmt.Fprintf(os.Stderr, "安装失败: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("用户 Agent 已安装并在后台启动，可安全关闭此窗口。")
+		dir, _ := installDir()
+		cfgFile, _ := configPath()
+		fmt.Println("==========================================")
+		fmt.Printf("  PPEELink 用户 Agent v%s 安装成功\n", agentVersion)
+		fmt.Println("==========================================")
+		fmt.Printf("  运行状态 : 已在后台静默启动（开机自启）\n")
+		fmt.Printf("  安装目录 : %s\n", dir)
+		fmt.Printf("  配置文件 : %s\n", cfgFile)
+		fmt.Printf("  面板地址 : %s\n", panelURL)
+		fmt.Println("  管理方式 : 可在面板「用户 Agent」页面随时发起实测、远程更新或无痕卸载")
+		fmt.Println("==========================================")
 		return
 	}
 
