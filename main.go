@@ -24,7 +24,7 @@ import (
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.5"
+const agentVersion = "1.6"
 
 type probeNode struct {
 	ID     int    `json:"id"`

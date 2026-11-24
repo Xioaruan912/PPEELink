@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -94,19 +93,11 @@ func newActiveProxyHTTPClient(timeout time.Duration) *http.Client {
 	}
 }
 
-// newDirectPhysicalHTTPClient builds Channel A: binds physical NIC and sets
-// Proxy: nil so requests completely bypass TUN and System Proxy.
+// newDirectPhysicalHTTPClient builds Channel A: binds physical NIC, uses a
+// physical-NIC-bound DNS resolver (bypassing Clash fake-ip), and disables proxy.
 func newDirectPhysicalHTTPClient(timeout time.Duration) *http.Client {
 	iface := findPhysicalInterface(false)
-	dialer := &net.Dialer{
-		Timeout: 8 * time.Second,
-		Control: func(network, _ string, c syscall.RawConn) error {
-			return bindSocketToInterface(network, c, iface)
-		},
-	}
-	if iface != nil && iface.IPv4 != nil {
-		dialer.LocalAddr = &net.TCPAddr{IP: iface.IPv4}
-	}
+	dialer := newPhysicalDialer(iface, 8*time.Second)
 	return &http.Client{
 		Timeout: timeout,
 		Transport: &http.Transport{

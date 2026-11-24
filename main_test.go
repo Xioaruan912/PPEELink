@@ -38,3 +38,16 @@ func TestProbeTCPReachable(t *testing.T) {
 		t.Fatalf("unexpected TCP probe result: %+v", res)
 	}
 }
+
+func TestFakeIPFilter(t *testing.T) {
+	for _, s := range []string{"198.18.0.15", "198.19.255.1", "28.0.0.42"} {
+		if !isFakeOrReservedIP(net.ParseIP(s)) {
+			t.Fatalf("expected %s to be detected as fake-ip", s)
+		}
+	}
+	for _, s := range []string{"211.80.216.5", "119.29.29.29", "179.255.148.213"} {
+		if isFakeOrReservedIP(net.ParseIP(s)) {
+			t.Fatalf("expected %s to be treated as real public IP", s)
+		}
+	}
+}

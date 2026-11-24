@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"strings"
+	"time"
 )
 
 type traceHop struct {
@@ -25,12 +26,23 @@ func resolveTraceTargetIP(host string) (net.IP, error) {
 	if ip := net.ParseIP(clean); ip != nil {
 		return ip, nil
 	}
+	// Resolve via physical NIC DNS first so Clash/Mihomo fake-ip never hijacks traceroute targets.
+	iface := findPhysicalInterface(false)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if ips, err := newPhysicalResolver(iface).LookupIP(ctx, "ip4", clean); err == nil {
+		for _, a := range ips {
+			if v4 := a.To4(); v4 != nil && !isFakeOrReservedIP(v4) {
+				return v4, nil
+			}
+		}
+	}
 	addrs, err := net.LookupIP(clean)
 	if err != nil || len(addrs) == 0 {
 		return nil, err
 	}
 	for _, a := range addrs {
-		if v4 := a.To4(); v4 != nil {
+		if v4 := a.To4(); v4 != nil && !isFakeOrReservedIP(v4) {
 			return v4, nil
 		}
 	}

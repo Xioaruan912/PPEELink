@@ -17,17 +17,18 @@ type speedSample struct {
 }
 
 type speedChannelResult struct {
-	Mode          string        `json:"mode"` // proxy | direct
-	DownloadMbps  float64       `json:"downloadMbps"`
-	PeakMbps      float64       `json:"peakMbps"`
-	UploadMbps    float64       `json:"uploadMbps"`
-	TTFBMs        int           `json:"ttfbMs"`
-	JitterMs      int           `json:"jitterMs"`
-	BytesDown     int64         `json:"bytesDown"`
-	BytesUp       int64         `json:"bytesUp"`
-	DurationMs    int           `json:"durationMs"`
-	Samples       []speedSample `json:"samples"`
-	Error         string        `json:"error,omitempty"`
+	Mode         string        `json:"mode"`             // proxy | direct
+	Target       string        `json:"target,omitempty"` // human-readable speedtest server label
+	DownloadMbps float64       `json:"downloadMbps"`
+	PeakMbps     float64       `json:"peakMbps"`
+	UploadMbps   float64       `json:"uploadMbps"`
+	TTFBMs       int           `json:"ttfbMs"`
+	JitterMs     int           `json:"jitterMs"`
+	BytesDown    int64         `json:"bytesDown"`
+	BytesUp      int64         `json:"bytesUp"`
+	DurationMs   int           `json:"durationMs"`
+	Samples      []speedSample `json:"samples"`
+	Error        string        `json:"error,omitempty"`
 }
 
 type speedtestReportPayload struct {
@@ -38,6 +39,86 @@ type speedtestReportPayload struct {
 	Error  string              `json:"error,omitempty"`
 }
 
+type speedTarget struct {
+	Label    string
+	ProbeURL string
+	DownURL  string
+	UpURL    string
+}
+
+var (
+	proxySpeedTarget = speedTarget{
+		Label:    "Cloudflare 边缘 (代理出口)",
+		ProbeURL: "https://speed.cloudflare.com/__down?bytes=0",
+		DownURL:  "https://speed.cloudflare.com/__down?bytes=25000000",
+		UpURL:    "https://speed.cloudflare.com/__up",
+	}
+
+	directSpeedCandidates = []speedTarget{
+		{
+			Label:    "腾讯国内 CDN (物理直连)",
+			ProbeURL: "https://dldir1v6.qq.com/weixin/Windows/WeChatSetup.exe",
+			DownURL:  "https://dldir1v6.qq.com/weixin/Windows/WeChatSetup.exe",
+			UpURL:    "https://speed.cloudflare.com/__up",
+		},
+		{
+			Label:    "阿里云镜像 (物理直连)",
+			ProbeURL: "https://mirrors.aliyun.com/ubuntu/ls-lR.gz",
+			DownURL:  "https://mirrors.aliyun.com/ubuntu/ls-lR.gz",
+			UpURL:    "https://speed.cloudflare.com/__up",
+		},
+		{
+			Label:    "清华 TUNA 镜像 (教育网直连)",
+			ProbeURL: "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ls-lR.gz",
+			DownURL:  "https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ls-lR.gz",
+			UpURL:    "https://speed.cloudflare.com/__up",
+		},
+		{
+			Label:    "Cloudflare 直连",
+			ProbeURL: "https://speed.cloudflare.com/__down?bytes=0",
+			DownURL:  "https://speed.cloudflare.com/__down?bytes=25000000",
+			UpURL:    "https://speed.cloudflare.com/__up",
+		},
+	}
+)
+
+// pickDirectSpeedTarget races the China domestic CDN + Cloudflare candidates
+// over the physical NIC (Fake-IP-free DNS) and returns the first reachable one.
+func pickDirectSpeedTarget(ctx context.Context, client *http.Client) speedTarget {
+	probeCtx, cancel := context.WithTimeout(ctx, 2800*time.Millisecond)
+	defer cancel()
+
+	ch := make(chan speedTarget, len(directSpeedCandidates))
+	for _, cand := range directSpeedCandidates {
+		go func(t speedTarget) {
+			req, err := http.NewRequestWithContext(probeCtx, http.MethodHead, t.ProbeURL, nil)
+			if err != nil {
+				return
+			}
+			req.Header.Set("User-Agent", unlockUA)
+			resp, err := client.Do(req)
+			if err != nil {
+				return
+			}
+			_, _ = io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				select {
+				case ch <- t:
+				default:
+				}
+			}
+		}(cand)
+	}
+
+	select {
+	case winner := <-ch:
+		return winner
+	case <-probeCtx.Done():
+		return directSpeedCandidates[0]
+	}
+}
+
 func runUserSpeedtest(ctx context.Context, mode string) speedtestReportPayload {
 	if mode == "" {
 		mode = "proxy"
@@ -45,7 +126,7 @@ func runUserSpeedtest(ctx context.Context, mode string) speedtestReportPayload {
 	out := speedtestReportPayload{Mode: mode}
 	if mode == "proxy" || mode == "both" {
 		client := newActiveProxyHTTPClient(12 * time.Second)
-		r := runSingleChannelSpeedtest(ctx, client, "proxy", 5*time.Second)
+		r := runSingleChannelSpeedtest(ctx, client, "proxy", proxySpeedTarget, 5*time.Second)
 		out.Proxy = &r
 	}
 	if mode == "direct" || mode == "both" {
@@ -54,20 +135,29 @@ func runUserSpeedtest(ctx context.Context, mode string) speedtestReportPayload {
 		if mode == "both" {
 			dur = 4 * time.Second
 		}
-		r := runSingleChannelSpeedtest(ctx, client, "direct", dur)
+		target := pickDirectSpeedTarget(ctx, client)
+		r := runSingleChannelSpeedtest(ctx, client, "direct", target, dur)
 		out.Direct = &r
 	}
 	return out
 }
 
-func runSingleChannelSpeedtest(ctx context.Context, client *http.Client, mode string, downDur time.Duration) speedChannelResult {
-	res := speedChannelResult{Mode: mode, Samples: []speedSample{}}
+func runSingleChannelSpeedtest(ctx context.Context, client *http.Client, mode string, target speedTarget, downDur time.Duration) speedChannelResult {
+	res := speedChannelResult{
+		Mode:    mode,
+		Target:  target.Label,
+		Samples: []speedSample{},
+	}
 
-	// 1. Measure TTFB & Jitter with 3 tiny zero-byte probes.
+	// 1. Measure TTFB & Jitter with 3 lightweight HEAD / zero-byte probes.
+	probeMethod := http.MethodHead
+	if target.ProbeURL == proxySpeedTarget.ProbeURL {
+		probeMethod = http.MethodGet
+	}
 	var rtts []int
 	for i := 0; i < 3; i++ {
-		pCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
-		req, _ := http.NewRequestWithContext(pCtx, http.MethodGet, "https://speed.cloudflare.com/__down?bytes=0", nil)
+		pCtx, cancel := context.WithTimeout(ctx, 3500*time.Millisecond)
+		req, _ := http.NewRequestWithContext(pCtx, probeMethod, target.ProbeURL, nil)
 		req.Header.Set("User-Agent", unlockUA)
 		t0 := time.Now()
 		resp, err := client.Do(req)
@@ -75,7 +165,9 @@ func runSingleChannelSpeedtest(ctx context.Context, client *http.Client, mode st
 		if err == nil {
 			_, _ = io.Copy(io.Discard, resp.Body)
 			resp.Body.Close()
-			rtts = append(rtts, elapsed)
+			if resp.StatusCode >= 200 && resp.StatusCode < 400 {
+				rtts = append(rtts, elapsed)
+			}
 		}
 		cancel()
 	}
@@ -98,7 +190,7 @@ func runSingleChannelSpeedtest(ctx context.Context, client *http.Client, mode st
 		}
 	}
 
-	// 2. Concurrent streaming download test (capped strictly by downDur & 60MB max).
+	// 2. Concurrent streaming download test (capped strictly by downDur).
 	dlCtx, cancelDL := context.WithTimeout(ctx, downDur)
 	defer cancelDL()
 
@@ -113,7 +205,7 @@ func runSingleChannelSpeedtest(ctx context.Context, client *http.Client, mode st
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, "https://speed.cloudflare.com/__down?bytes=25000000", nil)
+			req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, target.DownURL, nil)
 			if err != nil {
 				return
 			}
@@ -128,6 +220,14 @@ func runSingleChannelSpeedtest(ctx context.Context, client *http.Client, mode st
 				return
 			}
 			defer resp.Body.Close()
+			if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+				dlErrMu.Lock()
+				if firstErr == "" {
+					firstErr = resp.Status
+				}
+				dlErrMu.Unlock()
+				return
+			}
 			buf := make([]byte, 32*1024)
 			for {
 				n, rerr := resp.Body.Read(buf)
@@ -191,22 +291,24 @@ loop:
 		res.Error = firstErr
 	}
 
-	// 3. Lightweight 2.5-second upload probe (4MB payload max).
-	upCtx, cancelUP := context.WithTimeout(ctx, 2800*time.Millisecond)
-	defer cancelUP()
-	upPayload := make([]byte, 4*1024*1024)
-	upStart := time.Now()
-	upReq, err := http.NewRequestWithContext(upCtx, http.MethodPost, "https://speed.cloudflare.com/__up", bytes.NewReader(upPayload))
-	if err == nil {
-		upReq.Header.Set("User-Agent", unlockUA)
-		upReq.Header.Set("Content-Type", "application/octet-stream")
-		if upResp, err := client.Do(upReq); err == nil {
-			_, _ = io.Copy(io.Discard, upResp.Body)
-			upResp.Body.Close()
-			upSec := time.Since(upStart).Seconds()
-			if upSec > 0.05 {
-				res.BytesUp = int64(len(upPayload))
-				res.UploadMbps = round2(float64(len(upPayload)) * 8.0 / (upSec * 1_000_000.0))
+	// 3. Lightweight 2.8-second upload probe (4MB payload max).
+	if target.UpURL != "" {
+		upCtx, cancelUP := context.WithTimeout(ctx, 2800*time.Millisecond)
+		defer cancelUP()
+		upPayload := make([]byte, 4*1024*1024)
+		upStart := time.Now()
+		upReq, err := http.NewRequestWithContext(upCtx, http.MethodPost, target.UpURL, bytes.NewReader(upPayload))
+		if err == nil {
+			upReq.Header.Set("User-Agent", unlockUA)
+			upReq.Header.Set("Content-Type", "application/octet-stream")
+			if upResp, err := client.Do(upReq); err == nil {
+				_, _ = io.Copy(io.Discard, upResp.Body)
+				upResp.Body.Close()
+				upSec := time.Since(upStart).Seconds()
+				if upSec > 0.05 {
+					res.BytesUp = int64(len(upPayload))
+					res.UploadMbps = round2(float64(len(upPayload)) * 8.0 / (upSec * 1_000_000.0))
+				}
 			}
 		}
 	}

@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -83,15 +82,7 @@ func refreshISPBg(iface *physicalInterface) {
 		ispMu.Unlock()
 	}()
 
-	dialer := &net.Dialer{
-		Timeout: 4 * time.Second,
-		Control: func(network, _ string, c syscall.RawConn) error {
-			return bindSocketToInterface(network, c, iface)
-		},
-	}
-	if iface != nil && iface.IPv4 != nil {
-		dialer.LocalAddr = &net.TCPAddr{IP: iface.IPv4}
-	}
+	dialer := newPhysicalDialer(iface, 4*time.Second)
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{

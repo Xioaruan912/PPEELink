@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"net"
 	"strings"
+	"syscall"
+	"time"
 )
 
 type physicalInterface struct {
@@ -116,4 +119,73 @@ func isLoopbackHost(host string) bool {
 	}
 	ip := net.ParseIP(h)
 	return ip != nil && ip.IsLoopback()
+}
+
+// isFakeOrReservedIP filters out Clash/Mihomo fake-ip ranges (198.18.0.0/15, 28.0.0.0/8)
+// and non-routable placeholders so Channel A never dials a TUN-only fake IP.
+func isFakeOrReservedIP(ip net.IP) bool {
+	if ip == nil {
+		return true
+	}
+	v4 := ip.To4()
+	if v4 == nil {
+		return false
+	}
+	if v4[0] == 198 && (v4[1] == 18 || v4[1] == 19) {
+		return true
+	}
+	if v4[0] == 28 {
+		return true // common Mihomo fake-ip-range: 28.0.0.1/8
+	}
+	return false
+}
+
+// newPhysicalResolver builds a pure-Go DNS resolver whose UDP/TCP sockets are
+// bound to the physical NIC, querying public DNS servers directly so Clash/Mihomo
+// TUN dns-hijack / fake-ip never intercepts Channel A lookups.
+func newPhysicalResolver(iface *physicalInterface) *net.Resolver {
+	dnsServers := []string{"223.5.5.5:53", "119.29.29.29:53", "1.1.1.1:53"}
+	return &net.Resolver{
+		PreferGo: true,
+		Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+			d := &net.Dialer{
+				Timeout: 2500 * time.Millisecond,
+				Control: func(netw, _ string, c syscall.RawConn) error {
+					return bindSocketToInterface(netw, c, iface)
+				},
+			}
+			if iface != nil && iface.IPv4 != nil {
+				if strings.HasPrefix(network, "udp") {
+					d.LocalAddr = &net.UDPAddr{IP: iface.IPv4}
+				} else {
+					d.LocalAddr = &net.TCPAddr{IP: iface.IPv4}
+				}
+			}
+			var lastErr error
+			for _, srv := range dnsServers {
+				conn, err := d.DialContext(ctx, "udp4", srv)
+				if err == nil {
+					return conn, nil
+				}
+				lastErr = err
+			}
+			return nil, lastErr
+		},
+	}
+}
+
+// newPhysicalDialer creates a TCP/UDP net.Dialer strictly bound to the physical
+// NIC with a Fake-IP-free DNS resolver attached.
+func newPhysicalDialer(iface *physicalInterface, timeout time.Duration) *net.Dialer {
+	d := &net.Dialer{
+		Timeout:  timeout,
+		Resolver: newPhysicalResolver(iface),
+		Control: func(network, _ string, c syscall.RawConn) error {
+			return bindSocketToInterface(network, c, iface)
+		},
+	}
+	if iface != nil && iface.IPv4 != nil {
+		d.LocalAddr = &net.TCPAddr{IP: iface.IPv4}
+	}
+	return d
 }
