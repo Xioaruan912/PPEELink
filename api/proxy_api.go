@@ -692,8 +692,14 @@ func ProxyTrafficDaily(c *gin.Context) {
 
 func agentServer(c *gin.Context) (*models.ProxyServer, bool) {
 	auth := strings.TrimSpace(c.GetHeader("Authorization"))
-	token := strings.TrimSpace(strings.TrimPrefix(auth, "Agent "))
-	if token == "" || token == auth {
+	var token string
+	switch {
+	case strings.HasPrefix(auth, "Agent "):
+		token = strings.TrimSpace(strings.TrimPrefix(auth, "Agent "))
+	case strings.HasPrefix(auth, "Bearer "):
+		token = strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	}
+	if token == "" {
 		c.JSON(401, gin.H{"code": "40100", "msg": "缺少 agent 令牌"})
 		return nil, false
 	}

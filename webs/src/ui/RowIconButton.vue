@@ -33,20 +33,21 @@ const tooltipVisible = ref(false);
 </template>
 <style scoped>
 .row-icon-button {
-  width: 44px;
-  min-width: 44px;
-  height: 36px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
   padding: 0;
   gap: 0;
+  border-radius: 10px;
 }
 .icon-hit-area {
   display: inline-grid;
   place-items: center;
-  width: 42px;
-  height: 42px;
+  width: 100%;
+  height: 100%;
 }
 .row-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 </style>

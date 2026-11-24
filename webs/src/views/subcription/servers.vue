@@ -478,11 +478,13 @@ const usageRatio = (a: ProxyAccount) =>
               <h2>{{ s.name }}</h2>
               <p class="mono">{{ s.publicHost }}</p>
             </div>
-            <UiTag v-if="s.bbr" :tone="s.bbr === 'bbr' ? 'ok' : 'warn'">
-              {{ s.bbr.toUpperCase() }}
-            </UiTag>
-            <UiTag v-if="s.agentUpdateRequested" tone="warn">待更新</UiTag>
-            <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
+            <div class="card-tags">
+              <UiTag v-if="s.bbr" :tone="s.bbr === 'bbr' ? 'ok' : 'warn'">
+                {{ s.bbr.toUpperCase() }}
+              </UiTag>
+              <UiTag v-if="s.agentUpdateRequested" tone="warn">待更新</UiTag>
+              <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
+            </div>
           </header>
           <div v-if="s.quota?.limit" class="quota-line">
             <span
@@ -586,16 +588,20 @@ const usageRatio = (a: ProxyAccount) =>
             >
           </footer>
           <footer v-else class="card-actions">
-            <UiButton :icon="IconPlus" @click="openInbound(s)"
-              >添加入站</UiButton
-            >
-            <span class="act-icons">
-              <RowIconButton
+            <div class="card-primary-row">
+              <UiButton :icon="IconPlus" size="sm" @click="openInbound(s)"
+                >添加入站</UiButton
+              >
+              <UiButton
                 v-if="s.kind === 'agent'"
+                variant="ghost"
+                size="sm"
                 :icon="IconWrench"
-                :label="`${s.name} 内核运维（BBR / 升级 / 日志）`"
                 @click="openOps(s)"
-              />
+                >内核运维</UiButton
+              >
+            </div>
+            <div class="act-icons">
               <RowIconButton
                 :icon="IconPencil"
                 :label="`编辑服务器 ${s.name}`"
@@ -629,7 +635,7 @@ const usageRatio = (a: ProxyAccount) =>
                 :label="`删除服务器 ${s.name}`"
                 @click="removeServer(s)"
               />
-            </span>
+            </div>
           </footer>
         </article>
       </div>
@@ -1130,18 +1136,35 @@ const usageRatio = (a: ProxyAccount) =>
   background: transparent !important;
   white-space: normal;
 }
-.card-actions {
+.card-tags {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
+}
+.card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
   padding-top: 12px;
+  margin-top: auto;
   border-top: 1px solid var(--c-line);
+}
+.card-primary-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .act-icons {
   display: flex;
-  gap: 2px;
-  margin-left: auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+  overflow: visible;
+}
+.act-icons :deep(button) {
+  border-radius: 999px;
 }
 .act-icons .is-on {
   color: var(--c-ok);
