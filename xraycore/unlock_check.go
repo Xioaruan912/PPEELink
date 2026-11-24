@@ -222,8 +222,13 @@ func srvCheckNetflix(ctx context.Context, client *http.Client) ServerUnlockItem 
 	if c1 == 200 {
 		item.Status = "available"
 		if loc := hdr1.Get("X-Originating-URL"); loc != "" {
-			if parts := strings.Split(loc, "/"); len(parts) > 3 && len(parts[3]) <= 5 {
-				item.Region = strings.ToUpper(parts[3])
+			if parts := strings.Split(loc, "/"); len(parts) > 3 {
+				seg := strings.ToUpper(strings.TrimSpace(parts[3]))
+				if seg == "TITLE" || seg == "WATCH" || seg == "BROWSE" {
+					item.Region = "US"
+				} else if dash := strings.Split(seg, "-"); len(dash) >= 1 && len(dash[0]) == 2 {
+					item.Region = dash[0]
+				}
 			}
 		}
 		return item
