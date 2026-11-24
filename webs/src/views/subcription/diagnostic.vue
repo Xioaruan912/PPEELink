@@ -9,6 +9,10 @@ import {
   canOpenDiagnosticDetails,
 } from "./diagnosticBatch";
 import { getNodes, getNodeOverview } from "@/api/subcription/node";
+import {
+  diagnoseNodeFromUserAgent,
+  type LocalDiagnoseResponse,
+} from "@/api/subcription/probe";
 import { countryFlag } from "@/utils/flag";
 import { UiButton, UiDrawer } from "@/ui";
 import KineticNotice from "@/ui/KineticNotice.vue";
@@ -66,6 +70,8 @@ interface Result {
 }
 
 const result = ref<Result | null>(null);
+const localDiag = ref<LocalDiagnoseResponse | null>(null);
+const localLoading = ref(false);
 let controller: AbortController | undefined;
 
 type BatchStatus =
@@ -192,6 +198,72 @@ const activeVerdict = computed(() => {
   };
 });
 
+const seg2Status = computed<"scanning" | "passed" | "failed" | "unknown" | "idle">(() => {
+  if (loading.value && !batchRunning.value) return "scanning";
+  if (!result.value) return "idle";
+  const v = diagnosticVerdict(result.value);
+  return v === "passed" ? "passed" : v === "failed" ? "failed" : "unknown";
+});
+
+const twoSegmentVerdict = computed(() => {
+  const ld = localDiag.value;
+  if (localLoading.value || (loading.value && !batchRunning.value)) {
+    return {
+      tone: "scanning",
+      title: "正在并发执行两段式诊断…",
+      detail: "段 1 由本机用户 Agent 实测直连节点入口；段 2 由面板验证节点协议握手与目标出口。",
+    };
+  }
+  if (!ld || !ld.available) return null;
+
+  const seg1Ok = !!ld.success && !ld.ipv6Mismatch;
+  const seg2Ok = seg2Status.value === "passed";
+  const seg2Fail = seg2Status.value === "failed";
+
+  if (ld.ipv6Mismatch) {
+    return {
+      tone: "bad",
+      title: "本机无 IPv6 出口，无法直连该纯 IPv6 节点",
+      detail: seg2Ok
+        ? "面板侧验证节点本身完全正常；问题出在你当前宽带未分配公网 IPv6，建议改用 IPv4 节点或开启路由器 IPv6。"
+        : "本机缺少公网 IPv6 地址，且面板侧探测亦未通过。",
+    };
+  }
+  if (seg1Ok && seg2Ok) {
+    return {
+      tone: "ok",
+      title: "全链路双段通畅",
+      detail: `你的电脑（${ld.probeName || "本机"}）到节点入口 ${ld.rtt || 0} ms（${(ld.kind || "tcp").toUpperCase()}）直连正常，且节点出口访问 ${target.value.toUpperCase()} 畅通。`,
+    };
+  }
+  if (!seg1Ok && seg2Ok) {
+    return {
+      tone: "warn",
+      title: "故障定位：本地宽带去程被阻断或墙拦截",
+      detail: `节点服务器本身完全正常（面板实测出口畅通），但你的电脑无法直连 ${ld.host}:${ld.port}${ld.error ? `（${ld.error}）` : ""}。建议更换节点协议/端口或改走中转线路。`,
+    };
+  }
+  if (seg1Ok && seg2Fail) {
+    return {
+      tone: "warn",
+      title: "故障定位：节点协议配置或落地出口异常",
+      detail: `你的电脑可以直连节点入口（${ld.rtt || 0} ms），但面板协议握手或目标站访问失败，说明服务端入站配置、密钥或落地机出口存在问题。`,
+    };
+  }
+  if (!seg1Ok && seg2Fail) {
+    return {
+      tone: "bad",
+      title: "故障定位：节点服务器疑似宕机或端口未监听",
+      detail: `本机用户 Agent 直连与面板探测均无法到达 ${ld.host}:${ld.port}，请检查服务器运行状态、防火墙端口或内核进程。`,
+    };
+  }
+  return {
+    tone: seg1Ok ? "ok" : "warn",
+    title: seg1Ok ? "本机去程可达，面板出口待确认" : "本机去程受阻，面板出口待确认",
+    detail: ld.error || `本机到节点耗时 ${ld.rtt || 0} ms`,
+  };
+});
+
 function totalMillis(r: Result | null | undefined): number {
   if (!r?.steps?.length) return 0;
   return r.steps.reduce((acc, s) => acc + (s.millis || 0), 0);
@@ -276,6 +348,7 @@ async function run() {
   if (loading.value) return;
   error.value = "";
   result.value = null;
+  localDiag.value = null;
   batchRows.value = [];
   showRawLogs.value = false;
   if (mode.value === "node" ? !selected.value : !link.value.trim()) {
@@ -285,6 +358,24 @@ async function run() {
   loading.value = true;
   startScanAnimation();
   controller = new AbortController();
+
+  // Segment 1: fire User Agent local reachability check in parallel for saved nodes
+  let localPromise: Promise<void> = Promise.resolve();
+  if (mode.value === "node" && selected.value) {
+    const nodeId = selected.value;
+    localLoading.value = true;
+    localPromise = diagnoseNodeFromUserAgent({ nodeId })
+      .then((res) => {
+        localDiag.value = res.data || null;
+      })
+      .catch(() => {
+        localDiag.value = null;
+      })
+      .finally(() => {
+        localLoading.value = false;
+      });
+  }
+
   try {
     const response = await request({
       url: "/api/v1/nodes/diagnose",
@@ -304,6 +395,7 @@ async function run() {
         ? "已取消诊断"
         : e?.message || "诊断请求失败";
   } finally {
+    await localPromise;
     stopScanAnimation();
     loading.value = false;
     controller = undefined;
@@ -542,6 +634,101 @@ onBeforeUnmount(() => {
     </section>
 
     <KineticNotice :raw="error || listError" />
+
+    <!-- Two-Segment User Agent + Panel Root-Cause Pipeline -->
+    <section
+      v-if="!batchRows.length && mode === 'node' && (localLoading || (localDiag && localDiag.available))"
+      class="two-seg-card"
+      :class="`tone-${twoSegmentVerdict?.tone || 'scanning'}`"
+      aria-live="polite"
+    >
+      <header class="two-seg-head">
+        <div class="two-seg-title">
+          <span class="seg-dot" aria-hidden="true"></span>
+          <strong>两段式双视角定位（用户 Agent + 面板）</strong>
+        </div>
+        <span v-if="localDiag?.probeName" class="two-seg-probe mono">
+          {{ localDiag.probeName }}{{ localDiag.probeIsp ? ` · ${localDiag.probeIsp}` : "" }}
+        </span>
+      </header>
+
+      <div class="three-node-rail">
+        <div class="seg-node">
+          <span class="seg-kicker">段 1 起点</span>
+          <strong>你的电脑</strong>
+          <small class="mono">{{ localDiag?.probeIsp || "本机物理宽带" }}</small>
+        </div>
+
+        <div
+          class="seg-link"
+          :class="
+            localLoading
+              ? 'is-scanning'
+              : localDiag?.success && !localDiag?.ipv6Mismatch
+                ? 'is-ok'
+                : 'is-bad'
+          "
+        >
+          <span class="seg-line" aria-hidden="true"></span>
+          <span class="seg-badge mono">
+            {{
+              localLoading
+                ? "直连实测中…"
+                : localDiag?.ipv6Mismatch
+                  ? "本机无 IPv6"
+                  : localDiag?.success
+                    ? `${localDiag.rtt || 0} ms · ${(localDiag.kind || "tcp").toUpperCase()}`
+                    : "本机不可达"
+            }}
+          </span>
+        </div>
+
+        <div class="seg-node">
+          <span class="seg-kicker">中继入口</span>
+          <strong>节点服务器</strong>
+          <small class="mono">
+            {{ localDiag?.host ? `${localDiag.host}:${localDiag.port || ""}` : "目标节点" }}
+          </small>
+        </div>
+
+        <div
+          class="seg-link"
+          :class="
+            seg2Status === 'scanning'
+              ? 'is-scanning'
+              : seg2Status === 'passed'
+                ? 'is-ok'
+                : seg2Status === 'failed'
+                  ? 'is-bad'
+                  : 'is-warn'
+          "
+        >
+          <span class="seg-line" aria-hidden="true"></span>
+          <span class="seg-badge mono">
+            {{
+              seg2Status === "scanning"
+                ? "出口验证中…"
+                : seg2Status === "passed"
+                  ? `出口畅通 · ${totalMillis(result)} ms`
+                  : seg2Status === "failed"
+                    ? "握手/出口失败"
+                    : "待确认"
+            }}
+          </span>
+        </div>
+
+        <div class="seg-node">
+          <span class="seg-kicker">段 2 终点</span>
+          <strong>{{ target.toUpperCase() }}</strong>
+          <small>目标站点</small>
+        </div>
+      </div>
+
+      <div v-if="twoSegmentVerdict" class="root-cause-box">
+        <strong>{{ twoSegmentVerdict.title }}</strong>
+        <p>{{ twoSegmentVerdict.detail }}</p>
+      </div>
+    </section>
 
     <!-- Visual Animated Link Pipeline Stage -->
     <section
@@ -1272,6 +1459,180 @@ onBeforeUnmount(() => {
 .drawer-empty {
   color: var(--c-muted);
   font-size: 13px;
+}
+
+/* Two-Segment User Agent + Panel Root-Cause Card */
+.two-seg-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px;
+  border: 1px solid var(--c-line);
+  border-radius: 20px;
+  background: var(--c-surface);
+}
+
+.two-seg-card.tone-ok {
+  border-color: color-mix(in srgb, var(--c-ok) 36%, var(--c-line));
+}
+
+.two-seg-card.tone-warn {
+  border-color: color-mix(in srgb, var(--c-warn) 44%, var(--c-line));
+}
+
+.two-seg-card.tone-bad {
+  border-color: color-mix(in srgb, var(--c-bad) 42%, var(--c-line));
+}
+
+.two-seg-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.two-seg-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13.5px;
+  color: var(--c-ink);
+}
+
+.seg-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-ok);
+}
+
+.two-seg-card.tone-warn .seg-dot {
+  background: var(--c-warn);
+}
+
+.two-seg-card.tone-bad .seg-dot {
+  background: var(--c-bad);
+}
+
+.two-seg-card.tone-scanning .seg-dot {
+  animation: pulseDot 1.2s ease-in-out infinite;
+}
+
+.two-seg-probe {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.three-node-rail {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(110px, 0.9fr) minmax(0, 1fr) minmax(110px, 0.9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.seg-node {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface-muted);
+  min-width: 0;
+}
+
+.seg-kicker {
+  font-size: 10.5px;
+  color: var(--c-muted);
+}
+
+.seg-node strong {
+  font-size: 13.5px;
+  color: var(--c-ink);
+}
+
+.seg-node small {
+  font-size: 11px;
+  color: var(--c-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.seg-link {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.seg-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  background: var(--c-line);
+  transform: translateY(-50%);
+}
+
+.seg-link.is-ok .seg-line {
+  background: color-mix(in srgb, var(--c-ok) 50%, transparent);
+}
+
+.seg-link.is-bad .seg-line {
+  background: color-mix(in srgb, var(--c-bad) 50%, transparent);
+}
+
+.seg-badge {
+  position: relative;
+  z-index: 1;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--c-muted);
+  white-space: nowrap;
+}
+
+.seg-link.is-ok .seg-badge {
+  border-color: color-mix(in srgb, var(--c-ok) 38%, transparent);
+  color: var(--c-ok);
+}
+
+.seg-link.is-bad .seg-badge {
+  border-color: color-mix(in srgb, var(--c-bad) 38%, transparent);
+  color: var(--c-bad);
+}
+
+.seg-link.is-warn .seg-badge {
+  border-color: color-mix(in srgb, var(--c-warn) 42%, transparent);
+  color: var(--c-warn);
+}
+
+.root-cause-box {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--c-surface-muted);
+  font-size: 13px;
+}
+
+.root-cause-box p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--c-muted);
+  line-height: 1.55;
+}
+
+@media (max-width: 820px) {
+  .three-node-rail {
+    grid-template-columns: 1fr;
+  }
+  .seg-line {
+    display: none;
+  }
 }
 
 @keyframes beamTravel {

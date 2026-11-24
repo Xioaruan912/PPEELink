@@ -235,6 +235,148 @@ export function traceNodeFromUserAgent(data: {
   });
 }
 
+export interface UserUnlockEgress {
+  ip: string;
+  country: string;
+  loc: string;
+  city?: string;
+  colo?: string;
+  isp?: string;
+  asn?: string;
+  hosting?: boolean;
+  rtt: number;
+  directIp?: string;
+  matchedNode?: string;
+}
+
+export interface UserUnlockItem {
+  key: string;
+  name: string;
+  group: string;
+  ok: boolean;
+  status: "available" | "originals" | "blocked" | "unknown";
+  region?: string;
+  note: string;
+  evidence: string;
+  latencyMs: number;
+  checkedAt: string;
+}
+
+export interface UserUnlockResponse {
+  jobId: string;
+  probeName: string;
+  egress: UserUnlockEgress;
+  items: UserUnlockItem[];
+  error?: string;
+}
+
+export interface UserSpeedSample {
+  elapsedMs: number;
+  mbps: number;
+}
+
+export interface UserSpeedChannel {
+  mode: "proxy" | "direct";
+  downloadMbps: number;
+  peakMbps: number;
+  uploadMbps: number;
+  ttfbMs: number;
+  jitterMs: number;
+  bytesDown: number;
+  bytesUp: number;
+  durationMs: number;
+  samples: UserSpeedSample[];
+  error?: string;
+}
+
+export interface UserSpeedtestResponse {
+  jobId: string;
+  probeName: string;
+  mode: "proxy" | "direct" | "both";
+  proxy?: UserSpeedChannel;
+  direct?: UserSpeedChannel;
+  retentionPct?: number;
+  error?: string;
+}
+
+export interface BidirectionalTraceSide {
+  hops?: UserTraceHop[];
+  line?: string;
+  error?: string;
+}
+
+export interface BidirectionalTraceResponse {
+  nodeName: string;
+  nodeHost: string;
+  probeName: string;
+  probeIsp?: string;
+  clientIp?: string;
+  returnServer?: string;
+  outbound: BidirectionalTraceSide;
+  returnPath: BidirectionalTraceSide;
+  verdict: string;
+}
+
+export interface LocalDiagnoseResponse {
+  available: boolean;
+  reason?: string;
+  probeName?: string;
+  probeIsp?: string;
+  hasIpv6?: boolean | null;
+  ipv6Mismatch?: boolean;
+  host?: string;
+  port?: number;
+  kind?: string;
+  success?: boolean;
+  rtt?: number;
+  error?: string;
+}
+
+export function runUserAgentUnlock(probeId?: number) {
+  return request<UserUnlockResponse>({
+    url: "/api/v1/probes/unlock",
+    method: "post",
+    data: probeId ? { probeId } : {},
+    timeout: 32000,
+  });
+}
+
+export function runUserAgentSpeedtest(data: {
+  probeId?: number;
+  mode: "proxy" | "direct" | "both";
+}) {
+  return request<UserSpeedtestResponse>({
+    url: "/api/v1/probes/speedtest",
+    method: "post",
+    data,
+    timeout: 36000,
+  });
+}
+
+export function runBidirectionalTrace(data: {
+  nodeId: number;
+  probeId?: number;
+}) {
+  return request<BidirectionalTraceResponse>({
+    url: "/api/v1/probes/trace-bidirectional",
+    method: "post",
+    data,
+    timeout: 32000,
+  });
+}
+
+export function diagnoseNodeFromUserAgent(data: {
+  nodeId: number;
+  probeId?: number;
+}) {
+  return request<LocalDiagnoseResponse>({
+    url: "/api/v1/probes/diagnose-local",
+    method: "post",
+    data,
+    timeout: 16000,
+  });
+}
+
 export function applyProbeSortToSubs(probeId?: number) {
   return request<{ updatedSubscriptions: number }>({
     url: "/api/v1/probes/apply-sort",

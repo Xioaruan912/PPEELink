@@ -24,10 +24,16 @@ import {
   type TraceDetail,
 } from "@/api/network/trace";
 import PathMap from "./PathMap.vue";
+import BidirectionalTrace from "./BidirectionalTrace.vue";
 
 defineOptions({ name: "NetworkTraceroute" });
 
 const route = useRoute();
+const activeTab = ref<"bidirectional" | "multi">(
+  route.query.target || route.query.agentId || route.query.sourceAgentId
+    ? "multi"
+    : "bidirectional"
+);
 const rootEl = ref<HTMLElement>();
 let gsapCtx: gsap.Context | null = null;
 
@@ -353,11 +359,36 @@ onBeforeUnmount(() => {
   <div ref="rootEl" class="trace-gallery">
     <!-- Pure Gallery Masthead -->
     <header class="trace-masthead">
-      <div class="title-mask">
-        <h1 class="gallery-title" data-title-reveal>路由追踪</h1>
+      <div class="masthead-left">
+        <div class="title-mask">
+          <h1 class="gallery-title" data-title-reveal>路由追踪</h1>
+        </div>
+
+        <div class="pill-group mode-tabs" role="tablist" aria-label="追踪模式">
+          <button
+            type="button"
+            role="tab"
+            class="seg-pill"
+            :class="{ 'is-active': activeTab === 'bidirectional' }"
+            :aria-selected="activeTab === 'bidirectional'"
+            @click="activeTab = 'bidirectional'"
+          >
+            本机双向路由
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="seg-pill"
+            :class="{ 'is-active': activeTab === 'multi' }"
+            :aria-selected="activeTab === 'multi'"
+            @click="activeTab = 'multi'"
+          >
+            多源单向追踪
+          </button>
+        </div>
       </div>
 
-      <div class="masthead-actions">
+      <div v-if="activeTab === 'multi'" class="masthead-actions">
         <UiButton
           variant="ghost"
           :icon="Refresh"
@@ -388,6 +419,9 @@ onBeforeUnmount(() => {
 
     <span class="top-rule" data-top-rule aria-hidden="true"></span>
 
+    <BidirectionalTrace v-show="activeTab === 'bidirectional'" />
+
+    <div v-show="activeTab === 'multi'" class="multi-trace-stack">
     <!-- Compact Target + Protocol + Quick Presets Deck -->
     <section class="control-deck">
       <div class="target-row">
@@ -555,6 +589,7 @@ onBeforeUnmount(() => {
       :target="detail?.run.target || target"
       :running="running"
     />
+    </div>
   </div>
 </template>
 
@@ -566,10 +601,22 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.multi-trace-stack {
+  display: grid;
+  gap: 18px;
+}
+
 .trace-masthead {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.masthead-left {
+  display: flex;
+  align-items: center;
   gap: 16px;
   flex-wrap: wrap;
 }

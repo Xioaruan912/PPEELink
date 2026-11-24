@@ -30,9 +30,11 @@ import {
   formatRate,
   formatBytes,
 } from "@/utils/network-throughput";
+import UserAgentSpeedtest from "./UserAgentSpeedtest.vue";
 
 defineOptions({ name: "NetworkThroughput" });
 
+const activeTab = ref<"local" | "server">("local");
 const rootEl = ref<HTMLElement>();
 let gsapCtx: gsap.Context | null = null;
 
@@ -329,11 +331,36 @@ onBeforeUnmount(() => {
   <div ref="rootEl" class="tp-gallery">
     <!-- Pure Gallery Masthead -->
     <header class="tp-masthead">
-      <div class="title-mask">
-        <h1 class="gallery-title" data-title-reveal>吞吐互测</h1>
+      <div class="masthead-left">
+        <div class="title-mask">
+          <h1 class="gallery-title" data-title-reveal>吞吐测速</h1>
+        </div>
+
+        <div class="pill-group mode-tabs" role="tablist" aria-label="测速维度">
+          <button
+            type="button"
+            role="tab"
+            class="seg-pill"
+            :class="{ 'is-active': activeTab === 'local' }"
+            :aria-selected="activeTab === 'local'"
+            @click="activeTab = 'local'"
+          >
+            本机真实测速
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="seg-pill"
+            :class="{ 'is-active': activeTab === 'server' }"
+            :aria-selected="activeTab === 'server'"
+            @click="activeTab = 'server'"
+          >
+            服务器互测 (iperf3)
+          </button>
+        </div>
       </div>
 
-      <div class="masthead-actions">
+      <div v-if="activeTab === 'server'" class="masthead-actions">
         <UiButton
           variant="ghost"
           :icon="Setting"
@@ -372,6 +399,9 @@ onBeforeUnmount(() => {
 
     <span class="top-rule" data-top-rule aria-hidden="true"></span>
 
+    <UserAgentSpeedtest v-show="activeTab === 'local'" />
+
+    <div v-show="activeTab === 'server'" class="server-tp-stack">
     <!-- Dead-Simple Point-to-Point Selector Strip -->
     <section class="simple-picker">
       <div class="picker-col">
@@ -598,6 +628,7 @@ onBeforeUnmount(() => {
         </article>
       </div>
     </section>
+    </div>
   </div>
 </template>
 
@@ -609,10 +640,22 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.server-tp-stack {
+  display: grid;
+  gap: 18px;
+}
+
 .tp-masthead {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.masthead-left {
+  display: flex;
+  align-items: center;
   gap: 16px;
   flex-wrap: wrap;
 }

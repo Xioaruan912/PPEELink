@@ -4,6 +4,11 @@ import { Close, CopyDocument, VideoPlay } from "@element-plus/icons-vue";
 import { EmptyState, UiButton, UiDialog, UiSkeleton } from "@/ui";
 import { getNodeOverview, getUnlockServices } from "@/api/subcription/node";
 import {
+  getProbes,
+  runUserAgentUnlock,
+  type Probe,
+} from "@/api/subcription/probe";
+import {
   unlockGroups,
   type UnlockCheckResult,
   type UnlockService,
@@ -17,6 +22,9 @@ interface DeviceEgress {
   loc: string;
   colo: string;
   rtt: number;
+  isp?: string;
+  asn?: string;
+  hosting?: boolean;
   matchedNode?: string;
 }
 
@@ -28,6 +36,9 @@ interface RichCheckResult extends UnlockCheckResult {
 
 const services = ref<UnlockService[]>([]);
 const panelNodes = ref<{ name: string; server?: string }[]>([]);
+const onlineProbes = ref<Probe[]>([]);
+const selectedProbeId = ref<number | undefined>(undefined);
+const engine = ref<"agent" | "browser">("browser");
 const group = ref("all");
 const preparing = ref(true);
 const loading = ref(false);
@@ -54,7 +65,7 @@ const progressPct = computed(() =>
 
 const stats = computed(() => ({
   unlocked: results.value.filter((r) =>
-    ["available", "inferred"].includes(r.status || "")
+    ["available", "inferred", "originals"].includes(r.status || "")
   ).length,
   reachable: results.value.filter((r) => r.status === "reachable").length,
   blocked: results.value.filter((r) =>
@@ -64,6 +75,7 @@ const stats = computed(() => ({
 
 function statusMeta(status?: string) {
   if (status === "available") return { label: "原生解锁", tone: "ok" };
+  if (status === "originals") return { label: "仅自制剧", tone: "warn" };
   if (status === "inferred") return { label: "地区支持", tone: "ok" };
   if (status === "reachable") return { label: "可访问", tone: "info" };
   if (status === "region_blocked") return { label: "地区受限", tone: "warn" };
@@ -72,6 +84,7 @@ function statusMeta(status?: string) {
 }
 
 function evidenceLabel(kind?: string) {
+  if (kind === "native-http") return "用户 Agent 原生 HTTP（无 CORS）";
   if (kind === "openai" || kind === "dazn" || kind === "tvb") return "CORS API 直读";
   if (kind === "trace") return "边缘 Trace 定位";
   return "HTTP 可达探测";
@@ -118,9 +131,10 @@ async function prepare() {
   preparing.value = true;
   loadError.value = "";
   try {
-    const [catalog, overview] = await Promise.allSettled([
+    const [catalog, overview, probeRes] = await Promise.allSettled([
       getUnlockServices(),
       getNodeOverview(),
+      getProbes(),
     ]);
     if (!alive) return;
     if (catalog.status === "fulfilled") {
@@ -133,6 +147,15 @@ async function prepare() {
         name: n.name,
         server: n.server,
       }));
+    }
+    if (probeRes.status === "fulfilled") {
+      onlineProbes.value = (probeRes.value.data || []).filter((p) => p.online);
+      if (onlineProbes.value.length > 0) {
+        engine.value = "agent";
+        if (!selectedProbeId.value) {
+          selectedProbeId.value = onlineProbes.value[0].id;
+        }
+      }
     }
     void detectEgress();
   } finally {
@@ -148,7 +171,58 @@ function stop() {
 }
 
 async function startTest() {
-  if (loading.value || !targets.value.length) return;
+  if (loading.value) return;
+  if (engine.value === "agent") {
+    if (!onlineProbes.value.length) {
+      ElMessage.warning("当前无在线用户 Agent，已切换浏览器探测");
+      engine.value = "browser";
+    } else {
+      const id = ++version;
+      loading.value = true;
+      results.value = [];
+      try {
+        const { data } = await runUserAgentUnlock(selectedProbeId.value);
+        if (!alive || id !== version) return;
+        if (data?.egress?.ip) {
+          egress.value = {
+            ip: data.egress.ip,
+            loc: data.egress.loc || data.egress.country || "—",
+            colo: data.egress.colo || data.egress.city || "—",
+            rtt: data.egress.rtt || 0,
+            isp: data.egress.isp,
+            asn: data.egress.asn,
+            hosting: data.egress.hosting,
+            matchedNode: data.egress.matchedNode,
+          };
+        }
+        const rawItems = data?.items || [];
+        const filtered =
+          group.value === "all"
+            ? rawItems
+            : rawItems.filter((it) => it.group === group.value);
+        results.value = filtered.map((it) => ({
+          key: it.key,
+          name: it.name,
+          group: it.group,
+          ok: it.ok,
+          status: it.status as any,
+          region: it.region,
+          evidence: "api",
+          note: it.note,
+          checkedAt: it.checkedAt,
+          latencyMs: it.latencyMs,
+          probeKind: "native-http",
+        }));
+      } catch (err: any) {
+        ElMessage.error(err?.message || "用户 Agent 原生解锁检测失败");
+      } finally {
+        if (id === version) loading.value = false;
+      }
+      return;
+    }
+  }
+
+  if (!targets.value.length) return;
   const own = new AbortController();
   const id = ++version;
   controller = own;
@@ -234,6 +308,13 @@ onBeforeUnmount(() => {
         <template v-if="egress">
           <strong class="mono">{{ egress.ip }}</strong>
           <span class="egress-tag mono">{{ egress.loc }} · {{ egress.colo }}</span>
+          <span v-if="egress.asn" class="egress-tag mono">{{ egress.asn }}</span>
+          <span
+            v-if="egress.hosting !== undefined"
+            class="egress-tag"
+          >
+            {{ egress.hosting ? "机房 IP" : "非机房/原生倾向" }}
+          </span>
           <span v-if="egress.matchedNode" class="egress-node">
             命中节点：{{ egress.matchedNode }}
           </span>
@@ -245,6 +326,44 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="bar-right">
+        <div class="pill-group" role="group" aria-label="检测引擎">
+          <button
+            type="button"
+            class="seg-pill"
+            :class="{ 'is-active': engine === 'agent' }"
+            :disabled="loading || !onlineProbes.length"
+            :title="
+              onlineProbes.length
+                ? '使用本机用户 Agent 发起无 CORS 真实 HTTP 解锁检测'
+                : '请先在本机启动用户 Agent v1.4'
+            "
+            @click="engine = 'agent'"
+          >
+            Agent 原生{{ onlineProbes.length ? ` (${onlineProbes.length})` : "" }}
+          </button>
+          <button
+            type="button"
+            class="seg-pill"
+            :class="{ 'is-active': engine === 'browser' }"
+            :disabled="loading"
+            @click="engine = 'browser'"
+          >
+            浏览器探测
+          </button>
+        </div>
+
+        <select
+          v-if="engine === 'agent' && onlineProbes.length > 1"
+          v-model="selectedProbeId"
+          class="probe-select"
+          :disabled="loading"
+          aria-label="选择用户 Agent"
+        >
+          <option v-for="p in onlineProbes" :key="p.id" :value="p.id">
+            {{ p.name }}
+          </option>
+        </select>
+
         <div class="pill-group" role="group" aria-label="服务分类">
           <button
             v-for="item in unlockGroups"
@@ -342,7 +461,13 @@ onBeforeUnmount(() => {
       <div class="radar-ring" :class="{ 'is-scanning': loading }" aria-hidden="true">
         <span></span>
       </div>
-      <p>点击「开始检测」，以当前浏览器代理逐项探测 {{ targets.length }} 项流媒体与 AI 服务</p>
+      <p>
+        {{
+          engine === "agent"
+            ? `点击「开始检测」，由本机用户 Agent 绕过浏览器 CORS，对当前代理出口逐项发起原生 HTTP 流媒体与 AI 解锁检测`
+            : `点击「开始检测」，以当前浏览器代理逐项探测 ${targets.length} 项流媒体与 AI 服务`
+        }}
+      </p>
     </div>
 
     <!-- Rich Click-to-Inspect Service Detail Card -->
@@ -490,6 +615,27 @@ onBeforeUnmount(() => {
   background: var(--c-ink);
   color: var(--c-surface);
   font-weight: 500;
+}
+
+.seg-pill:disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+}
+
+.probe-select {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+}
+
+.probe-select:focus-visible {
+  border-color: var(--c-ink);
 }
 
 .sweep-track {

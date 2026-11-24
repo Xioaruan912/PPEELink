@@ -20,6 +20,7 @@ type Probe struct {
 	HasIPv6    *bool      `json:"hasIpv6"`
 	ISP        string     `gorm:"size:64" json:"isp"`
 	IfaceName  string     `gorm:"size:64" json:"iface"`
+	PublicIP   string     `gorm:"size:64" json:"publicIp"`
 	LastSeenAt *time.Time `json:"lastSeenAt"`
 	Version    string     `gorm:"size:32" json:"version"`
 }

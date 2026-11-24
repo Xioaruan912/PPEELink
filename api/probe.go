@@ -23,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.3"
+const latestUserAgentVersion = "1.4"
 
 type probeNode struct {
 	ID     int    `json:"id"`
@@ -50,6 +50,7 @@ type queuedProbeJob struct {
 	ID         string
 	Action     string
 	TargetHost string
+	SpeedMode  string
 	Nodes      []probeNode
 }
 
@@ -296,7 +297,7 @@ func ProbeList(c *gin.Context) {
 		online := probeHub.isWaiting(p.ID) || (p.LastSeenAt != nil && now.Sub(*p.LastSeenAt) < probeOnlineWindow)
 		items = append(items, gin.H{
 			"id": p.ID, "name": p.Name, "region": p.Region, "enabled": p.Enabled,
-			"autoProbe": p.AutoProbe, "hasIpv6": p.HasIPv6, "isp": p.ISP, "iface": p.IfaceName,
+			"autoProbe": p.AutoProbe, "hasIpv6": p.HasIPv6, "isp": p.ISP, "iface": p.IfaceName, "publicIp": p.PublicIP,
 			"online":    online, "lastSeenAt": p.LastSeenAt, "version": p.Version,
 			"latestVersion":   latestUserAgentVersion,
 			"updateAvailable": p.Version != "" && p.Version != latestUserAgentVersion,
@@ -505,6 +506,9 @@ func ProbeWait(c *gin.Context) {
 	if iface := strings.TrimSpace(c.Query("iface")); iface != "" && len(iface) <= 64 {
 		updates["iface_name"] = iface
 	}
+	if pubIP := strings.TrimSpace(c.Query("publicIp")); pubIP != "" && len(pubIP) <= 64 {
+		updates["public_ip"] = pubIP
+	}
 	models.DB.Model(probe).Updates(updates)
 
 	waitSec, _ := strconv.Atoi(c.DefaultQuery("timeout", "25"))
@@ -531,6 +535,7 @@ func ProbeWait(c *gin.Context) {
 			"jobId":      job.ID,
 			"action":     act,
 			"targetHost": job.TargetHost,
+			"speedMode":  job.SpeedMode,
 			"nodes":      job.Nodes,
 		}, "msg": "dispatched"})
 	case <-timer.C:
