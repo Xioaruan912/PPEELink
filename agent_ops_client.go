@@ -13,26 +13,31 @@ import (
 )
 
 type agentOpsJob struct {
-	JobID   string `json:"jobId"`
-	Action  string `json:"action"`  // tune-network | upgrade-core | fetch-logs | check-port
-	Source  string `json:"source"`  // xray | agent (for fetch-logs)
-	Lines   int    `json:"lines"`   // for fetch-logs
-	Filter  string `json:"filter"`  // for fetch-logs
-	Version string `json:"version"` // for upgrade-core
-	Port    int    `json:"port"`    // for check-port
-	Proto   string `json:"proto"`   // tcp | udp (for check-port)
+	JobID   string   `json:"jobId"`
+	Action  string   `json:"action"`  // tune-network | upgrade-core | fetch-logs | check-port | sni-check | security-audit | security-ban | security-unban
+	Source  string   `json:"source"`  // xray | agent (for fetch-logs)
+	Lines   int      `json:"lines"`   // for fetch-logs
+	Filter  string   `json:"filter"`  // for fetch-logs
+	Version string   `json:"version"` // for upgrade-core
+	Port    int      `json:"port"`    // for check-port
+	Proto   string   `json:"proto"`   // tcp | udp (for check-port)
+	Targets []string `json:"targets"` // for sni-check
+	Ports   []int    `json:"ports"`   // for security-audit
+	IP      string   `json:"ip"`      // for security-ban / security-unban
 }
 
 type agentOpsResult struct {
-	JobID  string `json:"jobId"`
-	OK     bool   `json:"ok"`
-	Output string `json:"output,omitempty"`
-	Error  string `json:"error,omitempty"`
-	InUse  bool   `json:"inUse,omitempty"`
-	BBR    string `json:"bbr,omitempty"`
-	Qdisc  string `json:"qdisc,omitempty"`
-	Rmem   int64  `json:"rmemMax,omitempty"`
-	Wmem   int64  `json:"wmemMax,omitempty"`
+	JobID    string                        `json:"jobId"`
+	OK       bool                          `json:"ok"`
+	Output   string                        `json:"output,omitempty"`
+	Error    string                        `json:"error,omitempty"`
+	InUse    bool                          `json:"inUse,omitempty"`
+	BBR      string                        `json:"bbr,omitempty"`
+	Qdisc    string                        `json:"qdisc,omitempty"`
+	Rmem     int64                         `json:"rmemMax,omitempty"`
+	Wmem     int64                         `json:"wmemMax,omitempty"`
+	SNIs     []xraycore.SNICheckResult     `json:"snis,omitempty"`
+	Security *xraycore.SecurityAuditResult `json:"security,omitempty"`
 }
 
 func runAgentOpsLoop(ctx context.Context, client *http.Client, panel, token string, runner *xraycore.Runner) {
@@ -123,6 +128,32 @@ func executeAgentOpsJob(ctx context.Context, runner *xraycore.Runner, job agentO
 		res.OK = true
 		res.InUse = inUse
 		res.Output = detail
+	case "sni-check":
+		sniCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		defer cancel()
+		res.SNIs = xraycore.CheckRealitySNIs(sniCtx, job.Targets)
+		res.OK = true
+		res.Output = fmt.Sprintf("已完成 %d 个 Reality 伪装目标体检", len(res.SNIs))
+	case "security-audit":
+		audit := xraycore.AuditInboundSecurity(runner, job.Ports)
+		res.Security = &audit
+		res.OK = true
+	case "security-ban":
+		msg, err := xraycore.BanSourceIP(job.IP)
+		if err != nil {
+			res.Error = err.Error()
+			return res
+		}
+		res.OK = true
+		res.Output = msg
+	case "security-unban":
+		msg, err := xraycore.UnbanSourceIP(job.IP)
+		if err != nil {
+			res.Error = err.Error()
+			return res
+		}
+		res.OK = true
+		res.Output = msg
 	default:
 		res.Error = "不支持的运维指令: " + job.Action
 	}
