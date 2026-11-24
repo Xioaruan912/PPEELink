@@ -61,13 +61,12 @@ test("groups permitted features into 5 intent-driven domains while preserving ev
   assert.equal(organized[0].path, "/subcription/subs");
   assert.equal(organized[0].children[0].label, "订阅链接");
   assert.deepEqual(
-    paths([organized.find((item) => item.label === "服务器")]),
-    [
-      "/subcription/servers",
-      "/subcription/relays",
-      "/monitor/index",
-      "/monitor/workspace",
-    ]
+    paths([organized.find((item) => item.label === "代理")]),
+    ["/subcription/servers", "/subcription/relays"]
+  );
+  assert.deepEqual(
+    paths([organized.find((item) => item.label === "Agent")]),
+    ["/monitor/index", "/monitor/workspace"]
   );
   assert.deepEqual(
     paths([organized.find((item) => item.label === "网络测试")]),

@@ -168,7 +168,7 @@ export function flattenNavigation(items: NavigationItem[]): NavigationItem[] {
   );
 }
 
-// 6-domain IA: 订阅 → 服务器 → 网络测试 → 概览 → 模板分组 → 系统设置.
+// 7-domain IA: 订阅 → 代理 → Agent → 网络测试 → 概览 → 模板分组 → 系统设置.
 const GROUPS = [
   {
     label: "订阅",
@@ -176,15 +176,14 @@ const GROUPS = [
     paths: ["/subcription/subs", "/my/subscriptions", "/subcription/nodes"],
   },
   {
-    label: "服务器",
+    label: "代理",
+    icon: IconNodes,
+    paths: ["/subcription/servers", "/subcription/relays"],
+  },
+  {
+    label: "Agent",
     icon: IconServer,
-    paths: [
-      "/subcription/servers",
-      "/subcription/relays",
-      "/monitor/index",
-      "/monitor/workspace",
-      "/monitor/user-agent",
-    ],
+    paths: ["/monitor/index", "/monitor/workspace", "/monitor/user-agent"],
   },
   {
     label: "网络测试",

@@ -16,6 +16,7 @@ import IconTrash from "~icons/ph/trash";
 import IconWarning from "~icons/ph/warning";
 import IconPower from "~icons/ph/power";
 import IconRefresh from "~icons/ph/arrows-clockwise";
+import IconWrench from "~icons/ph/wrench";
 import {
   deleteProxyInbound,
   deleteProxyServer,
@@ -43,6 +44,7 @@ import RowIconButton from "@/ui/RowIconButton.vue";
 import SecretLink from "./subs/SecretLink.vue";
 import InboundDrawer from "./servers/InboundDrawer.vue";
 import AccountDrawer from "./servers/AccountDrawer.vue";
+import ServerOpsDrawer from "./servers/ServerOpsDrawer.vue";
 import TrafficBars from "./servers/TrafficBars.vue";
 import Onboarding from "./servers/Onboarding.vue";
 import { formatBytes } from "@/utils/traffic";
@@ -166,7 +168,14 @@ const serverForm = reactive({
   resetDay: 1,
   monitorEnabled: false,
   websiteTrafficEnabled: false,
+  autoFirewall: false,
 });
+const opsDrawer = ref(false);
+const opsServer = ref<ProxyServer | null>(null);
+function openOps(s: ProxyServer) {
+  opsServer.value = s;
+  opsDrawer.value = true;
+}
 const GB = 1024 ** 3;
 const QUOTA_PRESETS = [
   { label: "不限", gb: 0 },
@@ -193,6 +202,7 @@ function openServer(s?: ProxyServer) {
           resetDay: s.resetDay || 1,
           monitorEnabled: s.monitorEnabled,
           websiteTrafficEnabled: s.websiteTrafficEnabled ?? false,
+          autoFirewall: s.autoFirewall ?? false,
         }
       : {
           id: 0,
@@ -204,6 +214,7 @@ function openServer(s?: ProxyServer) {
           resetDay: 1,
           monitorEnabled: false,
           websiteTrafficEnabled: false,
+          autoFirewall: false,
         }
   );
   serverDialog.value = true;
@@ -234,6 +245,7 @@ async function toggleServer(s: ProxyServer) {
     resetDay: s.resetDay || 1,
     monitorEnabled: s.monitorEnabled,
     websiteTrafficEnabled: s.websiteTrafficEnabled ?? false,
+    autoFirewall: s.autoFirewall ?? false,
   });
   ElMessage.success(
     s.enabled
@@ -466,6 +478,9 @@ const usageRatio = (a: ProxyAccount) =>
               <h2>{{ s.name }}</h2>
               <p class="mono">{{ s.publicHost }}</p>
             </div>
+            <UiTag v-if="s.bbr" :tone="s.bbr === 'bbr' ? 'ok' : 'warn'">
+              {{ s.bbr.toUpperCase() }}
+            </UiTag>
             <UiTag v-if="s.agentUpdateRequested" tone="warn">待更新</UiTag>
             <UiTag :tone="status(s).tone">{{ status(s).text }}</UiTag>
           </header>
@@ -527,7 +542,11 @@ const usageRatio = (a: ProxyAccount) =>
               <span class="in-main">
                 <strong>{{ i.remark || templateLabel(i.template) }}</strong>
                 <small
-                  >{{ templateLabel(i.template) }} ·
+                  >{{ templateLabel(i.template)
+                  }}<template v-if="i.portHopping">
+                    · 跳跃 {{ i.portHopping }}</template
+                  >
+                  ·
                   {{
                     i.tlsMode === "auto"
                       ? i.tlsFingerprint
@@ -571,6 +590,12 @@ const usageRatio = (a: ProxyAccount) =>
               >添加入站</UiButton
             >
             <span class="act-icons">
+              <RowIconButton
+                v-if="s.kind === 'agent'"
+                :icon="IconWrench"
+                :label="`${s.name} 内核运维（BBR / 升级 / 日志）`"
+                @click="openOps(s)"
+              />
               <RowIconButton
                 :icon="IconPencil"
                 :label="`编辑服务器 ${s.name}`"
@@ -776,6 +801,20 @@ const usageRatio = (a: ProxyAccount) =>
                 aria-label="网站流量统计"
               />
             </label>
+
+            <label
+              class="capability-row"
+              :class="{ 'is-on': serverForm.autoFirewall }"
+            >
+              <div class="capability-copy">
+                <strong>自动放行防火墙端口</strong>
+                <small>Agent 自动放行入站 TCP/UDP 与跳跃端口，删入站或卸载时自动回收。</small>
+              </div>
+              <el-switch
+                v-model="serverForm.autoFirewall"
+                aria-label="自动放行防火墙端口"
+              />
+            </label>
           </div>
         </section>
       </el-form>
@@ -820,6 +859,12 @@ const usageRatio = (a: ProxyAccount) =>
         ></template
       >
     </UiDialog>
+
+    <ServerOpsDrawer
+      v-model="opsDrawer"
+      :server="opsServer"
+      @refresh="load(true)"
+    />
 
     <UiDialog
       :model-value="!!uninstall"

@@ -5,6 +5,7 @@ import DomainRouteFields from "./DomainRouteFields.vue";
 import IconShuffle from "~icons/ph/shuffle";
 import IconCheck from "~icons/ph/seal-check";
 import {
+  checkProxyServerPort,
   checkRealityTarget,
   getProxyEgressOptions,
   saveProxyInbound,
@@ -114,6 +115,7 @@ const blank = () => ({
   remark: "Reality",
   template: "vless-reality-vision" as InboundTemplate,
   port: randomPort(),
+  portHopping: "",
   target: "www.amd.com:443",
   listen: "",
   fingerprint: "chrome",
@@ -211,6 +213,25 @@ async function loadExitOptions() {
 const error = ref("");
 const check = ref<TargetCheck | null>(null);
 const checking = ref(false);
+const checkingPort = ref(false);
+const portCheckTip = ref<{ ok: boolean; text: string } | null>(null);
+
+async function runPortCheck() {
+  if (!props.serverId || !form.port) return;
+  checkingPort.value = true;
+  portCheckTip.value = null;
+  try {
+    const proto = form.template === "hysteria2" ? "udp" : "tcp";
+    const { data } = await checkProxyServerPort(props.serverId, form.port, proto);
+    portCheckTip.value = { ok: !data.inUse, text: data.detail };
+    if (data.inUse) ElMessage.warning(data.detail);
+    else ElMessage.success(data.detail);
+  } catch (e: any) {
+    ElMessage.error(e?.message || "端口预检失败");
+  } finally {
+    checkingPort.value = false;
+  }
+}
 
 watch(visible, (open) => {
   if (!open) {
@@ -220,6 +241,7 @@ watch(visible, (open) => {
   loadExitOptions();
   error.value = "";
   check.value = null;
+  portCheckTip.value = null;
   importKey.value = false;
 
   Object.assign(
@@ -416,9 +438,39 @@ async function save() {
                   aria-label="随机端口"
                   @click="form.port = randomPort()"
                 />
+                <UiButton
+                  v-if="!identityLocked && props.serverId"
+                  variant="ghost"
+                  size="sm"
+                  :loading="checkingPort"
+                  @click="runPortCheck"
+                >
+                  预检
+                </UiButton>
               </div>
+              <small
+                v-if="portCheckTip"
+                style="display: block; margin-top: 4px; font-size: 11.5px"
+                :style="{ color: portCheckTip.ok ? 'var(--c-ok)' : 'var(--c-bad)' }"
+              >
+                {{ portCheckTip.text }}
+              </small>
             </el-form-item>
           </div>
+
+          <el-form-item
+            v-if="form.template === 'hysteria2'"
+            label="端口跳跃（Port Hopping，可选）"
+            style="margin-top: 8px"
+          >
+            <el-input
+              v-model="form.portHopping"
+              placeholder="例如：30000-40000（留空则单端口）"
+            />
+            <small style="color: var(--c-muted); font-size: 11.5px; margin-top: 4px; display: block">
+              Agent v1.20+ 自动配置 iptables UDP 端口跳跃并在订阅链接自动携带 mport，有效抗晚高峰 UDP 限速。
+            </small>
+          </el-form-item>
         </section>
 
         <!-- 3A. Reality Camouflage -->

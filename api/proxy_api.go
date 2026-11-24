@@ -78,6 +78,7 @@ type serverSaveRequest struct {
 	ResetDay              int     `json:"resetDay"`
 	MonitorEnabled        bool    `json:"monitorEnabled"`
 	WebsiteTrafficEnabled bool    `json:"websiteTrafficEnabled"`
+	AutoFirewall          bool    `json:"autoFirewall"`
 }
 
 func validHost(host string) bool {
@@ -125,7 +126,7 @@ func ProxyServerSave(c *gin.Context) {
 			res := tx.Model(&models.ProxyServer{}).Where("id = ? AND removing = ?", req.ID, false).
 				Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled,
 					"traffic_limit": limit, "reset_day": req.ResetDay, "monitor_enabled": req.MonitorEnabled,
-					"website_traffic_enabled": req.WebsiteTrafficEnabled})
+					"website_traffic_enabled": req.WebsiteTrafficEnabled, "auto_firewall": req.AutoFirewall})
 			if res.Error != nil {
 				return res.Error
 			}
@@ -155,7 +156,7 @@ func ProxyServerSave(c *gin.Context) {
 	}
 	server := models.ProxyServer{Name: req.Name, Kind: req.Kind, PublicHost: req.PublicHost, Enabled: true,
 		TrafficLimit: limit, ResetDay: req.ResetDay, MonitorEnabled: req.MonitorEnabled,
-		WebsiteTrafficEnabled: req.WebsiteTrafficEnabled}
+		WebsiteTrafficEnabled: req.WebsiteTrafficEnabled, AutoFirewall: req.AutoFirewall}
 	token := ""
 	if req.Kind == models.ServerKindAgent {
 		token = models.RandomHex(24)
@@ -290,6 +291,7 @@ type inboundSaveRequest struct {
 	Remark        string               `json:"remark"`
 	Template      string               `json:"template"`
 	Port          int                  `json:"port"`
+	PortHopping   string               `json:"portHopping"`
 	Target        string               `json:"target"`
 	SNI           string               `json:"sni"`
 	Path          string               `json:"path"`
@@ -313,6 +315,25 @@ func ProxyInboundSave(c *gin.Context) {
 	if req.Port < 1024 || req.Port > 65535 || req.Port == xrayAPIPort {
 		c.JSON(400, gin.H{"code": "40000", "msg": "端口需在 1024 到 65535 之间"})
 		return
+	}
+	req.PortHopping = strings.TrimSpace(req.PortHopping)
+	if req.PortHopping != "" {
+		if req.Template != xraycore.TemplateHysteria2 {
+			req.PortHopping = ""
+		} else {
+			parts := strings.Split(req.PortHopping, "-")
+			if len(parts) != 2 {
+				c.JSON(400, gin.H{"code": "40000", "msg": "端口跳跃格式需为 起始-结束，例如 30000-40000"})
+				return
+			}
+			sPort, e1 := strconv.Atoi(strings.TrimSpace(parts[0]))
+			ePort, e2 := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if e1 != nil || e2 != nil || sPort < 1024 || ePort > 65535 || sPort >= ePort {
+				c.JSON(400, gin.H{"code": "40000", "msg": "端口跳跃范围无效，需满足 1024 <= 起始 < 结束 <= 65535"})
+				return
+			}
+			req.PortHopping = fmt.Sprintf("%d-%d", sPort, ePort)
+		}
 	}
 	usesReality := xraycore.TemplateUsesReality(req.Template)
 	usesTLS := xraycore.TemplateUsesTLS(req.Template)
@@ -505,7 +526,7 @@ func ProxyInboundSave(c *gin.Context) {
 	in.DomainRoutes = domainRoutes
 	in.EgressNodeID = req.EgressNodeID
 	in.TLSCertFile, in.TLSKeyFile = req.TLSCertFile, req.TLSKeyFile
-	in.ServerID, in.Remark, in.Template, in.Port = req.ServerID, strings.TrimSpace(req.Remark), req.Template, req.Port
+	in.ServerID, in.Remark, in.Template, in.Port, in.PortHopping = req.ServerID, strings.TrimSpace(req.Remark), req.Template, req.Port, req.PortHopping
 	in.Target, in.SNI, in.Path, in.Host, in.Method, in.Enabled = req.Target, strings.TrimSpace(req.SNI), req.Path, strings.TrimSpace(req.Host), req.Method, req.Enabled
 	if usesReality && (in.PrivateKey == "" || req.RegenerateKey) {
 		priv, pub, err := xraycore.GenerateRealityKeys()

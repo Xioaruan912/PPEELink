@@ -57,7 +57,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 	}
 	spec := xraycore.Spec{
 		DeploymentProfile: "xui-v2.9.3", Version: xraycore.DefaultVersion, Enabled: server.Enabled, APIPort: xrayAPIPort,
-		BlockPrivate: true, BlockBitTorrent: true,
+		BlockPrivate: true, BlockBitTorrent: true, AutoFirewall: server.AutoFirewall,
 		Monitor:        &xraycore.MonitorSpec{Enabled: server.MonitorEnabled, IntervalSeconds: 60},
 		WebsiteTraffic: &xraycore.WebsiteTrafficSpec{Enabled: server.WebsiteTrafficEnabled, BucketSeconds: 3600},
 	}
@@ -111,7 +111,7 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 			return spec, err
 		}
 		spec.Inbounds = append(spec.Inbounds, xraycore.InboundSpec{
-			Listen: in.Listen, DomainRoutes: domainRoutes, TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, Target: in.Target, SNI: in.SNI,
+			Listen: in.Listen, DomainRoutes: domainRoutes, TLSAutoID: in.TLSAutoID, Egress: egress, Tag: inboundTag(in), Template: in.Template, Port: in.Port, PortHopping: in.PortHopping, Target: in.Target, SNI: in.SNI,
 			PrivateKey: in.PrivateKey, ShortID: in.ShortID, Path: in.Path, Host: in.Host, Method: in.Method, Users: users, TLSCertFile: in.TLSCertFile, TLSKeyFile: in.TLSKeyFile,
 		})
 	}
@@ -162,6 +162,18 @@ func ApplyServerReport(server models.ProxyServer, report xraycore.Report) error 
 		updates := map[string]any{
 			"proxy_features": report.ProxyFeatures, "running": report.Running, "last_error": report.Error, "last_seen_at": now,
 			"xray_ver": report.XrayVersion, "agent_version": report.AgentVersion, "arch": report.Arch, "applied_rev": report.Rev,
+		}
+		if report.BBR != "" {
+			updates["bbr"] = report.BBR
+		}
+		if report.Qdisc != "" {
+			updates["qdisc"] = report.Qdisc
+		}
+		if report.RmemMax > 0 {
+			updates["rmem_max"] = report.RmemMax
+		}
+		if report.WmemMax > 0 {
+			updates["wmem_max"] = report.WmemMax
 		}
 		if server.AgentUpdateRequested && report.AgentHash != "" && report.AgentHash == agentArtifactHash(report.Arch) {
 			updates["agent_update_requested"] = false
@@ -420,7 +432,16 @@ func InboundLink(server models.ProxyServer, in models.ProxyInbound, acc models.P
 			hy.Certificate = in.TLSCertificate
 			hy.Insecure = 1
 		}
-		return node.EncodeHY2URL(hy)
+		rawURL := node.EncodeHY2URL(hy)
+		if hop := strings.TrimSpace(in.PortHopping); hop != "" {
+			if u, err := url.Parse(rawURL); err == nil {
+				q := u.Query()
+				q.Set("mport", hop)
+				u.RawQuery = q.Encode()
+				return u.String()
+			}
+		}
+		return rawURL
 
 	case xraycore.TemplateSS2022:
 		if in.PrivateKey == "" {

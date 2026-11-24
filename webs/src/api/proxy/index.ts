@@ -33,6 +33,7 @@ export interface ProxyInbound {
   remark: string;
   template: InboundTemplate;
   port: number;
+  portHopping?: string;
   target: string;
   sni: string;
   publicKey: string;
@@ -63,6 +64,11 @@ export interface ProxyServer {
   resetDay: number;
   monitorEnabled: boolean;
   websiteTrafficEnabled?: boolean;
+  autoFirewall?: boolean;
+  bbr?: string;
+  qdisc?: string;
+  rmemMax?: number;
+  wmemMax?: number;
   agentUpdateRequested: boolean;
   /** 本计费周期流量；over 为 true 时 xray 已停止、节点暂不下发，resetAt 恢复 */
   quota: { used: number; limit: number; over: boolean; resetAt: string };
@@ -127,6 +133,7 @@ export const saveProxyServer = (data: {
   resetDay?: number;
   monitorEnabled?: boolean;
   websiteTrafficEnabled?: boolean;
+  autoFirewall?: boolean;
 }) =>
   request<{ id: number; token?: string; install?: string }>({
     url: "/api/v1/proxy/servers/save",
@@ -171,6 +178,50 @@ export const checkRealityTarget = (target: string, sni: string) =>
     url: "/api/v1/proxy/check-target",
     method: "post",
     data: { target, sni },
+  });
+export const tuneProxyServer = (id: number) =>
+  request<{
+    ok: boolean;
+    output: string;
+    bbr: string;
+    qdisc: string;
+    rmemMax: number;
+    wmemMax: number;
+  }>({
+    url: "/api/v1/proxy/servers/tune",
+    method: "post",
+    data: { id },
+    timeout: 30000,
+  });
+export const upgradeProxyCore = (id: number, version = "") =>
+  request<{ ok: boolean; output: string }>({
+    url: "/api/v1/proxy/servers/upgrade-core",
+    method: "post",
+    data: { id, version },
+    timeout: 100000,
+  });
+export const getProxyServerLogs = (params: {
+  id: number;
+  source?: "xray" | "agent";
+  filter?: string;
+  lines?: number;
+}) =>
+  request<{ logs: string; source: string }>({
+    url: "/api/v1/proxy/servers/logs",
+    method: "get",
+    params,
+    timeout: 25000,
+  });
+export const checkProxyServerPort = (
+  serverId: number,
+  port: number,
+  proto: "tcp" | "udp"
+) =>
+  request<{ inUse: boolean; detail: string }>({
+    url: "/api/v1/proxy/servers/check-port",
+    method: "post",
+    data: { serverId, port, proto },
+    timeout: 15000,
   });
 export const listProxyAccounts = () =>
   request<ProxyAccount[]>({ url: "/api/v1/proxy/accounts", method: "get" });

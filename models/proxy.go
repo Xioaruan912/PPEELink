@@ -39,6 +39,13 @@ type ProxyServer struct {
 	MonitorEnabled bool `gorm:"not null;default:false" json:"monitorEnabled"`
 	// WebsiteTrafficEnabled 仅统计代理转发载荷，不采集整机网络或完整 URL。
 	WebsiteTrafficEnabled bool `gorm:"not null;default:false" json:"websiteTrafficEnabled"`
+	// AutoFirewall 开启后 agent 自动放行入站端口（并在删入站/卸载时自动回收）。
+	AutoFirewall bool `gorm:"not null;default:false" json:"autoFirewall"`
+	// 服务器内核网络参数（由 agent v1.20+ 心跳上报）
+	BBR     string `gorm:"size:24" json:"bbr"`
+	Qdisc   string `gorm:"size:24" json:"qdisc"`
+	RmemMax int64  `json:"rmemMax"`
+	WmemMax int64  `json:"wmemMax"`
 	// AgentUpdateRequested 面板已请求 agent 自更新，agent 回报新版本摘要后清除。
 	AgentUpdateRequested bool `gorm:"not null;default:false" json:"agentUpdateRequested"`
 	// 月流量上限（字节，0 不限）与每月重置日：超出后停止 xray、节点暂不下发，到重置日自动恢复
@@ -72,7 +79,8 @@ type ProxyInbound struct {
 	Remark         string        `gorm:"size:80" json:"remark"`
 	Template       string        `gorm:"size:40;not null" json:"template"` // vless-reality-vision / vless-xhttp-reality
 	Port           int           `gorm:"not null" json:"port"`
-	Target         string        `gorm:"size:255" json:"target"` // Reality 伪装目标 host:port
+	PortHopping    string        `gorm:"size:32" json:"portHopping"` // Hysteria2 端口跳跃段，例如 30000-40000
+	Target         string        `gorm:"size:255" json:"target"`     // Reality 伪装目标 host:port
 	SNI            string        `gorm:"size:255" json:"sni"`
 	PrivateKey     string        `gorm:"size:64" json:"-"`
 	PublicKey      string        `gorm:"size:64" json:"publicKey"`
