@@ -74,7 +74,14 @@ func saveAgentSecurityPolicy(p AgentSecurityPolicy) error {
 	return os.WriteFile(path, raw, 0o600)
 }
 
-var systemdPanelArgRe = regexp.MustCompile(`(-panel(?:=|\s+))([^\s"']+)`)
+var systemdPanelArgRe = regexp.MustCompile(`(-panel(?:=|\s+))(["']?)([^\s"']+)(["']?)`)
+
+func rewriteSystemdPanelURL(content, newURL string) (string, bool) {
+	if !systemdPanelArgRe.MatchString(content) {
+		return "", false
+	}
+	return systemdPanelArgRe.ReplaceAllString(content, "${1}${2}"+newURL+"${4}"), true
+}
 
 // migrateAgentPanelURL pre-flight verifies connectivity to the new panel URL,
 // atomically updates the systemd unit file, and schedules a clean non-blocking restart.
@@ -116,10 +123,10 @@ func migrateAgentPanelURL(ctx context.Context, newURL, token string) (string, er
 		return "", fmt.Errorf("读取 systemd 配置失败: %w", err)
 	}
 	content := string(raw)
-	if !systemdPanelArgRe.MatchString(content) {
+	updated, ok := rewriteSystemdPanelURL(content, uStr)
+	if !ok {
 		return "", fmt.Errorf("未在 %s 中找到 -panel 参数", unitPath)
 	}
-	updated := systemdPanelArgRe.ReplaceAllString(content, "${1}"+uStr)
 	tmpPath := unitPath + ".tmp"
 	if err := os.WriteFile(tmpPath, []byte(updated), 0o644); err != nil {
 		return "", fmt.Errorf("写入新 systemd 配置失败: %w", err)

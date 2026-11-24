@@ -52,9 +52,16 @@ func ExecutableHash() string {
 	return executableHashCache.value
 }
 
+// AllowSelfUpdate is an optional host-side policy hook. When non-nil and returning false,
+// remote self-update requests are refused locally.
+var AllowSelfUpdate func() bool
+
 // Update 从面板下载当前 agent 二进制，校验 SHA-256 后原子替换并重新执行自身。
 // 调用成功后进程通常不会返回；失败时保留旧文件并返回错误。
 func (h *HTTPSource) Update(ctx context.Context, expectedHash string) error {
+	if AllowSelfUpdate != nil && !AllowSelfUpdate() {
+		return fmt.Errorf("该节点已关闭远程自更新策略")
+	}
 	// API requests use a short timeout, but a binary download may be slow.
 	var client *http.Client
 	if h.Client != nil {

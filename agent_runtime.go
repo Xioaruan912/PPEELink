@@ -30,6 +30,7 @@ func runAgent(args []string) {
 		log.Fatal(err)
 	}
 	loadAgentSecurityPolicy(*dir)
+	xraycore.AllowSelfUpdate = func() bool { return currentAgentPolicy().AllowAutoUpdate }
 	xraycore.AgentVersion = agentversion.Current
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
