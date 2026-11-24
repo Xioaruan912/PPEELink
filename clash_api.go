@@ -137,8 +137,10 @@ func detectClashStatus(ctx context.Context) clashStatus {
 	client := clashHTTPClient(700 * time.Millisecond)
 
 	var baseURL, ver string
+	var authErrURL string
+	var authErrCode int
 	for _, cand := range cands {
-		pCtx, cancel := context.WithTimeout(ctx, 600*time.Millisecond)
+		pCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 		resp, err := clashDoRequest(pCtx, client, http.MethodGet, cand+"/version", sec, nil)
 		if err == nil {
 			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
@@ -153,11 +155,21 @@ func detectClashStatus(ctx context.Context) clashStatus {
 					cancel()
 					break
 				}
+			} else if (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) && authErrURL == "" {
+				authErrURL = cand
+				authErrCode = resp.StatusCode
 			}
 		}
 		cancel()
 	}
 	if baseURL == "" {
+		if authErrURL != "" {
+			return clashStatus{
+				Connected:  false,
+				Controller: authErrURL,
+				Error:      fmt.Sprintf("检测到本机 Clash (%s)，但 API 访问密钥未填写或不正确 (HTTP %d)", authErrURL, authErrCode),
+			}
+		}
 		return clashStatus{Connected: false}
 	}
 

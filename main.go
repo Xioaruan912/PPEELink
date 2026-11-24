@@ -24,7 +24,7 @@ import (
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.8"
+const agentVersion = "1.9"
 
 type userAgentConfigPatch struct {
 	PanelURL       string `json:"panelUrl,omitempty"`
@@ -45,15 +45,17 @@ type probeNode struct {
 }
 
 type waitJob struct {
-	JobID      string                `json:"jobId"`
-	Action     string                `json:"action"`
-	TargetHost string                `json:"targetHost,omitempty"`
-	SpeedMode  string                `json:"speedMode,omitempty"`
-	ClashGroup string                `json:"clashGroup,omitempty"`
-	ClashNode  string                `json:"clashNode,omitempty"`
-	ClashNodes []string              `json:"clashNodes,omitempty"`
-	Config     *userAgentConfigPatch `json:"config,omitempty"`
-	Nodes      []probeNode           `json:"nodes"`
+	JobID       string                `json:"jobId"`
+	Action      string                `json:"action"`
+	TargetHost  string                `json:"targetHost,omitempty"`
+	SpeedMode   string                `json:"speedMode,omitempty"`
+	ClashAPI    string                `json:"clashApi,omitempty"`
+	ClashSecret string                `json:"clashSecret,omitempty"`
+	ClashGroup  string                `json:"clashGroup,omitempty"`
+	ClashNode   string                `json:"clashNode,omitempty"`
+	ClashNodes  []string              `json:"clashNodes,omitempty"`
+	Config      *userAgentConfigPatch `json:"config,omitempty"`
+	Nodes       []probeNode           `json:"nodes"`
 }
 
 type waitEnvelope struct {
@@ -346,6 +348,15 @@ func main() {
 				})
 				continue
 			}
+			if job.ClashAPI != "" || job.ClashSecret != "" {
+				if job.ClashAPI != "" {
+					savedClashAPI = strings.TrimSpace(job.ClashAPI)
+				}
+				if job.ClashSecret != "" {
+					savedClashSecret = strings.TrimSpace(job.ClashSecret)
+				}
+				setClashConfig(savedClashAPI, savedClashSecret)
+			}
 			cCtx, cancel := context.WithTimeout(ctx, 4*time.Second)
 			st := detectClashStatus(cCtx)
 			cancel()
@@ -361,6 +372,15 @@ func main() {
 					JobID: jobID, Action: "clash-switch", Error: "该设备已关闭 Clash 外部控制权限",
 				})
 				continue
+			}
+			if job.ClashAPI != "" || job.ClashSecret != "" {
+				if job.ClashAPI != "" {
+					savedClashAPI = strings.TrimSpace(job.ClashAPI)
+				}
+				if job.ClashSecret != "" {
+					savedClashSecret = strings.TrimSpace(job.ClashSecret)
+				}
+				setClashConfig(savedClashAPI, savedClashSecret)
 			}
 			cCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			st, swErr := switchClashProxy(cCtx, job.ClashGroup, job.ClashNode)
@@ -382,6 +402,15 @@ func main() {
 					JobID: jobID, Action: "clash-batch", Error: "该设备已关闭 Clash 外部控制权限",
 				})
 				continue
+			}
+			if job.ClashAPI != "" || job.ClashSecret != "" {
+				if job.ClashAPI != "" {
+					savedClashAPI = strings.TrimSpace(job.ClashAPI)
+				}
+				if job.ClashSecret != "" {
+					savedClashSecret = strings.TrimSpace(job.ClashSecret)
+				}
+				setClashConfig(savedClashAPI, savedClashSecret)
 			}
 			bCtx, cancel := context.WithTimeout(ctx, 110*time.Second)
 			payload := runClashBatchTest(bCtx, job.ClashGroup, job.ClashNodes)
@@ -465,18 +494,40 @@ func sendJSONReport(ctx context.Context, client *http.Client, endpoint, token st
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
-	if err != nil {
-		return err
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		c := client
+		if attempt > 0 {
+			// Fresh transport on retry avoids stale HTTP/2 connections reset by Clash TUN reloads.
+			c = &http.Client{
+				Timeout: 15 * time.Second,
+				Transport: &http.Transport{
+					Proxy:             nil,
+					DisableKeepAlives: true,
+				},
+			}
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(raw))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Probe "+token)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := c.Do(req)
+		if err != nil {
+			lastErr = err
+			time.Sleep(time.Duration(attempt+1) * 180 * time.Millisecond)
+			continue
+		}
+		resp.Body.Close()
+		if resp.StatusCode >= 500 {
+			lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+			time.Sleep(time.Duration(attempt+1) * 180 * time.Millisecond)
+			continue
+		}
+		return nil
 	}
-	req.Header.Set("Authorization", "Probe "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	return nil
+	return lastErr
 }
 
 func fetchJobs(ctx context.Context, client *http.Client, panelURL, token string) ([]probeNode, error) {
