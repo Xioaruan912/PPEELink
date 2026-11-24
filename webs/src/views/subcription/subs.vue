@@ -3,6 +3,10 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import gsap from "gsap";
 import { Plus, Refresh } from "@element-plus/icons-vue";
 import { UiButton } from "@/ui";
+import {
+  getUnlockRoutingPreview,
+  type UnlockRoutingPreview,
+} from "@/api/proxy";
 import { provideSubscriptions } from "./subs/useSubscriptions";
 import SubscriptionList from "./subs/SubscriptionList.vue";
 import EditorDrawer from "./subs/EditorDrawer.vue";
@@ -22,7 +26,23 @@ const activeCount = computed(() =>
   Math.max(tableData.value.length - expiredCount.value, 0)
 );
 
+const routingPreview = ref<UnlockRoutingPreview | null>(null);
+async function loadRoutingPreview() {
+  try {
+    const { data } = await getUnlockRoutingPreview();
+    routingPreview.value = data || null;
+  } catch {
+    // Non-fatal if user is non-admin or no servers configured
+  }
+}
+
+function refreshAll() {
+  void getsubs();
+  void loadRoutingPreview();
+}
+
 onMounted(() => {
+  void loadRoutingPreview();
   if (!rootEl.value) return;
   gsapCtx = gsap.context(() => {
     const mm = gsap.matchMedia();
@@ -115,7 +135,7 @@ onBeforeUnmount(() => {
           variant="ghost"
           :icon="Refresh"
           :loading="loading"
-          @click="getsubs"
+          @click="refreshAll"
         >
           {{ loading ? "同步中" : "刷新" }}
         </UiButton>
@@ -124,6 +144,52 @@ onBeforeUnmount(() => {
 
     <!-- Borderless Swiss Gallery Subscription Ledger -->
     <SubscriptionList />
+
+    <!-- Smart Unlock Subscription Routing Preview -->
+    <section
+      v-if="routingPreview && routingPreview.groups.length"
+      class="smart-route-card"
+      aria-label="原生解锁智能分流"
+    >
+      <header class="smart-route-head">
+        <div class="smart-route-title">
+          <h2>订阅智能分流</h2>
+          <span class="sr-pill is-ok">自动生效中</span>
+          <span class="sr-pill mono">
+            已验 {{ routingPreview.checkedServers }}/{{
+              routingPreview.totalServers
+            }}
+            台
+          </span>
+        </div>
+      </header>
+
+      <div class="smart-route-grid">
+        <div
+          v-for="g in routingPreview.groups"
+          :key="g.key"
+          class="smart-route-row"
+        >
+          <span class="sr-service">{{ g.service }}</span>
+          <div class="sr-nodes">
+            <span
+              v-for="name in g.included"
+              :key="`in-${name}`"
+              class="sr-node is-ok"
+            >
+              {{ name }}
+            </span>
+            <span
+              v-for="name in g.excluded"
+              :key="`ex-${name}`"
+              class="sr-node is-off"
+            >
+              {{ name }}
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <EditorDrawer />
     <DetailDrawer />
@@ -176,6 +242,111 @@ onBeforeUnmount(() => {
   line-height: 1.08;
   letter-spacing: -0.04em;
   color: var(--c-ink);
+}
+
+.smart-route-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px 22px;
+  border: 1px solid var(--c-line);
+  border-radius: 20px;
+  background: var(--c-surface);
+}
+
+.smart-route-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.smart-route-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.smart-route-title h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--c-ink);
+}
+
+.sr-pill {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.sr-pill.is-ok {
+  background: color-mix(in srgb, var(--c-ok) 12%, transparent);
+  color: var(--c-ok);
+}
+
+.smart-route-grid {
+  display: grid;
+}
+
+.smart-route-row {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.smart-route-row:first-child {
+  padding-top: 2px;
+}
+
+.smart-route-row:last-child {
+  padding-bottom: 2px;
+  border-bottom: none;
+}
+
+.sr-service {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--c-ink);
+}
+
+.sr-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sr-node {
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+}
+
+.sr-node.is-ok {
+  background: color-mix(in srgb, var(--c-ok) 12%, transparent);
+  color: var(--c-ok);
+}
+
+.sr-node.is-off {
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+
+@media (max-width: 640px) {
+  .smart-route-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
 }
 
 .inline-metrics {

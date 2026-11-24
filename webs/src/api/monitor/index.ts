@@ -1,4 +1,5 @@
 import request from "@/utils/request";
+import type { ServerUnlockReport } from "@/api/proxy";
 
 export interface MonitorMetric {
   id: number;
@@ -57,6 +58,7 @@ export interface MonitorItem {
   allowAutoUpdate?: boolean;
   autoFirewall?: boolean;
   websiteTrafficEnabled?: boolean;
+  unlock?: ServerUnlockReport;
   sshHost: string;
   sshPort: number;
   sshUser: string;

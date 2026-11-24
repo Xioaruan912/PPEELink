@@ -38,6 +38,10 @@ import {
   type MonitorDetail,
   type MonitorItem,
 } from "@/api/monitor";
+import {
+  runProxyServerUnlockCheck,
+  type ServerUnlockItem,
+} from "@/api/proxy";
 
 defineOptions({ name: "MonitorPage" });
 
@@ -53,6 +57,56 @@ const items = ref<MonitorItem[]>([]);
 const agentManagerVisible = ref(false);
 const latestAgentVersion = ref("");
 const checkingAgents = ref(false);
+const checkingUnlock = ref(false);
+
+const shortUnlockLabel: Record<string, string> = {
+  chatgpt: "GPT",
+  claude: "Claude",
+  gemini: "Gemini",
+  netflix: "NF",
+  disney: "Disney+",
+  youtube: "YT",
+  tiktok: "TT",
+  spotify: "Spotify",
+};
+
+function visibleUnlockItems(list?: ServerUnlockItem[]) {
+  if (!list?.length) return [];
+  return list.filter(
+    (it) => it.status === "available" || it.status === "originals"
+  );
+}
+
+function formatUnlockPill(it: ServerUnlockItem) {
+  const base = shortUnlockLabel[it.key] || it.name;
+  if (it.status === "originals") return `${base}自制`;
+  return it.region ? `${base} ${it.region}` : base;
+}
+
+async function checkAllUnlock() {
+  if (checkingUnlock.value) return;
+  checkingUnlock.value = true;
+  try {
+    const { data } = await runProxyServerUnlockCheck({ all: true });
+    const okCount = data?.okCount || 0;
+    const total = data?.total || 0;
+    if (okCount === 0 && total > 0) {
+      const firstErr =
+        data?.results?.find((r) => !r.ok && r.error)?.error ||
+        "请先更新服务器 Agent 至最新版本";
+      ElMessage.warning(`0/${total} 台检测成功：${firstErr}`);
+    } else if (okCount < total) {
+      ElMessage.warning(`原生解锁检测完成：${okCount}/${total} 台成功`);
+    } else {
+      ElMessage.success(`原生解锁检测完成：${okCount}/${total} 台已更新`);
+    }
+    await load(true);
+  } catch (err: any) {
+    ElMessage.error(err?.message || "解锁检测失败");
+  } finally {
+    checkingUnlock.value = false;
+  }
+}
 
 async function checkAgents() {
   checkingAgents.value = true;
@@ -463,6 +517,14 @@ async function resetToken(item: MonitorItem | null) {
         <UiButton variant="primary" :icon="Plus" @click="openAdd">
           添加服务器
         </UiButton>
+        <UiButton
+          v-if="items.length"
+          variant="ghost"
+          :loading="checkingUnlock"
+          @click="checkAllUnlock"
+        >
+          测全服解锁
+        </UiButton>
         <UiButton variant="ghost" @click="agentManagerVisible = true">
           Agent 管理
         </UiButton>
@@ -595,6 +657,21 @@ async function resetToken(item: MonitorItem | null) {
           </div>
         </div>
         <p v-else class="card-empty">等待服务器首次上报…</p>
+
+        <div
+          v-if="visibleUnlockItems(item.unlock?.items).length"
+          class="card-unlock"
+          @click.stop
+        >
+          <span
+            v-for="u in visibleUnlockItems(item.unlock?.items)"
+            :key="u.key"
+            class="unlock-chip"
+            :class="u.status === 'available' ? 'is-ok' : 'is-warn'"
+          >
+            {{ formatUnlockPill(u) }}
+          </span>
+        </div>
 
         <footer class="card-foot mono">
           <div v-if="item.latest" class="net-speed">
@@ -1062,6 +1139,31 @@ async function resetToken(item: MonitorItem | null) {
 .card-metrics {
   display: grid;
   gap: 12px;
+}
+
+.card-unlock {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.unlock-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.unlock-chip.is-ok {
+  background: color-mix(in srgb, var(--c-ok) 12%, transparent);
+  color: var(--c-ok);
+}
+
+.unlock-chip.is-warn {
+  background: color-mix(in srgb, var(--c-warn, #d97706) 14%, transparent);
+  color: var(--c-warn-ink, #b45309);
 }
 
 .metric-item {

@@ -16,6 +16,11 @@ import (
 // using verified Server Agent native unlock results. Returns (matchedProxies, true) when applied.
 var SmartUnlockFilter func(groupName string, allProxies []string, fallbackRegex *regexp.Regexp) ([]string, bool)
 
+// SmartUnlockProviderFilter optionally rewrites Clash proxy-provider group `filter` regexes
+// using verified Server Agent native unlock results so proxy-provider subscriptions also
+// automatically route AI / streaming groups to verified-unlocked servers.
+var SmartUnlockProviderFilter func(groupName string, fallbackFilter string) (string, bool)
+
 type Proxy struct {
 	Fingerprint        string                 `yaml:"fingerprint,omitempty"`
 	Name               string                 `yaml:"name,omitempty"`
@@ -660,6 +665,14 @@ func EncodeClashProvider(yamlfile, providerName, providerURL, testURL string) ([
 		group["use"] = append(uses, providerName)
 		if group["proxies"] == nil {
 			group["proxies"] = []interface{}{}
+		}
+		if SmartUnlockProviderFilter != nil {
+			if groupName, ok := group["name"].(string); ok && groupName != "" {
+				origFilter, _ := group["filter"].(string)
+				if smartFilter, applied := SmartUnlockProviderFilter(groupName, origFilter); applied && smartFilter != "" {
+					group["filter"] = smartFilter
+				}
+			}
 		}
 		groups[i] = group
 	}

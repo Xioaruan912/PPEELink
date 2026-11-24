@@ -52,6 +52,7 @@ func ProxyServerList(c *gin.Context) {
 		if s.UnlockJSON != "" {
 			var rep serverOpsUnlockReport
 			if json.Unmarshal([]byte(s.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
+				normalizeUnlockReportRegions(&rep)
 				v.Unlock = &rep
 			}
 		}

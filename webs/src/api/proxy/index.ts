@@ -348,6 +348,27 @@ export const unbanProxyServerIP = (serverId: number, ip: string) =>
     timeout: 18000,
   });
 
+export interface UnlockRoutingGroupPreview {
+  key: string;
+  service: string;
+  groups: string;
+  included: string[];
+  excluded: string[];
+  filter?: string;
+}
+
+export interface UnlockRoutingPreview {
+  checkedServers: number;
+  totalServers: number;
+  groups: UnlockRoutingGroupPreview[];
+}
+
+export const getUnlockRoutingPreview = () =>
+  request<UnlockRoutingPreview>({
+    url: "/api/v1/proxy/unlock-routing-preview",
+    method: "get",
+  });
+
 export const runProxyServerUnlockCheck = (data: {
   serverId?: number;
   all?: boolean;

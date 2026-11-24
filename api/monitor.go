@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -161,6 +162,13 @@ func MonitorList(c *gin.Context) {
 				item["allowAutoUpdate"] = server.AllowAutoUpdate == nil || *server.AllowAutoUpdate
 				item["autoFirewall"] = server.AutoFirewall
 				item["websiteTrafficEnabled"] = server.WebsiteTrafficEnabled
+				if server.UnlockJSON != "" {
+					var rep serverOpsUnlockReport
+					if json.Unmarshal([]byte(server.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
+						normalizeUnlockReportRegions(&rep)
+						item["unlock"] = &rep
+					}
+				}
 				if m.Group == "" || m.Group == "自建节点" {
 					region := inferMonitorRegion(m.Name, server.PublicHost)
 					item["group"] = region

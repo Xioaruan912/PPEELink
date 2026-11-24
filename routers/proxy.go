@@ -28,6 +28,7 @@ func Proxy(r *gin.Engine) {
 		g.POST("/servers/security/ban", api.ProxyServerSecurityBan)
 		g.POST("/servers/security/unban", api.ProxyServerSecurityUnban)
 		g.POST("/servers/unlock-check", api.ProxyServerUnlockCheck)
+		g.GET("/unlock-routing-preview", api.ProxyUnlockRoutingPreview)
 		g.POST("/servers/migrate-url", api.ProxyServerMigrateURL)
 		g.POST("/servers/policy", api.ProxyServerSavePolicy)
 		g.DELETE("/servers/delete", api.ProxyServerDelete)

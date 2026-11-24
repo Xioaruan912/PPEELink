@@ -17,6 +17,29 @@ import (
 
 func init() {
 	node.SmartUnlockFilter = resolveSmartUnlockGroupNodes
+	node.SmartUnlockProviderFilter = resolveSmartUnlockProviderFilter
+}
+
+func normalizeUnlockReportRegions(rep *serverOpsUnlockReport) {
+	if rep == nil {
+		return
+	}
+	for i := range rep.Items {
+		r := strings.ToUpper(strings.TrimSpace(rep.Items[i].Region))
+		if r == "" {
+			continue
+		}
+		if rep.Items[i].Key == "netflix" {
+			if r == "TITLE" || r == "WATCH" || r == "BROWSE" {
+				rep.Items[i].Region = "US"
+				continue
+			}
+			if parts := strings.Split(r, "-"); len(parts) >= 2 && len(parts[0]) == 2 {
+				rep.Items[i].Region = parts[0]
+				continue
+			}
+		}
+	}
 }
 
 func groupUnlockServiceKey(groupName string) string {
@@ -26,7 +49,7 @@ func groupUnlockServiceKey(groupName string) string {
 		return "chatgpt"
 	case strings.Contains(low, "claude") || strings.Contains(low, "anthropic"):
 		return "claude"
-	case strings.Contains(low, "gemini"):
+	case strings.Contains(low, "gemini") || strings.Contains(low, "google"):
 		return "gemini"
 	case low == "ai" || strings.HasPrefix(low, "ai ") || strings.HasSuffix(low, " ai"):
 		return "ai"
@@ -152,6 +175,177 @@ func resolveSmartUnlockGroupNodes(groupName string, allProxies []string, fallbac
 		return nil, false
 	}
 	return out, true
+}
+
+// resolveSmartUnlockProviderFilter dynamically synthesizes a Clash proxy-provider `filter` regex
+// matching verified-unlocked self-hosted servers (plus any external third-party nodes matching fallbackFilter).
+func resolveSmartUnlockProviderFilter(groupName string, fallbackFilter string) (string, bool) {
+	if models.DB == nil {
+		return "", false
+	}
+	serviceKey := groupUnlockServiceKey(groupName)
+	if serviceKey == "" {
+		return "", false
+	}
+	var servers []models.ProxyServer
+	if models.DB.Where("unlock_json <> '' AND removing = ?", false).Find(&servers).Error != nil || len(servers) == 0 {
+		return "", false
+	}
+
+	byHost := map[string]*serverOpsUnlockReport{}
+	unlockedServers := make([]string, 0, len(servers))
+	knownCount := 0
+	for i := range servers {
+		s := &servers[i]
+		var rep serverOpsUnlockReport
+		if json.Unmarshal([]byte(s.UnlockJSON), &rep) != nil || len(rep.Items) == 0 {
+			continue
+		}
+		if h := strings.ToLower(strings.TrimSpace(s.PublicHost)); h != "" {
+			byHost[h] = &rep
+		}
+		if ok, known := serverUnlocksService(&rep, serviceKey); known {
+			knownCount++
+			if ok && strings.TrimSpace(s.Name) != "" {
+				unlockedServers = append(unlockedServers, strings.TrimSpace(s.Name))
+			}
+		}
+	}
+	if knownCount == 0 || len(unlockedServers) == 0 {
+		return "", false
+	}
+
+	var fallbackRe *regexp.Regexp
+	if strings.TrimSpace(fallbackFilter) != "" {
+		fallbackRe, _ = regexp.Compile(fallbackFilter)
+	}
+
+	tokens := make([]string, 0, len(unlockedServers)+4)
+	seen := map[string]bool{}
+	addTok := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" || seen[raw] {
+			return
+		}
+		seen[raw] = true
+		tokens = append(tokens, regexp.QuoteMeta(raw))
+	}
+	for _, nm := range unlockedServers {
+		addTok(nm)
+	}
+
+	// Preserve external (non-self-hosted) nodes that match the original fallbackFilter.
+	var dbNodes []models.Node
+	if models.DB.Select("name, link").Find(&dbNodes).Error == nil {
+		for _, n := range dbNodes {
+			h, _ := node.ExtractServerHost(n.Link)
+			if _, isSelf := byHost[strings.ToLower(strings.TrimSpace(h))]; isSelf {
+				continue
+			}
+			matchedServerName := false
+			lowName := strings.ToLower(n.Name)
+			for _, s := range servers {
+				if sn := strings.ToLower(strings.TrimSpace(s.Name)); sn != "" && strings.Contains(lowName, sn) {
+					matchedServerName = true
+					break
+				}
+			}
+			if matchedServerName {
+				continue
+			}
+			if fallbackRe == nil || fallbackRe.MatchString(n.Name) {
+				addTok(n.Name)
+			}
+		}
+	}
+	if len(tokens) == 0 {
+		return "", false
+	}
+	return "(?i)(?:" + strings.Join(tokens, "|") + ")", true
+}
+
+// ProxyUnlockRoutingPreview 返回当前基于 Server Agent 原生解锁矩阵自动生效的订阅智能分流映射。
+func ProxyUnlockRoutingPreview(c *gin.Context) {
+	var servers []models.ProxyServer
+	if err := models.DB.Where("kind = ? AND removing = ?", models.ServerKindAgent, false).Order("id asc").Find(&servers).Error; err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取服务器失败"})
+		return
+	}
+
+	type parsedSrv struct {
+		name string
+		rep  *serverOpsUnlockReport
+	}
+	checked := make([]parsedSrv, 0, len(servers))
+	for _, s := range servers {
+		if s.UnlockJSON == "" {
+			continue
+		}
+		var rep serverOpsUnlockReport
+		if json.Unmarshal([]byte(s.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
+			normalizeUnlockReportRegions(&rep)
+			checked = append(checked, parsedSrv{name: s.Name, rep: &rep})
+		}
+	}
+
+	defs := []struct {
+		Key     string
+		Service string
+		Groups  string
+	}{
+		{"chatgpt", "ChatGPT", "ChatGPT / OpenAI"},
+		{"claude", "Claude", "Claude / Anthropic"},
+		{"gemini", "Gemini / Google", "Gemini / Google"},
+		{"netflix", "Netflix", "Netflix"},
+		{"disney", "Disney+", "Disney+"},
+		{"tiktok", "TikTok", "TikTok"},
+	}
+
+	type groupPreview struct {
+		Key      string   `json:"key"`
+		Service  string   `json:"service"`
+		Groups   string   `json:"groups"`
+		Included []string `json:"included"`
+		Excluded []string `json:"excluded"`
+		Filter   string   `json:"filter"`
+	}
+	out := make([]groupPreview, 0, len(defs))
+	for _, d := range defs {
+		gp := groupPreview{
+			Key:      d.Key,
+			Service:  d.Service,
+			Groups:   d.Groups,
+			Included: []string{},
+			Excluded: []string{},
+		}
+		for _, ps := range checked {
+			ok, known := serverUnlocksService(ps.rep, d.Key)
+			if !known {
+				continue
+			}
+			if ok {
+				gp.Included = append(gp.Included, ps.name)
+			} else {
+				gp.Excluded = append(gp.Excluded, ps.name)
+			}
+		}
+		if len(gp.Included) > 0 || len(gp.Excluded) > 0 {
+			if f, applied := resolveSmartUnlockProviderFilter(d.Key, ""); applied {
+				gp.Filter = f
+			}
+			out = append(out, gp)
+		}
+	}
+
+	c.JSON(200, gin.H{
+		"code": "00000",
+		"data": gin.H{
+			"checkedServers": len(checked),
+			"totalServers":   len(servers),
+			"groups":         out,
+		},
+		"msg": "ok",
+	})
 }
 
 // ProxyServerUnlockCheck 对单台或全部在线服务器发起 Server Agent 原生解锁矩阵检测并落库。
