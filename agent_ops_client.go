@@ -72,7 +72,7 @@ func waitAgentOpsJob(ctx context.Context, client *http.Client, panel, token stri
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Agent "+token)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -139,7 +139,7 @@ func reportAgentOpsResult(ctx context.Context, client *http.Client, panel, token
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Authorization", "Agent "+token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := client.Do(req)
 	if err != nil {
