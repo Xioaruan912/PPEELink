@@ -24,10 +24,46 @@ const RECOMMENDED_PRESET_IDS = [
   "telegram",
   "wechat",
   "qq",
+  "work-im",
+  "cn-meeting",
+  "cn-remote",
+  "cn-video",
+  "cn-music",
+  "cn-nas",
   "baidu-pan",
   "ali-quark-pan",
   "thunder",
 ];
+
+const allInCategorySelected = computed(
+  () =>
+    categoryPresets.value.length > 0 &&
+    categoryPresets.value.every((p) => isPresetActive(p.id))
+);
+
+function toggleCategoryAll() {
+  if (allInCategorySelected.value) {
+    const ids = new Set(categoryPresets.value.map((p) => p.id));
+    appRules.value = appRules.value.filter((r) => !ids.has(r.preset || ""));
+    expandedIndex.value = null;
+    return;
+  }
+  for (const preset of categoryPresets.value) {
+    if (isPresetActive(preset.id)) continue;
+    if (appRules.value.length >= 64) {
+      ElMessage.warning("应用规则最多 64 条");
+      break;
+    }
+    appRules.value.push({
+      platform: "all",
+      preset: preset.id,
+      label: preset.label,
+      processes: [...preset.processes],
+      packages: preset.packages ? [...preset.packages] : [],
+      target: resolveDefaultTarget(preset),
+    });
+  }
+}
 
 const hasBrowserRule = computed(() =>
   appRules.value.some((r) =>
@@ -236,20 +272,30 @@ function addBundleToken(index: number, rule: AppRule) {
 
     <!-- Apple Tactile Preset Picker -->
     <div class="preset-deck">
-      <nav class="cat-rail" role="tablist" aria-label="常用应用分类">
+      <div class="cat-bar">
+        <nav class="cat-rail" role="tablist" aria-label="常用应用分类">
+          <button
+            v-for="cat in APP_PRESET_CATEGORIES"
+            :key="cat.key"
+            type="button"
+            role="tab"
+            class="cat-pill"
+            :aria-selected="activeCategory === cat.key"
+            :class="{ 'is-active': activeCategory === cat.key }"
+            @click="activeCategory = cat.key"
+          >
+            {{ cat.label }}
+          </button>
+        </nav>
         <button
-          v-for="cat in APP_PRESET_CATEGORIES"
-          :key="cat.key"
+          v-if="activeCategory !== 'browser'"
           type="button"
-          role="tab"
-          class="cat-pill"
-          :aria-selected="activeCategory === cat.key"
-          :class="{ 'is-active': activeCategory === cat.key }"
-          @click="activeCategory = cat.key"
+          class="cat-select-all"
+          @click="toggleCategoryAll"
         >
-          {{ cat.label }}
+          {{ allInCategorySelected ? "取消全选" : "全选本类" }}
         </button>
-      </nav>
+      </div>
 
       <div
         v-if="activeCategory === 'browser' || hasBrowserRule"
@@ -615,11 +661,35 @@ function addBundleToken(index: number, rule: AppRule) {
   background: var(--c-surface);
 }
 
+.cat-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .cat-rail {
   display: flex;
   align-items: center;
   gap: 4px;
   flex-wrap: wrap;
+}
+
+.cat-select-all {
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease;
+}
+
+.cat-select-all:hover {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
 }
 
 .cat-pill {

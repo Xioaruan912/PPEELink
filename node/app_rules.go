@@ -77,8 +77,8 @@ func ValidateAppRules(rules []AppRule) error {
 			return err
 		}
 		totalEntries += len(procs) + len(pkgs)
-		if totalEntries > 256 {
-			return fmt.Errorf("应用规则展开后的进程与包名总数不能超过 256 项")
+		if totalEntries > 512 {
+			return fmt.Errorf("应用规则展开后的进程与包名总数不能超过 512 项")
 		}
 	}
 	return nil
