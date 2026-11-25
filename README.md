@@ -2,7 +2,7 @@
 
 独立运行的远端 VPS Agent（Go 1.25+，零前端与数据库依赖），负责承载 Xray-core 入站管理、主机监控、原生流媒体/AI 解锁检测、安全防护与远程运维 RPC，与主面板通过独立发行清单解耦发布。
 
-## 核心能力（当前版本 `v1.24`）
+## 核心能力（当前版本 `v1.25`）
 
 - **代理与转发托管**：自动拉取面板入站与端口转发配置，托管 Xray-core 与无域名自动 TLS 证书。
 - **原生解锁矩阵（`unlock-check`）**：由 VPS 本机出口直测 ChatGPT、Claude、Gemini、Netflix（全区/自制及标准国家码）、Disney+、YouTube、TikTok、Spotify，供面板展示并驱动 Clash 订阅智能分流。
@@ -18,7 +18,7 @@
 ./build.sh
 ```
 
-`dist/` 会生成 `linux/amd64`、`linux/arm64`、`linux/armv7` 三个独立二进制以及带 SHA-256 校验值的 `release.json`。版本号维护在 `agentversion/version.go`（当前 `1.24`）。
+`dist/` 会生成 `linux/amd64`、`linux/arm64`、`linux/armv7` 三个独立二进制以及带 SHA-256 校验值的 `release.json`。版本号维护在 `agentversion/version.go`（当前 `1.25`）。
 
 ## 运行
 

@@ -32,9 +32,43 @@ type ServerUnlockReport struct {
 }
 
 var (
-	srvYTRegionRe = regexp.MustCompile(`"GL":"([A-Z]{2})"`)
-	srvTTRegionRe = regexp.MustCompile(`"region":"([A-Z]{2})"`)
+	srvYTRegionRe     = regexp.MustCompile(`"GL":"([A-Z]{2})"`)
+	srvTTRegionRe     = regexp.MustCompile(`"region":"([A-Z]{2})"`)
+	srvGeminiISO3Re   = regexp.MustCompile(`2,1,200,"([A-Z]{3})"`)
+	geminiBlockedISO3 = map[string]bool{
+		"HKG": true, "CHN": true, "MAC": true, "RUS": true,
+		"BLR": true, "IRN": true, "PRK": true, "SYR": true, "CUB": true,
+	}
+	geminiISO3To2 = map[string]string{
+		"USA": "US", "JPN": "JP", "HKG": "HK", "CHN": "CN", "MAC": "MO",
+		"SGP": "SG", "TWN": "TW", "GBR": "GB", "DEU": "DE", "NLD": "NL",
+		"KOR": "KR", "CAN": "CA", "AUS": "AU", "FRA": "FR", "IND": "IN",
+		"BRA": "BR", "MYS": "MY", "THA": "TH", "PHL": "PH", "VNM": "VN",
+		"RUS": "RU", "BLR": "BY", "IRN": "IR", "PRK": "KP", "SYR": "SY", "CUB": "CU",
+	}
 )
+
+func parseGeminiAvailability(code int, body string) (status, region string) {
+	low := strings.ToLower(body)
+	if strings.Contains(low, "not available in your country") || strings.Contains(low, "isn't supported in your country") {
+		return "blocked", ""
+	}
+	if m := srvGeminiISO3Re.FindStringSubmatch(body); len(m) == 2 {
+		iso3 := m[1]
+		reg := geminiISO3To2[iso3]
+		if reg == "" {
+			reg = iso3
+		}
+		if geminiBlockedISO3[iso3] {
+			return "blocked", reg
+		}
+		return "available", reg
+	}
+	if code == 200 && strings.Contains(body, "45631641,null,true") {
+		return "available", ""
+	}
+	return "blocked", ""
+}
 
 // RunServerNativeUnlock tests the VPS's own direct outbound IP for major AI & streaming unlocks.
 func RunServerNativeUnlock(ctx context.Context) ServerUnlockReport {
@@ -189,25 +223,18 @@ func srvCheckClaude(ctx context.Context, client *http.Client) ServerUnlockItem {
 
 func srvCheckGemini(ctx context.Context, client *http.Client) ServerUnlockItem {
 	item := ServerUnlockItem{Key: "gemini", Name: "Gemini", Status: "unknown"}
-	code, body, _, err := srvHTTPGet(ctx, client, "https://gemini.google.com/", 32*1024)
+	// gemini.google.com HTML is ~920KB; the authoritative 2,1,200,"<ISO3>" region tuple lives around offset 820KB.
+	code, body, _, err := srvHTTPGet(ctx, client, "https://gemini.google.com/", 2*1024*1024)
 	if err != nil {
 		item.Status = "blocked"
 		return item
 	}
-	low := strings.ToLower(body)
-	if strings.Contains(low, "not available in your country") || strings.Contains(low, "isn't supported in your country") {
-		item.Status = "blocked"
-		return item
+	st, reg := parseGeminiAvailability(code, body)
+	item.Status = st
+	item.Region = reg
+	if st == "blocked" && reg != "" {
+		item.Note = "地区受限 (" + reg + ")"
 	}
-	if code == 200 && strings.Contains(body, "45631641") {
-		item.Status = "available"
-		return item
-	}
-	if code == 200 {
-		item.Status = "available"
-		return item
-	}
-	item.Status = "blocked"
 	return item
 }
 
