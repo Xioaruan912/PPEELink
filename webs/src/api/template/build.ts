@@ -12,11 +12,12 @@ export function BuildClashTemplate(data: any) {
   });
 }
 
-// 获取默认 mihomo 配置（用于预填表单）
-export function GetDefaultTemplate() {
+// 获取默认 mihomo 配置（用于预填表单；preset=smart 返回实时联动解锁矩阵的智能分流预设）
+export function GetDefaultTemplate(preset?: "default" | "smart") {
   return request({
     url: "/api/v1/template/default",
     method: "get",
+    params: preset === "smart" ? { preset: "smart" } : undefined,
   });
 }
 

@@ -46,3 +46,24 @@ export function ValidateTemp(data: any) {
     headers: { "Content-Type": "multipart/form-data" },
   });
 }
+
+export interface SmartClashGenerateResponse {
+  file: string;
+  path: string;
+  text: string;
+  updatedSubs: number;
+  checkedServers: number;
+  totalServers: number;
+}
+
+export function generateSmartClashTemplate(data?: {
+  filename?: string;
+  applyAllSubs?: boolean;
+}) {
+  return request<any, { data: SmartClashGenerateResponse; msg?: string }>({
+    url: "/api/v1/template/smart-clash/generate",
+    method: "post",
+    data: data || {},
+    headers: { "Content-Type": "application/json" },
+  });
+}

@@ -17,6 +17,7 @@ func Templates(r *gin.Engine) {
 		TempsGroup.GET("/default", api.TemplateGetDefault)
 		TempsGroup.POST("/parse", api.TemplateParseForBuilder)
 		TempsGroup.POST("/validate", api.ValidateTemp)
+		TempsGroup.POST("/smart-clash/generate", api.GenerateSmartClashTemplate)
 	}
 
 }

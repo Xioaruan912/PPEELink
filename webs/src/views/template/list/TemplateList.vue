@@ -11,7 +11,13 @@ import {
 import { EmptyState, UiButton, UiSkeleton } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
 import { formatDateTime } from "@/utils/date";
-import { useTemplates, tempType, fileSize, type Temp } from "./useTemplates";
+import {
+  useTemplates,
+  tempType,
+  fileSize,
+  isSmartClashTemplate,
+  type Temp,
+} from "./useTemplates";
 
 const {
   tableData,
@@ -158,6 +164,9 @@ function formatExt(filename: string) {
           <div class="row-title-line">
             <strong class="row-filename mono">{{ row.file }}</strong>
             <span class="ext-chip mono">{{ formatExt(row.file) }}</span>
+            <span v-if="isSmartClashTemplate(row.file)" class="smart-chip">
+              智能分流
+            </span>
           </div>
           <span class="row-sub">
             {{ tempType(row.file) }} · <span class="mono">{{ fileSize(row.text) }}</span>
@@ -351,6 +360,16 @@ function formatExt(filename: string) {
   font-size: 10.5px;
   font-weight: 600;
   color: var(--c-muted);
+}
+
+.smart-chip {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-ok) 12%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--c-ok);
 }
 
 .row-sub {

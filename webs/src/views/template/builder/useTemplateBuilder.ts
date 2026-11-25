@@ -308,23 +308,26 @@ function createTemplateBuilder() {
     alive = false;
     sourceRequest++;
   });
-  const loadDefault = async () => {
-    if (!alive || templateSource.value !== "default") return;
+  const loadDefault = async (preset: "default" | "smart" = "default") => {
+    if (!alive || templateSource.value !== preset) return;
     const request = ++sourceRequest;
     const initialSnapshot = snapshot.value;
     sourceLoading.value = true;
     sourceError.value = "";
     try {
-      const { data } = await GetDefaultTemplate();
+      const { data } = await GetDefaultTemplate(preset);
       if (
         !alive ||
         request !== sourceRequest ||
-        templateSource.value !== "default" ||
+        templateSource.value !== preset ||
         snapshot.value !== initialSnapshot
       )
         return;
       if (data) {
-        Object.assign(form, data, { filename: "mihomo_default.yaml" });
+        Object.assign(form, data, {
+          filename:
+            preset === "smart" ? "clash-smart.yaml" : "mihomo_default.yaml",
+        });
         form.groups = (data.groups || []).map(normalizeGroup);
         rulesText.value = (data.rules || []).join("\n");
       }
@@ -341,9 +344,9 @@ function createTemplateBuilder() {
     sourceLoading.value = false;
     sourceError.value = "";
     editingOldname.value = "";
-    if (val === "default") {
+    if (val === "default" || val === "smart") {
       target.value = "clash";
-      await loadDefault();
+      await loadDefault(val);
     } else if (val === "blank") {
       form.filename = "my_clash.yaml";
       form.groups = [
@@ -555,7 +558,8 @@ function createTemplateBuilder() {
             .filter((l) => l.trim() && !l.trim().startsWith("#"))
             .map((l) => l.trim()),
         };
-        if (templateSource.value === "default") payload.source = "default";
+        if (templateSource.value === "default" || templateSource.value === "smart")
+          payload.source = "default";
         if (editingOldname.value) payload.edit_oldname = editingOldname.value;
       }
       const { data } = await BuildClashTemplate(payload);

@@ -223,7 +223,12 @@ onBeforeUnmount(() => {
 
     <KineticNotice :raw="sourceError || buildError">
       <template v-if="sourceError" #action>
-        <UiButton size="sm" :icon="Refresh" variant="ghost" @click="loadDefault">
+        <UiButton
+          size="sm"
+          :icon="Refresh"
+          variant="ghost"
+          @click="loadDefault(templateSource === 'smart' ? 'smart' : 'default')"
+        >
           重试
         </UiButton>
       </template>
@@ -274,6 +279,14 @@ onBeforeUnmount(() => {
           <div class="deck-group">
             <span class="deck-label">模板基底</span>
             <div class="source-pills" role="group" aria-label="模板基底">
+              <button
+                type="button"
+                class="source-chip"
+                :class="{ 'is-active': templateSource === 'smart' }"
+                @click="selectSource('smart')"
+              >
+                智能分流 Clash
+              </button>
               <button
                 type="button"
                 class="source-chip"

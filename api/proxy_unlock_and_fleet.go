@@ -429,6 +429,9 @@ func ProxyServerUnlockCheck(c *gin.Context) {
 			okCount++
 		}
 	}
+	if okCount > 0 {
+		_ = SyncSmartClashTemplateFile(false)
+	}
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{"results": results, "okCount": okCount, "total": len(results)},

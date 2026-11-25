@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import gsap from "gsap";
-import { Back, DocumentChecked, Plus } from "@element-plus/icons-vue";
+import { Back, DocumentChecked, MagicStick, Plus } from "@element-plus/icons-vue";
 import { UiButton } from "@/ui";
 import { provideTemplates } from "./list/useTemplates";
 import TemplateList from "./list/TemplateList.vue";
@@ -19,9 +19,11 @@ const {
   Tempname,
   dirty,
   saving,
+  smartSyncing,
   handleAddTemp,
   closeEditor,
   addtemp,
+  syncSmartClash,
 } = provideTemplates();
 
 onMounted(() => {
@@ -96,14 +98,19 @@ onBeforeUnmount(() => {
             {{ TempTitle === "添加模板" ? "保存模板" : "保存修改" }}
           </UiButton>
         </template>
-        <UiButton
-          v-else
-          variant="primary"
-          :icon="Plus"
-          @click="handleAddTemp"
-        >
-          新建模板
-        </UiButton>
+        <template v-else>
+          <UiButton
+            variant="ghost"
+            :icon="MagicStick"
+            :loading="smartSyncing"
+            @click="syncSmartClash"
+          >
+            同步智能分流模板
+          </UiButton>
+          <UiButton variant="primary" :icon="Plus" @click="handleAddTemp">
+            新建模板
+          </UiButton>
+        </template>
       </div>
     </header>
 

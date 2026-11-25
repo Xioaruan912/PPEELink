@@ -59,7 +59,11 @@ const {
               <el-option
                 v-for="t in templist"
                 :key="t.file"
-                :label="t.file"
+                :label="
+                  t.file === 'clash-smart.yaml'
+                    ? 'clash-smart.yaml（智能分流默认）'
+                    : t.file
+                "
                 :value="'./template/' + t.file"
               />
             </el-select>
@@ -106,7 +110,11 @@ const {
               <el-option
                 v-for="t in templist"
                 :key="t.file"
-                :label="t.file"
+                :label="
+                  t.file === 'clash-smart.yaml'
+                    ? 'clash-smart.yaml（智能分流默认）'
+                    : t.file
+                "
                 :value="'./template/' + t.file"
               />
             </el-select>
@@ -153,7 +161,11 @@ const {
               <el-option
                 v-for="t in templist"
                 :key="t.file"
-                :label="t.file"
+                :label="
+                  t.file === 'clash-smart.yaml'
+                    ? 'clash-smart.yaml（智能分流默认）'
+                    : t.file
+                "
                 :value="'./template/' + t.file"
               />
             </el-select>

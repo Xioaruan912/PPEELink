@@ -156,6 +156,9 @@ func Run(port int) {
 	utils.Loginit()
 	// 初始化模板
 	Templateinit()
+	if err := api.SyncSmartClashTemplateFile(false); err != nil {
+		log.Printf("[主程序] 同步智能分流模板失败: %v", err)
+	}
 	// 安装中间件
 	r.Use(middlewares.SecurityHeaders) // 安全响应头与 API 禁缓存
 	r.Use(middlewares.PublicRateLimit) // 公开订阅与短链按 IP 令牌桶限流

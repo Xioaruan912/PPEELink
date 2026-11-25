@@ -424,8 +424,13 @@ func defaultBuilderRequest() BuilderRequest {
 }
 
 // TemplateGetDefault 返回默认的 mihomo 配置（供前端预填表单）。
-// GET /api/v1/template/default
+// GET /api/v1/template/default (?preset=smart 返回实时联动解锁矩阵的智能分流预设)
 func TemplateGetDefault(c *gin.Context) {
+	if strings.EqualFold(strings.TrimSpace(c.Query("preset")), "smart") {
+		req, _, _, _ := smartClashBuilderRequest()
+		c.JSON(200, gin.H{"code": "00000", "data": req, "msg": "智能分流 Clash 默认配置"})
+		return
+	}
 	c.JSON(200, gin.H{"code": "00000", "data": defaultBuilderRequest(), "msg": "默认配置"})
 }
 

@@ -15,20 +15,25 @@ import {
   UpdateTemp,
   DelTemp,
   ValidateTemp,
+  generateSmartClashTemplate,
 } from "@/api/template/temp";
 export interface Temp {
   file: string;
   text: string;
   create_date: string;
 }
+export const isSmartClashTemplate = (file: string) =>
+  file.toLowerCase() === "clash-smart.yaml";
 export const tempType = (file: string) =>
-  /\.ya?ml$/i.test(file)
-    ? "Clash / Mihomo"
-    : /surge/i.test(file)
-      ? "Surge"
-      : /\.conf$/i.test(file)
-        ? "Loon"
-        : "通用";
+  isSmartClashTemplate(file)
+    ? "Clash 智能分流 · 解锁联动"
+    : /\.ya?ml$/i.test(file)
+      ? "Clash / Mihomo"
+      : /surge/i.test(file)
+        ? "Surge"
+        : /\.conf$/i.test(file)
+          ? "Loon"
+          : "通用";
 export const fileSize = (text: string) => {
   const bytes = new Blob([text || ""]).size;
   return bytes < 1024
@@ -50,6 +55,7 @@ function createTemplates() {
     TempTitle = ref("");
   const dialogVisible = ref(false),
     saving = ref(false),
+    smartSyncing = ref(false),
     baselineText = ref("");
   const validating = ref(false),
     validationErrors = ref<string[]>([]),
@@ -223,6 +229,19 @@ function createTemplates() {
       ElMessage.warning("复制失败");
     }
   }
+  async function syncSmartClash() {
+    if (smartSyncing.value) return;
+    smartSyncing.value = true;
+    try {
+      const res = await generateSmartClashTemplate();
+      ElMessage.success(res?.msg || "已同步智能分流模板 clash-smart.yaml");
+      await gettemps();
+    } catch (error) {
+      ElMessage.error(errorMessage(error));
+    } finally {
+      if (alive) smartSyncing.value = false;
+    }
+  }
   onMounted(gettemps);
   return {
     tableData,
@@ -235,6 +254,7 @@ function createTemplates() {
     TempTitle,
     dialogVisible,
     saving,
+    smartSyncing,
     dirty,
     editorLanguage,
     validating,
@@ -249,6 +269,7 @@ function createTemplates() {
     runValidation,
     handleDel,
     copyText,
+    syncSmartClash,
   };
 }
 const key: InjectionKey<ReturnType<typeof createTemplates>> =

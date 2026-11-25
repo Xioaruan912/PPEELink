@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import gsap from "gsap";
-import { Plus, Refresh } from "@element-plus/icons-vue";
+import { MagicStick, Plus, Refresh } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { UiButton } from "@/ui";
 import {
   getUnlockRoutingPreview,
   type UnlockRoutingPreview,
 } from "@/api/proxy";
+import { generateSmartClashTemplate } from "@/api/template/temp";
 import { provideSubscriptions } from "./subs/useSubscriptions";
 import SubscriptionList from "./subs/SubscriptionList.vue";
 import EditorDrawer from "./subs/EditorDrawer.vue";
@@ -27,12 +29,45 @@ const activeCount = computed(() =>
 );
 
 const routingPreview = ref<UnlockRoutingPreview | null>(null);
+const smartTplBusy = ref(false);
+
 async function loadRoutingPreview() {
   try {
     const { data } = await getUnlockRoutingPreview();
     routingPreview.value = data || null;
   } catch {
     // Non-fatal if user is non-admin or no servers configured
+  }
+}
+
+async function handleSyncSmartTemplate(applyAllSubs = false) {
+  if (smartTplBusy.value) return;
+  if (applyAllSubs) {
+    try {
+      await ElMessageBox.confirm(
+        "将生成最新智能分流模板 clash-smart.yaml，并把全部订阅的 Clash 模板切换为该模板（保留 UDP / proxy-provider 等原有设置）。是否继续？",
+        "应用智能分流 Clash 模板",
+        {
+          confirmButtonText: "确认应用",
+          cancelButtonText: "取消",
+          type: "info",
+        }
+      );
+    } catch {
+      return;
+    }
+  }
+  smartTplBusy.value = true;
+  try {
+    const res = await generateSmartClashTemplate({ applyAllSubs });
+    ElMessage.success(res?.msg || "已同步智能分流 Clash 模板");
+    if (applyAllSubs) {
+      await getsubs();
+    }
+  } catch (err: any) {
+    ElMessage.error(err?.message || "同步智能分流模板失败");
+  } finally {
+    smartTplBusy.value = false;
   }
 }
 
@@ -162,6 +197,25 @@ onBeforeUnmount(() => {
             台
           </span>
         </div>
+        <div class="smart-route-actions">
+          <UiButton
+            size="sm"
+            variant="ghost"
+            :icon="MagicStick"
+            :loading="smartTplBusy"
+            @click="handleSyncSmartTemplate(false)"
+          >
+            同步智能模板
+          </UiButton>
+          <UiButton
+            size="sm"
+            variant="primary"
+            :loading="smartTplBusy"
+            @click="handleSyncSmartTemplate(true)"
+          >
+            应用至全部订阅
+          </UiButton>
+        </div>
       </header>
 
       <div class="smart-route-grid">
@@ -258,6 +312,14 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+}
+
+.smart-route-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .smart-route-title {
