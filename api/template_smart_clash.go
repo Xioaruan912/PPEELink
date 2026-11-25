@@ -119,7 +119,7 @@ func smartClashRules() []string {
 
 // smartClashBuilderRequest 构造「智能分流 Clash」模板表单，
 // 以现有生产 clash.yaml 的端口/DNS/TUN/Sniffer/规则体系为基底，
-// 并实时联动 Server Agent 原生解锁矩阵填充各 AI / 流媒体策略组 filter。
+// 并实时联动双源解锁矩阵（Server Agent 原生 + 本机 Clash 实测）填充各 AI / 流媒体策略组 filter。
 func smartClashBuilderRequest() (BuilderRequest, []SmartClashGroupSummary, int, int) {
 	req := defaultBuilderRequest()
 	req.Filename = SmartClashDefaultFilename
@@ -127,28 +127,7 @@ func smartClashBuilderRequest() (BuilderRequest, []SmartClashGroupSummary, int, 
 	req.RuleProviders = smartClashRuleProviders()
 	req.Rules = smartClashRules()
 
-	type checkedSrv struct {
-		name string
-		rep  *serverOpsUnlockReport
-	}
-	var checked []checkedSrv
-	totalServers := 0
-	if models.DB != nil {
-		var servers []models.ProxyServer
-		if models.DB.Where("kind = ? AND removing = ?", models.ServerKindAgent, false).Order("id asc").Find(&servers).Error == nil {
-			totalServers = len(servers)
-			for _, s := range servers {
-				if s.UnlockJSON == "" {
-					continue
-				}
-				var rep serverOpsUnlockReport
-				if json.Unmarshal([]byte(s.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
-					normalizeUnlockReportRegions(&rep)
-					checked = append(checked, checkedSrv{name: s.Name, rep: &rep})
-				}
-			}
-		}
-	}
+	entities, totalServers, _, _, _ := loadMergedUnlockEntities()
 
 	groups := make([]BuilderGroup, 0, len(smartClashGroupSpecs)+1)
 	groups = append(groups, BuilderGroup{
@@ -166,15 +145,15 @@ func smartClashBuilderRequest() (BuilderRequest, []SmartClashGroupSummary, int, 
 			Included:   []string{},
 			Excluded:   []string{},
 		}
-		for _, ps := range checked {
-			ok, known := serverUnlocksService(ps.rep, spec.ServiceKey)
+		for _, ent := range entities {
+			ok, known := serverUnlocksService(ent.Report, spec.ServiceKey)
 			if !known {
 				continue
 			}
 			if ok {
-				sum.Included = append(sum.Included, ps.name)
+				sum.Included = append(sum.Included, ent.Name)
 			} else {
-				sum.Excluded = append(sum.Excluded, ps.name)
+				sum.Excluded = append(sum.Excluded, ent.Name)
 			}
 		}
 
@@ -203,7 +182,7 @@ func smartClashBuilderRequest() (BuilderRequest, []SmartClashGroupSummary, int, 
 	}
 
 	req.Groups = groups
-	return req, summaries, len(checked), totalServers
+	return req, summaries, len(entities), totalServers
 }
 
 // BuildSmartClashTemplateYAML 根据当前原生解锁矩阵实时生成「智能分流 Clash」YAML 文本。

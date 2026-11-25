@@ -230,7 +230,12 @@ func ProbeClashBatchTest(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": res.Error, "data": res})
 		return
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": res, "msg": fmt.Sprintf("已完成 %d 个 Clash 节点实测", len(res.Items))})
+	saved := saveClashBatchUnlockSnapshots(res.ProbeName, res.Items)
+	msg := fmt.Sprintf("已完成 %d 个 Clash 节点实测", len(res.Items))
+	if saved > 0 {
+		msg = fmt.Sprintf("已完成 %d 个 Clash 节点实测，已融合更新 %d 个节点解锁矩阵", len(res.Items), saved)
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": res, "msg": msg})
 }
 
 // ---- #9 首页端到端拓扑与异常焦点数据 ------------------------------------------

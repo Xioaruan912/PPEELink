@@ -94,9 +94,9 @@ func serverUnlocksService(rep *serverOpsUnlockReport, serviceKey string) (unlock
 	return st == "available", true
 }
 
-// resolveSmartUnlockGroupNodes maps verified Server Agent unlock results onto
-// Clash subscription proxy-groups: unlocked self-hosted nodes are auto-included,
-// blocked self-hosted nodes are auto-excluded, and unchecked/external nodes follow fallbackRegex.
+// resolveSmartUnlockGroupNodes maps dual-source (Server Agent native + Clash real-tunnel) unlock results
+// onto Clash subscription proxy-groups: unlocked verified nodes are auto-included, blocked verified nodes
+// are auto-excluded, and unchecked/external nodes follow fallbackRegex.
 func resolveSmartUnlockGroupNodes(groupName string, allProxies []string, fallbackRegex *regexp.Regexp) ([]string, bool) {
 	if models.DB == nil {
 		return nil, false
@@ -106,32 +106,22 @@ func resolveSmartUnlockGroupNodes(groupName string, allProxies []string, fallbac
 		return nil, false
 	}
 
-	var servers []models.ProxyServer
-	if models.DB.Where("unlock_json <> '' AND removing = ?", false).Find(&servers).Error != nil || len(servers) == 0 {
+	entities, _, _, _, _ := loadMergedUnlockEntities()
+	if len(entities) == 0 {
 		return nil, false
 	}
 
-	// Build serverHost -> unlock report AND serverName -> unlock report
 	byHost := map[string]*serverOpsUnlockReport{}
 	byName := map[string]*serverOpsUnlockReport{}
-	for i := range servers {
-		s := &servers[i]
-		var rep serverOpsUnlockReport
-		if json.Unmarshal([]byte(s.UnlockJSON), &rep) != nil || len(rep.Items) == 0 {
-			continue
+	for _, ent := range entities {
+		if ent.Host != "" {
+			byHost[ent.Host] = ent.Report
 		}
-		if h := strings.ToLower(strings.TrimSpace(s.PublicHost)); h != "" {
-			byHost[h] = &rep
+		if nm := strings.ToLower(strings.TrimSpace(ent.MatchToken)); nm != "" {
+			byName[nm] = ent.Report
 		}
-		if nm := strings.ToLower(strings.TrimSpace(s.Name)); nm != "" {
-			byName[nm] = &rep
-		}
-	}
-	if len(byHost) == 0 && len(byName) == 0 {
-		return nil, false
 	}
 
-	// Map panel node name -> its extracted server host
 	var dbNodes []models.Node
 	_ = models.DB.Select("name, link").Find(&dbNodes).Error
 	nodeHostByName := make(map[string]string, len(dbNodes))
@@ -145,15 +135,23 @@ func resolveSmartUnlockGroupNodes(groupName string, allProxies []string, fallbac
 	appliedAny := false
 	for _, proxyName := range allProxies {
 		var rep *serverOpsUnlockReport
-		if h, ok := nodeHostByName[proxyName]; ok {
-			rep = byHost[h]
+		lowClean := strings.ToLower(cleanClashNodeName(proxyName))
+		// Prefer exact name match first (distinguishes DMIT_USA vs DMIT_USA_v6).
+		if r, ok := byName[lowClean]; ok {
+			rep = r
+		}
+		if rep == nil {
+			if h, ok := nodeHostByName[proxyName]; ok {
+				rep = byHost[h]
+			}
 		}
 		if rep == nil {
 			lowP := strings.ToLower(proxyName)
+			bestLen := 0
 			for sName, r := range byName {
-				if strings.Contains(lowP, sName) {
+				if strings.Contains(lowP, sName) && len(sName) > bestLen {
 					rep = r
-					break
+					bestLen = len(sName)
 				}
 			}
 		}
@@ -178,7 +176,7 @@ func resolveSmartUnlockGroupNodes(groupName string, allProxies []string, fallbac
 }
 
 // resolveSmartUnlockProviderFilter dynamically synthesizes a Clash proxy-provider `filter` regex
-// matching verified-unlocked self-hosted servers (plus any external third-party nodes matching fallbackFilter).
+// matching dual-source verified-unlocked nodes (plus any unchecked external nodes matching fallbackFilter).
 func resolveSmartUnlockProviderFilter(groupName string, fallbackFilter string) (string, bool) {
 	if models.DB == nil {
 		return "", false
@@ -187,31 +185,26 @@ func resolveSmartUnlockProviderFilter(groupName string, fallbackFilter string) (
 	if serviceKey == "" {
 		return "", false
 	}
-	var servers []models.ProxyServer
-	if models.DB.Where("unlock_json <> '' AND removing = ?", false).Find(&servers).Error != nil || len(servers) == 0 {
+	entities, _, _, _, _ := loadMergedUnlockEntities()
+	if len(entities) == 0 {
 		return "", false
 	}
 
 	byHost := map[string]*serverOpsUnlockReport{}
-	unlockedServers := make([]string, 0, len(servers))
+	unlockedTokens := make([]string, 0, len(entities))
 	knownCount := 0
-	for i := range servers {
-		s := &servers[i]
-		var rep serverOpsUnlockReport
-		if json.Unmarshal([]byte(s.UnlockJSON), &rep) != nil || len(rep.Items) == 0 {
-			continue
+	for _, ent := range entities {
+		if ent.Host != "" {
+			byHost[ent.Host] = ent.Report
 		}
-		if h := strings.ToLower(strings.TrimSpace(s.PublicHost)); h != "" {
-			byHost[h] = &rep
-		}
-		if ok, known := serverUnlocksService(&rep, serviceKey); known {
+		if ok, known := serverUnlocksService(ent.Report, serviceKey); known {
 			knownCount++
-			if ok && strings.TrimSpace(s.Name) != "" {
-				unlockedServers = append(unlockedServers, strings.TrimSpace(s.Name))
+			if ok && strings.TrimSpace(ent.MatchToken) != "" {
+				unlockedTokens = append(unlockedTokens, strings.TrimSpace(ent.MatchToken))
 			}
 		}
 	}
-	if knownCount == 0 || len(unlockedServers) == 0 {
+	if knownCount == 0 || len(unlockedTokens) == 0 {
 		return "", false
 	}
 
@@ -220,7 +213,7 @@ func resolveSmartUnlockProviderFilter(groupName string, fallbackFilter string) (
 		fallbackRe, _ = regexp.Compile(fallbackFilter)
 	}
 
-	tokens := make([]string, 0, len(unlockedServers)+4)
+	tokens := make([]string, 0, len(unlockedTokens)+4)
 	seen := map[string]bool{}
 	addTok := func(raw string) {
 		raw = strings.TrimSpace(raw)
@@ -230,27 +223,27 @@ func resolveSmartUnlockProviderFilter(groupName string, fallbackFilter string) (
 		seen[raw] = true
 		tokens = append(tokens, regexp.QuoteMeta(raw))
 	}
-	for _, nm := range unlockedServers {
+	for _, nm := range unlockedTokens {
 		addTok(nm)
 	}
 
-	// Preserve external (non-self-hosted) nodes that match the original fallbackFilter.
+	// Preserve unchecked external nodes that match the original fallbackFilter.
 	var dbNodes []models.Node
 	if models.DB.Select("name, link").Find(&dbNodes).Error == nil {
 		for _, n := range dbNodes {
 			h, _ := node.ExtractServerHost(n.Link)
-			if _, isSelf := byHost[strings.ToLower(strings.TrimSpace(h))]; isSelf {
+			if _, isManaged := byHost[strings.ToLower(strings.TrimSpace(h))]; isManaged {
 				continue
 			}
-			matchedServerName := false
+			matchedEntity := false
 			lowName := strings.ToLower(n.Name)
-			for _, s := range servers {
-				if sn := strings.ToLower(strings.TrimSpace(s.Name)); sn != "" && strings.Contains(lowName, sn) {
-					matchedServerName = true
+			for _, ent := range entities {
+				if sn := strings.ToLower(strings.TrimSpace(ent.MatchToken)); sn != "" && strings.Contains(lowName, sn) {
+					matchedEntity = true
 					break
 				}
 			}
-			if matchedServerName {
+			if matchedEntity {
 				continue
 			}
 			if fallbackRe == nil || fallbackRe.MatchString(n.Name) {
@@ -264,29 +257,9 @@ func resolveSmartUnlockProviderFilter(groupName string, fallbackFilter string) (
 	return "(?i)(?:" + strings.Join(tokens, "|") + ")", true
 }
 
-// ProxyUnlockRoutingPreview 返回当前基于 Server Agent 原生解锁矩阵自动生效的订阅智能分流映射。
+// ProxyUnlockRoutingPreview 返回当前基于双源解锁矩阵（服务端原生 + 本机 Clash 实测）自动生效的订阅智能分流映射。
 func ProxyUnlockRoutingPreview(c *gin.Context) {
-	var servers []models.ProxyServer
-	if err := models.DB.Where("kind = ? AND removing = ?", models.ServerKindAgent, false).Order("id asc").Find(&servers).Error; err != nil {
-		c.JSON(500, gin.H{"code": "50000", "msg": "读取服务器失败"})
-		return
-	}
-
-	type parsedSrv struct {
-		name string
-		rep  *serverOpsUnlockReport
-	}
-	checked := make([]parsedSrv, 0, len(servers))
-	for _, s := range servers {
-		if s.UnlockJSON == "" {
-			continue
-		}
-		var rep serverOpsUnlockReport
-		if json.Unmarshal([]byte(s.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
-			normalizeUnlockReportRegions(&rep)
-			checked = append(checked, parsedSrv{name: s.Name, rep: &rep})
-		}
-	}
+	entities, totalServers, nativeCount, clashCount, dualCount := loadMergedUnlockEntities()
 
 	defs := []struct {
 		Key     string
@@ -302,31 +275,42 @@ func ProxyUnlockRoutingPreview(c *gin.Context) {
 	}
 
 	type groupPreview struct {
-		Key      string   `json:"key"`
-		Service  string   `json:"service"`
-		Groups   string   `json:"groups"`
-		Included []string `json:"included"`
-		Excluded []string `json:"excluded"`
-		Filter   string   `json:"filter"`
+		Key           string            `json:"key"`
+		Service       string            `json:"service"`
+		Groups        string            `json:"groups"`
+		Included      []string          `json:"included"`
+		Excluded      []string          `json:"excluded"`
+		SourcesByNode map[string]string `json:"sourcesByNode,omitempty"` // nodeName -> "both" | "native" | "clash"
+		Filter        string            `json:"filter"`
 	}
 	out := make([]groupPreview, 0, len(defs))
 	for _, d := range defs {
 		gp := groupPreview{
-			Key:      d.Key,
-			Service:  d.Service,
-			Groups:   d.Groups,
-			Included: []string{},
-			Excluded: []string{},
+			Key:           d.Key,
+			Service:       d.Service,
+			Groups:        d.Groups,
+			Included:      []string{},
+			Excluded:      []string{},
+			SourcesByNode: map[string]string{},
 		}
-		for _, ps := range checked {
-			ok, known := serverUnlocksService(ps.rep, d.Key)
+		for _, ent := range entities {
+			ok, known := serverUnlocksService(ent.Report, d.Key)
 			if !known {
 				continue
 			}
+			// Determine per-service verification source for this node.
+			itemSrc := ent.Source
+			for _, it := range ent.Report.Items {
+				if strings.EqualFold(it.Key, d.Key) && it.Source != "" {
+					itemSrc = it.Source
+					break
+				}
+			}
+			gp.SourcesByNode[ent.Name] = itemSrc
 			if ok {
-				gp.Included = append(gp.Included, ps.name)
+				gp.Included = append(gp.Included, ent.Name)
 			} else {
-				gp.Excluded = append(gp.Excluded, ps.name)
+				gp.Excluded = append(gp.Excluded, ent.Name)
 			}
 		}
 		if len(gp.Included) > 0 || len(gp.Excluded) > 0 {
@@ -340,8 +324,11 @@ func ProxyUnlockRoutingPreview(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{
-			"checkedServers": len(checked),
-			"totalServers":   len(servers),
+			"checkedServers": len(entities),
+			"totalServers":   totalServers,
+			"nativeCount":    nativeCount,
+			"clashCount":     clashCount,
+			"dualCount":      dualCount,
 			"groups":         out,
 		},
 		"msg": "ok",

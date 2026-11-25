@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -125,6 +124,7 @@ func MonitorList(c *gin.Context) {
 		return
 	}
 	now := time.Now()
+	clashByServer, _ := loadClashSnapshotsByServerID()
 	items := make([]gin.H, 0, len(monitors))
 	online := 0
 	for _, m := range monitors {
@@ -162,12 +162,8 @@ func MonitorList(c *gin.Context) {
 				item["allowAutoUpdate"] = server.AllowAutoUpdate == nil || *server.AllowAutoUpdate
 				item["autoFirewall"] = server.AutoFirewall
 				item["websiteTrafficEnabled"] = server.WebsiteTrafficEnabled
-				if server.UnlockJSON != "" {
-					var rep serverOpsUnlockReport
-					if json.Unmarshal([]byte(server.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
-						normalizeUnlockReportRegions(&rep)
-						item["unlock"] = &rep
-					}
+				if merged := buildMergedServerUnlockReport(&server, clashByServer); merged != nil {
+					item["unlock"] = merged
 				}
 				if m.Group == "" || m.Group == "自建节点" {
 					region := inferMonitorRegion(m.Name, server.PublicHost)

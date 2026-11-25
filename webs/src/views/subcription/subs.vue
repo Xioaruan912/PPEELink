@@ -31,6 +31,28 @@ const activeCount = computed(() =>
 const routingPreview = ref<UnlockRoutingPreview | null>(null);
 const smartTplBusy = ref(false);
 
+const routingSourceBadge = computed(() => {
+  const rp = routingPreview.value;
+  if (!rp) return "";
+  const native = rp.nativeCount || 0;
+  const clash = rp.clashCount || 0;
+  if (native > 0 && clash > 0) {
+    return `双源融合 · 原生 ${native} · Clash ${clash}`;
+  }
+  if (clash > 0) return `Clash 实测 · ${clash} 节点`;
+  return `服务端原生 · ${rp.checkedServers}/${rp.totalServers} 台`;
+});
+
+function nodeSourceTag(
+  sourcesByNode: Record<string, "both" | "native" | "clash"> | undefined,
+  name: string
+) {
+  const s = sourcesByNode?.[name];
+  if (s === "both") return "双验";
+  if (s === "clash") return "Clash";
+  return "";
+}
+
 async function loadRoutingPreview() {
   try {
     const { data } = await getUnlockRoutingPreview();
@@ -190,12 +212,7 @@ onBeforeUnmount(() => {
         <div class="smart-route-title">
           <h2>订阅智能分流</h2>
           <span class="sr-pill is-ok">自动生效中</span>
-          <span class="sr-pill mono">
-            已验 {{ routingPreview.checkedServers }}/{{
-              routingPreview.totalServers
-            }}
-            台
-          </span>
+          <span class="sr-pill mono">{{ routingSourceBadge }}</span>
         </div>
         <div class="smart-route-actions">
           <UiButton
@@ -231,14 +248,20 @@ onBeforeUnmount(() => {
               :key="`in-${name}`"
               class="sr-node is-ok"
             >
-              {{ name }}
+              <span>{{ name }}</span>
+              <em
+                v-if="nodeSourceTag(g.sourcesByNode, name)"
+                class="sr-src"
+              >
+                {{ nodeSourceTag(g.sourcesByNode, name) }}
+              </em>
             </span>
             <span
               v-for="name in g.excluded"
               :key="`ex-${name}`"
               class="sr-node is-off"
             >
-              {{ name }}
+              <span>{{ name }}</span>
             </span>
           </div>
         </div>
@@ -386,10 +409,20 @@ onBeforeUnmount(() => {
 }
 
 .sr-node {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   padding: 2px 9px;
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 500;
+}
+
+.sr-src {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.78;
 }
 
 .sr-node.is-ok {

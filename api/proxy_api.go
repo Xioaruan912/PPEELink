@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -46,15 +45,12 @@ func ProxyServerList(c *gin.Context) {
 		latestVer = m.Version
 	}
 	day := time.Now().Format("2006-01-02")
+	clashByServer, _ := loadClashSnapshotsByServerID()
 	views := make([]serverView, 0, len(servers))
 	for _, s := range servers {
 		v := serverView{ProxyServer: s, Inbounds: []models.ProxyInbound{}, LatestAgentVersion: latestVer}
-		if s.UnlockJSON != "" {
-			var rep serverOpsUnlockReport
-			if json.Unmarshal([]byte(s.UnlockJSON), &rep) == nil && len(rep.Items) > 0 {
-				normalizeUnlockReportRegions(&rep)
-				v.Unlock = &rep
-			}
+		if merged := buildMergedServerUnlockReport(&s, clashByServer); merged != nil {
+			v.Unlock = merged
 		}
 		models.DB.Where("server_id = ?", s.ID).Order("id asc").Find(&v.Inbounds)
 		v.Online = s.LastSeenAt != nil && time.Since(*s.LastSeenAt) < 3*time.Minute

@@ -57,21 +57,32 @@ type serverOpsPolicy struct {
 }
 
 type serverOpsUnlockItem struct {
-	Key    string `json:"key"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Region string `json:"region,omitempty"`
-	Note   string `json:"note,omitempty"`
+	Key          string `json:"key"`
+	Name         string `json:"name"`
+	Status       string `json:"status"`
+	Region       string `json:"region,omitempty"`
+	Note         string `json:"note,omitempty"`
+	Source       string `json:"source,omitempty"`       // "both" | "native" | "clash"
+	Consensus    string `json:"consensus,omitempty"`    // "agree" | "conflict" (when Source == "both")
+	NativeStatus string `json:"nativeStatus,omitempty"` // 原生 Agent 检测状态
+	NativeRegion string `json:"nativeRegion,omitempty"` // 原生 Agent 检测地区
+	ClashStatus  string `json:"clashStatus,omitempty"`  // 本机 Clash 链路实测状态
+	ClashRegion  string `json:"clashRegion,omitempty"`  // 本机 Clash 链路实测地区
 }
 
 type serverOpsUnlockReport struct {
-	IP        string                `json:"ip,omitempty"`
-	Country   string                `json:"country,omitempty"`
-	ISP       string                `json:"isp,omitempty"`
-	ASN       string                `json:"asn,omitempty"`
-	Hosting   bool                  `json:"hosting"`
-	CheckedAt string                `json:"checkedAt"`
-	Items     []serverOpsUnlockItem `json:"items"`
+	IP             string                `json:"ip,omitempty"`
+	Country        string                `json:"country,omitempty"`
+	ISP            string                `json:"isp,omitempty"`
+	ASN            string                `json:"asn,omitempty"`
+	Hosting        bool                  `json:"hosting"`
+	CheckedAt      string                `json:"checkedAt"`
+	ClashCheckedAt string                `json:"clashCheckedAt,omitempty"`
+	ClashNode      string                `json:"clashNode,omitempty"`
+	ClashTTFBMs    int                   `json:"clashTtfbMs,omitempty"`
+	ClashMbps      float64               `json:"clashMbps,omitempty"`
+	Sources        []string              `json:"sources,omitempty"` // ["native"], ["clash"], ["native", "clash"]
+	Items          []serverOpsUnlockItem `json:"items"`
 }
 
 type serverOpsJob struct {

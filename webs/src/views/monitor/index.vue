@@ -83,11 +83,41 @@ function formatUnlockPill(it: ServerUnlockItem) {
   return base;
 }
 
-function detailUnlockStatusText(status: ServerUnlockItem["status"]) {
+function detailUnlockStatusText(status?: ServerUnlockItem["status"]) {
   if (status === "available") return "可用";
   if (status === "originals") return "自制";
   if (status === "blocked") return "受限";
   return "—";
+}
+
+function unlockSourceBadge(u: ServerUnlockItem) {
+  if (u.source === "both") {
+    return u.consensus === "conflict" ? "冲突" : "双验";
+  }
+  if (u.source === "clash") return "Clash";
+  return "";
+}
+
+function unlockTooltip(u: ServerUnlockItem) {
+  const label = shortUnlockLabel[u.key] || u.name;
+  if (u.source === "both") {
+    const n = `${detailUnlockStatusText(u.nativeStatus)}${u.nativeRegion ? " " + u.nativeRegion : ""}`;
+    const c = `${detailUnlockStatusText(u.clashStatus)}${u.clashRegion ? " " + u.clashRegion : ""}`;
+    return `${label} · 双源（原生: ${n} / Clash: ${c}）`;
+  }
+  if (u.source === "clash") {
+    return `${label} · Clash 实测: ${detailUnlockStatusText(u.status)}${u.region ? " " + u.region : ""}`;
+  }
+  return `${label} · 服务端原生: ${detailUnlockStatusText(u.status)}${u.region ? " " + u.region : ""}`;
+}
+
+function unlockReportSourceText(sources?: ("native" | "clash")[]) {
+  if (!sources?.length) return "服务端原生";
+  if (sources.includes("native") && sources.includes("clash")) {
+    return "双源融合 · 原生 + Clash";
+  }
+  if (sources.includes("clash")) return "Clash 链路实测";
+  return "服务端原生";
 }
 
 async function checkAllUnlock(serverId?: number) {
@@ -684,6 +714,7 @@ async function resetToken(item: MonitorItem | null) {
             :key="u.key"
             class="unlock-chip"
             :class="u.status === 'available' ? 'is-ok' : 'is-warn'"
+            :title="unlockTooltip(u)"
           >
             {{ formatUnlockPill(u) }}
           </span>
@@ -902,25 +933,75 @@ async function resetToken(item: MonitorItem | null) {
           </div>
         </div>
 
-        <!-- Row 2: Native Unlock Matrix Strip -->
+        <!-- Row 2: Dual-Source Unlock Matrix Strip -->
         <section
           v-if="liveActiveMonitor?.unlock?.items?.length"
-          class="detail-unlock-strip"
-          aria-label="原生解锁矩阵"
+          class="detail-unlock-block"
+          aria-label="双源解锁矩阵"
         >
-          <div
-            v-for="u in liveActiveMonitor.unlock.items"
-            :key="u.key"
-            class="unlock-cell"
-            :class="`is-${u.status}`"
-          >
-            <span class="unlock-cell-name">{{
-              shortUnlockLabel[u.key] || u.name
-            }}</span>
-            <div class="unlock-cell-val">
-              <i class="unlock-dot" aria-hidden="true"></i>
-              <strong>{{ detailUnlockStatusText(u.status) }}</strong>
-              <span v-if="u.region" class="unlock-reg mono">{{ u.region }}</span>
+          <div class="detail-unlock-meta">
+            <span
+              class="unlock-src-pill"
+              :class="{
+                'is-dual':
+                  liveActiveMonitor.unlock.sources?.includes('native') &&
+                  liveActiveMonitor.unlock.sources?.includes('clash'),
+              }"
+            >
+              {{ unlockReportSourceText(liveActiveMonitor.unlock.sources) }}
+            </span>
+            <span
+              v-if="
+                liveActiveMonitor.unlock.clashTtfbMs ||
+                liveActiveMonitor.unlock.clashMbps
+              "
+              class="unlock-clash-perf mono"
+            >
+              Clash 实测
+              <template v-if="liveActiveMonitor.unlock.clashTtfbMs">
+                · {{ liveActiveMonitor.unlock.clashTtfbMs }} ms
+              </template>
+              <template v-if="liveActiveMonitor.unlock.clashMbps">
+                · {{ liveActiveMonitor.unlock.clashMbps.toFixed(1) }} Mbps
+              </template>
+            </span>
+          </div>
+
+          <div class="detail-unlock-strip">
+            <div
+              v-for="u in liveActiveMonitor.unlock.items"
+              :key="u.key"
+              class="unlock-cell"
+              :class="[
+                `is-${u.status}`,
+                { 'is-conflict': u.consensus === 'conflict' },
+              ]"
+              :title="unlockTooltip(u)"
+            >
+              <div class="unlock-cell-head">
+                <span class="unlock-cell-name">{{
+                  shortUnlockLabel[u.key] || u.name
+                }}</span>
+                <span
+                  v-if="unlockSourceBadge(u)"
+                  class="unlock-src-tag"
+                  :class="{ 'is-conflict': u.consensus === 'conflict' }"
+                >
+                  {{ unlockSourceBadge(u) }}
+                </span>
+              </div>
+              <div class="unlock-cell-val">
+                <i class="unlock-dot" aria-hidden="true"></i>
+                <strong>{{ detailUnlockStatusText(u.status) }}</strong>
+                <span v-if="u.region" class="unlock-reg mono">{{
+                  u.region
+                }}</span>
+              </div>
+              <div v-if="u.consensus === 'conflict'" class="unlock-diff mono">
+                原{{ detailUnlockStatusText(u.nativeStatus) }} / C{{
+                  detailUnlockStatusText(u.clashStatus)
+                }}
+              </div>
             </div>
           </div>
         </section>
@@ -1519,6 +1600,38 @@ async function resetToken(item: MonitorItem | null) {
   color: var(--c-muted);
 }
 
+.detail-unlock-block {
+  display: grid;
+  gap: 6px;
+}
+
+.detail-unlock-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.unlock-src-pill {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--c-surface-2);
+  color: var(--c-muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.unlock-src-pill.is-dual {
+  background: color-mix(in srgb, var(--c-ok) 12%, transparent);
+  color: var(--c-ok);
+}
+
+.unlock-clash-perf {
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
 .detail-unlock-strip {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
@@ -1527,15 +1640,51 @@ async function resetToken(item: MonitorItem | null) {
 
 .unlock-cell {
   display: grid;
-  gap: 4px;
-  padding: 9px 10px;
+  gap: 3px;
+  padding: 8px 10px;
   border: 1px solid var(--c-line);
   border-radius: 12px;
   background: var(--c-surface);
 }
 
+.unlock-cell.is-conflict {
+  border-color: color-mix(in srgb, var(--c-warn, #d97706) 45%, var(--c-line));
+}
+
+.unlock-cell-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+}
+
 .unlock-cell-name {
   font-size: 11px;
+  color: var(--c-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unlock-src-tag {
+  flex: none;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-ok) 12%, transparent);
+  color: var(--c-ok);
+  font-size: 9.5px;
+  font-weight: 600;
+  line-height: 15px;
+}
+
+.unlock-src-tag.is-conflict {
+  background: color-mix(in srgb, var(--c-warn, #d97706) 16%, transparent);
+  color: var(--c-warn-ink, #b45309);
+}
+
+.unlock-diff {
+  font-size: 9.5px;
   color: var(--c-muted);
   white-space: nowrap;
   overflow: hidden;

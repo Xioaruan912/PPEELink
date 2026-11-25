@@ -49,6 +49,12 @@ export interface ServerUnlockItem {
   status: "available" | "originals" | "blocked" | "unknown";
   region?: string;
   note?: string;
+  source?: "both" | "native" | "clash";
+  consensus?: "agree" | "conflict";
+  nativeStatus?: "available" | "originals" | "blocked" | "unknown";
+  nativeRegion?: string;
+  clashStatus?: "available" | "originals" | "blocked" | "unknown";
+  clashRegion?: string;
 }
 
 export interface ServerUnlockReport {
@@ -58,6 +64,11 @@ export interface ServerUnlockReport {
   asn?: string;
   hosting?: boolean;
   checkedAt?: string;
+  clashCheckedAt?: string;
+  clashNode?: string;
+  clashTtfbMs?: number;
+  clashMbps?: number;
+  sources?: ("native" | "clash")[];
   items: ServerUnlockItem[];
 }
 
@@ -354,12 +365,16 @@ export interface UnlockRoutingGroupPreview {
   groups: string;
   included: string[];
   excluded: string[];
+  sourcesByNode?: Record<string, "both" | "native" | "clash">;
   filter?: string;
 }
 
 export interface UnlockRoutingPreview {
   checkedServers: number;
   totalServers: number;
+  nativeCount?: number;
+  clashCount?: number;
+  dualCount?: number;
   groups: UnlockRoutingGroupPreview[];
 }
 
