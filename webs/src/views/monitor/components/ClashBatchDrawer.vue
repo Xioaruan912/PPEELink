@@ -168,7 +168,7 @@ watch(
   <UiDrawer
     v-model="open"
     title="Clash 联动 · 全节点真测速与解锁"
-    size="min(920px, 100vw)"
+    size="min(980px, 96vw)"
     append-to-body
   >
     <div class="clash-shell">
@@ -493,16 +493,17 @@ watch(
 }
 
 .matrix-table {
-  min-width: 820px;
+  min-width: 720px;
+  width: 100%;
   display: grid;
 }
 
 .m-row {
   display: grid;
-  grid-template-columns: minmax(140px, 1.8fr) 52px 70px 88px repeat(6, 62px) 62px;
+  grid-template-columns: minmax(120px, 1.45fr) 44px 64px 80px repeat(6, minmax(48px, 1fr)) 54px;
   align-items: center;
-  gap: 8px;
-  padding: 11px 16px;
+  gap: 6px;
+  padding: 11px 14px;
   border-top: 1px solid var(--c-line);
   font-size: 12px;
 }
