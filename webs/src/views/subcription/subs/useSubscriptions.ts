@@ -573,11 +573,13 @@ export function createSubscriptions() {
     SubTitle.value = "添加订阅";
     Subname.value = "";
     oldSubname.value = "";
-    udpOn.value = false;
+    udpOn.value = true;
     certOn.value = false;
     providerOn.value = false;
     appRules.value = [];
-    Clash.value = "./template/clash.yaml";
+    Clash.value = templist.value.some((t) => t.file === "clash-smart.yaml")
+      ? "./template/clash-smart.yaml"
+      : "./template/clash.yaml";
     Surge.value = "./template/surge.conf";
     Loon.value = "./template/loon.conf";
     clashMode.value = "1";

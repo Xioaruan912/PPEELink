@@ -11,11 +11,29 @@ import {
   type AppPresetCategory,
 } from "./appPresets";
 
-const { appRules, NodesList, Clash, templist } = useSubscriptions();
+const { appRules, NodesList, Clash, templist, udpOn } = useSubscriptions();
 
 const activeCategory = ref<AppPresetCategory>("ai");
 const expandedIndex = ref<number | null>(null);
 const customEntryDraft = ref<Record<number, string>>({});
+
+const RECOMMENDED_PRESET_IDS = [
+  "chatgpt",
+  "claude",
+  "dev-cli",
+  "telegram",
+  "wechat",
+  "qq",
+  "baidu-pan",
+  "ali-quark-pan",
+  "thunder",
+];
+
+const hasBrowserRule = computed(() =>
+  appRules.value.some((r) =>
+    ["chrome", "edge", "firefox", "arc-brave"].includes(r.preset || "")
+  )
+);
 
 const templateGroups = computed(() => {
   if (!Clash.value.startsWith("./template/")) return [];
@@ -64,6 +82,42 @@ function togglePreset(preset: AppPreset) {
     packages: preset.packages ? [...preset.packages] : [],
     target: resolveDefaultTarget(preset),
   });
+  if (preset.category === "browser") {
+    ElMessage.info(
+      `已添加「${preset.label}」：该浏览器内全部网站将强制走所选出站，不再按域名分流`
+    );
+  }
+}
+
+function applyRecommendedPresets() {
+  let added = 0;
+  for (const id of RECOMMENDED_PRESET_IDS) {
+    if (isPresetActive(id)) continue;
+    const preset = APP_PRESETS.find((p) => p.id === id);
+    if (!preset || appRules.value.length >= 64) continue;
+    appRules.value.push({
+      platform: "all",
+      preset: preset.id,
+      label: preset.label,
+      processes: [...preset.processes],
+      packages: preset.packages ? [...preset.packages] : [],
+      target: resolveDefaultTarget(preset),
+    });
+    added++;
+  }
+  if (!udpOn.value) {
+    udpOn.value = true;
+  }
+  if (added > 0) {
+    ElMessage.success(`已添加 ${added} 组常用推荐应用（不含浏览器）并开启 UDP`);
+  } else {
+    ElMessage.info("常用推荐应用已全部在列表中");
+  }
+}
+
+function enableUdpNow() {
+  udpOn.value = true;
+  ElMessage.success("已开启 UDP 转发，记得点击底部保存订阅");
 }
 
 function addCustomRule() {
@@ -148,17 +202,36 @@ function addBundleToken(index: number, rule: AppRule) {
         <h3 class="apps-title">应用代理</h3>
         <span class="apps-tip" role="note">
           <i class="tip-dot" aria-hidden="true"></i>
-          需开启客户端 TUN · 按顺序优先匹配（iOS 不支持）
+          需开启客户端 TUN 才能接管全部进程（iOS 不支持）
         </span>
+        <button
+          v-if="appRules.length && !udpOn"
+          type="button"
+          class="apps-tip is-warn-btn"
+          @click="enableUdpNow"
+        >
+          <i class="tip-dot is-warn" aria-hidden="true"></i>
+          建议开启 UDP 转发 · 点此开启
+        </button>
       </div>
-      <UiButton
-        size="sm"
-        variant="ghost"
-        :disabled="appRules.length >= 64"
-        @click="addCustomRule"
-      >
-        + 自定义进程
-      </UiButton>
+      <div class="apps-head-ops">
+        <UiButton
+          size="sm"
+          variant="ghost"
+          :disabled="appRules.length >= 64"
+          @click="applyRecommendedPresets"
+        >
+          推荐配置
+        </UiButton>
+        <UiButton
+          size="sm"
+          variant="ghost"
+          :disabled="appRules.length >= 64"
+          @click="addCustomRule"
+        >
+          + 自定义进程
+        </UiButton>
+      </div>
     </header>
 
     <!-- Apple Tactile Preset Picker -->
@@ -177,6 +250,15 @@ function addBundleToken(index: number, rule: AppRule) {
           {{ cat.label }}
         </button>
       </nav>
+
+      <div
+        v-if="activeCategory === 'browser' || hasBrowserRule"
+        class="browser-warn"
+        role="note"
+      >
+        <i class="tip-dot is-warn" aria-hidden="true"></i>
+        整浏览器代理会覆盖域名智能分流（国内网站也会走代理），日常浏览建议不选浏览器
+      </div>
 
       <div class="preset-chips">
         <button
@@ -470,6 +552,12 @@ function addBundleToken(index: number, rule: AppRule) {
   color: var(--c-ink);
 }
 
+.apps-head-ops {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .apps-tip {
   display: inline-flex;
   align-items: center;
@@ -481,12 +569,40 @@ function addBundleToken(index: number, rule: AppRule) {
   font-size: 11.5px;
 }
 
+.apps-tip.is-warn-btn {
+  border: 1px solid color-mix(in srgb, var(--c-warn, #d97706) 35%, var(--c-line));
+  background: color-mix(in srgb, var(--c-warn, #d97706) 10%, var(--c-surface));
+  color: var(--c-warn-ink, #b45309);
+  cursor: pointer;
+  transition: transform 100ms ease-out;
+}
+
+.apps-tip.is-warn-btn:active {
+  transform: scale(0.97);
+}
+
 .tip-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
   background: var(--c-ok);
   flex: none;
+}
+
+.tip-dot.is-warn {
+  background: var(--c-warn, #d97706);
+}
+
+.browser-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--c-warn, #d97706) 9%, var(--c-surface-2));
+  color: var(--c-warn-ink, #b45309);
+  font-size: 11.5px;
+  width: fit-content;
 }
 
 /* Tactile Apple Preset Picker */
