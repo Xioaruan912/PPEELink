@@ -285,10 +285,10 @@ const shortUnlockLabel: Record<string, string> = {
   chatgpt: "GPT",
   claude: "Claude",
   gemini: "Gemini",
-  netflix: "NF",
+  netflix: "Netflix",
   disney: "Disney+",
-  youtube: "YT",
-  tiktok: "TT",
+  youtube: "YouTube",
+  tiktok: "TikTok",
   spotify: "Spotify",
 };
 
@@ -302,7 +302,7 @@ function visibleUnlockItems(items?: ServerUnlockItem[]) {
 function formatPillText(it: ServerUnlockItem) {
   const base = shortUnlockLabel[it.key] || it.name;
   if (it.status === "originals") return `${base}自制`;
-  return it.region ? `${base} ${it.region}` : base;
+  return base;
 }
 </script>
 

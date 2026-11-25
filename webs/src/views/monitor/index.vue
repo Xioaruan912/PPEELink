@@ -63,10 +63,10 @@ const shortUnlockLabel: Record<string, string> = {
   chatgpt: "GPT",
   claude: "Claude",
   gemini: "Gemini",
-  netflix: "NF",
+  netflix: "Netflix",
   disney: "Disney+",
-  youtube: "YT",
-  tiktok: "TT",
+  youtube: "YouTube",
+  tiktok: "TikTok",
   spotify: "Spotify",
 };
 
@@ -80,14 +80,23 @@ function visibleUnlockItems(list?: ServerUnlockItem[]) {
 function formatUnlockPill(it: ServerUnlockItem) {
   const base = shortUnlockLabel[it.key] || it.name;
   if (it.status === "originals") return `${base}自制`;
-  return it.region ? `${base} ${it.region}` : base;
+  return base;
 }
 
-async function checkAllUnlock() {
+function detailUnlockStatusText(status: ServerUnlockItem["status"]) {
+  if (status === "available") return "可用";
+  if (status === "originals") return "自制";
+  if (status === "blocked") return "受限";
+  return "—";
+}
+
+async function checkAllUnlock(serverId?: number) {
   if (checkingUnlock.value) return;
   checkingUnlock.value = true;
   try {
-    const { data } = await runProxyServerUnlockCheck({ all: true });
+    const { data } = await runProxyServerUnlockCheck(
+      serverId ? { serverId } : { all: true }
+    );
     const okCount = data?.okCount || 0;
     const total = data?.total || 0;
     if (okCount === 0 && total > 0) {
@@ -98,7 +107,9 @@ async function checkAllUnlock() {
     } else if (okCount < total) {
       ElMessage.warning(`原生解锁检测完成：${okCount}/${total} 台成功`);
     } else {
-      ElMessage.success(`原生解锁检测完成：${okCount}/${total} 台已更新`);
+      ElMessage.success(
+        serverId ? "原生解锁已刷新" : `原生解锁检测完成：${okCount}/${total} 台已更新`
+      );
     }
     await load(true);
   } catch (err: any) {
@@ -312,6 +323,11 @@ const detailLoading = ref(false);
 const detailError = ref("");
 const range = ref<string | number>("24h");
 const activeMonitor = ref<MonitorItem | null>(null);
+const liveActiveMonitor = computed(
+  () =>
+    items.value.find((item) => item.id === activeMonitor.value?.id) ||
+    activeMonitor.value
+);
 
 const rangeOptions = [
   { label: "1 小时", value: "1h" },
@@ -521,7 +537,7 @@ async function resetToken(item: MonitorItem | null) {
           v-if="items.length"
           variant="ghost"
           :loading="checkingUnlock"
-          @click="checkAllUnlock"
+          @click="checkAllUnlock()"
         >
           测全服解锁
         </UiButton>
@@ -771,29 +787,29 @@ async function resetToken(item: MonitorItem | null) {
       </template>
     </UiDialog>
 
-    <!-- Pure Telemetry Detail Dialog (No Redundant Terminal/Files/Docker Buttons) -->
+    <!-- Zero-Scroll Apple Bento Telemetry & Unlock Detail Dialog -->
     <UiDialog
       v-model="detailVisible"
-      :title="detail?.monitor.name || activeMonitor?.name || '服务器详情'"
-      width="980px"
+      :title="detail?.monitor.name || liveActiveMonitor?.name || '服务器详情'"
+      width="min(1140px, 95vw)"
       @closed="closeDetail"
     >
       <div v-if="detailLoading" class="detail-loading">
-        <UiSkeleton :lines="5" height="56px" />
+        <UiSkeleton :lines="4" height="54px" />
       </div>
       <div v-else-if="detailError" class="state-error" role="alert">
         <span>{{ detailError }}</span>
         <UiButton @click="loadDetail">重试</UiButton>
       </div>
-      <template v-else-if="detail">
-        <div class="detail-head">
-          <div class="detail-title">
+      <div v-else-if="detail" class="detail-bento">
+        <!-- Single Unified Toolbar (Zero Redundant Title) -->
+        <div class="detail-bar">
+          <div class="detail-bar-left">
             <span
               class="status-dot"
               :class="detail.online ? 'is-on' : 'is-off'"
               aria-hidden="true"
             ></span>
-            <strong>{{ detail.monitor.name }}</strong>
             <UiTag :tone="detail.online ? 'ok' : 'neutral'">
               {{ detail.online ? "在线" : "离线" }}
             </UiTag>
@@ -801,8 +817,22 @@ async function resetToken(item: MonitorItem | null) {
               {{ detail.monitor.group || "未分组" }} ·
               {{ detail.monitor.os }}/{{ detail.monitor.arch }}
             </span>
+            <UiSegmented
+              v-model="range"
+              label="时间范围"
+              :options="rangeOptions"
+            />
           </div>
           <div class="detail-actions">
+            <UiButton
+              v-if="liveActiveMonitor?.proxyServerId && detail.online"
+              size="sm"
+              variant="ghost"
+              :loading="checkingUnlock"
+              @click="checkAllUnlock(Number(liveActiveMonitor.proxyServerId))"
+            >
+              测解锁
+            </UiButton>
             <UiButton
               size="sm"
               variant="ghost"
@@ -815,7 +845,7 @@ async function resetToken(item: MonitorItem | null) {
             <UiButton
               size="sm"
               variant="ghost"
-              @click="resetToken(activeMonitor)"
+              @click="resetToken(liveActiveMonitor)"
             >
               重置令牌
             </UiButton>
@@ -823,19 +853,20 @@ async function resetToken(item: MonitorItem | null) {
               size="sm"
               variant="danger"
               :icon="Delete"
-              @click="removeMonitor(activeMonitor)"
+              @click="removeMonitor(liveActiveMonitor)"
             >
               删除
             </UiButton>
           </div>
         </div>
 
+        <!-- Row 1: 5 Crisp KPI Bento Cards -->
         <div v-if="latest" class="detail-stats">
-          <div>
+          <div class="kpi-tile">
             <span>CPU</span>
             <strong class="mono">{{ latest.cpuPercent.toFixed(1) }}%</strong>
           </div>
-          <div>
+          <div class="kpi-tile">
             <span>内存</span>
             <strong class="mono">
               {{ currentPercent(latest.memUsed, latest.memTotal) }}%
@@ -845,7 +876,7 @@ async function resetToken(item: MonitorItem | null) {
               {{ formatBytes(latest.memTotal) }}
             </small>
           </div>
-          <div>
+          <div class="kpi-tile">
             <span>磁盘</span>
             <strong class="mono">
               {{ currentPercent(latest.diskUsed, latest.diskTotal) }}%
@@ -855,14 +886,14 @@ async function resetToken(item: MonitorItem | null) {
               {{ formatBytes(latest.diskTotal) }}
             </small>
           </div>
-          <div>
+          <div class="kpi-tile">
             <span>负载</span>
             <strong class="mono">{{ latest.load1.toFixed(2) }}</strong>
             <small class="mono">
               {{ latest.load5.toFixed(2) }} / {{ latest.load15.toFixed(2) }}
             </small>
           </div>
-          <div>
+          <div class="kpi-tile">
             <span>运行时间</span>
             <strong class="mono">{{ formatUptime(latest.uptime) }}</strong>
             <small class="mono">
@@ -871,54 +902,84 @@ async function resetToken(item: MonitorItem | null) {
           </div>
         </div>
 
-        <div class="range-row">
-          <UiSegmented
-            v-model="range"
-            label="时间范围"
-            :options="rangeOptions"
-          />
-        </div>
+        <!-- Row 2: Native Unlock Matrix Strip -->
+        <section
+          v-if="liveActiveMonitor?.unlock?.items?.length"
+          class="detail-unlock-strip"
+          aria-label="原生解锁矩阵"
+        >
+          <div
+            v-for="u in liveActiveMonitor.unlock.items"
+            :key="u.key"
+            class="unlock-cell"
+            :class="`is-${u.status}`"
+          >
+            <span class="unlock-cell-name">{{
+              shortUnlockLabel[u.key] || u.name
+            }}</span>
+            <div class="unlock-cell-val">
+              <i class="unlock-dot" aria-hidden="true"></i>
+              <strong>{{ detailUnlockStatusText(u.status) }}</strong>
+              <span v-if="u.region" class="unlock-reg mono">{{ u.region }}</span>
+            </div>
+          </div>
+        </section>
 
+        <!-- Row 3: Zero-Scroll 2-Row Bento Chart Grid (3 + 2) -->
         <div v-if="!rows.length" class="chart-empty">
           还没有历史指标，等待下一次上报。
         </div>
-        <div v-else class="chart-grid">
-          <MetricChart
-            title="CPU"
-            unit="%"
-            :max="100"
-            :labels="labels"
-            :series="cpuSeries"
-          />
-          <MetricChart
-            title="内存"
-            unit="%"
-            :max="100"
-            :labels="labels"
-            :series="memSeries"
-          />
-          <MetricChart
-            title="磁盘"
-            unit="%"
-            :max="100"
-            :labels="labels"
-            :series="diskSeries"
-          />
-          <MetricChart
-            title="网络"
-            unit="MB/s"
-            :labels="labels"
-            :series="netSeries"
-          />
-          <MetricChart
-            title="负载"
-            :labels="labels"
-            :series="loadSeries"
-            :decimals="1"
-            class="chart-wide"
-          />
+        <div v-else class="chart-bento">
+          <div class="chart-card span-2">
+            <MetricChart
+              title="CPU"
+              unit="%"
+              :max="100"
+              :height="118"
+              :labels="labels"
+              :series="cpuSeries"
+            />
+          </div>
+          <div class="chart-card span-2">
+            <MetricChart
+              title="内存"
+              unit="%"
+              :max="100"
+              :height="118"
+              :labels="labels"
+              :series="memSeries"
+            />
+          </div>
+          <div class="chart-card span-2">
+            <MetricChart
+              title="磁盘"
+              unit="%"
+              :max="100"
+              :height="118"
+              :labels="labels"
+              :series="diskSeries"
+            />
+          </div>
+          <div class="chart-card span-3">
+            <MetricChart
+              title="网络"
+              unit="MB/s"
+              :height="118"
+              :labels="labels"
+              :series="netSeries"
+            />
+          </div>
+          <div class="chart-card span-3">
+            <MetricChart
+              title="负载"
+              :height="118"
+              :labels="labels"
+              :series="loadSeries"
+              :decimals="2"
+            />
+          </div>
         </div>
-      </template>
+      </div>
     </UiDialog>
   </div>
 </template>
@@ -1393,27 +1454,25 @@ async function resetToken(item: MonitorItem | null) {
   font-size: 12.5px;
 }
 
-/* Detail Modal */
-.detail-head {
+/* Zero-Scroll Apple Bento Detail Modal */
+.detail-bento {
+  display: grid;
+  gap: 12px;
+}
+
+.detail-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 14px;
+  gap: 12px;
   flex-wrap: wrap;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--c-line);
 }
 
-.detail-title {
+.detail-bar-left {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.detail-title strong {
-  font-size: 16px;
-  font-weight: 500;
 }
 
 .detail-meta {
@@ -1431,61 +1490,164 @@ async function resetToken(item: MonitorItem | null) {
 .detail-stats {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  padding: 16px 0;
-  border-bottom: 1px solid var(--c-line);
+  gap: 10px;
 }
 
-.detail-stats > div {
+.kpi-tile {
   display: grid;
-  gap: 3px;
+  gap: 2px;
+  padding: 10px 14px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface-2);
 }
 
-.detail-stats span {
-  font-size: 11.5px;
-  color: var(--c-muted);
-}
-
-.detail-stats strong {
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--c-ink);
-}
-
-.detail-stats small {
+.kpi-tile span {
   font-size: 11px;
   color: var(--c-muted);
 }
 
-.range-row {
-  padding: 16px 0 12px;
+.kpi-tile strong {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--c-ink);
+}
+
+.kpi-tile small {
+  font-size: 11px;
+  color: var(--c-muted);
+}
+
+.detail-unlock-strip {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.unlock-cell {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 12px;
+  background: var(--c-surface);
+}
+
+.unlock-cell-name {
+  font-size: 11px;
+  color: var(--c-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.unlock-cell-val {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--c-ink);
+}
+
+.unlock-cell-val strong {
+  font-weight: 600;
+}
+
+.unlock-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--c-muted);
+}
+
+.unlock-cell.is-available .unlock-dot {
+  background: var(--c-ok);
+}
+
+.unlock-cell.is-available .unlock-cell-val strong {
+  color: var(--c-ok);
+}
+
+.unlock-cell.is-originals .unlock-dot {
+  background: var(--c-warn, #d97706);
+}
+
+.unlock-cell.is-originals .unlock-cell-val strong {
+  color: var(--c-warn-ink, #b45309);
+}
+
+.unlock-cell.is-blocked .unlock-dot {
+  background: var(--c-bad);
+}
+
+.unlock-cell.is-blocked .unlock-cell-val strong {
+  color: var(--c-muted);
+}
+
+.unlock-reg {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--c-muted);
 }
 
 .chart-empty {
-  padding: 36px 0;
+  padding: 28px 0;
   text-align: center;
   color: var(--c-muted);
   font-size: 13px;
 }
 
-.chart-grid {
+.chart-bento {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
 }
 
-.chart-wide {
-  grid-column: 1 / -1;
+.chart-card {
+  padding: 10px 12px 6px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface);
+  min-width: 0;
+}
+
+.chart-card.span-2 {
+  grid-column: span 2;
+}
+
+.chart-card.span-3 {
+  grid-column: span 3;
+}
+
+@media (max-width: 960px) {
+  .detail-unlock-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .chart-card.span-2,
+  .chart-card.span-3 {
+    grid-column: span 3;
+  }
 }
 
 @media (max-width: 780px) {
   .server-grid,
-  .chart-grid,
   .dialog-grid-2 {
     grid-template-columns: 1fr;
   }
   .detail-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .detail-unlock-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .chart-bento {
+    grid-template-columns: 1fr;
+  }
+  .chart-card.span-2,
+  .chart-card.span-3 {
+    grid-column: span 1;
   }
 }
 </style>

@@ -33,9 +33,23 @@ let chart: echarts.ECharts | undefined;
 let observer: ResizeObserver | undefined;
 let themeObserver: MutationObserver | undefined;
 
+function formatByteRate(bytesPerSec: number, compact = false) {
+  const abs = Math.abs(bytesPerSec);
+  if (abs === 0) return compact ? "0" : "0 B/s";
+  if (abs < 1024) return compact ? `${Math.round(bytesPerSec)}B` : `${Math.round(bytesPerSec)} B/s`;
+  if (abs < 1024 * 1024) {
+    const kb = bytesPerSec / 1024;
+    const str = kb >= 100 ? kb.toFixed(0) : kb.toFixed(1);
+    return compact ? `${str}K` : `${str} KB/s`;
+  }
+  const mb = bytesPerSec / 1024 / 1024;
+  const str = mb >= 100 ? mb.toFixed(0) : mb.toFixed(1);
+  return compact ? `${str}M` : `${str} MB/s`;
+}
+
 function format(value: number) {
   if (props.unit === "%") return `${value.toFixed(1)}%`;
-  if (props.unit === "MB/s") return `${(value / 1024 / 1024).toFixed(1)} MB/s`;
+  if (props.unit === "MB/s") return formatByteRate(value, false);
   return `${value.toFixed(2)}${props.unit}`;
 }
 
@@ -43,10 +57,13 @@ function render() {
   if (!chart) return;
   const styles = getComputedStyle(document.documentElement);
   const token = (name: string) => styles.getPropertyValue(name).trim();
+  const compact = props.height <= 135;
   chart.setOption(
     {
       animation: false,
-      grid: { left: 46, right: 14, top: 12, bottom: 24 },
+      grid: compact
+        ? { left: 42, right: 10, top: 8, bottom: 20 }
+        : { left: 46, right: 14, top: 12, bottom: 24 },
       tooltip: {
         trigger: "axis",
         backgroundColor: token("--c-surface"),
@@ -65,6 +82,7 @@ function render() {
       yAxis: {
         type: "value",
         max: props.max,
+        splitNumber: compact ? 3 : 5,
         splitLine: { lineStyle: { color: token("--c-line") } },
         axisLabel: {
           color: token("--c-muted"),
@@ -73,7 +91,7 @@ function render() {
             props.unit === "%"
               ? `${Math.round(value)}%`
               : props.unit === "MB/s"
-                ? `${(value / 1024 / 1024).toFixed(1)}`
+                ? formatByteRate(value, true)
                 : value.toFixed(props.decimals),
         },
       },
