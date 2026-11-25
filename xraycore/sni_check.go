@@ -26,14 +26,14 @@ type SNICheckResult struct {
 }
 
 var defaultRealitySNICandidates = []string{
+	"www.debian.org",
+	"www.python.org",
+	"www.kernel.org",
+	"www.gentoo.org",
+	"addons.mozilla.org",
 	"www.apple.com",
-	"www.icloud.com",
 	"www.microsoft.com",
-	"aws.amazon.com",
 	"www.amazon.com",
-	"www.cloudflare.com",
-	"www.samsung.com",
-	"cdn.jsdelivr.net",
 }
 
 func cleanSNIHost(raw string) string {
