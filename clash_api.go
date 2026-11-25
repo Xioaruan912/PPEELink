@@ -310,23 +310,28 @@ func switchClashProxy(ctx context.Context, group, targetNode string) (clashStatu
 	return st, nil
 }
 
-func getClashMode(ctx context.Context, controller, sec string) string {
+type clashRuntimeConfig struct {
+	Mode      string `json:"mode"`
+	Port      int    `json:"port"`
+	MixedPort int    `json:"mixed-port"`
+}
+
+func getClashRuntimeConfig(ctx context.Context, controller, sec string) clashRuntimeConfig {
 	client := clashHTTPClient(2 * time.Second)
 	resp, err := clashDoRequest(ctx, client, http.MethodGet, controller+"/configs", sec, nil)
 	if err != nil {
-		return ""
+		return clashRuntimeConfig{}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return ""
+		return clashRuntimeConfig{}
 	}
-	var cfg struct {
-		Mode string `json:"mode"`
-	}
+	var cfg clashRuntimeConfig
 	if json.NewDecoder(io.LimitReader(resp.Body, 32*1024)).Decode(&cfg) == nil {
-		return strings.TrimSpace(cfg.Mode)
+		cfg.Mode = strings.TrimSpace(cfg.Mode)
+		return cfg
 	}
-	return ""
+	return clashRuntimeConfig{}
 }
 
 func setClashMode(ctx context.Context, controller, sec, mode string) error {
@@ -346,25 +351,60 @@ func setClashMode(ctx context.Context, controller, sec, mode string) error {
 	return nil
 }
 
-func getClashGroupCurrent(ctx context.Context, controller, sec, groupName string) (string, bool) {
+func getClashGroupInfo(ctx context.Context, controller, sec, groupName string) (string, []string) {
 	client := clashHTTPClient(2 * time.Second)
 	endpoint := fmt.Sprintf("%s/proxies/%s", controller, url.PathEscape(groupName))
 	resp, err := clashDoRequest(ctx, client, http.MethodGet, endpoint, sec, nil)
 	if err != nil {
-		return "", false
+		return "", nil
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", false
+		return "", nil
 	}
 	var g struct {
 		Now string   `json:"now"`
 		All []string `json:"all"`
 	}
 	if json.NewDecoder(io.LimitReader(resp.Body, 512*1024)).Decode(&g) != nil {
-		return "", false
+		return "", nil
 	}
-	return g.Now, len(g.All) > 0
+	return g.Now, g.All
+}
+
+func containsExact(list []string, target string) bool {
+	for _, s := range list {
+		if s == target {
+			return true
+		}
+	}
+	return false
+}
+
+func newClashBatchHTTPClient(controller string, cfg clashRuntimeConfig, timeout time.Duration) *http.Client {
+	proxyPort := cfg.MixedPort
+	if proxyPort <= 0 {
+		proxyPort = cfg.Port
+	}
+	if proxyPort > 0 {
+		host := "127.0.0.1"
+		if u, err := url.Parse(controller); err == nil && u.Hostname() != "" {
+			host = u.Hostname()
+		}
+		if proxyURL, err := url.Parse(fmt.Sprintf("http://%s:%d", host, proxyPort)); err == nil {
+			return &http.Client{
+				Timeout: timeout,
+				Transport: &http.Transport{
+					Proxy:                 http.ProxyURL(proxyURL),
+					ForceAttemptHTTP2:     true,
+					TLSHandshakeTimeout:   8 * time.Second,
+					ResponseHeaderTimeout: timeout,
+					MaxIdleConnsPerHost:   4,
+				},
+			}
+		}
+	}
+	return newActiveProxyHTTPClient(timeout)
 }
 
 func putClashGroupProxy(ctx context.Context, controller, sec, groupName, nodeName string) error {
@@ -385,7 +425,8 @@ func putClashGroupProxy(ctx context.Context, controller, sec, groupName, nodeNam
 
 // runClashBatchTest iterates over Clash nodes, temporarily switches Clash to Global mode
 // so rule-specific groups (ChatGPT/Google/etc.) cannot leak traffic onto another node,
-// measures real throughput + 6 AI/streaming unlocks per node, and ALWAYS restores mode & node.
+// routes directly via Clash's local mixed/http port, measures real throughput + 6 AI/streaming unlocks,
+// and ALWAYS restores mode, GLOBAL selection, and original group node.
 func runClashBatchTest(ctx context.Context, group string, requested []string) clashReportPayload {
 	st := detectClashStatus(ctx)
 	if !st.Connected || st.Controller == "" {
@@ -410,11 +451,33 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 	}
 
 	_, sec := clashCandidates()
-	origMode := getClashMode(ctx, st.Controller, sec)
-	origGlobalNow, hasGlobal := getClashGroupCurrent(ctx, st.Controller, sec, "GLOBAL")
+	rtCfg := getClashRuntimeConfig(ctx, st.Controller, sec)
+	origMode := rtCfg.Mode
+	origGlobalNow, globalAll := getClashGroupInfo(ctx, st.Controller, sec, "GLOBAL")
+	globalHasGroup := containsExact(globalAll, group)
+	globalHasAnyTarget := false
+	for _, t := range targets {
+		if containsExact(globalAll, t) {
+			globalHasAnyTarget = true
+			break
+		}
+	}
+
+	inGlobalMode := strings.EqualFold(origMode, "global")
 	switchedGlobalMode := false
-	if hasGlobal && !strings.EqualFold(origMode, "global") {
-		if err := setClashMode(ctx, st.Controller, sec, "global"); err == nil {
+	// Only switch to Global mode when GLOBAL can actually select either the target nodes
+	// or the parent selector group (e.g. "日常使用"); otherwise GLOBAL could remain pinned to DIRECT!
+	if (globalHasGroup || globalHasAnyTarget) && !inGlobalMode {
+		if globalHasGroup {
+			// Point GLOBAL -> group before enabling global mode so traffic never hits DIRECT.
+			if err := putClashGroupProxy(ctx, st.Controller, sec, "GLOBAL", group); err == nil {
+				if err := setClashMode(ctx, st.Controller, sec, "global"); err == nil {
+					inGlobalMode = true
+					switchedGlobalMode = true
+				}
+			}
+		} else if err := setClashMode(ctx, st.Controller, sec, "global"); err == nil {
+			inGlobalMode = true
 			switchedGlobalMode = true
 		}
 	}
@@ -422,7 +485,7 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 	defer func() {
 		restoreCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 		defer cancel()
-		if hasGlobal && origGlobalNow != "" {
+		if len(globalAll) > 0 && origGlobalNow != "" {
 			_ = putClashGroupProxy(restoreCtx, st.Controller, sec, "GLOBAL", origGlobalNow)
 		}
 		if switchedGlobalMode && origMode != "" {
@@ -438,13 +501,31 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 		if ctx.Err() != nil {
 			break
 		}
-		swCtx, swCancel := context.WithTimeout(ctx, 2*time.Second)
+		swCtx, swCancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 		var swErr error
-		if hasGlobal {
-			swErr = putClashGroupProxy(swCtx, st.Controller, sec, "GLOBAL", nodeName)
-		}
-		if swErr == nil {
-			_ = putClashGroupProxy(swCtx, st.Controller, sec, group, nodeName)
+		if inGlobalMode {
+			switch {
+			case containsExact(globalAll, nodeName):
+				swErr = putClashGroupProxy(swCtx, st.Controller, sec, "GLOBAL", nodeName)
+				if swErr == nil {
+					_ = putClashGroupProxy(swCtx, st.Controller, sec, group, nodeName)
+				}
+			case globalHasGroup:
+				// In proxy-provider configs, GLOBAL lists selector groups ("日常使用") rather than raw provider nodes.
+				// Chain GLOBAL -> group -> nodeName so 100% of traffic exits via nodeName (never DIRECT).
+				swErr = putClashGroupProxy(swCtx, st.Controller, sec, group, nodeName)
+				if swErr == nil {
+					swErr = putClashGroupProxy(swCtx, st.Controller, sec, "GLOBAL", group)
+				}
+			default:
+				// Safety guard: never run tests in global mode if GLOBAL cannot route to this node.
+				if switchedGlobalMode && origMode != "" {
+					_ = setClashMode(swCtx, st.Controller, sec, origMode)
+					inGlobalMode = false
+					switchedGlobalMode = false
+				}
+				swErr = putClashGroupProxy(swCtx, st.Controller, sec, group, nodeName)
+			}
 		} else {
 			swErr = putClashGroupProxy(swCtx, st.Controller, sec, group, nodeName)
 		}
@@ -456,11 +537,12 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 		select {
 		case <-ctx.Done():
 			break
-		case <-time.After(320 * time.Millisecond):
+		case <-time.After(350 * time.Millisecond):
 		}
 
-		// Fresh HTTP client per node so pooled TCP/TLS connections never stay pinned to the previous node.
-		client := newActiveProxyHTTPClient(8 * time.Second)
+		// Fresh HTTP client per node routed explicitly through Clash's local mixed/http port
+		// so pooled TCP/TLS connections never stay pinned to the previous node or leak to direct NIC.
+		client := newClashBatchHTTPClient(st.Controller, rtCfg, 9*time.Second)
 		items = append(items, testSingleClashNode(ctx, client, nodeName))
 	}
 
@@ -527,16 +609,17 @@ func testSingleClashNode(ctx context.Context, client *http.Client, nodeName stri
 	wg.Wait()
 	cancelU()
 
-	// 2. Fast 3.2s download speedtest with multi-CDN fallback (Cloudflare -> CacheFly).
+	// 2. Fast 4.2s download speedtest with multi-CDN fallback (Cloudflare -> CacheFly -> OVH).
 	dlURLs := []string{
 		"https://speed.cloudflare.com/__down?bytes=15000000",
 		"https://cachefly.cachefly.net/10mb.test",
+		"https://proof.ovh.net/files/10Mb.dat",
 	}
 	for _, dlURL := range dlURLs {
 		if ctx.Err() != nil {
 			break
 		}
-		dlCtx, cancelDL := context.WithTimeout(ctx, 3200*time.Millisecond)
+		dlCtx, cancelDL := context.WithTimeout(ctx, 4200*time.Millisecond)
 		var totalBytes atomic.Int64
 		var firstByteNs atomic.Int64
 		var dlWG sync.WaitGroup

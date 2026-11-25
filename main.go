@@ -24,7 +24,7 @@ import (
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.12"
+const agentVersion = "1.13"
 
 type userAgentConfigPatch struct {
 	PanelURL       string `json:"panelUrl,omitempty"`
