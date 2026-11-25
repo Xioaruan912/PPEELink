@@ -88,6 +88,7 @@ interface ResolvedNodeView {
 const rootEl = ref<HTMLElement>();
 let gsapCtx: gsap.Context | null = null;
 
+const initialLoading = ref(true);
 const loading = ref(false);
 const probingAll = ref(false);
 const probingNodeId = ref<number | null>(null);
@@ -318,6 +319,7 @@ async function refreshAll() {
     ElMessage.error(err?.message || "加载失败");
   } finally {
     loading.value = false;
+    initialLoading.value = false;
   }
 }
 
@@ -580,10 +582,19 @@ onBeforeUnmount(() => {
         </div>
         <span
           class="online-pill mono"
-          :class="{ 'is-online': hasOnlineProbe }"
+          :class="{
+            'is-online': !initialLoading && hasOnlineProbe,
+            'is-loading': initialLoading,
+          }"
         >
           <i aria-hidden="true"></i>
-          {{ hasOnlineProbe ? `${onlineProbes.length} 在线` : "未连接" }}
+          {{
+            initialLoading
+              ? "同步中"
+              : hasOnlineProbe
+                ? `${onlineProbes.length} 在线`
+                : "未连接"
+          }}
         </span>
       </div>
 
@@ -637,7 +648,30 @@ onBeforeUnmount(() => {
 
     <!-- Section 1: 本机设备卡片 -->
     <section class="ua-section" aria-label="本机设备">
-      <div v-if="probes.length" class="device-grid">
+      <div
+        v-if="initialLoading"
+        class="device-grid"
+        aria-busy="true"
+        aria-label="正在加载设备"
+      >
+        <div v-for="i in 2" :key="i" class="skel-card skel-device">
+          <div class="skel-row">
+            <span class="skel-bar is-sm"></span>
+            <span class="skel-bar is-xs"></span>
+          </div>
+          <span class="skel-bar is-title"></span>
+          <div class="skel-row">
+            <span class="skel-pill"></span>
+            <span class="skel-pill"></span>
+          </div>
+          <div class="skel-foot">
+            <span class="skel-btn"></span>
+            <span class="skel-bar is-xs"></span>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="probes.length" class="device-grid">
         <article
           v-for="p in probes"
           :key="p.id"
@@ -775,7 +809,14 @@ onBeforeUnmount(() => {
         </button>
       </div>
 
-      <header class="nodes-bar">
+      <header v-if="initialLoading" class="nodes-bar" aria-hidden="true">
+        <div class="filter-pills">
+          <span v-for="i in 4" :key="i" class="skel-filter-pill"></span>
+        </div>
+        <span class="skel-search"></span>
+      </header>
+
+      <header v-else class="nodes-bar">
         <div class="filter-pills" role="group" aria-label="状态筛选">
           <button
             type="button"
@@ -831,7 +872,27 @@ onBeforeUnmount(() => {
         />
       </header>
 
-      <div v-if="filteredNodes.length" class="node-card-grid">
+      <div
+        v-if="initialLoading"
+        class="node-card-grid"
+        aria-busy="true"
+        aria-label="正在加载节点实测数据"
+      >
+        <div v-for="i in 6" :key="i" class="skel-card skel-node">
+          <div class="skel-row">
+            <span class="skel-bar is-md"></span>
+            <span class="skel-bar is-xs"></span>
+          </div>
+          <span class="skel-bar is-metric"></span>
+          <span class="skel-spark"></span>
+          <div class="skel-foot">
+            <span class="skel-bar is-sm"></span>
+            <span class="skel-bar is-xs"></span>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="filteredNodes.length" class="node-card-grid">
         <article
           v-for="item in filteredNodes"
           :key="item.id"
@@ -1877,12 +1938,156 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+/* Apple Shimmer Skeleton Loading State */
+.online-pill.is-loading i {
+  background: var(--c-muted);
+  animation: ua-pulse 1.2s ease-in-out infinite;
+}
+
+.skel-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--c-line);
+  border-radius: 18px;
+  background: var(--c-surface);
+}
+
+.skel-device {
+  min-height: 152px;
+}
+
+.skel-node {
+  min-height: 168px;
+}
+
+.skel-row,
+.skel-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.skel-bar,
+.skel-pill,
+.skel-btn,
+.skel-spark,
+.skel-filter-pill,
+.skel-search {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-ink) 6%, var(--c-surface-2));
+}
+
+.skel-bar::after,
+.skel-pill::after,
+.skel-btn::after,
+.skel-spark::after,
+.skel-filter-pill::after,
+.skel-search::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--c-surface) 75%, transparent) 50%,
+    transparent 100%
+  );
+  animation: ua-shimmer 1.35s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+.skel-bar.is-xs {
+  width: 44px;
+  height: 12px;
+}
+
+.skel-bar.is-sm {
+  width: 88px;
+  height: 12px;
+}
+
+.skel-bar.is-md {
+  width: 132px;
+  height: 14px;
+}
+
+.skel-bar.is-title {
+  width: 46%;
+  height: 22px;
+  border-radius: 8px;
+}
+
+.skel-bar.is-metric {
+  width: 36%;
+  height: 30px;
+  border-radius: 10px;
+}
+
+.skel-pill {
+  width: 68px;
+  height: 20px;
+}
+
+.skel-btn {
+  width: 78px;
+  height: 28px;
+}
+
+.skel-spark {
+  width: 100%;
+  height: 32px;
+  border-radius: 10px;
+}
+
+.skel-filter-pill {
+  width: 66px;
+  height: 30px;
+}
+
+.skel-search {
+  width: 210px;
+  height: 34px;
+}
+
+@keyframes ua-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes ua-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .online-pill.is-loading i,
+  .skel-bar::after,
+  .skel-pill::after,
+  .skel-btn::after,
+  .skel-spark::after,
+  .skel-filter-pill::after,
+  .skel-search::after {
+    animation: none;
+  }
+}
+
 @media (max-width: 640px) {
   .device-grid,
   .node-card-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .search-input {
+  .search-input,
+  .skel-search {
     width: 100%;
   }
 }
