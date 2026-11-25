@@ -127,7 +127,7 @@ func doUnlockReq(ctx context.Context, client *http.Client, method, u string, bod
 		return 0, nil, "", "", lat, err
 	}
 	defer resp.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 256*1024))
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
 	finalURL := ""
 	if resp.Request != nil && resp.Request.URL != nil {
 		finalURL = resp.Request.URL.String()
@@ -297,25 +297,57 @@ func checkClaude(ctx context.Context, client *http.Client) unlockItemResult {
 	return item
 }
 
+var (
+	geminiISO3Re      = regexp.MustCompile(`2,1,200,"([A-Z]{3})"`)
+	geminiBlockedISO3 = map[string]bool{
+		"HKG": true, "CHN": true, "MAC": true, "RUS": true,
+		"BLR": true, "IRN": true, "PRK": true, "SYR": true, "CUB": true,
+	}
+	geminiISO3To2 = map[string]string{
+		"USA": "US", "JPN": "JP", "HKG": "HK", "CHN": "CN", "MAC": "MO",
+		"SGP": "SG", "TWN": "TW", "GBR": "GB", "DEU": "DE", "NLD": "NL",
+		"KOR": "KR", "CAN": "CA", "AUS": "AU", "FRA": "FR", "IND": "IN",
+		"BRA": "BR", "MYS": "MY", "THA": "TH", "PHL": "PH", "VNM": "VN",
+		"RUS": "RU", "BLR": "BY", "IRN": "IR", "PRK": "KP", "SYR": "SY", "CUB": "CU",
+	}
+)
+
 func checkGemini(ctx context.Context, client *http.Client) unlockItemResult {
 	item := newUnlockItem("gemini", "Google Gemini", "ai")
-	code, _, body, finalURL, lat, err := doUnlockReq(ctx, client, http.MethodGet, "https://gemini.google.com/", nil, nil)
+	code, _, body, _, lat, err := doUnlockReq(ctx, client, http.MethodGet, "https://gemini.google.com/", nil, nil)
 	item.LatencyMs = lat
 	if err != nil {
 		item.Status = "unknown"
 		item.Note = shortErr(err)
 		return item
 	}
-	if strings.Contains(body, "45631641,null,true") || (code == 200 && strings.Contains(finalURL, "gemini.google.com") && !strings.Contains(body, "not available in your country")) {
+	low := strings.ToLower(body)
+	if strings.Contains(low, "not available in your country") || strings.Contains(low, "isn't supported in your country") {
+		item.Status = "blocked"
+		item.Note = "出口地区不支持 Gemini"
+		return item
+	}
+	if m := geminiISO3Re.FindStringSubmatch(body); len(m) == 2 {
+		iso3 := m[1]
+		reg := geminiISO3To2[iso3]
+		if reg == "" {
+			reg = iso3
+		}
+		item.Region = reg
+		if geminiBlockedISO3[iso3] {
+			item.Status = "blocked"
+			item.Note = "出口地区（" + reg + "）不支持 Gemini"
+			return item
+		}
+		item.OK = true
+		item.Status = "available"
+		item.Note = "原生支持 Google Gemini（" + reg + "）"
+		return item
+	}
+	if code == 200 && strings.Contains(body, "45631641,null,true") {
 		item.OK = true
 		item.Status = "available"
 		item.Note = "原生支持 Google Gemini"
-		if m := regexp.MustCompile(`"([A-Z]{2})"`).FindStringSubmatch(body); len(m) == 2 {
-			// Best-effort region extraction only if cleanly matched near gl
-			if gm := regexp.MustCompile(`"gl":"([A-Z]{2})"`).FindStringSubmatch(body); len(gm) == 2 {
-				item.Region = gm[1]
-			}
-		}
 		return item
 	}
 	item.Status = "blocked"

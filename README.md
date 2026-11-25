@@ -1,6 +1,6 @@
 # PPEELink User Agent (`userAgent` 分支)
 
-轻量、按需触发的本机用户侧探针客户端（当前版本 **`v1.10`**），支持 Windows、macOS（Intel / Apple Silicon）与 Linux（amd64 / arm64）。空闲时仅保持轻量长轮询等待指令，不主动扫描节点。
+轻量、按需触发的本机用户侧探针客户端（当前版本 **`v1.11`**），支持 Windows、macOS（Intel / Apple Silicon）与 Linux（amd64 / arm64）。空闲时仅保持轻量长轮询等待指令，不主动扫描节点。
 
 ## 核心能力
 
