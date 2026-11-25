@@ -54,8 +54,12 @@ interface GroupRef {
   NodeCount: number;
 }
 export interface AppRule {
-  platform: "desktop" | "android";
-  app: string;
+  platform: "desktop" | "android" | "all";
+  app?: string;
+  preset?: string;
+  label?: string;
+  processes?: string[];
+  packages?: string[];
   target: string;
 }
 interface Config {
@@ -75,6 +79,7 @@ interface SubLogs {
 }
 interface Temp {
   file: string;
+  text?: string;
 }
 interface OverviewItem {
   id: number;
@@ -611,7 +616,11 @@ export function createSubscriptions() {
     udpOn.value = !!config.udp;
     certOn.value = !!config.cert;
     providerOn.value = !!config.proxyProvider;
-    appRules.value = (config.appRules || []).map((rule) => ({ ...rule }));
+    appRules.value = (config.appRules || []).map((rule) => ({
+      ...rule,
+      processes: rule.processes ? [...rule.processes] : undefined,
+      packages: rule.packages ? [...rule.packages] : undefined,
+    }));
     Clash.value = config.clash;
     Surge.value = config.surge;
     Loon.value = config.loon;

@@ -3,32 +3,82 @@ package node
 import (
 	"encoding/json"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"regexp"
 	"sort"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type AppRule struct {
-	Platform string `json:"platform"`
-	App      string `json:"app"`
-	Target   string `json:"target"`
+	Platform  string   `json:"platform"`
+	App       string   `json:"app,omitempty"`
+	Preset    string   `json:"preset,omitempty"`
+	Label     string   `json:"label,omitempty"`
+	Processes []string `json:"processes,omitempty"`
+	Packages  []string `json:"packages,omitempty"`
+	Target    string   `json:"target"`
 }
 
 var processName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._ +()-]{0,127}$`)
 var packageName = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$`)
 
+func expandAppRuleEntries(r AppRule, idx int) (processes []string, packages []string, err error) {
+	if r.Target == "" || len(r.Target) > 255 || strings.ContainsAny(r.Target, ",\r\n\x00") {
+		return nil, nil, fmt.Errorf("第 %d 条应用规则的目标无效", idx+1)
+	}
+
+	if len(r.Processes) > 0 || len(r.Packages) > 0 {
+		seenProc := map[string]bool{}
+		for _, p := range r.Processes {
+			if p == "" || p != strings.TrimSpace(p) || !processName.MatchString(p) {
+				return nil, nil, fmt.Errorf("第 %d 条应用规则的进程名无效: %s", idx+1, p)
+			}
+			if !seenProc[p] {
+				seenProc[p] = true
+				processes = append(processes, p)
+			}
+		}
+		seenPkg := map[string]bool{}
+		for _, pkg := range r.Packages {
+			if pkg == "" || pkg != strings.TrimSpace(pkg) || len(pkg) > 255 || !packageName.MatchString(pkg) {
+				return nil, nil, fmt.Errorf("第 %d 条应用规则的包名无效: %s", idx+1, pkg)
+			}
+			if !seenPkg[pkg] {
+				seenPkg[pkg] = true
+				packages = append(packages, pkg)
+			}
+		}
+		if len(processes) == 0 && len(packages) == 0 {
+			return nil, nil, fmt.Errorf("第 %d 条应用规则至少包含一个进程或包名", idx+1)
+		}
+		return processes, packages, nil
+	}
+
+	valid := (r.Platform == "desktop" && processName.MatchString(r.App)) ||
+		(r.Platform == "android" && len(r.App) <= 255 && packageName.MatchString(r.App))
+	if !valid || r.App != strings.TrimSpace(r.App) {
+		return nil, nil, fmt.Errorf("第 %d 条应用规则的应用名称或平台无效", idx+1)
+	}
+	if r.Platform == "android" {
+		return nil, []string{r.App}, nil
+	}
+	return []string{r.App}, nil, nil
+}
+
 func ValidateAppRules(rules []AppRule) error {
 	if len(rules) > 64 {
 		return fmt.Errorf("应用规则最多 64 条")
 	}
+	totalEntries := 0
 	for i, r := range rules {
-		valid := (r.Platform == "desktop" && processName.MatchString(r.App)) || (r.Platform == "android" && len(r.App) <= 255 && packageName.MatchString(r.App))
-		if !valid || r.App != strings.TrimSpace(r.App) {
-			return fmt.Errorf("第 %d 条应用规则的应用名称或平台无效", i+1)
+		procs, pkgs, err := expandAppRuleEntries(r, i)
+		if err != nil {
+			return err
 		}
-		if r.Target == "" || len(r.Target) > 255 || strings.ContainsAny(r.Target, ",\r\n\x00") {
-			return fmt.Errorf("第 %d 条应用规则的目标无效", i+1)
+		totalEntries += len(procs) + len(pkgs)
+		if totalEntries > 256 {
+			return fmt.Errorf("应用规则展开后的进程与包名总数不能超过 256 项")
 		}
 	}
 	return nil
@@ -123,12 +173,24 @@ func ApplyApplicationRules(client string, body []byte, cfg SqlConfig) ([]byte, e
 			doc["proxy-groups"] = append(groups, g)
 		}
 		generated := []any{}
-		for _, r := range cfg.AppRules {
+		seenRule := map[string]bool{}
+		for i, r := range cfg.AppRules {
 			target := r.Target
 			if target == "PROXY" {
 				target = proxyTag
 			}
-			generated = append(generated, "PROCESS-NAME,"+r.App+","+target)
+			procs, pkgs, err := expandAppRuleEntries(r, i)
+			if err != nil {
+				return nil, err
+			}
+			for _, item := range append(procs, pkgs...) {
+				line := "PROCESS-NAME," + item + "," + target
+				if seenRule[line] {
+					continue
+				}
+				seenRule[line] = true
+				generated = append(generated, line)
+			}
 		}
 		old, _ := doc["rules"].([]any)
 		doc["rules"] = append(generated, old...)
@@ -142,28 +204,36 @@ func ApplyApplicationRules(client string, body []byte, cfg SqlConfig) ([]byte, e
 		doc["route"] = route
 	}
 	generated := []any{}
-	for _, r := range cfg.AppRules {
-		key := "process_name"
-		if r.Platform == "android" {
-			key = "package_name"
+	for i, r := range cfg.AppRules {
+		procs, pkgs, err := expandAppRuleEntries(r, i)
+		if err != nil {
+			return nil, err
 		}
-		rule := map[string]any{key: []string{r.App}, "action": "route"}
 		target := r.Target
+		action := "route"
 		switch target {
 		case "REJECT":
-			rule["action"] = "reject"
+			action = "reject"
 		case "DIRECT":
 			target = "direct"
 		case "PROXY":
 			target = "proxy"
 		}
-		if target != "REJECT" {
-			if !targets[target] {
-				return nil, fmt.Errorf("应用规则缺少对应的出站")
-			}
-			rule["outbound"] = target
+		if action != "reject" && !targets[target] {
+			return nil, fmt.Errorf("应用规则缺少对应的出站")
 		}
-		generated = append(generated, rule)
+		appendSingboxRule := func(key string, vals []string) {
+			if len(vals) == 0 {
+				return
+			}
+			rule := map[string]any{key: vals, "action": action}
+			if action != "reject" {
+				rule["outbound"] = target
+			}
+			generated = append(generated, rule)
+		}
+		appendSingboxRule("process_name", procs)
+		appendSingboxRule("package_name", pkgs)
 	}
 	old, _ := route["rules"].([]any)
 	route["rules"] = append(generated, old...)
