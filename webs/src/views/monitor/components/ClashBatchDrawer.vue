@@ -275,28 +275,36 @@ watch(
         </button>
       </section>
 
+      <!-- Running Progress Banner -->
+      <section v-if="batchRunning" class="batch-progress" aria-live="polite">
+        <span class="bp-dot" aria-hidden="true"></span>
+        <span>
+          正在全局模式逐一实测 {{ status?.proxies?.length || 0 }} 个节点的真实带宽与解锁，完成后自动恢复原模式与原节点…
+        </span>
+      </section>
+
       <!-- Batch Matrix Table -->
       <section v-if="results.length" class="matrix-card">
         <div class="matrix-table">
           <div class="m-row is-head">
-            <span>节点</span>
-            <span>出口</span>
-            <span>TTFB</span>
-            <span>下载</span>
-            <span>GPT</span>
-            <span>Claude</span>
-            <span>Gemini</span>
-            <span>NF</span>
-            <span>Disney</span>
-            <span>YT</span>
-            <span></span>
+            <span class="col-left">节点</span>
+            <span class="col-center">出口</span>
+            <span class="col-center">TTFB</span>
+            <span class="col-center">下载</span>
+            <span class="col-center">GPT</span>
+            <span class="col-center">Claude</span>
+            <span class="col-center">Gemini</span>
+            <span class="col-center">NF</span>
+            <span class="col-center">Disney</span>
+            <span class="col-center">YT</span>
+            <span class="col-right">操作</span>
           </div>
 
           <div v-for="item in results" :key="item.name" class="m-row">
-            <strong class="m-name" :title="item.name">{{ item.name }}</strong>
-            <span class="mono m-sub">{{ item.country || "—" }}</span>
-            <span class="mono">{{ item.ttfbMs ? `${item.ttfbMs} ms` : "—" }}</span>
-            <strong class="mono m-speed">
+            <strong class="m-name col-left" :title="item.name">{{ item.name }}</strong>
+            <span class="mono m-sub col-center">{{ item.country || "—" }}</span>
+            <span class="mono col-center">{{ item.ttfbMs ? `${item.ttfbMs} ms` : "—" }}</span>
+            <strong class="mono m-speed col-center">
               {{ item.downloadMbps ? `${item.downloadMbps.toFixed(1)} Mbps` : "—" }}
             </strong>
             <span
@@ -307,15 +315,17 @@ watch(
             >
               {{ unlockBadge(val).text }}
             </span>
-            <button
-              type="button"
-              class="sw-btn"
-              :class="{ 'is-now': status?.current === item.name }"
-              :disabled="batchRunning || switchingNode === item.name"
-              @click="handleSwitch(item.name)"
-            >
-              {{ status?.current === item.name ? "当前" : "切换" }}
-            </button>
+            <div class="col-right">
+              <button
+                type="button"
+                class="sw-btn"
+                :class="{ 'is-now': status?.current === item.name }"
+                :disabled="batchRunning || switchingNode === item.name"
+                @click="handleSwitch(item.name)"
+              >
+                {{ status?.current === item.name ? "当前" : "切换" }}
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -442,6 +452,39 @@ watch(
   font-weight: 500;
 }
 
+.batch-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--c-line);
+  border-radius: 14px;
+  background: var(--c-surface-2);
+  font-size: 12.5px;
+  color: var(--c-ink);
+}
+
+.bp-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-ok);
+  flex: none;
+  animation: bp-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes bp-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+
 .matrix-card {
   border: 1px solid var(--c-line);
   border-radius: 16px;
@@ -450,16 +493,16 @@ watch(
 }
 
 .matrix-table {
-  min-width: 780px;
+  min-width: 820px;
   display: grid;
 }
 
 .m-row {
   display: grid;
-  grid-template-columns: 1.8fr 54px 66px 96px repeat(6, 58px) 58px;
+  grid-template-columns: minmax(140px, 1.8fr) 52px 70px 88px repeat(6, 62px) 62px;
   align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
+  gap: 8px;
+  padding: 11px 16px;
   border-top: 1px solid var(--c-line);
   font-size: 12px;
 }
@@ -468,7 +511,24 @@ watch(
   border-top: 0;
   color: var(--c-muted);
   font-size: 11px;
+  font-weight: 500;
   background: var(--c-surface-muted);
+}
+
+.col-left {
+  text-align: left;
+  justify-self: start;
+}
+
+.col-center {
+  text-align: center;
+  justify-self: center;
+}
+
+.col-right {
+  display: flex;
+  justify-content: flex-end;
+  justify-self: end;
 }
 
 .m-name {
@@ -476,6 +536,7 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
+  max-width: 100%;
 }
 
 .m-sub {
@@ -484,15 +545,20 @@ watch(
 
 .m-speed {
   color: var(--c-ink);
+  white-space: nowrap;
 }
 
 .u-tag {
   display: inline-flex;
+  align-items: center;
   justify-content: center;
-  padding: 2px 5px;
-  border-radius: 6px;
+  width: 100%;
+  min-height: 24px;
+  padding: 2px 6px;
+  border-radius: 8px;
   font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .u-tag.tone-ok {

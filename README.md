@@ -71,7 +71,7 @@
 | :--- | :--- | :--- |
 | **`main`** | 主面板（Go 1.25 + Gin + GORM + SQLite WAL + Vue 3 嵌入式单文件） | 面板可执行文件 `ppeelink` |
 | **`agent`** | 远端服务器 Agent（当前 `v1.25`，独立 Go 模块，支持 `linux/amd64`、`arm64`、`armv7`） | 放入面板运行目录 `downloads/agent/` |
-| **`userAgent`** | 本机用户侧探针（当前 `v1.11`，独立 Go 模块，支持 Windows / macOS / Linux，含系统托盘） | 放入面板运行目录 `downloads/user-agent/` |
+| **`userAgent`** | 本机用户侧探针（当前 `v1.12`，独立 Go 模块，支持 Windows / macOS / Linux，含系统托盘） | 放入面板运行目录 `downloads/user-agent/` |
 
 <br />
 

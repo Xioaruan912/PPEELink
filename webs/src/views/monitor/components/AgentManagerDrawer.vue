@@ -57,7 +57,7 @@ const clashForm = reactive({
 const savingClash = ref(false);
 
 const latestVersion = computed(
-  () => props.probes.find((p) => p.latestVersion)?.latestVersion || "1.11"
+  () => props.probes.find((p) => p.latestVersion)?.latestVersion || "1.12"
 );
 
 const onlineProbes = computed(() => props.probes.filter((p) => p.online));
