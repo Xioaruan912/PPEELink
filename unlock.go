@@ -440,8 +440,9 @@ func checkDisneyPlus(ctx context.Context, client *http.Client) unlockItemResult 
 		item.Note = shortErr(err)
 		return item
 	}
-	low := strings.ToLower(finalURL + " " + body)
-	if code == 403 || strings.Contains(low, "unavailable") || strings.Contains(low, "not available in your region") {
+	low := strings.ToLower(body)
+	lowURL := strings.ToLower(finalURL)
+	if code == 403 || strings.Contains(lowURL, "/unavailable") || strings.Contains(low, "unavailable in your region") || strings.Contains(low, "not available in your") {
 		item.Status = "blocked"
 		item.Note = "当前出口地区不可用"
 		return item

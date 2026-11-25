@@ -310,8 +310,82 @@ func switchClashProxy(ctx context.Context, group, targetNode string) (clashStatu
 	return st, nil
 }
 
-// runClashBatchTest iterates over Clash nodes, measures quick real-world throughput
-// + key AI/streaming unlock on each via Channel B, and ALWAYS restores the original node.
+func getClashMode(ctx context.Context, controller, sec string) string {
+	client := clashHTTPClient(2 * time.Second)
+	resp, err := clashDoRequest(ctx, client, http.MethodGet, controller+"/configs", sec, nil)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var cfg struct {
+		Mode string `json:"mode"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 32*1024)).Decode(&cfg) == nil {
+		return strings.TrimSpace(cfg.Mode)
+	}
+	return ""
+}
+
+func setClashMode(ctx context.Context, controller, sec, mode string) error {
+	if strings.TrimSpace(mode) == "" {
+		return nil
+	}
+	client := clashHTTPClient(2 * time.Second)
+	body, _ := json.Marshal(map[string]string{"mode": mode})
+	resp, err := clashDoRequest(ctx, client, http.MethodPatch, controller+"/configs", sec, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return nil
+}
+
+func getClashGroupCurrent(ctx context.Context, controller, sec, groupName string) (string, bool) {
+	client := clashHTTPClient(2 * time.Second)
+	endpoint := fmt.Sprintf("%s/proxies/%s", controller, url.PathEscape(groupName))
+	resp, err := clashDoRequest(ctx, client, http.MethodGet, endpoint, sec, nil)
+	if err != nil {
+		return "", false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", false
+	}
+	var g struct {
+		Now string   `json:"now"`
+		All []string `json:"all"`
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 512*1024)).Decode(&g) != nil {
+		return "", false
+	}
+	return g.Now, len(g.All) > 0
+}
+
+func putClashGroupProxy(ctx context.Context, controller, sec, groupName, nodeName string) error {
+	client := clashHTTPClient(2 * time.Second)
+	body, _ := json.Marshal(map[string]string{"name": nodeName})
+	endpoint := fmt.Sprintf("%s/proxies/%s", controller, url.PathEscape(groupName))
+	resp, err := clashDoRequest(ctx, client, http.MethodPut, endpoint, sec, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 256))
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+	return nil
+}
+
+// runClashBatchTest iterates over Clash nodes, temporarily switches Clash to Global mode
+// so rule-specific groups (ChatGPT/Google/etc.) cannot leak traffic onto another node,
+// measures real throughput + 6 AI/streaming unlocks per node, and ALWAYS restores mode & node.
 func runClashBatchTest(ctx context.Context, group string, requested []string) clashReportPayload {
 	st := detectClashStatus(ctx)
 	if !st.Connected || st.Controller == "" {
@@ -335,11 +409,27 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 		return clashReportPayload{Action: "clash-batch", Group: group, Original: original, Error: "策略组内无可用节点"}
 	}
 
+	_, sec := clashCandidates()
+	origMode := getClashMode(ctx, st.Controller, sec)
+	origGlobalNow, hasGlobal := getClashGroupCurrent(ctx, st.Controller, sec, "GLOBAL")
+	switchedGlobalMode := false
+	if hasGlobal && !strings.EqualFold(origMode, "global") {
+		if err := setClashMode(ctx, st.Controller, sec, "global"); err == nil {
+			switchedGlobalMode = true
+		}
+	}
+
 	defer func() {
+		restoreCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+		defer cancel()
+		if hasGlobal && origGlobalNow != "" {
+			_ = putClashGroupProxy(restoreCtx, st.Controller, sec, "GLOBAL", origGlobalNow)
+		}
+		if switchedGlobalMode && origMode != "" {
+			_ = setClashMode(restoreCtx, st.Controller, sec, origMode)
+		}
 		if original != "" {
-			restoreCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			_, _ = switchClashProxy(restoreCtx, group, original)
-			cancel()
+			_ = putClashGroupProxy(restoreCtx, st.Controller, sec, group, original)
 		}
 	}()
 
@@ -349,20 +439,28 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 			break
 		}
 		swCtx, swCancel := context.WithTimeout(ctx, 2*time.Second)
-		_, err := switchClashProxy(swCtx, group, nodeName)
+		var swErr error
+		if hasGlobal {
+			swErr = putClashGroupProxy(swCtx, st.Controller, sec, "GLOBAL", nodeName)
+		}
+		if swErr == nil {
+			_ = putClashGroupProxy(swCtx, st.Controller, sec, group, nodeName)
+		} else {
+			swErr = putClashGroupProxy(swCtx, st.Controller, sec, group, nodeName)
+		}
 		swCancel()
-		if err != nil {
-			items = append(items, clashNodeTestResult{Name: nodeName, Error: shortErr(err)})
+		if swErr != nil {
+			items = append(items, clashNodeTestResult{Name: nodeName, Error: shortErr(swErr)})
 			continue
 		}
 		select {
 		case <-ctx.Done():
 			break
-		case <-time.After(280 * time.Millisecond):
+		case <-time.After(320 * time.Millisecond):
 		}
 
-		// Fresh HTTP client per node so pooled TCP/TLS connections don't stay pinned to the previous node!
-		client := newActiveProxyHTTPClient(6 * time.Second)
+		// Fresh HTTP client per node so pooled TCP/TLS connections never stay pinned to the previous node.
+		client := newActiveProxyHTTPClient(8 * time.Second)
 		items = append(items, testSingleClashNode(ctx, client, nodeName))
 	}
 
@@ -429,42 +527,62 @@ func testSingleClashNode(ctx context.Context, client *http.Client, nodeName stri
 	wg.Wait()
 	cancelU()
 
-	// 2. Fast 2.2s 2-stream download speedtest over Cloudflare edge.
-	dlCtx, cancelDL := context.WithTimeout(ctx, 2200*time.Millisecond)
-	var totalBytes atomic.Int64
-	startDL := time.Now()
-	var dlWG sync.WaitGroup
-	for i := 0; i < 2; i++ {
-		dlWG.Add(1)
-		go func() {
-			defer dlWG.Done()
-			req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, "https://speed.cloudflare.com/__down?bytes=12000000", nil)
-			if err != nil {
-				return
-			}
-			req.Header.Set("User-Agent", unlockUA)
-			resp, err := client.Do(req)
-			if err != nil {
-				return
-			}
-			defer resp.Body.Close()
-			buf := make([]byte, 32*1024)
-			for {
-				n, rerr := resp.Body.Read(buf)
-				if n > 0 {
-					totalBytes.Add(int64(n))
-				}
-				if rerr != nil || dlCtx.Err() != nil {
-					break
-				}
-			}
-		}()
+	// 2. Fast 3.2s download speedtest with multi-CDN fallback (Cloudflare -> CacheFly).
+	dlURLs := []string{
+		"https://speed.cloudflare.com/__down?bytes=15000000",
+		"https://cachefly.cachefly.net/10mb.test",
 	}
-	dlWG.Wait()
-	cancelDL()
-	elapsed := time.Since(startDL).Seconds()
-	if b := totalBytes.Load(); b > 0 && elapsed > 0.05 {
-		res.DownloadMbps = round2(float64(b) * 8.0 / (elapsed * 1_000_000.0))
+	for _, dlURL := range dlURLs {
+		if ctx.Err() != nil {
+			break
+		}
+		dlCtx, cancelDL := context.WithTimeout(ctx, 3200*time.Millisecond)
+		var totalBytes atomic.Int64
+		var firstByteNs atomic.Int64
+		var dlWG sync.WaitGroup
+		for i := 0; i < 2; i++ {
+			dlWG.Add(1)
+			go func() {
+				defer dlWG.Done()
+				req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, dlURL, nil)
+				if err != nil {
+					return
+				}
+				req.Header.Set("User-Agent", unlockUA)
+				req.Header.Set("Accept-Encoding", "identity")
+				resp, err := client.Do(req)
+				if err != nil {
+					return
+				}
+				defer resp.Body.Close()
+				if resp.StatusCode != http.StatusOK {
+					return
+				}
+				buf := make([]byte, 32*1024)
+				for {
+					n, rerr := resp.Body.Read(buf)
+					if n > 0 {
+						firstByteNs.CompareAndSwap(0, time.Now().UnixNano())
+						totalBytes.Add(int64(n))
+					}
+					if rerr != nil || dlCtx.Err() != nil {
+						break
+					}
+				}
+			}()
+		}
+		dlWG.Wait()
+		cancelDL()
+		if b := totalBytes.Load(); b > 16*1024 {
+			if fb := firstByteNs.Load(); fb > 0 {
+				elapsed := time.Since(time.Unix(0, fb)).Seconds()
+				if elapsed < 0.25 {
+					elapsed = 0.25
+				}
+				res.DownloadMbps = round2(float64(b) * 8.0 / (elapsed * 1_000_000.0))
+				break
+			}
+		}
 	}
 	if res.EgressIP == "" && res.DownloadMbps == 0 {
 		res.Error = "节点不可达"
