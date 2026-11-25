@@ -1047,6 +1047,8 @@ async function checkServerUnlock(serverId?: number) {
     <InboundDrawer
       v-model="inboundDrawer"
       :server-id="inboundServer"
+      :server-name="servers.find((s) => s.id === inboundServer)?.name"
+      :server-country="servers.find((s) => s.id === inboundServer)?.unlock?.country"
       :inbound="editingInbound"
       @saved="load(true)"
     />

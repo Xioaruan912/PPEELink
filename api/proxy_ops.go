@@ -406,7 +406,7 @@ func ProxyServerCheckPort(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"inUse": res.InUse, "detail": res.Output}, "msg": res.Output})
 }
 
-// ProxyServerCheckSNI 由目标 VPS 就地检测 Reality 伪装目标（TLS 1.3 / H2 / 握手延迟）并智能推荐。
+// ProxyServerCheckSNI 由目标 VPS 就地检测 Reality 伪装目标（TLS 1.3 / H2 / 握手延迟）并按地区本土站智能推荐。
 func ProxyServerCheckSNI(c *gin.Context) {
 	var req struct {
 		ServerID uint     `json:"serverId"`
@@ -416,9 +416,11 @@ func ProxyServerCheckSNI(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "服务器 ID 无效"})
 		return
 	}
+	region := resolveServerSNIRegion(req.ServerID)
+	targets := buildRegionalSNITargets(region, req.Targets)
 	_, res, ok := runServerOpsRPC(c, req.ServerID, serverOpsJob{
 		Action:  "sni-check",
-		Targets: req.Targets,
+		Targets: targets,
 	}, 20*time.Second)
 	if !ok {
 		return
@@ -427,7 +429,7 @@ func ProxyServerCheckSNI(c *gin.Context) {
 		c.JSON(500, gin.H{"code": "50000", "msg": res.Error})
 		return
 	}
-	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"items": res.SNIs}, "msg": res.Output})
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"items": res.SNIs, "region": region}, "msg": res.Output})
 }
 
 // ProxyServerSecurityAudit 拉取目标服务器的入站在线连接 IP、近期异常探测聚合及防火墙封禁列表。

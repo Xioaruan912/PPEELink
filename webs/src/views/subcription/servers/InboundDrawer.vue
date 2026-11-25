@@ -18,24 +18,28 @@ import {
 } from "@/api/proxy";
 import { UiButton, UiDrawer } from "@/ui";
 import KineticNotice from "@/ui/KineticNotice.vue";
+import {
+  REGIONAL_SNI_GROUPS,
+  inferSNIRegion,
+  type SNIRegionKey,
+} from "./realitySniPresets";
 
 const props = defineProps<{
   serverId: number;
+  serverName?: string;
+  serverCountry?: string;
   inbound: ProxyInbound | null;
   requireEgress?: boolean;
 }>();
 const visible = defineModel<boolean>({ required: true });
 const emit = defineEmits<{ saved: [] }>();
 
-// 精选非 Cloudflare CDN 伪装目标（TLS 1.3 + h2，已排除 CF CDN 防止被用于攻击）
-const targets = [
-  { host: "www.amd.com", tag: "推荐" },
-  { host: "www.apple.com", tag: "" },
-  { host: "dl.google.com", tag: "" },
-  { host: "www.amazon.com", tag: "" },
-  { host: "www.tesla.com", tag: "" },
-  { host: "addons.mozilla.org", tag: "" },
-];
+const activeSniRegion = ref<SNIRegionKey>("GLOBAL");
+const regionalTargets = computed(
+  () =>
+    REGIONAL_SNI_GROUPS.find((g) => g.key === activeSniRegion.value)?.hosts ||
+    REGIONAL_SNI_GROUPS[REGIONAL_SNI_GROUPS.length - 1].hosts
+);
 
 type ProtoFamily = "vless" | "vmess" | "trojan" | "ss2022" | "hy2";
 
@@ -244,6 +248,10 @@ watch(visible, (open) => {
   error.value = "";
   check.value = null;
   portCheckTip.value = null;
+  sniResults.value = [];
+  activeSniRegion.value = inferSNIRegion(
+    props.serverCountry || props.serverName
+  );
   importKey.value = false;
 
   Object.assign(
@@ -301,7 +309,7 @@ async function runServerSNIAudit() {
   sniAuditing.value = true;
   error.value = "";
   try {
-    const custom = [form.sni, form.target].filter(Boolean);
+    const custom = [form.sni, form.target, ...regionalTargets.value].filter(Boolean);
     const res = await checkProxyServerSNI(props.serverId, custom);
     sniResults.value = res.data?.items || [];
     if (!sniResults.value.length) {
@@ -508,18 +516,34 @@ async function save() {
             <span class="shield-pill">已排除 CF CDN</span>
           </header>
 
-          <div v-if="!identityLocked" class="target-chips">
-            <button
-              v-for="item in targets"
-              :key="item.host"
-              type="button"
-              class="target-chip"
-              :class="{ 'is-active': form.target === `${item.host}:443` }"
-              @click="pickTarget(item.host)"
-            >
-              <span class="mono">{{ item.host }}</span>
-              <em v-if="item.tag" class="chip-tag">{{ item.tag }}</em>
-            </button>
+          <div v-if="!identityLocked" class="sni-region-deck">
+            <nav class="sni-region-rail" role="tablist" aria-label="伪装站地区">
+              <button
+                v-for="g in REGIONAL_SNI_GROUPS"
+                :key="g.key"
+                type="button"
+                role="tab"
+                class="region-pill"
+                :class="{ 'is-active': activeSniRegion === g.key }"
+                :aria-selected="activeSniRegion === g.key"
+                @click="activeSniRegion = g.key"
+              >
+                {{ g.label }}
+              </button>
+            </nav>
+
+            <div class="target-chips">
+              <button
+                v-for="host in regionalTargets"
+                :key="host"
+                type="button"
+                class="target-chip"
+                :class="{ 'is-active': form.target === `${host}:443` }"
+                @click="pickTarget(host)"
+              >
+                <span class="mono">{{ host }}</span>
+              </button>
+            </div>
           </div>
 
           <div class="two-col">
@@ -1033,6 +1057,42 @@ async function save() {
 
 .port-row :deep(.el-input-number) {
   flex: 1;
+}
+
+.sni-region-deck {
+  display: grid;
+  gap: 10px;
+}
+
+.sni-region-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.region-pill {
+  padding: 4px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    color 150ms ease,
+    border-color 150ms ease;
+}
+
+.region-pill:hover {
+  border-color: var(--c-line);
+  color: var(--c-ink);
+}
+
+.region-pill.is-active {
+  background: var(--c-ink);
+  color: var(--c-surface);
 }
 
 .target-chips {
