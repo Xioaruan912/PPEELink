@@ -1,53 +1,44 @@
-# PPEELink Agent
+# PPEELink Server Agent (`agent` 分支)
 
-此分支只维护远端 Agent。面板、前端、数据库和管理 API 不在此分支。
-Agent 与面板通过既有 HTTP/WebSocket JSON 协议连接，发布与面板分开。
+独立运行的远端 VPS Agent（Go 1.25+，零前端与数据库依赖），负责承载 Xray-core 入站管理、主机监控、原生流媒体/AI 解锁检测、安全防护与远程运维 RPC，与主面板通过独立发行清单解耦发布。
+
+## 核心能力（当前版本 `v1.24`）
+
+- **代理与转发托管**：自动拉取面板入站与端口转发配置，托管 Xray-core 与无域名自动 TLS 证书。
+- **原生解锁矩阵（`unlock-check`）**：由 VPS 本机出口直测 ChatGPT、Claude、Gemini、Netflix（全区/自制及标准国家码）、Disney+、YouTube、TikTok、Spotify，供面板展示并驱动 Clash 订阅智能分流。
+- **安全与隐私硬策略（`set-policy`）**：将 `WebShell 终端`、`文件浏览与上传`、`Docker 容器管理`、`允许远程自更新` 持久化到节点本地 `policy.json`，在主机侧直接拒绝关闭的功能请求。
+- **面板地址预检迁移（`set-panel-url`）**：收到新面板 URL 后先用当前令牌连通预检 `/api/v1/agent/spec`，验证通过后原子更新 systemd unit 中的 `-panel` 参数（兼容引号/无引号/等号写法）并平滑重启，防止填错域名导致失联。
+- **运维与安全体检**：支持内核 BBR / `qdisc` 调优、Xray 核心在线升级、Reality SNI VPS 侧实测评分（`sni-check`）、入站异常扫描审计与 `iptables` 封禁/解封、NextTrace 路由追踪及 iperf3 吞吐互测。
 
 ## 构建
 
-需要 Go1.25+；发行清单生成使用 Python3。不需要 Node、pnpm、前端资源或数据库。
+需要 Go 1.25+ 与 Python 3：
 
 ```sh
 ./build.sh
 ```
 
-`dist/` 输出 Linux amd64、arm64、ARMv7 独立程序及 `release.json`（版本、架构和 SHA256）。
-版本在 `agentversion/version.go` 维护，目前1.17。修改 Agent 后按1.17 →1.18递增。
-CI 只验证并生成构建产物，不自动创建公开发行版或更新服务器。
+`dist/` 会生成 `linux/amd64`、`linux/arm64`、`linux/armv7` 三个独立二进制以及带 SHA-256 校验值的 `release.json`。版本号维护在 `agentversion/version.go`（当前 `1.24`）。
 
-## 运行与兼容
+## 运行
 
 ```sh
 export PPEELINK_AGENT_TOKEN='<面板签发的令牌>'
-./dist/agent-linux-amd64 agent -panel https://panel.example.com
+./dist/agent-linux-amd64 agent -panel "https://panel.example.com"
 ./dist/agent-linux-amd64 --version
 ```
 
-已有 `agent`、`monitor` 和 `probe` 子命令、参数、systemd 服务名及令牌方式保持兼容。
-`monitor` 继续走统一 Agent 生命周期。Agent 只下载官方/固定校验的运行工具；
-iperf3 首次缺失时自动准备固定3.22静态工具，目标服务器无需编译环境。
-
 ## 发布到面板
 
-将同一次构建的完整 `dist/` 内容部署至面板工作目录的 `downloads/agent/`。
-先上传三份程序，再原子替换 `release.json`；不要用面板可执行文件冒充 Agent。
-面板通过现有下载接口发送对应架构程序，并使用清单 SHA256 校验升级回报。
-面板只更换前端/API时无需重新发布 Agent。部署程序的版本和校验值应与清单一致。
+将同一次构建的完整 `dist/` 内容部署至面板运行目录的 `downloads/agent/`：先上传三份二进制，再原子替换 `release.json`。面板会自动识别新版本并支持单机或一键全量静默升级。
 
 ## 验证
 
 ```sh
-go test . ./agentversion ./certpin ./monitorcore ./relaycore ./terminalcore ./throughputcore ./tracecore
-go test ./xraycore -run 'TestExecutableHash|TestUpdate|TestStats'
+go test ./...
 PPEELINK_AGENT_SYSTEMD_TESTS=1 go test . -run 'TestAgentTerminalPersistent|TestAgentTerminalTask'
 ```
 
-systemd/tmux 与真实网络测量需要隔离测试环境并显式启用。xraycore 中历史路由测试的
-既有失败不属于此次结构迁移；不声称完整旧测试集全部通过。
-面板跨进程兼容测试使用本分支编译的测试辅助程序，不在 Agent 中引入面板包。
-
 ## 许可
 
-Agent 本身见 `LICENSE`；下载的测速工具许可见 `throughputcore/licenses/`，安装时写入
-工具旁的 `iperf3.LICENSE`。固定静态发行资产来源、SHA256 和校验规则见
-`throughputcore/prepare.go`；该二进制由 userdocs 构建，不是 ESnet 官方二进制发行。
+Agent 本体遵循 [LICENSE](LICENSE)；自动准备的静态 `iperf3` 工具来源、校验与许可规则见 `throughputcore/prepare.go` 与 `throughputcore/licenses/`。
