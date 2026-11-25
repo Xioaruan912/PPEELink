@@ -36,8 +36,8 @@ It brings VPS Xray-core inbound management, native unlock-driven smart subscript
 | Branch | Role | Deployment Path |
 | :--- | :--- | :--- |
 | **`main`** | Control panel (Go 1.25 + Gin + GORM + SQLite WAL + embedded Vue 3 SPA) | `ppeelink` binary |
-| **`agent`** | Remote Server Agent (`v1.24`, standalone Go module for `linux/amd64`, `arm64`, `armv7`) | `downloads/agent/` |
-| **`userAgent`** | Client-side User Agent (`v1.10`, standalone Go module for Windows / macOS / Linux with tray) | `downloads/user-agent/` |
+| **`agent`** | Remote Server Agent (`v1.25`, standalone Go module for `linux/amd64`, `arm64`, `armv7`) | `downloads/agent/` |
+| **`userAgent`** | Client-side User Agent (`v1.11`, standalone Go module for Windows / macOS / Linux with tray) | `downloads/user-agent/` |
 
 <br />
 

@@ -23,7 +23,7 @@ import (
 const probeOnlineWindow = 60 * time.Second
 
 // latestUserAgentVersion 与 userAgent 分支保持同步。
-const latestUserAgentVersion = "1.10"
+const latestUserAgentVersion = "1.11"
 
 type probeNode struct {
 	ID     int    `json:"id"`
