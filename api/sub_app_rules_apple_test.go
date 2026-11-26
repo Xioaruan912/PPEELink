@@ -48,7 +48,7 @@ func TestServeSubscriptionWithAppRulesSucceedsForLoonShadowrocketAndIOSClash(t *
 		t.Fatal(err)
 	}
 	if err := db.AutoMigrate(
-		&models.Subcription{}, &models.Node{}, &models.GroupNode{},
+		&models.Subcription{}, &models.SubLogs{}, &models.Node{}, &models.GroupNode{},
 		&models.NodeHealthEvent{}, &models.AlertSetting{},
 		&models.SubscriptionArtifact{}, &models.SubscriptionArtifactPointer{},
 		&models.ProxyServer{},
