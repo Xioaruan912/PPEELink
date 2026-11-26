@@ -26,21 +26,13 @@ func compatibilityInputs(nodes []models.Node) []node.CompatibilityInput {
 func compatibilityPayload(nodes []models.Node, config string) gin.H {
 	inputs := compatibilityInputs(nodes)
 	reports := node.BuildCompatibility(inputs)
+	note := "检查当前导出器能否保留节点参数，不代表网络连通性；客户端版本要求见提示"
 	var cfg node.SqlConfig
 	_ = json.Unmarshal([]byte(config), &cfg)
 	if len(cfg.AppRules) > 0 {
-		for i := range reports {
-			if reports[i].Key == "clash" || reports[i].Key == "singbox" {
-				continue
-			}
-			reports[i].Included, reports[i].Warnings, reports[i].Excluded = 0, 0, reports[i].Total
-			for j := range reports[i].Items {
-				reports[i].Items[j].Status = "unsupported"
-				reports[i].Items[j].Reason = "此订阅包含应用规则，仅支持 Mihomo、sing-box 完整配置"
-			}
-		}
+		note = "应用规则仅在桌面/Android Mihomo 与 sing-box 生效，导入 iOS（Loon / Shadowrocket / Surge 等）时会自动跳过应用规则以保证正常导入"
 	}
-	return gin.H{"limited": len(inputs) >= 10000, "revision": node.CompatibilityRevision, "clients": reports, "note": "检查当前导出器能否保留节点参数，不代表网络连通性；客户端版本要求见提示"}
+	return gin.H{"limited": len(inputs) >= 10000, "revision": node.CompatibilityRevision, "clients": reports, "note": note}
 }
 
 // SubscriptionCompatibility uses the same groups, delivery policy and pipeline as export.

@@ -101,8 +101,33 @@ func rememberGoodArtifact(subscriptionID int, client string, body []byte, delive
 		Delete(&models.SubscriptionArtifact{}).Error
 }
 
+// shouldApplyAppRules 判断当前订阅请求是否应注入桌面/Android 应用进程规则。
+// iOS 客户端（Loon / Shadowrocket / Surge / Stash / Egern / Quantumult X 以及带 iOS UA 的 Clash/sing-box）
+// 与纯节点格式（v2ray / clash-proxies）不支持进程级分流，自动跳过应用规则以保证正常导入。
+func shouldApplyAppRules(client, userAgent string) bool {
+	c := strings.ToLower(strings.TrimSpace(client))
+	if c != "clash" && c != "singbox" {
+		return false
+	}
+	ua := strings.ToLower(strings.TrimSpace(userAgent))
+	for _, iosHint := range []string{
+		"iphone", "ipad", "ipod", "ios",
+		"shadowrocket", "loon", "stash", "egern",
+		"surge", "quantumult", "sfi/",
+	} {
+		if strings.Contains(ua, iosHint) {
+			return false
+		}
+	}
+	return true
+}
+
 // buildSubscriptionOutput 在内存中渲染订阅；providerBase 用于 proxy-provider 模式拼接节点地址。
 func buildSubscriptionOutput(sub models.Subcription, client, providerBase string) ([]byte, error) {
+	return buildSubscriptionOutputWithOptions(sub, client, providerBase, client == "clash" || client == "singbox")
+}
+
+func buildSubscriptionOutputWithOptions(sub models.Subcription, client, providerBase string, applyAppRules bool) ([]byte, error) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	c.Request = httptest.NewRequest("GET", "/", nil)
@@ -137,11 +162,11 @@ func buildSubscriptionOutput(sub models.Subcription, client, providerBase string
 	if recorder.Code >= 400 {
 		return nil, fmt.Errorf("订阅生成失败 HTTP %d", recorder.Code)
 	}
-	var appConfig node.SqlConfig
-	if err := json.Unmarshal([]byte(sub.Config), &appConfig); err != nil {
-		return nil, err
-	}
-	if client == "clash" || client == "singbox" {
+	if applyAppRules && (client == "clash" || client == "singbox") {
+		var appConfig node.SqlConfig
+		if err := json.Unmarshal([]byte(sub.Config), &appConfig); err != nil {
+			return nil, err
+		}
 		return node.ApplyApplicationRules(client, body, appConfig)
 	}
 	return append([]byte(nil), body...), nil
@@ -166,12 +191,13 @@ func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client stri
 	}
 	var appConfig node.SqlConfig
 	_ = json.Unmarshal([]byte(sub.Config), &appConfig)
-	if len(appConfig.AppRules) > 0 && client != "clash" && client != "singbox" && client != "clash-proxies" {
-		c.String(400, "此订阅包含应用规则，请使用 Mihomo 或 sing-box 完整配置")
-		return
+
+	applyAppRules := len(appConfig.AppRules) > 0 && shouldApplyAppRules(client, c.Request.UserAgent())
+	if len(appConfig.AppRules) > 0 && !applyAppRules {
+		c.Header("X-PPEELink-AppRules", "skipped")
 	}
 
-	body, err := buildSubscriptionOutput(sub, client, baseURL(c))
+	body, err := buildSubscriptionOutputWithOptions(sub, client, baseURL(c), applyAppRules)
 	if err == nil {
 		err = validateSubscriptionContent(client, body)
 	}
@@ -180,13 +206,17 @@ func serveSubscriptionClient(c *gin.Context, sub models.Subcription, client stri
 		return
 	}
 	liveValid := err == nil
-	if !liveValid && len(appConfig.AppRules) > 0 {
+	if !liveValid && applyAppRules {
 		c.String(502, "应用规则生成失败，请检查目标节点是否仍在订阅中")
 		return
 	}
+	artifactKey := client
+	if len(appConfig.AppRules) > 0 && !applyAppRules && (client == "clash" || client == "singbox") {
+		artifactKey = client + "-noapp"
+	}
 	if liveValid {
-		rememberGoodArtifact(sub.ID, client, body, deliveryDigest)
-	} else if artifact, lkgErr := lastKnownGoodArtifact(sub.ID, client); lkgErr == nil && len(artifact.Content) > 0 && artifact.InputDigest == deliveryDigest {
+		rememberGoodArtifact(sub.ID, artifactKey, body, deliveryDigest)
+	} else if artifact, lkgErr := lastKnownGoodArtifact(sub.ID, artifactKey); lkgErr == nil && len(artifact.Content) > 0 && artifact.InputDigest == deliveryDigest {
 		body, err = artifact.Content, nil
 		c.Header("X-SubLinkX-Artifact", "last-known-good")
 	}
