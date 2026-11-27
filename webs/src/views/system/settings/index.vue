@@ -805,11 +805,10 @@ onBeforeUnmount(() => {
         <div class="action-list">
           <div class="action-row">
             <div class="action-copy">
-              <strong>完整数据库备份</strong>
+              <strong>整机快照备份</strong>
               <span v-if="lastBackupAt" class="mono">
-                上次备份 {{ formatDateTime(lastBackupAt) }}
+                上次 {{ formatDateTime(lastBackupAt) }}
               </span>
-              <span v-else>下载完整 SQLite 快照文件</span>
             </div>
             <UiButton
               variant="primary"
@@ -818,14 +817,13 @@ onBeforeUnmount(() => {
               :disabled="!online"
               @click="fullBackup"
             >
-              下载快照
+              下载 .tar.gz
             </UiButton>
           </div>
 
           <div class="action-row">
             <div class="action-copy">
               <strong>导出 JSON 配置</strong>
-              <span>仅导出模板与订阅结构，不含密钥</span>
             </div>
             <UiButton
               variant="ghost"
@@ -859,14 +857,13 @@ onBeforeUnmount(() => {
               {{
                 importFile
                   ? importFile.name
-                  : "拖入本机备份文件恢复（支持 .tar.gz 整机快照 / .json 配置）"
+                  : "从本机恢复（.tar.gz 整机快照 / .json 配置）"
               }}
             </strong>
             <span v-if="importFile" class="mono">
-              {{ importMode === "full" ? "整机快照恢复" : "配置合并导入" }} ·
+              {{ importMode === "full" ? "整机快照" : "配置合并" }} ·
               {{ fileSizeLabel }}
             </span>
-            <span v-else>整机快照恢复前自动留存安全副本，JSON 模式仅合并模板与订阅</span>
           </div>
           <div class="drop-actions">
             <UiButton variant="ghost" :icon="IconUploadSimple" @click="chooseImport">
@@ -888,12 +885,14 @@ onBeforeUnmount(() => {
         <div class="webdav-card">
           <div class="webdav-head">
             <div class="action-copy">
-              <strong>WebDAV 云端自动备份</strong>
+              <strong>WebDAV 云端备份</strong>
               <span v-if="webdavForm.lastBackupAt" class="mono">
-                上次云备份 {{ formatDateTime(webdavForm.lastBackupAt) }} ·
+                {{ formatDateTime(webdavForm.lastBackupAt) }} ·
                 {{ webdavForm.lastStatus === "ok" ? "成功" : webdavForm.lastError || "失败" }}
               </span>
-              <span v-else>{{ currentWebDAVHint }}</span>
+              <span v-else-if="webdavForm.preset === 'jianguoyun'">
+                提醒：坚果云请使用「应用密码」
+              </span>
             </div>
             <el-switch v-model="webdavForm.enabled" active-text="自动备份" />
           </div>
@@ -1685,8 +1684,8 @@ onBeforeUnmount(() => {
 
 .webdav-card {
   display: grid;
-  gap: 16px;
-  padding: 20px;
+  gap: 20px;
+  padding: 24px;
   border: 1px solid var(--c-line);
   border-radius: 16px;
   background: var(--c-surface);
@@ -1703,13 +1702,13 @@ onBeforeUnmount(() => {
 .preset-strip {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
 }
 
 .webdav-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px 16px;
+  gap: 16px 20px;
 }
 
 .field-cell {

@@ -919,8 +919,7 @@ function formatUnlockBadge(it: ServerUnlockItem) {
 
         <section class="modal-section is-last">
           <header class="modal-section-head">
-            <h3>附加采集能力</h3>
-            <p>复用同一份 Agent 进程，按需开启监控与流量排行。</p>
+            <h3>能力与分流</h3>
           </header>
 
           <div class="capability-toggles">
@@ -930,7 +929,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
             >
               <div class="capability-copy">
                 <strong>服务器硬件监控</strong>
-                <small>上报 CPU、内存、磁盘与实时网速，无需额外部署监控服务。</small>
               </div>
               <el-switch
                 v-model="serverForm.monitorEnabled"
@@ -944,7 +942,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
             >
               <div class="capability-copy">
                 <strong>网站流量统计</strong>
-                <small>仅记录代理转发的域名与字节数，不采集完整 URL，默认关闭。</small>
               </div>
               <el-switch
                 v-model="serverForm.websiteTrafficEnabled"
@@ -958,7 +955,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
             >
               <div class="capability-copy">
                 <strong>自动放行防火墙端口</strong>
-                <small>Agent 自动放行入站 TCP/UDP 与跳跃端口，删入站或卸载时自动回收。</small>
               </div>
               <el-switch
                 v-model="serverForm.autoFirewall"
@@ -971,8 +967,7 @@ function formatUnlockBadge(it: ServerUnlockItem) {
               :class="{ 'is-on': serverForm.warpEnabled }"
             >
               <div class="capability-copy">
-                <strong>Cloudflare WARP 按域名分流出口</strong>
-                <small>自动注册免费 WARP WireGuard 出口，仅指定平台流量走 WARP（需 Agent v1.26+）。</small>
+                <strong>Cloudflare WARP 分流出口</strong>
                 <div v-if="serverForm.warpEnabled" class="warp-preset-row">
                   <button
                     v-for="p in WARP_DOMAIN_PRESETS"
@@ -985,10 +980,13 @@ function formatUnlockBadge(it: ServerUnlockItem) {
                     {{ p.label }}
                   </button>
                 </div>
+                <p v-if="serverForm.warpEnabled" class="warp-note">
+                  提醒：仅用于清洗美 / 日 / 新 / 欧机房 IP；香港等地区受限节点请用入站落地分流。
+                </p>
               </div>
               <el-switch
                 v-model="serverForm.warpEnabled"
-                aria-label="Cloudflare WARP 按域名分流出口"
+                aria-label="Cloudflare WARP 分流出口"
               />
             </div>
           </div>
@@ -997,9 +995,7 @@ function formatUnlockBadge(it: ServerUnlockItem) {
 
       <template #footer>
         <div class="modal-footer-bar">
-          <span class="modal-footer-tip">
-            {{ serverForm.id ? "修改将在 Agent 下次心跳生效" : "保存后将生成一次性 Agent 安装命令" }}
-          </span>
+          <span class="modal-footer-tip"></span>
           <div class="modal-footer-btns">
             <UiButton variant="ghost" @click="serverDialog = false">
               取消
@@ -1741,6 +1737,12 @@ function formatUnlockBadge(it: ServerUnlockItem) {
   border-color: var(--c-ink);
   color: var(--c-surface);
   font-weight: 500;
+}
+.warp-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--c-warn);
+  line-height: 1.45;
 }
 .modal-footer-bar {
   display: flex;
