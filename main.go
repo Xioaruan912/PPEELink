@@ -17,14 +17,13 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/sagernet/quic-go"
 )
 
-const agentVersion = "1.13"
+const agentVersion = "1.14"
 
 type userAgentConfigPatch struct {
 	PanelURL       string `json:"panelUrl,omitempty"`
@@ -201,10 +200,6 @@ func main() {
 		log.Printf("[用户 Agent v%s] 已启动，按需待命中（空闲时不向任何节点发包）", agentVersion)
 	}
 
-	var paused atomic.Bool
-	stopTray := startSystemTray(panelURL, &paused, stop)
-	defer stopTray()
-
 	// Warm up ISP detection in background on startup.
 	_ = detectLocalNetEnv()
 
@@ -245,7 +240,6 @@ func main() {
 		switch job.Action {
 		case "uninstall":
 			_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "uninstall", OK: true})
-			stopTray()
 			performTracelessUninstall()
 			os.Exit(0)
 		case "update":
@@ -254,7 +248,6 @@ func main() {
 				continue
 			}
 			_ = sendAck(ctx, client, panelURL, tok, ackPayload{JobID: jobID, Action: "update", OK: true})
-			stopTray()
 			os.Exit(0)
 		case "trace":
 			if strings.TrimSpace(job.TargetHost) == "" {
@@ -413,16 +406,38 @@ func main() {
 				setClashConfig(savedClashAPI, savedClashSecret)
 			}
 			bCtx, cancel := context.WithTimeout(ctx, 110*time.Second)
-			payload := runClashBatchTest(bCtx, job.ClashGroup, job.ClashNodes)
+			payload := runClashBatchTest(bCtx, job.ClashGroup, job.ClashNodes, func(group, currentNode string, items []clashNodeTestResult, total int) {
+				pCtx, pCancel := context.WithTimeout(ctx, 3*time.Second)
+				_ = sendJSONReport(pCtx, client, panelURL+"/api/v1/probe/clash-report", tok, clashReportPayload{
+					JobID:       jobID,
+					Action:      "clash-batch-progress",
+					Group:       group,
+					CurrentNode: currentNode,
+					Total:       total,
+					Done:        false,
+					Items:       items,
+				})
+				pCancel()
+			})
 			cancel()
 			payload.JobID = jobID
+			payload.Done = true
 			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, payload)
+		case "net-diag":
+			dCtx, cancel := context.WithTimeout(ctx, 8*time.Second)
+			rep := runNetDiag(dCtx)
+			cancel()
+			_ = sendJSONReport(ctx, client, panelURL+"/api/v1/probe/clash-report", tok, clashReportPayload{
+				JobID:   jobID,
+				Action:  "net-diag",
+				Done:    true,
+				NetDiag: rep,
+			})
 		case "probe", "":
-			if len(job.Nodes) == 0 || paused.Load() {
+			if len(job.Nodes) == 0 {
 				continue
 			}
 			results := runProbes(ctx, job.Nodes, conc, *timeout)
-			updateTrayTopNodes(job.Nodes, results)
 			if err := sendReport(ctx, client, panelURL, tok, jobID, results); err != nil {
 				continue
 			}

@@ -41,14 +41,18 @@ type clashNodeTestResult struct {
 }
 
 type clashReportPayload struct {
-	JobID    string                `json:"jobId"`
-	Action   string                `json:"action"` // clash-status | clash-switch | clash-batch
-	Status   *clashStatus          `json:"status,omitempty"`
-	Group    string                `json:"group,omitempty"`
-	Original string                `json:"original,omitempty"`
-	Switched string                `json:"switched,omitempty"`
-	Items    []clashNodeTestResult `json:"items,omitempty"`
-	Error    string                `json:"error,omitempty"`
+	JobID       string                `json:"jobId"`
+	Action      string                `json:"action"` // clash-status | clash-switch | clash-batch | clash-batch-progress | net-diag
+	Status      *clashStatus          `json:"status,omitempty"`
+	Group       string                `json:"group,omitempty"`
+	Original    string                `json:"original,omitempty"`
+	Switched    string                `json:"switched,omitempty"`
+	CurrentNode string                `json:"currentNode,omitempty"`
+	Total       int                   `json:"total,omitempty"`
+	Done        bool                  `json:"done,omitempty"`
+	Items       []clashNodeTestResult `json:"items,omitempty"`
+	NetDiag     *netDiagReport        `json:"netDiag,omitempty"`
+	Error       string                `json:"error,omitempty"`
 }
 
 var (
@@ -257,7 +261,6 @@ func detectClashStatus(ctx context.Context) clashStatus {
 		Current:    bestNow,
 		Proxies:    bestProxies,
 	}
-	updateTrayClashState(st.Group, st.Current, st.Proxies)
 	return st
 }
 
@@ -306,7 +309,6 @@ func switchClashProxy(ctx context.Context, group, targetNode string) (clashStatu
 	}
 	st.Group = group
 	st.Current = resolved
-	updateTrayClashState(st.Group, st.Current, st.Proxies)
 	return st, nil
 }
 
@@ -427,7 +429,7 @@ func putClashGroupProxy(ctx context.Context, controller, sec, groupName, nodeNam
 // so rule-specific groups (ChatGPT/Google/etc.) cannot leak traffic onto another node,
 // routes directly via Clash's local mixed/http port, measures real throughput + 6 AI/streaming unlocks,
 // and ALWAYS restores mode, GLOBAL selection, and original group node.
-func runClashBatchTest(ctx context.Context, group string, requested []string) clashReportPayload {
+func runClashBatchTest(ctx context.Context, group string, requested []string, onProgress func(group, currentNode string, items []clashNodeTestResult, total int)) clashReportPayload {
 	st := detectClashStatus(ctx)
 	if !st.Connected || st.Controller == "" {
 		return clashReportPayload{Action: "clash-batch", Error: "未检测到本机 Clash / Mihomo 外部控制接口（9090/9097）"}
@@ -497,9 +499,15 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 	}()
 
 	items := make([]clashNodeTestResult, 0, len(targets))
+	total := len(targets)
 	for _, nodeName := range targets {
 		if ctx.Err() != nil {
 			break
+		}
+		if onProgress != nil {
+			snapshot := make([]clashNodeTestResult, len(items))
+			copy(snapshot, items)
+			onProgress(group, nodeName, snapshot, total)
 		}
 		swCtx, swCancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 		var swErr error
@@ -544,6 +552,11 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 		// so pooled TCP/TLS connections never stay pinned to the previous node or leak to direct NIC.
 		client := newClashBatchHTTPClient(st.Controller, rtCfg, 9*time.Second)
 		items = append(items, testSingleClashNode(ctx, client, nodeName))
+		if onProgress != nil {
+			snapshot := make([]clashNodeTestResult, len(items))
+			copy(snapshot, items)
+			onProgress(group, "", snapshot, total)
+		}
 	}
 
 	return clashReportPayload{
@@ -551,6 +564,8 @@ func runClashBatchTest(ctx context.Context, group string, requested []string) cl
 		Status:   &st,
 		Group:    group,
 		Original: original,
+		Total:    total,
+		Done:     true,
 		Items:    items,
 	}
 }
