@@ -214,8 +214,11 @@ const QUOTA_PRESETS = [
 ];
 const savingServer = ref(false);
 const install = ref<{ name: string; command: string } | null>(null);
+const editingServer = computed(
+  () => servers.value.find((s) => s.id === serverForm.id) || null
+);
 const serverDialogTitle = computed(() =>
-  serverForm.id ? "编辑代理节点" : "添加代理节点"
+  serverForm.id ? "实例设置" : "添加代理节点"
 );
 function openServer(s?: ProxyServer) {
   Object.assign(
@@ -520,14 +523,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
         <UiButton variant="primary" :icon="IconPlus" @click="openServer()">
           添加代理节点
         </UiButton>
-        <UiButton
-          v-if="updatableAgentServers.length"
-          variant="ghost"
-          :loading="batchUpdatingAgents"
-          @click="updateAllAgents()"
-        >
-          更新全部 Agent ({{ updatableAgentServers.length }})
-        </UiButton>
         <UiButton variant="ghost" :icon="IconRefresh" :loading="loading" @click="load()">
           刷新
         </UiButton>
@@ -728,58 +723,13 @@ function formatUnlockBadge(it: ServerUnlockItem) {
                 >添加入站</UiButton
               >
               <UiButton
-                v-if="s.kind === 'agent'"
                 variant="ghost"
                 size="sm"
-                :icon="IconWrench"
-                @click="openOps(s)"
-                >内核运维</UiButton
+                :icon="IconPencil"
+                @click="openServer(s)"
+                >实例设置</UiButton
               >
             </div>
-            <el-dropdown trigger="click" placement="bottom-end">
-              <button
-                type="button"
-                class="more-trigger"
-                :aria-label="`更多操作 ${s.name}`"
-              >
-                <IconDots />
-              </button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item @click="openServer(s)">
-                    <span class="dd-item"><IconPencil />编辑服务器</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    v-if="s.kind === 'agent'"
-                    @click="updateAgent(s)"
-                  >
-                    <span class="dd-item">
-                      <IconRefresh />
-                      {{
-                        s.agentUpdateRequested
-                          ? "撤销 Agent 更新"
-                          : "更新 Agent"
-                      }}
-                    </span>
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    v-if="s.kind === 'agent'"
-                    @click="showInstall(s)"
-                  >
-                    <span class="dd-item"><IconTerminal />重新生成安装命令</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="toggleServer(s)">
-                    <span class="dd-item">
-                      <IconPower />
-                      {{ s.enabled ? "停用服务器" : "启用服务器" }}
-                    </span>
-                  </el-dropdown-item>
-                  <el-dropdown-item divided @click="removeServer(s)">
-                    <span class="dd-item is-danger"><IconTrash />删除服务器</span>
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
           </footer>
         </article>
       </div>
@@ -852,7 +802,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
         <section class="modal-section">
           <header class="modal-section-head">
             <h3>基础连接</h3>
-            <p>填写节点识别名称与客户端实际连接的公网入口地址。</p>
           </header>
           <div class="modal-grid-2">
             <el-form-item label="节点名称" required>
@@ -874,9 +823,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
         <section class="modal-section">
           <header class="modal-section-head">
             <h3>月度流量配额</h3>
-            <p>
-              按面板统计的上下行合计；超额后自动暂停下发，并在每月重置日恢复。
-            </p>
           </header>
 
           <div class="quota-presets" role="group" aria-label="快捷流量配额">
@@ -919,23 +865,10 @@ function formatUnlockBadge(it: ServerUnlockItem) {
 
         <section class="modal-section is-last">
           <header class="modal-section-head">
-            <h3>能力与分流</h3>
+            <h3>代理能力与分流</h3>
           </header>
 
           <div class="capability-toggles">
-            <label
-              class="capability-row"
-              :class="{ 'is-on': serverForm.monitorEnabled }"
-            >
-              <div class="capability-copy">
-                <strong>服务器硬件监控</strong>
-              </div>
-              <el-switch
-                v-model="serverForm.monitorEnabled"
-                aria-label="服务器硬件监控"
-              />
-            </label>
-
             <label
               class="capability-row"
               :class="{ 'is-on': serverForm.websiteTrafficEnabled }"
@@ -946,19 +879,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
               <el-switch
                 v-model="serverForm.websiteTrafficEnabled"
                 aria-label="网站流量统计"
-              />
-            </label>
-
-            <label
-              class="capability-row"
-              :class="{ 'is-on': serverForm.autoFirewall }"
-            >
-              <div class="capability-copy">
-                <strong>自动放行防火墙端口</strong>
-              </div>
-              <el-switch
-                v-model="serverForm.autoFirewall"
-                aria-label="自动放行防火墙端口"
               />
             </label>
 
@@ -995,7 +915,40 @@ function formatUnlockBadge(it: ServerUnlockItem) {
 
       <template #footer>
         <div class="modal-footer-bar">
-          <span class="modal-footer-tip"></span>
+          <div v-if="editingServer" class="modal-danger-bar">
+            <UiButton
+              variant="ghost"
+              size="sm"
+              @click="
+                serverDialog = false;
+                toggleServer(editingServer);
+              "
+            >
+              {{ editingServer.enabled ? "停用" : "启用" }}
+            </UiButton>
+            <UiButton
+              v-if="editingServer.kind === 'agent'"
+              variant="ghost"
+              size="sm"
+              @click="
+                serverDialog = false;
+                showInstall(editingServer);
+              "
+            >
+              安装命令
+            </UiButton>
+            <UiButton
+              variant="danger"
+              size="sm"
+              @click="
+                serverDialog = false;
+                removeServer(editingServer);
+              "
+            >
+              删除
+            </UiButton>
+          </div>
+          <span v-else class="modal-footer-tip"></span>
           <div class="modal-footer-btns">
             <UiButton variant="ghost" @click="serverDialog = false">
               取消
@@ -1755,7 +1708,8 @@ function formatUnlockBadge(it: ServerUnlockItem) {
   font-size: 12px;
   color: var(--c-muted);
 }
-.modal-footer-btns {
+.modal-footer-btns,
+.modal-danger-bar {
   display: inline-flex;
   align-items: center;
   gap: 8px;

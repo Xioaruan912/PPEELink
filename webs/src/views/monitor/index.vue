@@ -26,6 +26,8 @@ import IconChartLine from "~icons/ph/chart-line";
 import IconCheckCircle from "~icons/ph/check-circle";
 import MetricChart from "@/components/monitor/MetricChart.vue";
 import ServerAgentManagerDrawer from "./components/ServerAgentManagerDrawer.vue";
+import ServerOpsDrawer from "@/views/subcription/servers/ServerOpsDrawer.vue";
+import { listProxyServers, type ProxyServer } from "@/api/proxy";
 import { formatBytes } from "@/utils/traffic";
 import { formatDateTime } from "@/utils/date";
 import {
@@ -55,6 +57,28 @@ const phase = ref<"loading" | "ready" | "error">("loading");
 const error = ref("");
 const items = ref<MonitorItem[]>([]);
 const agentManagerVisible = ref(false);
+const opsDrawerVisible = ref(false);
+const opsServerTarget = ref<ProxyServer | null>(null);
+const loadingOpsTarget = ref(false);
+
+async function openHostKernelOps(proxyServerId?: number) {
+  if (!proxyServerId || loadingOpsTarget.value) return;
+  loadingOpsTarget.value = true;
+  try {
+    const { data } = await listProxyServers();
+    const matched = (data || []).find((s) => s.id === proxyServerId) || null;
+    if (!matched) {
+      ElMessage.warning("未找到对应的代理主机记录");
+      return;
+    }
+    opsServerTarget.value = matched;
+    opsDrawerVisible.value = true;
+  } catch {
+    ElMessage.error("读取主机运维信息失败");
+  } finally {
+    loadingOpsTarget.value = false;
+  }
+}
 const latestAgentVersion = ref("");
 const checkingAgents = ref(false);
 const checkingUnlock = ref(false);
@@ -748,6 +772,13 @@ async function resetToken(item: MonitorItem | null) {
       "
     />
 
+    <!-- Host Kernel Tuning, Security & Live Logs Drawer -->
+    <ServerOpsDrawer
+      v-model="opsDrawerVisible"
+      :server="opsServerTarget"
+      @refresh="loadDetail"
+    />
+
     <!-- Add Server Monitor Dialog -->
     <UiDialog
       v-model="addVisible"
@@ -859,10 +890,10 @@ async function resetToken(item: MonitorItem | null) {
               v-if="liveActiveMonitor?.proxyServerId && detail.online"
               size="sm"
               variant="ghost"
-              :loading="checkingUnlock"
-              @click="checkAllUnlock(Number(liveActiveMonitor.proxyServerId))"
+              :loading="loadingOpsTarget"
+              @click="openHostKernelOps(Number(liveActiveMonitor.proxyServerId))"
             >
-              测解锁
+              内核与安全
             </UiButton>
             <UiButton
               size="sm"
