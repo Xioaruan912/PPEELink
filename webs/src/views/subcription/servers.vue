@@ -26,7 +26,6 @@ import {
   listProxyAccounts,
   listProxyServers,
   resetServerToken,
-  runProxyServerUnlockCheck,
   saveProxyInbound,
   saveProxyServer,
   type DailyTraffic,
@@ -412,8 +411,7 @@ function openAccount(a: ProxyAccount) {
 const usageRatio = (a: ProxyAccount) =>
   a.trafficLimit ? Math.min(a.trafficUsed / a.trafficLimit, 1) : 0;
 
-// ---- 原生解锁矩阵 ----
-const checkingUnlock = ref(false);
+// ---- 批量更新 Agent & 解锁徽章展示 ----
 const batchUpdatingAgents = ref(false);
 const updatableAgentServers = computed(() =>
   servers.value.filter((s) => {
@@ -491,32 +489,6 @@ function formatUnlockBadge(it: ServerUnlockItem) {
   if (it.status === "originals") return `${base}自制`;
   return base;
 }
-async function checkServerUnlock(serverId?: number) {
-  if (checkingUnlock.value) return;
-  checkingUnlock.value = true;
-  try {
-    const { data } = await runProxyServerUnlockCheck(
-      serverId ? { serverId } : { all: true }
-    );
-    const okCount = data?.okCount || 0;
-    const total = data?.total || 0;
-    if (okCount === 0 && total > 0) {
-      const firstErr =
-        data?.results?.find((r) => !r.ok && r.error)?.error ||
-        "请先更新服务器 Agent 至最新版本";
-      ElMessage.warning(`0/${total} 台检测成功：${firstErr}`);
-    } else if (okCount < total) {
-      ElMessage.warning(`解锁检测完成：${okCount}/${total} 台成功`);
-    } else {
-      ElMessage.success(`解锁检测完成：${okCount}/${total} 台已更新`);
-    }
-    await load(true);
-  } catch (err: any) {
-    ElMessage.error(err?.message || "解锁检测失败");
-  } finally {
-    checkingUnlock.value = false;
-  }
-}
 </script>
 <template>
   <div class="servers-page server-experience">
@@ -555,14 +527,6 @@ async function checkServerUnlock(serverId?: number) {
           @click="updateAllAgents()"
         >
           更新全部 Agent ({{ updatableAgentServers.length }})
-        </UiButton>
-        <UiButton
-          v-if="servers.length"
-          variant="ghost"
-          :loading="checkingUnlock"
-          @click="checkServerUnlock()"
-        >
-          测全服解锁
         </UiButton>
         <UiButton variant="ghost" :icon="IconRefresh" :loading="loading" @click="load()">
           刷新
@@ -784,12 +748,6 @@ async function checkServerUnlock(serverId?: number) {
                 <el-dropdown-menu>
                   <el-dropdown-item @click="openServer(s)">
                     <span class="dd-item"><IconPencil />编辑服务器</span>
-                  </el-dropdown-item>
-                  <el-dropdown-item
-                    v-if="s.kind === 'agent' && s.online"
-                    @click="checkServerUnlock(s.id)"
-                  >
-                    <span class="dd-item"><IconRefresh />检测原生解锁</span>
                   </el-dropdown-item>
                   <el-dropdown-item
                     v-if="s.kind === 'agent'"
