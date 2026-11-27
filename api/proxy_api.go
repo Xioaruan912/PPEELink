@@ -89,6 +89,8 @@ type serverSaveRequest struct {
 	MonitorEnabled        bool    `json:"monitorEnabled"`
 	WebsiteTrafficEnabled bool    `json:"websiteTrafficEnabled"`
 	AutoFirewall          bool    `json:"autoFirewall"`
+	WarpEnabled           bool    `json:"warpEnabled"`
+	WarpDomains           string  `json:"warpDomains"`
 }
 
 func validHost(host string) bool {
@@ -136,7 +138,8 @@ func ProxyServerSave(c *gin.Context) {
 			res := tx.Model(&models.ProxyServer{}).Where("id = ? AND removing = ?", req.ID, false).
 				Updates(map[string]any{"name": req.Name, "public_host": req.PublicHost, "enabled": req.Enabled,
 					"traffic_limit": limit, "reset_day": req.ResetDay, "monitor_enabled": req.MonitorEnabled,
-					"website_traffic_enabled": req.WebsiteTrafficEnabled, "auto_firewall": req.AutoFirewall})
+					"website_traffic_enabled": req.WebsiteTrafficEnabled, "auto_firewall": req.AutoFirewall,
+					"warp_enabled": req.WarpEnabled, "warp_domains": strings.TrimSpace(req.WarpDomains)})
 			if res.Error != nil {
 				return res.Error
 			}
@@ -166,7 +169,8 @@ func ProxyServerSave(c *gin.Context) {
 	}
 	server := models.ProxyServer{Name: req.Name, Kind: req.Kind, PublicHost: req.PublicHost, Enabled: true,
 		TrafficLimit: limit, ResetDay: req.ResetDay, MonitorEnabled: req.MonitorEnabled,
-		WebsiteTrafficEnabled: req.WebsiteTrafficEnabled, AutoFirewall: req.AutoFirewall}
+		WebsiteTrafficEnabled: req.WebsiteTrafficEnabled, AutoFirewall: req.AutoFirewall,
+		WarpEnabled: req.WarpEnabled, WarpDomains: strings.TrimSpace(req.WarpDomains)}
 	token := ""
 	if req.Kind == models.ServerKindAgent {
 		token = models.RandomHex(24)

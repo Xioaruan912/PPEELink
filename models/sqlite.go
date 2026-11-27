@@ -34,7 +34,7 @@ func InitSqlite() {
 		sqlDB.SetConnMaxLifetime(time.Hour)
 	}
 	err = db.AutoMigrate(&User{}, &Subcription{}, &SubLogs{}, &GroupNode{}, &Node{},
-		&Probe{}, &ProbeResult{}, &ClashUnlockSnapshot{}, &NetworkTraceRun{}, &NetworkTraceView{}, &ThroughputRun{}, &ThroughputJob{}, &ThroughputCapability{}, &TraceProbeCapability{}, &TraceAgentCapability{}, &Monitor{}, &MonitorMetric{}, &NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &ProxyServer{}, &AgentRelay{}, &AgentRelayDay{}, &ProxyInbound{}, &ProxyTraffic{}, &ProxyAccount{}, &WebsiteTraffic{}, &WebsiteTrafficReceipt{})
+		&Probe{}, &ProbeResult{}, &ClashUnlockSnapshot{}, &NetworkTraceRun{}, &NetworkTraceView{}, &ThroughputRun{}, &ThroughputJob{}, &ThroughputCapability{}, &TraceProbeCapability{}, &TraceAgentCapability{}, &Monitor{}, &MonitorMetric{}, &NodeQualitySample{}, &NodeTargetQualitySample{}, &NodeHealthEvent{}, &AlertSetting{}, &WebDAVBackupSetting{}, &UnlockObservation{}, &TemplateVersion{}, &RuleSource{}, &RuleCatalog{}, &RuleCacheSnapshot{}, &EgressTarget{}, &TaskRun{}, &SubscriptionArtifact{}, &SubscriptionArtifactPointer{}, &APIToken{}, &RoutingRegressionCase{}, &AuditLog{}, &ShortLink{}, &ProxyServer{}, &AgentRelay{}, &AgentRelayDay{}, &ProxyInbound{}, &ProxyTraffic{}, &ProxyAccount{}, &WebsiteTraffic{}, &WebsiteTrafficReceipt{})
 	if err != nil {
 		log.Println("数据表迁移失败:", err)
 	}
@@ -99,4 +99,21 @@ func CloseSqlite() {
 	if sqlDB, err := DB.DB(); err == nil {
 		_ = sqlDB.Close()
 	}
+}
+
+// ReopenSqlite closes and reopens the SQLite database after an in-place full backup restore.
+func ReopenSqlite() error {
+	CloseSqlite()
+	dsn := "./db/ppeelink.db?_pragma=busy_timeout(8000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=foreign_keys(1)&_pragma=cache_size(-32000)&_pragma=temp_store(MEMORY)&_pragma=mmap_size(134217728)"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return err
+	}
+	if sqlDB, dbErr := db.DB(); dbErr == nil {
+		sqlDB.SetMaxOpenConns(8)
+		sqlDB.SetMaxIdleConns(4)
+		sqlDB.SetConnMaxLifetime(time.Hour)
+	}
+	DB = db
+	return nil
 }

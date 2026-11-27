@@ -111,8 +111,8 @@ const {
                 v-for="t in templist"
                 :key="t.file"
                 :label="
-                  t.file === 'clash-smart.yaml'
-                    ? 'clash-smart.yaml（智能分流默认）'
+                  t.file === 'surge-smart.conf'
+                    ? 'surge-smart.conf（智能分流默认）'
                     : t.file
                 "
                 :value="'./template/' + t.file"
@@ -162,8 +162,8 @@ const {
                 v-for="t in templist"
                 :key="t.file"
                 :label="
-                  t.file === 'clash-smart.yaml'
-                    ? 'clash-smart.yaml（智能分流默认）'
+                  t.file === 'loon-smart.conf'
+                    ? 'loon-smart.conf（智能分流默认）'
                     : t.file
                 "
                 :value="'./template/' + t.file"

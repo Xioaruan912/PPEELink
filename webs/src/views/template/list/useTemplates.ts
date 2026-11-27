@@ -22,8 +22,14 @@ export interface Temp {
   text: string;
   create_date: string;
 }
-export const isSmartClashTemplate = (file: string) =>
-  file.toLowerCase() === "clash-smart.yaml";
+export const isSmartClashTemplate = (file: string) => {
+  const f = file.toLowerCase();
+  return (
+    f === "clash-smart.yaml" ||
+    f === "loon-smart.conf" ||
+    f === "surge-smart.conf"
+  );
+};
 export const tempType = (file: string) =>
   isSmartClashTemplate(file)
     ? "Clash 智能分流 · 解锁联动"

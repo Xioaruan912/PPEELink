@@ -17,12 +17,21 @@ import {
   getApiTokens,
   getAuditLogs,
   getShortLinks,
+  getWebDAVConfig,
   importSafeBackup,
   inspectSafeBackup,
+  listWebDAVBackups,
+  restoreFullBackupFile,
+  restoreWebDAVBackup,
   revokeApiToken,
+  runWebDAVBackupNow,
+  saveWebDAVConfig,
+  testWebDAVConfig,
   type ApiToken,
   type AuditEntry,
   type ShortLinkItem,
+  type WebDAVBackupConfig,
+  type WebDAVRemoteFile,
 } from "@/api/ops";
 import { EmptyState, UiButton, UiDialog, UiSkeleton } from "@/ui";
 import RowIconButton from "@/ui/RowIconButton.vue";
@@ -76,6 +85,215 @@ const fileSizeLabel = computed(() => {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 });
 
+const importMode = computed<"full" | "json">(() => {
+  const name = importFile.value?.name.toLowerCase() || "";
+  return name.endsWith(".tar.gz") || name.endsWith(".tgz") ? "full" : "json";
+});
+
+// ---- 1b. WebDAV 云端自动备份 -------------------------------------------------
+const webdavPresets = [
+  {
+    key: "jianguoyun",
+    label: "坚果云",
+    url: "https://dav.jianguoyun.com/dav/",
+    hint: "坚果云请在「账户信息 → 安全选项」生成专用应用密码",
+  },
+  {
+    key: "alist",
+    label: "Alist / OpenList",
+    url: "https://your-alist.example.com/dav/",
+    hint: "填 Alist WebDAV 入口（通常以 /dav/ 结尾）",
+  },
+  {
+    key: "nextcloud",
+    label: "Nextcloud",
+    url: "https://cloud.example.com/remote.php/dav/files/USER/",
+    hint: "填 Nextcloud 文件 WebDAV 地址与应用密码",
+  },
+  {
+    key: "custom",
+    label: "自定义 WebDAV",
+    url: "",
+    hint: "兼容群晖、InfiniCloud 及任意标准 WebDAV 服务",
+  },
+] as const;
+
+const webdavSchedules = [
+  { value: "off", label: "关闭" },
+  { value: "daily", label: "每天" },
+  { value: "every3d", label: "每 3 天" },
+  { value: "weekly", label: "每周" },
+] as const;
+
+const webdavForm = reactive<WebDAVBackupConfig>({
+  enabled: false,
+  preset: "jianguoyun",
+  url: "https://dav.jianguoyun.com/dav/",
+  username: "",
+  password: "",
+  hasPassword: false,
+  remoteDir: "ppeelink-backups",
+  schedule: "daily",
+  keepCount: 7,
+  lastStatus: "",
+  lastError: "",
+  lastFile: "",
+  lastBackupAt: null,
+});
+const webdavBusy = ref<"" | "save" | "test" | "run" | "list" | "restore">("");
+const webdavFiles = ref<WebDAVRemoteFile[]>([]);
+const webdavFilesLoaded = ref(false);
+const restoringRemoteFile = ref("");
+
+const currentWebDAVHint = computed(
+  () =>
+    webdavPresets.find((p) => p.key === webdavForm.preset)?.hint ||
+    "支持坚果云、Alist、Nextcloud 等标准 WebDAV"
+);
+
+function selectWebDAVPreset(key: string) {
+  webdavForm.preset = key;
+  const preset = webdavPresets.find((p) => p.key === key);
+  if (preset && preset.url) {
+    webdavForm.url = preset.url;
+  }
+}
+
+async function loadWebDAV() {
+  try {
+    const { data } = await getWebDAVConfig();
+    if (data) {
+      webdavForm.enabled = Boolean(data.enabled);
+      webdavForm.preset = data.preset || "jianguoyun";
+      webdavForm.url = data.url || "https://dav.jianguoyun.com/dav/";
+      webdavForm.username = data.username || "";
+      webdavForm.password = "";
+      webdavForm.hasPassword = Boolean(data.hasPassword);
+      webdavForm.remoteDir = data.remoteDir || "ppeelink-backups";
+      webdavForm.schedule = data.schedule || "daily";
+      webdavForm.keepCount = data.keepCount || 7;
+      webdavForm.lastStatus = data.lastStatus || "";
+      webdavForm.lastError = data.lastError || "";
+      webdavForm.lastFile = data.lastFile || "";
+      webdavForm.lastBackupAt = data.lastBackupAt || null;
+    }
+  } catch {
+    // 静默忽略未配置状态
+  }
+}
+
+async function saveWebDAV() {
+  if (!online.value) return;
+  webdavBusy.value = "save";
+  try {
+    await saveWebDAVConfig({
+      enabled: webdavForm.enabled,
+      preset: webdavForm.preset,
+      url: webdavForm.url,
+      username: webdavForm.username,
+      password: webdavForm.password || undefined,
+      remoteDir: webdavForm.remoteDir,
+      schedule: webdavForm.schedule,
+      keepCount: Number(webdavForm.keepCount) || 7,
+    });
+    ElMessage.success("WebDAV 云备份配置已保存");
+    await loadWebDAV();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "保存失败");
+  } finally {
+    webdavBusy.value = "";
+  }
+}
+
+async function testWebDAV() {
+  if (!online.value) return;
+  webdavBusy.value = "test";
+  try {
+    const res: any = await testWebDAVConfig({
+      url: webdavForm.url,
+      username: webdavForm.username,
+      password: webdavForm.password || undefined,
+      remoteDir: webdavForm.remoteDir,
+    });
+    ElMessage.success(res?.msg || "WebDAV 连接正常");
+  } catch (error: any) {
+    ElMessage.error(error?.message || "连接测试失败");
+  } finally {
+    webdavBusy.value = "";
+  }
+}
+
+async function runWebDAVNow() {
+  if (!online.value) return;
+  webdavBusy.value = "run";
+  try {
+    await saveWebDAVConfig({
+      enabled: webdavForm.enabled,
+      preset: webdavForm.preset,
+      url: webdavForm.url,
+      username: webdavForm.username,
+      password: webdavForm.password || undefined,
+      remoteDir: webdavForm.remoteDir,
+      schedule: webdavForm.schedule,
+      keepCount: Number(webdavForm.keepCount) || 7,
+    });
+    const res: any = await runWebDAVBackupNow();
+    ElMessage.success(res?.msg || "已上传云端快照");
+    await loadWebDAV();
+    await fetchWebDAVList();
+  } catch (error: any) {
+    ElMessage.error(error?.message || "云备份失败");
+  } finally {
+    webdavBusy.value = "";
+  }
+}
+
+async function fetchWebDAVList() {
+  if (!online.value) return;
+  webdavBusy.value = "list";
+  try {
+    const { data } = await listWebDAVBackups();
+    webdavFiles.value = data || [];
+    webdavFilesLoaded.value = true;
+  } catch (error: any) {
+    ElMessage.error(error?.message || "读取云端列表失败");
+  } finally {
+    webdavBusy.value = "";
+  }
+}
+
+async function restoreFromWebDAV(file: WebDAVRemoteFile) {
+  if (!online.value) return;
+  try {
+    await ElMessageBox.confirm(
+      `从云端恢复整机快照「${file.name}」？当前数据库会自动留存恢复前副本，完成后建议刷新页面。`,
+      "从 WebDAV 恢复",
+      { type: "warning", confirmButtonText: "确认恢复", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  webdavBusy.value = "restore";
+  restoringRemoteFile.value = file.name;
+  try {
+    const res: any = await restoreWebDAVBackup(file.name);
+    ElMessage.success(res?.msg || "整机备份已恢复");
+    await loadBackup(true);
+  } catch (error: any) {
+    ElMessage.error(error?.message || "恢复失败");
+  } finally {
+    webdavBusy.value = "";
+    restoringRemoteFile.value = "";
+  }
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return "-";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+}
+
 async function loadBackup(force = false) {
   if (!force && summaryState.phase === "ready") return;
   summaryState.phase = "loading";
@@ -84,6 +302,7 @@ async function loadBackup(force = false) {
     const { data } = await inspectSafeBackup();
     summaryState.summary = data || null;
     summaryState.phase = "ready";
+    void loadWebDAV();
   } catch (error: any) {
     summaryState.phase = "error";
     summaryState.error = error?.message || "读取备份概览失败";
@@ -134,6 +353,10 @@ function chooseImport() {
 function acceptImportFile(file: File) {
   importFile.value = file;
   importError.value = "";
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith(".tar.gz") || lower.endsWith(".tgz")) {
+    return;
+  }
   file
     .text()
     .then((text) => {
@@ -141,7 +364,7 @@ function acceptImportFile(file: File) {
     })
     .catch(() => {
       importFile.value = null;
-      importError.value = "无效的 JSON 配置文件";
+      importError.value = "请选择有效的 .tar.gz 整机快照或 .json 配置文件";
     });
 }
 
@@ -161,20 +384,32 @@ function onDrop(event: DragEvent) {
 async function confirmImport() {
   if (!importFile.value || !online.value) return;
   const file = importFile.value;
+  const isFull = importMode.value === "full";
   try {
     await ElMessageBox.confirm(
-      `合并导入「${file.name}」？节点、成员与令牌不会被覆盖。`,
-      "导入配置",
-      { type: "warning", confirmButtonText: "导入", cancelButtonText: "取消" }
+      isFull
+        ? `从本机整机快照「${file.name}」恢复数据库与全部模板？恢复前会自动留存安全副本。`
+        : `合并导入「${file.name}」？节点、成员与令牌不会被覆盖。`,
+      isFull ? "恢复整机快照" : "导入配置",
+      {
+        type: "warning",
+        confirmButtonText: isFull ? "立即恢复" : "导入",
+        cancelButtonText: "取消",
+      }
     );
   } catch {
     return;
   }
   backupBusy.value = "import";
   try {
-    const payload = JSON.parse(await file.text());
-    await importSafeBackup(payload);
-    ElMessage.success("配置已合并恢复");
+    if (isFull) {
+      const res = await restoreFullBackupFile(file);
+      ElMessage.success(res?.msg || "整机快照已恢复");
+    } else {
+      const payload = JSON.parse(await file.text());
+      await importSafeBackup(payload);
+      ElMessage.success("配置已合并恢复");
+    }
     importFile.value = null;
     await loadBackup(true);
   } catch (error: any) {
@@ -604,7 +839,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- Clean Dropzone for Config Import -->
+        <!-- Clean Dropzone for Local Full (.tar.gz) or Safe (.json) Restore -->
         <div
           class="import-drop"
           :class="{ 'is-dragging': dragging }"
@@ -615,14 +850,23 @@ onBeforeUnmount(() => {
           <input
             ref="importInput"
             type="file"
-            accept=".json,application/json"
+            accept=".tar.gz,.tgz,.json,application/gzip,application/json"
             class="sr-only"
             @change="onImportFile"
           />
           <div class="drop-copy">
-            <strong>{{ importFile ? importFile.name : "拖入 JSON 配置文件恢复" }}</strong>
-            <span v-if="importFile" class="mono">{{ fileSizeLabel }}</span>
-            <span v-else>合并导入模板与订阅，保留现有节点与成员</span>
+            <strong>
+              {{
+                importFile
+                  ? importFile.name
+                  : "拖入本机备份文件恢复（支持 .tar.gz 整机快照 / .json 配置）"
+              }}
+            </strong>
+            <span v-if="importFile" class="mono">
+              {{ importMode === "full" ? "整机快照恢复" : "配置合并导入" }} ·
+              {{ fileSizeLabel }}
+            </span>
+            <span v-else>整机快照恢复前自动留存安全副本，JSON 模式仅合并模板与订阅</span>
           </div>
           <div class="drop-actions">
             <UiButton variant="ghost" :icon="IconUploadSimple" @click="chooseImport">
@@ -634,11 +878,154 @@ onBeforeUnmount(() => {
               :loading="backupBusy === 'import'"
               @click="confirmImport"
             >
-              确认导入
+              {{ importMode === "full" ? "确认恢复" : "确认导入" }}
             </UiButton>
           </div>
         </div>
         <p v-if="importError" class="inline-error" role="alert">{{ importError }}</p>
+
+        <!-- WebDAV Cloud Auto-Backup (坚果云 / Alist / Nextcloud) -->
+        <div class="webdav-card">
+          <div class="webdav-head">
+            <div class="action-copy">
+              <strong>WebDAV 云端自动备份</strong>
+              <span v-if="webdavForm.lastBackupAt" class="mono">
+                上次云备份 {{ formatDateTime(webdavForm.lastBackupAt) }} ·
+                {{ webdavForm.lastStatus === "ok" ? "成功" : webdavForm.lastError || "失败" }}
+              </span>
+              <span v-else>{{ currentWebDAVHint }}</span>
+            </div>
+            <el-switch v-model="webdavForm.enabled" active-text="自动备份" />
+          </div>
+
+          <div class="preset-strip" role="group" aria-label="WebDAV 服务预设">
+            <button
+              v-for="p in webdavPresets"
+              :key="p.key"
+              type="button"
+              class="seg-pill"
+              :class="{ 'is-active': webdavForm.preset === p.key }"
+              @click="selectWebDAVPreset(p.key)"
+            >
+              {{ p.label }}
+            </button>
+          </div>
+
+          <div class="webdav-grid">
+            <label class="field-cell field-wide">
+              <span>WebDAV 地址</span>
+              <el-input
+                v-model="webdavForm.url"
+                placeholder="https://dav.jianguoyun.com/dav/"
+                clearable
+              />
+            </label>
+            <label class="field-cell">
+              <span>账号 / 邮箱</span>
+              <el-input
+                v-model="webdavForm.username"
+                placeholder="坚果云注册邮箱或 WebDAV 用户名"
+                clearable
+              />
+            </label>
+            <label class="field-cell">
+              <span>应用密码</span>
+              <el-input
+                v-model="webdavForm.password"
+                type="password"
+                show-password
+                :placeholder="
+                  webdavForm.hasPassword ? '已保存（留空则保持不变）' : '输入应用密码'
+                "
+              />
+            </label>
+            <label class="field-cell">
+              <span>远端目录</span>
+              <el-input v-model="webdavForm.remoteDir" placeholder="ppeelink-backups" />
+            </label>
+            <label class="field-cell">
+              <span>备份周期</span>
+              <div class="pill-group">
+                <button
+                  v-for="s in webdavSchedules"
+                  :key="s.value"
+                  type="button"
+                  class="seg-pill"
+                  :class="{ 'is-active': webdavForm.schedule === s.value }"
+                  @click="webdavForm.schedule = s.value"
+                >
+                  {{ s.label }}
+                </button>
+              </div>
+            </label>
+            <label class="field-cell">
+              <span>云端保留份数</span>
+              <el-input-number
+                v-model="webdavForm.keepCount"
+                :min="1"
+                :max="60"
+                controls-position="right"
+              />
+            </label>
+          </div>
+
+          <div class="webdav-actions">
+            <UiButton
+              variant="ghost"
+              :loading="webdavBusy === 'test'"
+              :disabled="!online"
+              @click="testWebDAV"
+            >
+              测试连接
+            </UiButton>
+            <UiButton
+              variant="ghost"
+              :loading="webdavBusy === 'list'"
+              :disabled="!online"
+              @click="fetchWebDAVList"
+            >
+              查看云端快照
+            </UiButton>
+            <UiButton
+              variant="ghost"
+              :loading="webdavBusy === 'save'"
+              :disabled="!online"
+              @click="saveWebDAV"
+            >
+              保存配置
+            </UiButton>
+            <UiButton
+              variant="primary"
+              :icon="IconUploadSimple"
+              :loading="webdavBusy === 'run'"
+              :disabled="!online"
+              @click="runWebDAVNow"
+            >
+              立即云备份
+            </UiButton>
+          </div>
+
+          <div v-if="webdavFilesLoaded" class="remote-list">
+            <div v-if="!webdavFiles.length" class="muted">远端目录暂无备份快照</div>
+            <div v-for="rf in webdavFiles" :key="rf.name" class="remote-row">
+              <div class="row-primary">
+                <strong class="mono">{{ rf.name }}</strong>
+                <span class="row-meta mono">
+                  {{ formatBytes(rf.size) }}
+                  <template v-if="rf.lastModified"> · {{ rf.lastModified }}</template>
+                </span>
+              </div>
+              <UiButton
+                variant="ghost"
+                :loading="webdavBusy === 'restore' && restoringRemoteFile === rf.name"
+                :disabled="!online"
+                @click="restoreFromWebDAV(rf)"
+              >
+                从此备份恢复
+              </UiButton>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- 2. API 令牌 -->
@@ -1294,6 +1681,73 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 12.5px;
   color: var(--c-bad);
+}
+
+.webdav-card {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface);
+}
+
+.webdav-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.preset-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.webdav-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+
+.field-cell {
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--c-muted);
+}
+
+.field-cell.field-wide {
+  grid-column: 1 / -1;
+}
+
+.webdav-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.remote-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--c-line);
+}
+
+.remote-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--c-line);
+}
+
+.remote-row:last-child {
+  border-bottom: 0;
 }
 
 .sr-only {

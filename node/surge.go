@@ -184,49 +184,77 @@ func DecodeSurge(proxys, groups []string, file string) (string, error) {
 		}
 	}
 
-	proxyReg := regexp.MustCompile(`(?s)\[Proxy\](.*?)\[*]`)
-	groupReg := regexp.MustCompile(`(?s)\[Proxy Group\](.*?)\[*]`)
-
-	proxyPart := proxyReg.ReplaceAllStringFunc(string(surge), func(s string) string {
-
-		text := strings.Join(proxys, "\n")
-		return "[Proxy]\n" + text + s[len("[Proxy]"):]
-	})
-	groupPart := groupReg.ReplaceAllStringFunc(proxyPart, func(s string) string {
-		lines := strings.Split(s, "\n")
-		grouplist := strings.Join(groups, ",")
+	raw := string(surge)
+	proxyPart := replaceSurgeSection(raw, "Proxy", strings.Join(proxys, "\n"))
+	groupPart := transformSurgeSection(proxyPart, "Proxy Group", func(body string) string {
+		lines := strings.Split(body, "\n")
+		grouplist := strings.Join(groups, ", ")
 		for i, line := range lines {
-
-			if strings.Contains(line, "=") {
-				// 支持 Xboard/subconverter 风格 filter(正则) 过滤节点
-				// 例如: 💬 OpenAi = select,🚀 节点选择,filter("(?i)openai|chatgpt")
-				filterRe, hasFilter := parseSurgeFilter(line)
-				if hasFilter {
-					var matched []string
-					for _, g := range groups {
-						if filterRe.MatchString(g) {
-							matched = append(matched, g)
-						}
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") || !strings.Contains(trimmed, "=") {
+				continue
+			}
+			// 支持 Xboard/subconverter 风格 filter(正则) 过滤节点
+			// 例如: 💬 OpenAi = select, 🚀 节点选择, filter("(?i)openai|chatgpt")
+			filterRe, hasFilter := parseSurgeFilter(trimmed)
+			if hasFilter {
+				cleaned := removeSurgeFilter(trimmed)
+				cleaned = strings.TrimRight(cleaned, ", ")
+				for _, g := range groups {
+					if filterRe.MatchString(g) && !strings.Contains(cleaned, g) {
+						cleaned += ", " + g
 					}
-					// 追加匹配到的节点，避免重复
-					for _, m := range matched {
-						if !strings.Contains(line+","+grouplist, m) {
-							lines[i] = strings.TrimSpace(line) + ", " + m
-							line = lines[i]
-							grouplist = strings.Join(groups, ",")
-						}
-					}
-					// 移除行内的 filter(...) 标记，避免 Surge 无法解析
-					lines[i] = removeSurgeFilter(lines[i])
-				} else {
-					lines[i] = strings.TrimSpace(line) + ", " + grouplist
 				}
+				lines[i] = cleaned
+			} else if !strings.Contains(trimmed, "include-all-proxies") && grouplist != "" {
+				lines[i] = strings.TrimRight(trimmed, ", ") + ", " + grouplist
 			}
 		}
-		return strings.Join(lines, "\n") + s[len("[Proxy Group]"):]
+		return strings.Join(lines, "\n")
 	})
 
 	return groupPart, nil
+}
+
+func replaceSurgeSection(raw, section, body string) string {
+	re := regexp.MustCompile(`(?m)^\s*\[[^]\r\n]+\][ \t]*\r?$`)
+	spans := re.FindAllStringIndex(raw, -1)
+	for i, span := range spans {
+		if strings.TrimSpace(raw[span[0]:span[1]]) == "["+section+"]" {
+			end := len(raw)
+			if i+1 < len(spans) {
+				end = spans[i+1][0]
+			}
+			existing := strings.TrimSpace(raw[span[1]:end])
+			merged := body
+			if existing != "" {
+				if merged != "" {
+					merged = body + "\n" + existing
+				} else {
+					merged = existing
+				}
+			}
+			return raw[:span[0]] + "[" + section + "]\n" + merged + "\n\n" + raw[end:]
+		}
+	}
+	return strings.TrimRight(raw, "\r\n") + "\n\n[" + section + "]\n" + body + "\n"
+}
+
+func transformSurgeSection(raw, section string, fn func(string) string) string {
+	re := regexp.MustCompile(`(?m)^\s*\[[^]\r\n]+\][ \t]*\r?$`)
+	spans := re.FindAllStringIndex(raw, -1)
+	for i, span := range spans {
+		if strings.TrimSpace(raw[span[0]:span[1]]) == "["+section+"]" {
+			end := len(raw)
+			if i+1 < len(spans) {
+				end = spans[i+1][0]
+			}
+			body := strings.Trim(raw[span[1]:end], "\r\n")
+			updated := fn(body)
+			return raw[:span[0]] + "[" + section + "]\n" + updated + "\n\n" + raw[end:]
+		}
+	}
+	return raw
 }
 
 // parseSurgeFilter 从 surge 分组行中提取 filter(正则) 标记

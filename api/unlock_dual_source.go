@@ -420,7 +420,7 @@ func saveClashBatchUnlockSnapshots(probeName string, items []clashNodeTestResult
 		}
 	}
 	if saved > 0 {
-		_ = SyncSmartClashTemplateFile(false)
+		_ = SyncAllSmartTemplates(false)
 	}
 	return saved
 }

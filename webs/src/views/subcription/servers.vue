@@ -172,7 +172,34 @@ const serverForm = reactive({
   monitorEnabled: false,
   websiteTrafficEnabled: false,
   autoFirewall: false,
+  warpEnabled: false,
+  warpDomains: "openai,claude,gemini",
 });
+const WARP_DOMAIN_PRESETS = [
+  { key: "openai", label: "ChatGPT / OpenAI" },
+  { key: "claude", label: "Claude" },
+  { key: "gemini", label: "Gemini" },
+  { key: "netflix", label: "Netflix" },
+  { key: "disney", label: "Disney+" },
+  { key: "tiktok", label: "TikTok" },
+  { key: "google", label: "Google" },
+];
+function warpDomainList(): string[] {
+  return serverForm.warpDomains
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+function hasWarpDomain(key: string): boolean {
+  return warpDomainList().includes(key);
+}
+function toggleWarpDomain(key: string) {
+  const list = warpDomainList();
+  const idx = list.indexOf(key);
+  if (idx >= 0) list.splice(idx, 1);
+  else list.push(key);
+  serverForm.warpDomains = list.join(",");
+}
 const opsDrawer = ref(false);
 const opsServer = ref<ProxyServer | null>(null);
 function openOps(s: ProxyServer) {
@@ -206,6 +233,8 @@ function openServer(s?: ProxyServer) {
           monitorEnabled: s.monitorEnabled,
           websiteTrafficEnabled: s.websiteTrafficEnabled ?? false,
           autoFirewall: s.autoFirewall ?? false,
+          warpEnabled: s.warpEnabled ?? false,
+          warpDomains: s.warpDomains || "openai,claude,gemini",
         }
       : {
           id: 0,
@@ -218,6 +247,8 @@ function openServer(s?: ProxyServer) {
           monitorEnabled: false,
           websiteTrafficEnabled: false,
           autoFirewall: false,
+          warpEnabled: false,
+          warpDomains: "openai,claude,gemini",
         }
   );
   serverDialog.value = true;
@@ -249,6 +280,8 @@ async function toggleServer(s: ProxyServer) {
     monitorEnabled: s.monitorEnabled,
     websiteTrafficEnabled: s.websiteTrafficEnabled ?? false,
     autoFirewall: s.autoFirewall ?? false,
+    warpEnabled: s.warpEnabled ?? false,
+    warpDomains: s.warpDomains || "",
   });
   ElMessage.success(
     s.enabled
@@ -974,6 +1007,32 @@ async function checkServerUnlock(serverId?: number) {
                 aria-label="自动放行防火墙端口"
               />
             </label>
+
+            <div
+              class="capability-row capability-row--warp"
+              :class="{ 'is-on': serverForm.warpEnabled }"
+            >
+              <div class="capability-copy">
+                <strong>Cloudflare WARP 按域名分流出口</strong>
+                <small>自动注册免费 WARP WireGuard 出口，仅指定平台流量走 WARP（需 Agent v1.26+）。</small>
+                <div v-if="serverForm.warpEnabled" class="warp-preset-row">
+                  <button
+                    v-for="p in WARP_DOMAIN_PRESETS"
+                    :key="p.key"
+                    type="button"
+                    class="warp-pill"
+                    :class="{ 'is-active': hasWarpDomain(p.key) }"
+                    @click.prevent="toggleWarpDomain(p.key)"
+                  >
+                    {{ p.label }}
+                  </button>
+                </div>
+              </div>
+              <el-switch
+                v-model="serverForm.warpEnabled"
+                aria-label="Cloudflare WARP 按域名分流出口"
+              />
+            </div>
           </div>
         </section>
       </el-form>
@@ -1694,6 +1753,36 @@ async function checkServerUnlock(serverId?: number) {
   font-size: 12px;
   color: var(--c-muted);
   line-height: 1.5;
+}
+.capability-row--warp {
+  align-items: flex-start;
+  cursor: default;
+}
+.warp-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.warp-pill {
+  padding: 4px 10px;
+  border: 1px solid var(--c-line);
+  border-radius: 999px;
+  background: var(--c-surface);
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.warp-pill:hover {
+  border-color: var(--c-ink);
+  color: var(--c-ink);
+}
+.warp-pill.is-active {
+  background: var(--c-ink);
+  border-color: var(--c-ink);
+  color: var(--c-surface);
+  font-weight: 500;
 }
 .modal-footer-bar {
   display: flex;

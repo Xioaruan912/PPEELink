@@ -38,16 +38,37 @@ type clashNodeTestResultDTO struct {
 	Error        string  `json:"error,omitempty"`
 }
 
+type netDiagCheckDTO struct {
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	Status string `json:"status"`
+	Detail string `json:"detail"`
+	Advice string `json:"advice,omitempty"`
+	RTTMs  int    `json:"rttMs,omitempty"`
+}
+
+type netDiagReportDTO struct {
+	Summary   string            `json:"summary"`
+	CheckedAt string            `json:"checkedAt"`
+	Checks    []netDiagCheckDTO `json:"checks"`
+}
+
 type clashReportDTO struct {
-	JobID     string                   `json:"jobId"`
-	ProbeName string                   `json:"probeName,omitempty"`
-	Action    string                   `json:"action"`
-	Status    *clashStatusDTO          `json:"status,omitempty"`
-	Group     string                   `json:"group,omitempty"`
-	Original  string                   `json:"original,omitempty"`
-	Switched  string                   `json:"switched,omitempty"`
-	Items     []clashNodeTestResultDTO `json:"items,omitempty"`
-	Error     string                   `json:"error,omitempty"`
+	JobID          string                   `json:"jobId"`
+	ProbeName      string                   `json:"probeName,omitempty"`
+	Action         string                   `json:"action"`
+	Status         *clashStatusDTO          `json:"status,omitempty"`
+	Group          string                   `json:"group,omitempty"`
+	Original       string                   `json:"original,omitempty"`
+	Switched       string                   `json:"switched,omitempty"`
+	CurrentNode    string                   `json:"currentNode,omitempty"`
+	Total          int                      `json:"total,omitempty"`
+	Done           bool                     `json:"done,omitempty"`
+	SavedSnapshots int                      `json:"savedSnapshots,omitempty"`
+	Items          []clashNodeTestResultDTO `json:"items,omitempty"`
+	NetDiag        *netDiagReportDTO        `json:"netDiag,omitempty"`
+	Error          string                   `json:"error,omitempty"`
+	UpdatedAt      time.Time                `json:"-"`
 }
 
 type liveProbeClash struct {
@@ -70,7 +91,38 @@ var (
 	}{
 		data: map[uint]liveProbeClash{},
 	}
+
+	clashBatchStore = struct {
+		mu   sync.RWMutex
+		jobs map[string]clashReportDTO
+	}{
+		jobs: map[string]clashReportDTO{},
+	}
 )
+
+func upsertClashBatchProgress(rep clashReportDTO) {
+	clashBatchStore.mu.Lock()
+	defer clashBatchStore.mu.Unlock()
+	now := time.Now()
+	for id, old := range clashBatchStore.jobs {
+		if now.Sub(old.UpdatedAt) > 10*time.Minute {
+			delete(clashBatchStore.jobs, id)
+		}
+	}
+	if prev, ok := clashBatchStore.jobs[rep.JobID]; ok {
+		if rep.ProbeName == "" {
+			rep.ProbeName = prev.ProbeName
+		}
+		if rep.Group == "" {
+			rep.Group = prev.Group
+		}
+		if rep.Total == 0 {
+			rep.Total = prev.Total
+		}
+	}
+	rep.UpdatedAt = now
+	clashBatchStore.jobs[rep.JobID] = rep
+}
 
 func recordProbeClashLive(probeID uint, group, now string) {
 	probeClashLive.mu.Lock()
@@ -144,9 +196,10 @@ func dispatchClashJob(c *gin.Context, probeID uint, job queuedProbeJob, timeout 
 	}
 }
 
-// UserProbeClashReport 用户 Agent 回报 Clash 状态/切换/全节点批量测试结果。
+// UserProbeClashReport 用户 Agent 回报 Clash 状态/切换/流式进度/全节点批量测试/网络体检结果。
 func UserProbeClashReport(c *gin.Context) {
-	if _, ok := currentProbe(c); !ok {
+	probe, ok := currentProbe(c)
+	if !ok {
 		return
 	}
 	var req clashReportDTO
@@ -154,13 +207,27 @@ func UserProbeClashReport(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "格式错误"})
 		return
 	}
+	req.ProbeName = probe.Name
+	if req.Action == "clash-batch-progress" {
+		req.Done = false
+		upsertClashBatchProgress(req)
+		c.JSON(200, gin.H{"code": "00000", "msg": "ok"})
+		return
+	}
+	if req.Action == "clash-batch" {
+		req.Done = true
+		if len(req.Items) > 0 {
+			req.SavedSnapshots = saveClashBatchUnlockSnapshots(probe.Name, req.Items)
+		}
+		upsertClashBatchProgress(req)
+	}
 	clashResultsHub.mu.Lock()
-	ch, ok := clashResultsHub.waiters[req.JobID]
-	if ok {
+	ch, waited := clashResultsHub.waiters[req.JobID]
+	if waited {
 		delete(clashResultsHub.waiters, req.JobID)
 	}
 	clashResultsHub.mu.Unlock()
-	if ok {
+	if waited {
 		select {
 		case ch <- req:
 		default:
@@ -236,6 +303,86 @@ func ProbeClashBatchTest(c *gin.Context) {
 		msg = fmt.Sprintf("已完成 %d 个 Clash 节点实测，已融合更新 %d 个节点解锁矩阵", len(res.Items), saved)
 	}
 	c.JSON(200, gin.H{"code": "00000", "data": res, "msg": msg})
+}
+
+// ProbeClashBatchStart 异步启动 Clash 全节点实测任务并立即返回 jobId，前端按秒轮询实时展示流式逐行结果。
+// POST /api/v1/probes/clash/batch/start
+func ProbeClashBatchStart(c *gin.Context) {
+	var req struct {
+		ProbeID uint     `json:"probeId"`
+		Group   string   `json:"group"`
+		Nodes   []string `json:"nodes"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	target, err := pickOnlineUserProbe(req.ProbeID)
+	if err != nil {
+		c.JSON(500, gin.H{"code": "50000", "msg": "读取用户 Agent 失败"})
+		return
+	}
+	if target == nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "没有在线的用户 Agent"})
+		return
+	}
+	jobID := newProbeJobID()
+	job := queuedProbeJob{
+		ID:          jobID,
+		Action:      "clash-batch",
+		ClashGroup:  strings.TrimSpace(req.Group),
+		ClashNodes:  req.Nodes,
+		ClashAPI:    target.ClashAPI,
+		ClashSecret: target.ClashSecret,
+	}
+	upsertClashBatchProgress(clashReportDTO{
+		JobID:     jobID,
+		ProbeName: target.Name,
+		Action:    "clash-batch-progress",
+		Group:     job.ClashGroup,
+		Total:     len(req.Nodes),
+		Done:      false,
+		Items:     []clashNodeTestResultDTO{},
+	})
+	_, _, ok := probeHub.dispatchJob(target.ID, job, true)
+	if !ok {
+		c.JSON(409, gin.H{"code": "40900", "msg": "用户 Agent 繁忙，请稍后再试"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": gin.H{"jobId": jobID, "probeName": target.Name}, "msg": "已启动流式全节点实测"})
+}
+
+// ProbeClashBatchStatus 查询进行中的流式 Clash 全节点实测进度与最新节点结果。
+// GET /api/v1/probes/clash/batch/status?jobId=...
+func ProbeClashBatchStatus(c *gin.Context) {
+	jobID := strings.TrimSpace(c.Query("jobId"))
+	if jobID == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "缺少 jobId"})
+		return
+	}
+	clashBatchStore.mu.RLock()
+	st, ok := clashBatchStore.jobs[jobID]
+	clashBatchStore.mu.RUnlock()
+	if !ok {
+		c.JSON(404, gin.H{"code": "40400", "msg": "未找到实测任务或已过期"})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": st, "msg": "ok"})
+}
+
+// ProbeNetDiag 触发本机用户 Agent 的 3 秒「代理接管 & DNS & TUN」一键体检。
+// POST /api/v1/probes/net-diag
+func ProbeNetDiag(c *gin.Context) {
+	var req struct {
+		ProbeID uint `json:"probeId"`
+	}
+	_ = c.ShouldBindJSON(&req)
+	res, ok := dispatchClashJob(c, req.ProbeID, queuedProbeJob{Action: "net-diag"}, 12*time.Second)
+	if !ok {
+		return
+	}
+	if res.Error != "" && res.NetDiag == nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": res.Error})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": res.NetDiag, "msg": "ok"})
 }
 
 // ---- #9 首页端到端拓扑与异常焦点数据 ------------------------------------------

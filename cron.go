@@ -68,6 +68,26 @@ func StartCronTasks() *cron.Cron {
 		return c
 	}
 
+	// 每天凌晨 4:00 检查并执行 WebDAV 自动云备份
+	_, err = c.AddFunc("0 0 4 * * *", func() {
+		defer utils.RecoverPanic("cron-webdav-backup")
+		api.RunScheduledWebDAVBackup()
+	})
+	if err != nil {
+		log.Println("[Cron] 添加 WebDAV 云备份任务失败:", err)
+		return c
+	}
+
+	// 每 12 小时（04:15 / 16:15）错峰巡检在线服务器原生解锁状态，退化节点自动摘除智能分流组
+	_, err = c.AddFunc("0 15 4,16 * * *", func() {
+		defer utils.RecoverPanic("cron-unlock-sweep")
+		api.RunScheduledUnlockSweep()
+	})
+	if err != nil {
+		log.Println("[Cron] 添加定时解锁巡检任务失败:", err)
+		return c
+	}
+
 	c.Start()
 	go func() {
 		defer utils.RecoverPanic("startup-rule-sync")

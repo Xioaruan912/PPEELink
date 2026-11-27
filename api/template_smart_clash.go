@@ -259,8 +259,13 @@ func GenerateSmartClashTemplate(c *gin.Context) {
 	if models.DB != nil {
 		_ = models.SaveTemplateVersion(filename, text, "smart_generate")
 	}
+	// 同步 iOS 端（Loon / Surge）智能分流模板
+	_ = SyncSmartLoonTemplateFile(true)
+	_ = SyncSmartSurgeTemplateFile(true)
 
 	templateRelPath := "./template/" + filename
+	loonRelPath := "./template/" + SmartLoonDefaultFilename
+	surgeRelPath := "./template/" + SmartSurgeDefaultFilename
 	updatedSubs := 0
 	if req.ApplyAllSubs && models.DB != nil {
 		var subs []models.Subcription
@@ -271,6 +276,12 @@ func GenerateSmartClashTemplate(c *gin.Context) {
 					_ = json.Unmarshal([]byte(sub.Config), &cfgMap)
 				}
 				cfgMap["clash"] = templateRelPath
+				if curLoon, _ := cfgMap["loon"].(string); curLoon == "" || strings.HasSuffix(curLoon, "loon.conf") || strings.HasSuffix(curLoon, SmartLoonDefaultFilename) {
+					cfgMap["loon"] = loonRelPath
+				}
+				if curSurge, _ := cfgMap["surge"].(string); curSurge == "" || strings.HasSuffix(curSurge, "surge.conf") || strings.HasSuffix(curSurge, SmartSurgeDefaultFilename) {
+					cfgMap["surge"] = surgeRelPath
+				}
 				raw, merr := json.Marshal(cfgMap)
 				if merr != nil {
 					continue
@@ -282,9 +293,9 @@ func GenerateSmartClashTemplate(c *gin.Context) {
 		}
 	}
 
-	msg := fmt.Sprintf("已同步智能分流模板 %s（联动 %d/%d 台服务器解锁数据）", filename, checkedServers, totalServers)
+	msg := fmt.Sprintf("已同步三端智能分流模板 %s / %s / %s（联动 %d/%d 台服务器解锁数据）", filename, SmartLoonDefaultFilename, SmartSurgeDefaultFilename, checkedServers, totalServers)
 	if req.ApplyAllSubs {
-		msg = fmt.Sprintf("已同步 %s 并应用至 %d 个订阅", filename, updatedSubs)
+		msg = fmt.Sprintf("已同步三端智能分流模板并应用至 %d 个订阅", updatedSubs)
 	}
 	c.JSON(200, gin.H{
 		"code": "00000",

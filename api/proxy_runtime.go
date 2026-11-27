@@ -61,6 +61,18 @@ func BuildServerSpec(server models.ProxyServer) (xraycore.Spec, error) {
 		Monitor:        &xraycore.MonitorSpec{Enabled: server.MonitorEnabled, IntervalSeconds: 60},
 		WebsiteTraffic: &xraycore.WebsiteTrafficSpec{Enabled: server.WebsiteTrafficEnabled, BucketSeconds: 3600},
 	}
+	if server.WarpEnabled {
+		var domains []string
+		for _, part := range strings.Split(server.WarpDomains, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				domains = append(domains, p)
+			}
+		}
+		if len(domains) == 0 {
+			domains = []string{"openai", "claude", "gemini"}
+		}
+		spec.Warp = &xraycore.WarpSpec{Enabled: true, Domains: domains}
+	}
 	if server.Kind == models.ServerKindAgent {
 		spec.AgentUpdate = server.AgentUpdateRequested
 		spec.AgentHash = agentArtifactHash(server.Arch)
@@ -399,6 +411,7 @@ func StartLocalProxy() {
 // 远程 agent 在下一轮（最长 60 秒）拉取时生效。
 func NotifyProxyChanged() {
 	StartLocalProxy()
+	BroadcastSpecChange()
 	if e := SyncAgentRelayNodes(); e != nil {
 		log.Printf("[relay] 同步入口节点失败: %v", e)
 	}

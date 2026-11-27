@@ -50,9 +50,10 @@
 
 | 模块 | 说明 |
 | :--- | :--- |
-| **自建实例与入站管理** | 通过独立 Server Agent 管理 Xray-core，支持 VLESS（Reality Vision / XHTTP / gRPC / WS+TLS）、VMess（WS+TLS / TCP）、Trojan（Reality / TLS）、Shadowsocks 2022 与 Hysteria2。支持免域名自动证书、Reality SNI VPS 侧实测评分、一键批量升级全部节点与内核 BBR 调优。 |
-| **双源解锁矩阵与智能分流** | 融合「Server Agent 原生检测」与「本机 Clash 链路实测」两套解锁数据（双源均已验证时组合展示、冲突按 Clash 实测优先，单源自动独立生效，兼容中转专线与第三方节点），在「主机与 Agent」卡片与一屏无滚动 Bento 详情弹窗直观呈现；内置默认模板 **`clash-smart.yaml`（智能分流 Clash）**，与订阅下发（含 `proxy-providers` 模式）自动联动同步 `ChatGPT` / `Claude` / `Gemini` / `Netflix` / `Disney+` / `TikTok` 策略组，并支持在「订阅链接」与「配置模板」一键同步与应用。 |
-| **用户 Agent 双通道实测** | 运行在用户本机（Windows / macOS / Linux），按需触发、零后台滥用。区分「物理网卡直连（绕过 Clash TUN / Fake-IP）」与「当前代理出口」双通道，提供 5 秒真实带宽与衰减比测速、无 CORS 原生 AI / 流媒体解锁、以及「本机去程 + VPS 回程」双向路由追踪。 |
+| **自建实例与入站管理** | 通过独立 Server Agent (`v1.26`) 管理 Xray-core，支持 VLESS（Reality Vision / XHTTP / gRPC / WS+TLS）、VMess（WS+TLS / TCP）、Trojan（Reality / TLS）、Shadowsocks 2022 与 Hysteria2。支持免域名自动证书、Reality SNI 分地区 VPS 侧实测评分、**单机 Cloudflare WARP 按域名分流出口**、**防滥用秒级配置唤醒**、一键批量升级全部节点与内核 BBR 调优。 |
+| **双源解锁矩阵与三端智能分流** | 融合「Server Agent 原生检测」与「本机 Clash 链路实测」两套解锁数据（含每 12 小时自动巡检与退化节点自动摘除），内置三端智能分流默认模板 **`clash-smart.yaml` / `loon-smart.conf` / `surge-smart.conf`**（并优化默认 `loon.conf`），自动联动同步 `ChatGPT` / `Claude` / `Gemini` / `Netflix` / `Disney+` / `TikTok` 策略组；导入 iOS 客户端（Loon / Shadowrocket / Surge / iOS Clash）时自动识别并跳过桌面进程应用规则。 |
+| **用户 Agent 流式实测与网络体检** | 运行在用户本机（`v1.14`，纯静默后台、无原生托盘）。区分「物理网卡直连」与「当前代理出口」双通道；全节点 Clash 实测支持**流式逐行实时出结果与 Apple 级动效进度**，并新增 3 秒「代理接管 / DNS Fake-IP / 国内直连 / 海外出口 / UDP QUIC」一键网络体检。 |
+| **WebDAV 云端自动备份与整机恢复** | 系统设置「备份与恢复」支持 SQLite `VACUUM INTO` + 模板整机 `.tar.gz` 本机导出/原地校验恢复（恢复前自动留存安全副本），并内置纯 Go WebDAV 客户端，适配**坚果云 / Alist / Nextcloud / 群晖**定时自动备份、保留份数自动清理与一键从云端快照恢复。 |
 | **Clash / Mihomo 联动控制** | 支持连接本机 Clash 外部控制接口（含 API 密钥校验与内嵌连接配置），实时切换策略组节点；全节点实测时自动以全局模式隔离（兼容 `proxy-provider` 下 `GLOBAL -> 策略组` 级联切换）并直连本机 `mixed-port` 完成三重 CDN 下载带宽与 6 项解锁实测，测完自动恢复原模式与原节点，并落库融合至双源解锁矩阵。 |
 | **Agent 车队集中管理** | Server Agent 与 User Agent 均提供低密度多卡片管理抽屉：一键全量静默升级、**面板域名 URL 预检迁移**（新地址连通校验通过后再切换，防止填错失联）、**安全与隐私权限控制**（主机侧硬拦截 WebShell / 文件上传 / Docker / 自动防火墙 / 远程自更新，用户侧控制公网 IP 上报、Clash 联动与探测并发数）。 |
 | **安全防护与全局拓扑** | 首页写实世界地图展示用户端到端实时飞行连线与异常焦点；VPS 侧支持入站扫描审计与 `iptables` 一键封禁；面板内置 JWT 登出吊销、登录防爆破、公开订阅限流与 SQLite WAL 调优。 |

@@ -156,7 +156,7 @@ func Run(port int) {
 	utils.Loginit()
 	// 初始化模板
 	Templateinit()
-	if err := api.SyncSmartClashTemplateFile(false); err != nil {
+	if err := api.SyncAllSmartTemplates(false); err != nil {
 		log.Printf("[主程序] 同步智能分流模板失败: %v", err)
 	}
 	// 安装中间件

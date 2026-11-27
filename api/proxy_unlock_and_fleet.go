@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
 	"regexp"
 	"strings"
@@ -417,13 +418,56 @@ func ProxyServerUnlockCheck(c *gin.Context) {
 		}
 	}
 	if okCount > 0 {
-		_ = SyncSmartClashTemplateFile(false)
+		_ = SyncAllSmartTemplates(false)
 	}
 	c.JSON(200, gin.H{
 		"code": "00000",
 		"data": gin.H{"results": results, "okCount": okCount, "total": len(results)},
 		"msg":  fmt.Sprintf("已完成 %d/%d 台服务器原生解锁检测", okCount, len(results)),
 	})
+}
+
+// RunScheduledUnlockSweep 供 cron.go 每 12 小时自动执行：
+// 错峰对全部在线 Server Agent 复检原生解锁能力，并在检测后自动刷新三端智能分流模板（自动摘除退化节点）。
+func RunScheduledUnlockSweep() {
+	if models.DB == nil {
+		return
+	}
+	var servers []models.ProxyServer
+	if err := models.DB.Where("removing = ? AND enabled = ? AND kind = ?", false, true, models.ServerKindAgent).Order("id asc").Find(&servers).Error; err != nil {
+		return
+	}
+	okCount := 0
+	for i, srv := range servers {
+		if !serverOpsOnline(&srv) {
+			continue
+		}
+		if i > 0 {
+			time.Sleep(3 * time.Second)
+		}
+		jobID, resCh, ok := opsDispatch(srv.ID, serverOpsJob{Action: "unlock-check"}, true)
+		if !ok {
+			continue
+		}
+		select {
+		case res := <-resCh:
+			if res.OK && res.Unlock != nil {
+				raw, _ := json.Marshal(res.Unlock)
+				now := time.Now()
+				_ = models.DB.Model(&models.ProxyServer{}).Where("id = ?", srv.ID).Updates(map[string]any{
+					"unlock_json":       string(raw),
+					"unlock_checked_at": now,
+				}).Error
+				okCount++
+			}
+		case <-time.After(28 * time.Second):
+		}
+		opsCleanup(jobID)
+	}
+	if okCount > 0 {
+		_ = SyncAllSmartTemplates(false)
+		log.Printf("[Cron] 定时解锁巡检完成（%d/%d 台更新），已同步三端智能分流模板", okCount, len(servers))
+	}
 }
 
 // ProxyServerMigrateURL 一键向指定或全部在线服务器 Agent 下发新面板地址（含连通性预检防失联）。

@@ -453,6 +453,28 @@ export function switchProbeClashNode(data: {
   });
 }
 
+export interface NetDiagCheck {
+  key: string;
+  label: string;
+  status: "ok" | "warn" | "fail";
+  detail: string;
+  advice?: string;
+  rttMs?: number;
+}
+
+export interface NetDiagReport {
+  summary: string;
+  checkedAt: string;
+  checks: NetDiagCheck[];
+}
+
+export interface ClashBatchStatus extends ClashReport {
+  currentNode?: string;
+  total?: number;
+  done?: boolean;
+  savedSnapshots?: number;
+}
+
 export function runProbeClashBatchTest(data: {
   probeId?: number;
   group?: string;
@@ -463,6 +485,37 @@ export function runProbeClashBatchTest(data: {
     method: "post",
     data,
     timeout: 130000,
+  });
+}
+
+export function startProbeClashBatch(data: {
+  probeId?: number;
+  group?: string;
+  nodes?: string[];
+}) {
+  return request<{ jobId: string; probeName: string }>({
+    url: "/api/v1/probes/clash/batch/start",
+    method: "post",
+    data,
+    timeout: 12000,
+  });
+}
+
+export function getProbeClashBatchStatus(jobId: string) {
+  return request<ClashBatchStatus>({
+    url: "/api/v1/probes/clash/batch/status",
+    method: "get",
+    params: { jobId },
+    timeout: 8000,
+  });
+}
+
+export function runProbeNetDiag(probeId?: number) {
+  return request<NetDiagReport>({
+    url: "/api/v1/probes/net-diag",
+    method: "post",
+    data: { probeId },
+    timeout: 15000,
   });
 }
 

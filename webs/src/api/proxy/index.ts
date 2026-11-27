@@ -101,6 +101,8 @@ export interface ProxyServer {
   monitorEnabled: boolean;
   websiteTrafficEnabled?: boolean;
   autoFirewall?: boolean;
+  warpEnabled?: boolean;
+  warpDomains?: string;
   bbr?: string;
   qdisc?: string;
   rmemMax?: number;
@@ -170,6 +172,8 @@ export const saveProxyServer = (data: {
   monitorEnabled?: boolean;
   websiteTrafficEnabled?: boolean;
   autoFirewall?: boolean;
+  warpEnabled?: boolean;
+  warpDomains?: string;
 }) =>
   request<{ id: number; token?: string; install?: string }>({
     url: "/api/v1/proxy/servers/save",
@@ -432,6 +436,8 @@ export const saveProxyServerPolicy = (data: {
   dockerEnabled?: boolean;
   allowAutoUpdate?: boolean;
   autoFirewall?: boolean;
+  warpEnabled?: boolean;
+  warpDomains?: string;
   websiteTrafficEnabled?: boolean;
 }) =>
   request<{ updated: number; pushed: number }>({

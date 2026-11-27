@@ -1,15 +1,19 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import gsap from "gsap";
 import { ElMessage } from "element-plus";
 import { Refresh, VideoPlay } from "@element-plus/icons-vue";
 import { UiButton, UiDrawer } from "@/ui";
 import {
+  getProbeClashBatchStatus,
   getProbeClashStatus,
   pushProbeConfig,
-  runProbeClashBatchTest,
+  runProbeNetDiag,
+  startProbeClashBatch,
   switchProbeClashNode,
   type ClashNodeTestItem,
   type ClashStatus,
+  type NetDiagReport,
   type Probe,
 } from "@/api/subcription/probe";
 
@@ -34,6 +38,8 @@ const selectedProbeId = ref<number | undefined>(undefined);
 const loadingStatus = ref(false);
 const switchingNode = ref("");
 const batchRunning = ref(false);
+const batchTotal = ref(0);
+const currentTestingNode = ref("");
 const errorMsg = ref("");
 const status = ref<ClashStatus | null>(null);
 const results = ref<ClashNodeTestItem[]>([]);
@@ -41,10 +47,72 @@ const showConfig = ref(false);
 const clashApiInput = ref("http://127.0.0.1:9090");
 const clashSecretInput = ref("");
 const savingConfig = ref(false);
+const diagLoading = ref(false);
+const diagReport = ref<NetDiagReport | null>(null);
+
+const matrixListEl = ref<HTMLElement>();
+const progressBarEl = ref<HTMLElement>();
+const diagCardEl = ref<HTMLElement>();
+let pollTimer: ReturnType<typeof setInterval> | null = null;
+let lastAnimatedCount = 0;
 
 const activeProbe = computed(() =>
   props.probes.find((p) => p.id === selectedProbeId.value)
 );
+
+const progressRatio = computed(() => {
+  const total = batchTotal.value || status.value?.proxies?.length || 0;
+  if (!total) return 0;
+  return Math.min(1, results.value.length / total);
+});
+
+function prefersReducedMotion() {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false;
+}
+
+function animateProgressFill(ratio: number) {
+  if (!progressBarEl.value) return;
+  if (prefersReducedMotion()) {
+    progressBarEl.value.style.transform = `scaleX(${ratio})`;
+    return;
+  }
+  gsap.to(progressBarEl.value, {
+    scaleX: Math.max(0.03, ratio),
+    duration: 0.42,
+    ease: "power3.out",
+    overwrite: "auto",
+  });
+}
+
+function animateNewRows(prevCount: number) {
+  if (!matrixListEl.value || prefersReducedMotion()) return;
+  const rows = matrixListEl.value.querySelectorAll<HTMLElement>("[data-stream-row]");
+  const fresh: HTMLElement[] = [];
+  rows.forEach((el, idx) => {
+    if (idx >= prevCount) fresh.push(el);
+  });
+  if (!fresh.length) return;
+  gsap.fromTo(
+    fresh,
+    { y: 12, opacity: 0, scale: 0.99 },
+    {
+      y: 0,
+      opacity: 1,
+      scale: 1,
+      duration: 0.4,
+      stagger: 0.045,
+      ease: "power3.out",
+      clearProps: "transform,opacity",
+    }
+  );
+}
+
+function stopBatchPoll() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+    pollTimer = null;
+  }
+}
 
 function syncClashInputs() {
   clashApiInput.value =
@@ -126,20 +194,105 @@ async function handleSwitch(nodeName: string) {
 
 async function runBatch() {
   if (batchRunning.value || !status.value?.connected) return;
+  stopBatchPoll();
   batchRunning.value = true;
   errorMsg.value = "";
+  results.value = [];
+  lastAnimatedCount = 0;
+  batchTotal.value = Math.min(status.value.proxies?.length || 0, 16);
+  currentTestingNode.value = status.value.proxies?.[0] || "";
+  await nextTick();
+  animateProgressFill(0.04);
+
   try {
-    const res = await runProbeClashBatchTest({
+    const startRes = await startProbeClashBatch({
       probeId: selectedProbeId.value,
       group: status.value.group,
     });
-    results.value = res.data?.items || [];
-    if (res.data?.status) status.value = res.data.status;
-    ElMessage.success(`已完成 ${results.value.length} 个节点实测并恢复原节点`);
+    const jobId = startRes.data?.jobId;
+    if (!jobId) throw new Error("未能启动流式实测任务");
+
+    const startedAt = Date.now();
+    pollTimer = setInterval(async () => {
+      if (Date.now() - startedAt > 125_000) {
+        stopBatchPoll();
+        batchRunning.value = false;
+        currentTestingNode.value = "";
+        errorMsg.value = "全节点实测超时，请确认用户 Agent 在线";
+        return;
+      }
+      try {
+        const stRes = await getProbeClashBatchStatus(jobId);
+        const snap = stRes.data;
+        if (!snap) return;
+        if (snap.total) batchTotal.value = snap.total;
+        currentTestingNode.value = snap.currentNode || "";
+        const nextItems = snap.items || [];
+        if (nextItems.length > lastAnimatedCount) {
+          const prev = lastAnimatedCount;
+          results.value = nextItems;
+          lastAnimatedCount = nextItems.length;
+          await nextTick();
+          animateNewRows(prev);
+          animateProgressFill(progressRatio.value);
+        }
+        if (snap.done) {
+          stopBatchPoll();
+          batchRunning.value = false;
+          currentTestingNode.value = "";
+          if (snap.status) status.value = snap.status;
+          if (snap.error && !nextItems.length) {
+            errorMsg.value = snap.error;
+          } else {
+            animateProgressFill(1);
+            const savedTip = snap.savedSnapshots
+              ? `，已融合更新 ${snap.savedSnapshots} 个节点解锁矩阵`
+              : "";
+            ElMessage.success(
+              `已完成 ${nextItems.length} 个节点实测并恢复原节点${savedTip}`
+            );
+            emit("refresh");
+          }
+        }
+      } catch {
+        // 单次轮询抖动静默重试
+      }
+    }, 850);
   } catch (e: any) {
-    errorMsg.value = e?.response?.data?.msg || e?.message || "全节点实测失败";
-  } finally {
+    stopBatchPoll();
     batchRunning.value = false;
+    currentTestingNode.value = "";
+    errorMsg.value = e?.response?.data?.msg || e?.message || "全节点实测失败";
+  }
+}
+
+async function runNetDiagnostic() {
+  if (diagLoading.value || !onlineProbes.value.length) return;
+  diagLoading.value = true;
+  errorMsg.value = "";
+  try {
+    const res = await runProbeNetDiag(selectedProbeId.value);
+    diagReport.value = res.data || null;
+    await nextTick();
+    if (diagCardEl.value && !prefersReducedMotion()) {
+      const items = diagCardEl.value.querySelectorAll<HTMLElement>("[data-diag-item]");
+      gsap.fromTo(
+        items,
+        { y: 10, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          duration: 0.36,
+          stagger: 0.05,
+          ease: "power3.out",
+          clearProps: "transform,opacity",
+        }
+      );
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || e?.message || "网络体检失败（需用户 Agent v1.14+）");
+  } finally {
+    diagLoading.value = false;
   }
 }
 
@@ -159,9 +312,15 @@ watch(
       selectedProbeId.value =
         props.activeProbeId || onlineProbes.value[0]?.id;
       void fetchStatus();
+    } else {
+      stopBatchPoll();
     }
   }
 );
+
+onBeforeUnmount(() => {
+  stopBatchPoll();
+});
 </script>
 
 <template>
@@ -200,6 +359,14 @@ watch(
         </div>
 
         <div class="bar-right">
+          <UiButton
+            variant="ghost"
+            :loading="diagLoading"
+            :disabled="batchRunning || !onlineProbes.length"
+            @click="runNetDiagnostic"
+          >
+            网络体检
+          </UiButton>
           <UiButton
             variant="ghost"
             :disabled="batchRunning"
@@ -275,17 +442,55 @@ watch(
         </button>
       </section>
 
-      <!-- Running Progress Banner -->
-      <section v-if="batchRunning" class="batch-progress" aria-live="polite">
-        <span class="bp-dot" aria-hidden="true"></span>
-        <span>
-          正在全局模式逐一实测 {{ status?.proxies?.length || 0 }} 个节点的真实带宽与解锁，完成后自动恢复原模式与原节点…
-        </span>
+      <!-- 3-Second Proxy / DNS / TUN Self-Diagnostic Sheet -->
+      <section v-if="diagReport" ref="diagCardEl" class="diag-card">
+        <div class="diag-head">
+          <strong>{{ diagReport.summary }}</strong>
+          <button type="button" class="diag-close" @click="diagReport = null">收起</button>
+        </div>
+        <div class="diag-list">
+          <div
+            v-for="item in diagReport.checks"
+            :key="item.key"
+            data-diag-item
+            class="diag-row"
+          >
+            <span class="diag-dot" :class="`is-${item.status}`" aria-hidden="true"></span>
+            <div class="diag-copy">
+              <div class="diag-line">
+                <strong>{{ item.label }}</strong>
+                <span class="mono diag-detail">{{ item.detail }}</span>
+              </div>
+              <p v-if="item.advice" class="diag-advice">{{ item.advice }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Streaming Progress Banner -->
+      <section v-if="batchRunning" class="batch-progress-wrap" aria-live="polite">
+        <div class="batch-progress">
+          <span class="bp-dot" aria-hidden="true"></span>
+          <span class="bp-text">
+            <template v-if="currentTestingNode">
+              正在实测 <strong class="mono">{{ currentTestingNode }}</strong>
+            </template>
+            <template v-else>
+              正在全局模式逐一实测节点真实带宽与解锁…
+            </template>
+          </span>
+          <span class="bp-count mono">
+            {{ results.length }} / {{ batchTotal || status?.proxies?.length || 0 }}
+          </span>
+        </div>
+        <div class="bp-track">
+          <div ref="progressBarEl" class="bp-fill"></div>
+        </div>
       </section>
 
       <!-- Batch Matrix Table -->
-      <section v-if="results.length" class="matrix-card">
-        <div class="matrix-table">
+      <section v-if="results.length || (batchRunning && currentTestingNode)" class="matrix-card">
+        <div ref="matrixListEl" class="matrix-table">
           <div class="m-row is-head">
             <span class="col-left">节点</span>
             <span class="col-center">出口</span>
@@ -300,7 +505,12 @@ watch(
             <span class="col-right">操作</span>
           </div>
 
-          <div v-for="item in results" :key="item.name" class="m-row">
+          <div
+            v-for="item in results"
+            :key="item.name"
+            data-stream-row
+            class="m-row"
+          >
             <strong class="m-name col-left" :title="item.name">{{ item.name }}</strong>
             <span class="mono m-sub col-center">{{ item.country || "—" }}</span>
             <span class="mono col-center">{{ item.ttfbMs ? `${item.ttfbMs} ms` : "—" }}</span>
@@ -326,6 +536,15 @@ watch(
                 {{ status?.current === item.name ? "当前" : "切换" }}
               </button>
             </div>
+          </div>
+
+          <!-- Live Scanning Placeholder Row -->
+          <div
+            v-if="batchRunning && currentTestingNode && !results.some((r) => r.name === currentTestingNode)"
+            class="m-row is-scanning"
+          >
+            <strong class="m-name col-left">{{ currentTestingNode }}</strong>
+            <span class="scan-bar" style="grid-column: 2 / -1"></span>
           </div>
         </div>
       </section>
@@ -452,16 +671,185 @@ watch(
   font-weight: 500;
 }
 
-.batch-progress {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.batch-progress-wrap {
+  display: grid;
+  gap: 8px;
   padding: 12px 16px;
   border: 1px solid var(--c-line);
   border-radius: 14px;
   background: var(--c-surface-2);
+}
+
+.batch-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-size: 12.5px;
   color: var(--c-ink);
+}
+
+.bp-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bp-count {
+  font-size: 12px;
+  color: var(--c-muted);
+}
+
+.bp-track {
+  position: relative;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-ink) 10%, transparent);
+  overflow: hidden;
+}
+
+.bp-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--c-ink);
+  transform: scaleX(0.03);
+  transform-origin: left center;
+  will-change: transform;
+}
+
+.m-row.is-scanning {
+  background: color-mix(in srgb, var(--c-ink) 2%, transparent);
+}
+
+.scan-bar {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--c-ink) 8%, transparent);
+  overflow: hidden;
+}
+
+.scan-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 38%;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--c-ink) 22%, transparent),
+    transparent
+  );
+  animation: scan-sweep 1.25s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes scan-sweep {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(320%);
+  }
+}
+
+.diag-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--c-line);
+  border-radius: 16px;
+  background: var(--c-surface-2);
+}
+
+.diag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--c-ink);
+}
+
+.diag-close {
+  border: 0;
+  background: transparent;
+  color: var(--c-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.diag-list {
+  display: grid;
+  gap: 10px;
+}
+
+.diag-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--c-line);
+}
+
+.diag-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.diag-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.diag-dot.is-ok {
+  background: var(--c-ok);
+}
+
+.diag-dot.is-warn {
+  background: var(--c-warn);
+}
+
+.diag-dot.is-fail {
+  background: var(--c-bad);
+}
+
+.diag-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  flex: 1;
+}
+
+.diag-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+}
+
+.diag-detail {
+  color: var(--c-muted);
+  font-size: 12px;
+}
+
+.diag-advice {
+  margin: 0;
+  font-size: 12px;
+  color: var(--c-warn);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bp-dot,
+  .scan-bar::after {
+    animation: none;
+  }
 }
 
 .bp-dot {

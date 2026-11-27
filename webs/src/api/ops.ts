@@ -59,6 +59,77 @@ export const deleteShortLink = (id: number) =>
     params: { id },
   });
 
+export interface WebDAVBackupConfig {
+  enabled: boolean;
+  preset: string;
+  url: string;
+  username: string;
+  password?: string;
+  hasPassword?: boolean;
+  remoteDir: string;
+  schedule: "off" | "daily" | "every3d" | "weekly";
+  keepCount: number;
+  lastStatus?: string;
+  lastError?: string;
+  lastFile?: string;
+  lastBackupAt?: string | null;
+}
+
+export interface WebDAVRemoteFile {
+  name: string;
+  size: number;
+  lastModified: string;
+}
+
+export const getWebDAVConfig = () =>
+  request<WebDAVBackupConfig>({
+    url: "/api/v1/ops/backup/webdav/config",
+    method: "get",
+  });
+export const saveWebDAVConfig = (data: Partial<WebDAVBackupConfig>) =>
+  request({ url: "/api/v1/ops/backup/webdav/config", method: "put", data });
+export const testWebDAVConfig = (data: {
+  url: string;
+  username: string;
+  password?: string;
+  remoteDir: string;
+}) => request({ url: "/api/v1/ops/backup/webdav/test", method: "post", data });
+export const runWebDAVBackupNow = () =>
+  request<{ file: string; bytes: number }>({
+    url: "/api/v1/ops/backup/webdav/run",
+    method: "post",
+  });
+export const listWebDAVBackups = () =>
+  request<WebDAVRemoteFile[]>({
+    url: "/api/v1/ops/backup/webdav/list",
+    method: "get",
+  });
+export const restoreWebDAVBackup = (file: string) =>
+  request({
+    url: "/api/v1/ops/backup/webdav/restore",
+    method: "post",
+    data: { file },
+  });
+
+/** 上传本机 .tar.gz 完整备份并原地恢复整机数据库与模板。 */
+export async function restoreFullBackupFile(file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(
+    `${import.meta.env.VITE_APP_BASE_API}/api/v1/ops/backup/full/restore`,
+    {
+      method: "POST",
+      headers: { Authorization: localStorage.getItem("accessToken") || "" },
+      body: form,
+    }
+  );
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || body?.code !== "00000") {
+    throw new Error(body?.msg || `恢复失败 HTTP ${response.status}`);
+  }
+  return body;
+}
+
 /** 下载完整备份（数据库快照 + 模板）。二进制流不经过 JSON 响应拦截器。 */
 export async function downloadFullBackup() {
   const response = await fetch(

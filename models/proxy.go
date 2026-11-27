@@ -41,6 +41,9 @@ type ProxyServer struct {
 	WebsiteTrafficEnabled bool `gorm:"not null;default:false" json:"websiteTrafficEnabled"`
 	// AutoFirewall 开启后 agent 自动放行入站端口（并在删入站/卸载时自动回收）。
 	AutoFirewall bool `gorm:"not null;default:false" json:"autoFirewall"`
+	// 单机 WARP 免费 WireGuard 分流出口（按预设域名组走 WARP 解决 AI/流媒体送中问题）
+	WarpEnabled bool   `gorm:"not null;default:false" json:"warpEnabled"`
+	WarpDomains string `gorm:"size:512" json:"warpDomains"`
 	// 服务器内核网络参数（由 agent v1.20+ 心跳上报）
 	BBR     string `gorm:"size:24" json:"bbr"`
 	Qdisc   string `gorm:"size:24" json:"qdisc"`
