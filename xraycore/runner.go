@@ -99,6 +99,16 @@ func (r *Runner) Apply(ctx context.Context, spec Spec) error {
 		return err
 	}
 	spec = prepared
+	if spec.Warp != nil && spec.Warp.Enabled {
+		profile, werr := EnsureWarpProfile(ctx, r.Dir)
+		if werr != nil {
+			r.lastErr = werr.Error()
+			return werr
+		}
+		warpCopy := *spec.Warp
+		warpCopy.Profile = profile
+		spec.Warp = &warpCopy
+	}
 	var nextWebsite *WebsiteCollector
 	if spec.WebsiteTraffic != nil && spec.WebsiteTraffic.Enabled {
 		if r.websiteStats == nil {

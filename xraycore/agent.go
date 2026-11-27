@@ -28,6 +28,11 @@ type Source interface {
 	Report(ctx context.Context, report Report) error
 }
 
+// SpecWaiter 是可选的长轮询秒级唤醒接口，由 HTTPSource 实现；支持旧面板优雅回退至周期轮询。
+type SpecWaiter interface {
+	WaitSpecChange(ctx context.Context, since uint64) (changed bool, nextSeq uint64, err error)
+}
+
 // Updater 是可自更新的远端来源。HTTPSource 实现；面板本机来源不需要。
 type Updater interface {
 	Update(ctx context.Context, hash string) error
@@ -239,13 +244,69 @@ func RunLoop(ctx context.Context, src Source, runner *Runner, interval time.Dura
 	if tick() {
 		return true
 	}
+	wakeCh := make(chan struct{}, 1)
+	if waiter, ok := src.(SpecWaiter); ok {
+		go func() {
+			var seq uint64
+			backoff := 2 * time.Second
+			for {
+				if ctx.Err() != nil {
+					return
+				}
+				changed, nextSeq, err := waiter.WaitSpecChange(ctx, seq)
+				if err != nil {
+					if ctx.Err() != nil {
+						return
+					}
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(backoff):
+					}
+					if backoff < 30*time.Second {
+						backoff *= 2
+						if backoff > 30*time.Second {
+							backoff = 30 * time.Second
+						}
+					}
+					continue
+				}
+				backoff = 2 * time.Second
+				if nextSeq > seq {
+					seq = nextSeq
+				}
+				if changed {
+					select {
+					case wakeCh <- struct{}{}:
+					default:
+					}
+					// 防滥用冷却：连续变更至少间隔 2 秒再重连等待
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(2 * time.Second):
+					}
+				}
+			}
+		}()
+	}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	var lastTick time.Time
 	for {
 		select {
 		case <-ctx.Done():
 			return false
+		case <-wakeCh:
+			if !lastTick.IsZero() && time.Since(lastTick) < 2*time.Second {
+				continue
+			}
+			lastTick = time.Now()
+			if tick() {
+				return true
+			}
 		case <-ticker.C:
+			lastTick = time.Now()
 			if tick() {
 				return true
 			}
@@ -310,4 +371,36 @@ func (h *HTTPSource) Spec(ctx context.Context) (Spec, error) {
 
 func (h *HTTPSource) Report(ctx context.Context, report Report) error {
 	return h.do(ctx, http.MethodPost, "/api/v1/agent/report", report, nil)
+}
+
+func (h *HTTPSource) WaitSpecChange(ctx context.Context, since uint64) (bool, uint64, error) {
+	waitCtx, cancel := context.WithTimeout(ctx, 50*time.Second)
+	defer cancel()
+	path := fmt.Sprintf("/api/v1/agent/spec/wait?since=%d&timeout=40", since)
+	req, err := http.NewRequestWithContext(waitCtx, http.MethodGet, strings.TrimRight(h.Panel, "/")+path, nil)
+	if err != nil {
+		return false, since, err
+	}
+	req.Header.Set("Authorization", "Agent "+h.Token)
+	client := &http.Client{Timeout: 55 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, since, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
+	if resp.StatusCode != http.StatusOK {
+		return false, since, fmt.Errorf("spec wait HTTP %d", resp.StatusCode)
+	}
+	var env struct {
+		Code string `json:"code"`
+		Data struct {
+			Changed bool   `json:"changed"`
+			Seq     uint64 `json:"seq"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil || env.Code != "00000" {
+		return false, since, fmt.Errorf("spec wait invalid payload")
+	}
+	return env.Data.Changed, env.Data.Seq, nil
 }

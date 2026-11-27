@@ -64,6 +64,7 @@ func BuildConfigWithWebsiteCollector(spec Spec, collector *WebsiteCollector) ([]
 	if routeErr != nil {
 		return nil, routeErr
 	}
+	outbounds, rules = appendWarpConfig(spec, outbounds, rules)
 	config := map[string]any{
 		"log": map[string]any{"loglevel": "warning"},
 		"api": map[string]any{

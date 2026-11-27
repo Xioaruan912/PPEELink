@@ -114,6 +114,15 @@ type Spec struct {
 	// AgentUpdate 为面板主动请求 agent 自更新；AgentHash 是已发布独立 Agent 产物的 SHA-256。
 	AgentUpdate bool   `json:"agentUpdate,omitempty"`
 	AgentHash   string `json:"agentHash,omitempty"`
+	// Warp 为单机免费 Cloudflare WARP WireGuard 按域名分流出口（Agent v1.26+）。
+	Warp *WarpSpec `json:"warp,omitempty"`
+}
+
+// WarpSpec 描述单台服务器的 Cloudflare WARP WireGuard 分流配置。
+type WarpSpec struct {
+	Enabled bool         `json:"enabled"`
+	Domains []string     `json:"domains,omitempty"`
+	Profile *WarpProfile `json:"-"`
 }
 
 // WebsiteTrafficSpec defaults to UTC hour buckets (3600 seconds). Custom bucket
