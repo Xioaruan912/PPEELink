@@ -43,7 +43,11 @@ func ImportClashProvider(text string, opt ImportOptions) (ImportResult, error) {
 		opt.Interval = 3600
 	}
 	if opt.Path == "" {
-		opt.Path = "./rules/" + safeProviderName(opt.ProviderName) + ".yaml"
+		ext := ".yaml"
+		if strings.EqualFold(opt.Format, "text") {
+			ext = ".list"
+		}
+		opt.Path = "./rules/" + safeProviderName(opt.ProviderName) + ext
 	}
 	if opt.ConflictPolicy == "" {
 		opt.ConflictPolicy = "keep"

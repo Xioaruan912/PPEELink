@@ -10,6 +10,8 @@ import {
 import { ElMessage } from "element-plus";
 import {
   getRuleSources,
+  createRuleSource,
+  deleteRuleSource,
   getRuleCatalog,
   getRulePreview,
   getRuleTemplateGroups,
@@ -26,6 +28,7 @@ export type RuleItem = {
   category: string;
   platform: string;
   format: string;
+  behavior?: string;
   ruleCount: number;
   checksum?: string;
   contentHash?: string;
@@ -40,13 +43,21 @@ export type NormalizedRule = {
 };
 export const ruleText = (rule: NormalizedRule) =>
   [rule.type, rule.value, ...(rule.options || [])].join(",");
-export const sourceLabel = (key: string) =>
-  (
+export const sourceLabel = (key: string, list?: { key: string; name: string }[]) => {
+  const fromList = list?.find((s) => s.key === key)?.name;
+  if (fromList) return fromList;
+  return (
     ({
       shunt_rules: "ShuntRules",
       ios_rule_script: "ios_rule_script",
+      sukka_ruleset: "Sukka Ruleset",
+      metacubex_rules: "MetaCubeX 官方",
+      loyalsoldier_rules: "Loyalsoldier",
+      acl4ssr_rules: "ACL4SSR",
+      cats_adrules: "AdRules 去广告",
     }) as Record<string, string>
   )[key] || key;
+};
 export const fmtTime = (value?: string) => formatDateTime(value) || "尚未同步";
 export function metadataSummary(row: RuleItem) {
   try {
@@ -95,9 +106,12 @@ function createRules() {
     "AI",
     "流媒体",
     "社交",
+    "国内直连",
+    "代理/全球",
     "Apple",
     "Google",
     "Microsoft",
+    "游戏",
     "开发者",
     "广告/隐私",
     "其他",
@@ -249,17 +263,61 @@ function createRules() {
       ? selectedIds.value.filter((value) => value !== id)
       : [...selectedIds.value, id];
   }
-  async function doSync() {
-    syncing.value = true;
+  const syncingKey = ref("");
+  async function doSync(sourceKey?: string) {
+    const key = typeof sourceKey === "string" ? sourceKey : "";
+    syncing.value = !key;
+    syncingKey.value = key;
     errorText.value = "";
     try {
-      await syncRuleCatalog();
+      await syncRuleCatalog(key);
       await Promise.all([loadSources(), loadCatalog()]);
-      ElMessage.success("规则目录已同步");
+      ElMessage.success(key ? `${sourceLabel(key, sources.value)} 已同步` : "全部规则源已同步");
     } catch (error) {
       errorText.value = `同步失败：${message(error)}`;
     } finally {
       syncing.value = false;
+      syncingKey.value = "";
+    }
+  }
+  const savingSource = ref(false);
+  async function addCustomSource(payload: {
+    name: string;
+    repo: string;
+    branch: string;
+    pathPrefix: string;
+    platform: string;
+    behavior: string;
+  }) {
+    savingSource.value = true;
+    try {
+      const res: any = await createRuleSource(payload);
+      await Promise.all([loadSources(), loadCatalog()]);
+      ElMessage.success(res?.msg || "规则源已添加");
+      return true;
+    } catch (error) {
+      ElMessage.error(`添加失败：${message(error)}`);
+      return false;
+    } finally {
+      savingSource.value = false;
+    }
+  }
+  async function removeCustomSource(key: string) {
+    if (
+      !(await confirm(
+        "删除自定义规则源",
+        `确认删除规则源「${sourceLabel(key, sources.value)}」及其缓存目录？`,
+        "删除"
+      ))
+    )
+      return;
+    try {
+      await deleteRuleSource(key);
+      if (source.value === key) source.value = "";
+      await Promise.all([loadSources(), loadCatalog()]);
+      ElMessage.success("已删除自定义规则源");
+    } catch (error) {
+      ElMessage.error(`删除失败：${message(error)}`);
     }
   }
   function focus(row: RuleItem) {
@@ -438,6 +496,10 @@ function createRules() {
     toggleCategory,
     toggleSelected,
     doSync,
+    syncingKey,
+    savingSource,
+    addCustomSource,
+    removeCustomSource,
     openPreview,
     importOpen,
     importLoading,

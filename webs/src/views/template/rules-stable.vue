@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import gsap from "gsap";
 import {
   FolderChecked,
@@ -8,7 +8,7 @@ import {
   Search,
   View,
 } from "@element-plus/icons-vue";
-import { EmptyState, UiButton, UiSkeleton } from "@/ui";
+import { EmptyState, UiButton, UiDialog, UiSkeleton } from "@/ui";
 import KineticNotice from "@/ui/KineticNotice.vue";
 import RuleDialogs from "./rules/RuleDialogs.vue";
 import {
@@ -23,6 +23,15 @@ defineOptions({ name: "RulesWorkbench" });
 const rootEl = ref<HTMLElement>();
 let gsapCtx: gsap.Context | null = null;
 const showSources = ref(false);
+const addSourceOpen = ref(false);
+const customForm = reactive({
+  name: "",
+  repo: "",
+  branch: "main",
+  pathPrefix: "",
+  platform: "Clash",
+  behavior: "classical",
+});
 
 const {
   loading,
@@ -31,6 +40,8 @@ const {
   hasMore,
   sourcesLoading,
   syncing,
+  syncingKey,
+  savingSource,
   errorText,
   sourcesError,
   rules,
@@ -51,15 +62,36 @@ const {
   toggleCategory,
   toggleSelected,
   doSync,
+  addCustomSource,
+  removeCustomSource,
   openPreview,
   openImport,
 } = provideRules();
 
-const sourceTabs = [
+const sourceTabs = computed(() => [
   { label: "全部来源", value: "" },
-  { label: "ShuntRules", value: "shunt_rules" },
-  { label: "ios_rule_script", value: "ios_rule_script" },
-];
+  ...sources.value.map((s: any) => ({
+    label: s.name || sourceLabel(s.key),
+    value: s.key,
+  })),
+]);
+
+function openAddSource() {
+  Object.assign(customForm, {
+    name: "",
+    repo: "",
+    branch: "main",
+    pathPrefix: "",
+    platform: platform.value || "Clash",
+    behavior: "classical",
+  });
+  addSourceOpen.value = true;
+}
+
+async function submitCustomSource() {
+  const ok = await addCustomSource({ ...customForm });
+  if (ok) addSourceOpen.value = false;
+}
 
 const clientTabs = ["Clash", "Surge", "Loon"];
 
@@ -144,7 +176,7 @@ onBeforeUnmount(() => {
           variant="primary"
           :icon="Refresh"
           :loading="syncing"
-          @click="doSync"
+          @click="doSync()"
         >
           {{ syncing ? "同步中…" : "立即同步" }}
         </UiButton>
@@ -158,6 +190,12 @@ onBeforeUnmount(() => {
     <!-- On-Demand Collapsible Remote Sources Strip -->
     <Transition name="fade-slide">
       <section v-if="showSources" class="sources-strip" aria-label="远程规则源状态">
+        <div class="sources-bar">
+          <span class="muted">共 {{ sources.length }} 个规则源</span>
+          <UiButton size="sm" variant="ghost" :icon="Plus" @click="openAddSource">
+            添加自定义源
+          </UiButton>
+        </div>
         <UiSkeleton v-if="sourcesLoading" :lines="2" height="44px" />
         <div v-else-if="sources.length" class="source-grid">
           <article v-for="item in sources" :key="item.key" class="source-card">
@@ -171,10 +209,29 @@ onBeforeUnmount(() => {
                 {{ item.status === "ok" ? "已同步" : item.error ? "异常" : "待同步" }}
               </span>
             </div>
-            <span class="src-repo mono">{{ item.repo }}</span>
+            <span class="src-repo mono">
+              {{ item.repo }}<template v-if="item.pathPrefix">/{{ item.pathPrefix }}</template>
+            </span>
             <div class="src-foot mono">
-              <span>{{ item.count || 0 }} 目录 · 缓存 {{ item.cachedCount || 0 }}</span>
-              <time>{{ fmtTime(item.lastSyncAt) }}</time>
+              <span>{{ item.count || 0 }} 条 · {{ fmtTime(item.lastSyncAt) }}</span>
+              <div class="src-actions">
+                <button
+                  type="button"
+                  class="src-link-btn"
+                  :disabled="syncing || syncingKey === item.key"
+                  @click="doSync(item.key)"
+                >
+                  {{ syncingKey === item.key ? "同步中" : "同步" }}
+                </button>
+                <button
+                  v-if="item.custom"
+                  type="button"
+                  class="src-link-btn is-danger"
+                  @click="removeCustomSource(item.key)"
+                >
+                  删除
+                </button>
+              </div>
             </div>
           </article>
         </div>
@@ -295,10 +352,15 @@ onBeforeUnmount(() => {
           <div class="row-title-line">
             <strong class="row-name">{{ row.name || "未命名规则" }}</strong>
             <span class="row-cat">{{ row.category || "其他" }}</span>
-            <span class="row-fmt mono">{{ row.platform }} / {{ row.format }}</span>
+            <span class="row-fmt mono">
+              {{ row.platform }} / {{ row.format
+              }}<template v-if="row.behavior && row.behavior !== 'classical'">
+                · {{ row.behavior }}</template
+              >
+            </span>
           </div>
           <span class="row-sub">
-            {{ sourceLabel(row.sourceKey) }}
+            {{ sourceLabel(row.sourceKey, sources) }}
             <template v-if="row.duplicateCount">
               · 已去重 +{{ row.duplicateCount }}
             </template>
@@ -370,6 +432,58 @@ onBeforeUnmount(() => {
 
     <!-- Preserved Preview Drawer & Import Dialog -->
     <RuleDialogs />
+
+    <!-- Minimal Custom GitHub Rule Source Dialog -->
+    <UiDialog
+      v-model="addSourceOpen"
+      title="添加自定义 GitHub 规则源"
+      width="500px"
+    >
+      <el-form label-position="top" @submit.prevent="submitCustomSource">
+        <el-form-item label="名称" required>
+          <el-input v-model="customForm.name" placeholder="例如：EverythingRules" />
+        </el-form-item>
+        <el-form-item label="GitHub 仓库" required>
+          <el-input
+            v-model="customForm.repo"
+            placeholder="owner/repo（例如 Xioaruan912/EverythingRules）"
+          />
+        </el-form-item>
+        <div class="src-form-grid">
+          <el-form-item label="分支">
+            <el-input v-model="customForm.branch" placeholder="main" />
+          </el-form-item>
+          <el-form-item label="规则目录前缀">
+            <el-input v-model="customForm.pathPrefix" placeholder="例如 rules/clash" />
+          </el-form-item>
+          <el-form-item label="客户端平台">
+            <el-select v-model="customForm.platform" style="width: 100%">
+              <el-option label="Clash" value="Clash" />
+              <el-option label="Surge" value="Surge" />
+              <el-option label="Loon" value="Loon" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="规则行为">
+            <el-select v-model="customForm.behavior" style="width: 100%">
+              <el-option label="classical（标准规则）" value="classical" />
+              <el-option label="domain（纯域名）" value="domain" />
+              <el-option label="ipcidr（纯 IP 段）" value="ipcidr" />
+            </el-select>
+          </el-form-item>
+        </div>
+      </el-form>
+      <template #footer>
+        <UiButton variant="ghost" @click="addSourceOpen = false">取消</UiButton>
+        <UiButton
+          variant="primary"
+          :loading="savingSource"
+          :disabled="!customForm.name.trim() || !customForm.repo.trim()"
+          @click="submitCustomSource"
+        >
+          添加并同步
+        </UiButton>
+      </template>
+    </UiDialog>
   </div>
 </template>
 
@@ -448,6 +562,44 @@ onBeforeUnmount(() => {
 /* Collapsible Remote Sources */
 .sources-strip {
   display: grid;
+  gap: 12px;
+}
+
+.sources-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.src-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.src-link-btn {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--c-ink);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.src-link-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.src-link-btn.is-danger {
+  color: var(--c-bad);
+}
+
+.src-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 14px;
 }
 
 .source-grid {

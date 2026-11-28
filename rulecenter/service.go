@@ -33,6 +33,11 @@ var warmRunning sync.Map
 var sourceDefs = []models.RuleSource{
 	{Key: "shunt_rules", Name: "ShuntRules", Type: "github-readme", Repo: "luestr/ShuntRules", Branch: "main", BaseURL: "https://rule.kelee.one", Enabled: true},
 	{Key: "ios_rule_script", Name: "ios_rule_script", Type: "github-contents", Repo: "blackmatrix7/ios_rule_script", Branch: "master", BaseURL: "https://raw.githubusercontent.com/blackmatrix7/ios_rule_script/master", Enabled: true},
+	{Key: "sukka_ruleset", Name: "Sukka Ruleset", Type: "sukka-html", Repo: "SukkaW/Surge", Branch: "master", BaseURL: "https://ruleset.skk.moe", Enabled: true},
+	{Key: "metacubex_rules", Name: "MetaCubeX 官方", Type: "github-contents", Repo: "MetaCubeX/meta-rules-dat", Branch: "meta", BaseURL: "https://raw.githubusercontent.com/MetaCubeX/meta-rules-dat/meta", Enabled: true},
+	{Key: "loyalsoldier_rules", Name: "Loyalsoldier", Type: "github-contents", Repo: "Loyalsoldier/clash-rules", Branch: "release", BaseURL: "https://raw.githubusercontent.com/Loyalsoldier/clash-rules/release", Enabled: true},
+	{Key: "acl4ssr_rules", Name: "ACL4SSR", Type: "github-contents", Repo: "ACL4SSR/ACL4SSR", Branch: "master", BaseURL: "https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master", Enabled: true},
+	{Key: "cats_adrules", Name: "AdRules 去广告", Type: "github-contents", Repo: "Cats-Team/AdRules", Branch: "main", BaseURL: "https://raw.githubusercontent.com/Cats-Team/AdRules/main", Enabled: true},
 }
 
 func EnsureSources() error {
@@ -55,10 +60,14 @@ func SyncAll(ctx context.Context) error {
 	if err := EnsureSources(); err != nil {
 		return err
 	}
+	var srcs []models.RuleSource
+	if err := models.DB.Where("enabled = ?", true).Order("id asc").Find(&srcs).Error; err != nil {
+		return err
+	}
 	var errs []string
-	for _, def := range sourceDefs {
-		if err := SyncSource(ctx, def.Key); err != nil {
-			errs = append(errs, def.Key+": "+err.Error())
+	for _, src := range srcs {
+		if err := SyncSource(ctx, src.Key); err != nil {
+			errs = append(errs, src.Key+": "+err.Error())
 		}
 	}
 	if len(errs) > 0 {
@@ -68,6 +77,7 @@ func SyncAll(ctx context.Context) error {
 }
 
 func SyncSource(ctx context.Context, key string) error {
+	_ = EnsureSources()
 	var src models.RuleSource
 	if err := models.DB.Where("key = ?", key).First(&src).Error; err != nil {
 		return err
@@ -79,8 +89,22 @@ func SyncSource(ctx context.Context, key string) error {
 		items, err = syncShuntRules(ctx)
 	case "ios_rule_script":
 		items, err = syncIOSRuleScript(ctx)
+	case "sukka_ruleset":
+		items, err = syncSukkaRuleset(ctx)
+	case "metacubex_rules":
+		items, err = syncMetaCubeXRules(ctx)
+	case "loyalsoldier_rules":
+		items, err = syncLoyalsoldierRules(ctx)
+	case "acl4ssr_rules":
+		items, err = syncACL4SSRRules(ctx)
+	case "cats_adrules":
+		items, err = syncCatsAdRules(ctx)
 	default:
-		err = fmt.Errorf("unknown rule source: %s", key)
+		if src.Type == "github-custom" {
+			items, err = syncCustomGitHubSource(ctx, src)
+		} else {
+			err = fmt.Errorf("unknown rule source: %s", key)
+		}
 	}
 	now := time.Now()
 	if err != nil {
@@ -106,7 +130,11 @@ func SyncSource(ctx context.Context, key string) error {
 		}
 		for _, item := range items {
 			meta, _ := json.Marshal(item.Metadata)
-			rec := models.RuleCatalog{SourceKey: item.SourceKey, ExternalID: item.ExternalID, Name: item.Name, Category: item.Category, Platform: item.Platform, Format: item.Format, URL: item.URL, RemoteUpdate: item.UpdatedAt, RemoteRevision: item.RemoteRevision, MetadataJSON: string(meta)}
+			behavior := item.Behavior
+			if behavior == "" {
+				behavior = "classical"
+			}
+			rec := models.RuleCatalog{SourceKey: item.SourceKey, ExternalID: item.ExternalID, Name: item.Name, Category: item.Category, Platform: item.Platform, Format: item.Format, Behavior: behavior, URL: item.URL, RemoteUpdate: item.UpdatedAt, RemoteRevision: item.RemoteRevision, MetadataJSON: string(meta)}
 			if old, ok := oldByID[item.ExternalID]; ok {
 				rec.LocalPath = old.LocalPath
 				rec.RuleCount = old.RuleCount
@@ -377,12 +405,23 @@ func CategoryFor(name string) string {
 		cat  string
 		keys []string
 	}{
-		{"AI", []string{"openai", "chatgpt", "gemini", "claude", "anthropic", "copilot", "perplexity"}},
-		{"流媒体", []string{"netflix", "youtube", "disney", "spotify", "primevideo", "hbo", "twitch", "bilibili"}},
-		{"社交", []string{"telegram", "twitter", "facebook", "instagram", "whatsapp", "reddit", "discord"}},
-		{"Apple", []string{"apple", "icloud", "testflight"}}, {"Google", []string{"google", "youtube", "gemini"}},
-		{"Microsoft", []string{"microsoft", "onedrive", "office365", "xbox"}}, {"开发者", []string{"github", "gitlab", "docker", "npm", "pypi"}},
-		{"广告/隐私", []string{"advert", "adguard", "privacy", "tracking"}},
+		{"AI", []string{"openai", "chatgpt", "gemini", "claude", "anthropic", "copilot", "perplexity", "deepseek", "cursor", "grok", "mistral", "aigc", "apple_intelligence"}},
+		{"广告/隐私", []string{"advert", "adguard", "adrules", "adblock", "banad", "banprogram", "baneasy", "reject", "privacy", "tracking", "phishing", "hijacking"}},
+		{"流媒体", []string{"netflix", "youtube", "disney", "spotify", "primevideo", "hbo", "twitch", "bilibili", "biliintl", "tiktok", "stream", "abema", "bahamut", "hulu", "emby", "neteasemusic", "media", "iqiyi", "youku", "tvb"}},
+		{"社交", []string{"telegram", "twitter", "facebook", "instagram", "whatsapp", "reddit", "discord", "line", "signal", "slack", "pixiv"}},
+		{"Apple", []string{"apple", "icloud", "testflight"}},
+		{"Google", []string{"google", "gstatic", "gmail", "gcp"}},
+		{"Microsoft", []string{"microsoft", "onedrive", "office365", "xbox", "bing", "azure", "msft"}},
+		{"游戏", []string{"steam", "epic", "ea", "origin", "playstation", "nintendo", "blizzard", "riot", "game", "ubisoft", "sony"}},
+		{"开发者", []string{"github", "gitlab", "docker", "npm", "pypi", "vercel", "cloudflare", "aws", "heroku", "jetbrains", "oracle", "my_git"}},
+		{"国内直连", []string{"china", "cncidr", "domestic", "direct", "lan", "lancidr", "private", "local", "wechat", "weibo", "baidu", "alibaba", "tencent", "jd", "taobao", "alipay", "115", "12306", "douyin", "zhihu", "meituan", "didi"}},
+		{"代理/全球", []string{"proxy", "global", "gfw", "greatfire", "tld-not-cn", "cdn", "download", "speedtest", "unban"}},
+	}
+	if n == "ai" || n == "cn" {
+		if n == "ai" {
+			return "AI"
+		}
+		return "国内直连"
 	}
 	for _, g := range groups {
 		for _, k := range g.keys {
@@ -451,8 +490,18 @@ func catalogSourceRank(sourceKey string) int {
 		return 0
 	case "shunt_rules":
 		return 1
-	default:
+	case "sukka_ruleset":
 		return 2
+	case "metacubex_rules":
+		return 3
+	case "loyalsoldier_rules":
+		return 4
+	case "acl4ssr_rules":
+		return 5
+	case "cats_adrules":
+		return 6
+	default:
+		return 7
 	}
 }
 
@@ -504,7 +553,7 @@ func backfillCandidateContentHashes(records []models.RuleCatalog) {
 		if err != nil || len(data) == 0 {
 			continue
 		}
-		rules, _, err := ParseRules(data, rec.Format)
+		rules, _, err := ParseRulesWithBehavior(data, rec.Format, rec.Behavior)
 		if err != nil || len(rules) == 0 {
 			continue
 		}
@@ -567,7 +616,7 @@ func Sources() ([]SourceStatus, error) {
 		var count, cached int64
 		models.DB.Model(&models.RuleCatalog{}).Where("source_key = ?", s.Key).Count(&count)
 		models.DB.Model(&models.RuleCatalog{}).Where("source_key = ? AND checksum <> ''", s.Key).Count(&cached)
-		out = append(out, SourceStatus{Key: s.Key, Name: s.Name, Kind: s.Type, Repo: s.Repo, Branch: s.Branch, Enabled: s.Enabled, Status: s.LastSyncStatus, LastSyncAt: s.LastSyncAt, Error: s.LastSyncError, Count: count, CachedCount: cached})
+		out = append(out, SourceStatus{Key: s.Key, Name: s.Name, Kind: s.Type, Repo: s.Repo, Branch: s.Branch, PathPrefix: s.PathPrefix, Platform: s.Platform, Behavior: s.Behavior, Custom: s.Custom, Enabled: s.Enabled, Status: s.LastSyncStatus, LastSyncAt: s.LastSyncAt, Error: s.LastSyncError, Count: count, CachedCount: cached})
 	}
 	return out, nil
 }
@@ -582,17 +631,25 @@ func WarmSourceCache(ctx context.Context, sourceKey string) {
 		return
 	}
 
-	// Warm the cache deliberately at low priority. A single sequential worker
-	// avoids hammering the shared SQLite database and keeps dashboard/API reads
-	// responsive while background rule refresh is running.
+	// Warm up to 80 rules per sync pass sequentially at low priority so large
+	// upstream catalogs (e.g. MetaCubeX 590+ files) never saturate VPS bandwidth;
+	// remaining rules are cached immediately on demand when previewed or imported.
+	warmed := 0
 	for _, rec := range records {
 		select {
 		case <-ctx.Done():
 			return
 		default:
 		}
+		if rec.Checksum != "" && rec.RemoteRevision != "" && rec.CacheRevision == rec.RemoteRevision {
+			continue
+		}
 		_, _, _, _ = refreshCatalogRecord(ctx, rec, true)
-		time.Sleep(100 * time.Millisecond)
+		warmed++
+		if warmed >= 80 {
+			return
+		}
+		time.Sleep(120 * time.Millisecond)
 	}
 }
 
@@ -604,12 +661,12 @@ func refreshCatalogRecord(ctx context.Context, rec models.RuleCatalog, checkRemo
 	cached, cachedErr := os.ReadFile(local)
 	cacheOK := cachedErr == nil && len(cached) > 0
 
-	if checkRemote && rec.SourceKey == "ios_rule_script" && rec.RemoteRevision != "" && rec.CacheRevision == rec.RemoteRevision && cacheOK && rec.RuleCount > 0 {
-		rules, warnings, err := ParseRules(cached, rec.Format)
+	if checkRemote && rec.RemoteRevision != "" && rec.CacheRevision == rec.RemoteRevision && cacheOK && rec.RuleCount > 0 {
+		rules, warnings, err := ParseRulesWithBehavior(cached, rec.Format, rec.Behavior)
 		return cached, rules, warnings, err
 	}
 	if !checkRemote && cacheOK && rec.RuleCount > 0 {
-		rules, warnings, err := ParseRules(cached, rec.Format)
+		rules, warnings, err := ParseRulesWithBehavior(cached, rec.Format, rec.Behavior)
 		return cached, rules, warnings, err
 	}
 
@@ -626,7 +683,7 @@ func refreshCatalogRecord(ctx context.Context, rec models.RuleCatalog, checkRemo
 		if !cacheOK {
 			return nil, nil, nil, fetchErr
 		}
-		rules, warnings, err := ParseRules(cached, rec.Format)
+		rules, warnings, err := ParseRulesWithBehavior(cached, rec.Format, rec.Behavior)
 		return cached, rules, warnings, err
 	}
 	sum := sha256.Sum256(body)
@@ -634,7 +691,7 @@ func refreshCatalogRecord(ctx context.Context, rec models.RuleCatalog, checkRemo
 	if cacheOK && rec.Checksum != "" && checksum == rec.Checksum {
 		// The remote payload is byte-for-byte identical. Keep the existing file
 		// and, critically, do not issue a no-op SQLite UPDATE.
-		rules, warnings, err := ParseRules(cached, rec.Format)
+		rules, warnings, err := ParseRulesWithBehavior(cached, rec.Format, rec.Behavior)
 		if err == nil && rec.ContentHash == "" {
 			if h := NormalizedContentHash(rules); h != "" {
 				_ = models.DB.Model(&models.RuleCatalog{}).Where("external_id = ?", rec.ExternalID).Update("content_hash", h).Error
@@ -642,7 +699,7 @@ func refreshCatalogRecord(ctx context.Context, rec models.RuleCatalog, checkRemo
 		}
 		return cached, rules, warnings, err
 	}
-	rules, warnings, err := ParseRules(body, rec.Format)
+	rules, warnings, err := ParseRulesWithBehavior(body, rec.Format, rec.Behavior)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -679,7 +736,11 @@ func LoadItem(ctx context.Context, externalID string) (RuleItem, []NormalizedRul
 	if len(sample) > 30 {
 		sample = sample[:30]
 	}
-	return RuleItem{ExternalID: rec.ExternalID, SourceKey: rec.SourceKey, Name: rec.Name, Category: rec.Category, Platform: rec.Platform, Format: rec.Format, URL: rec.URL, LocalPath: cachePath(rec.SourceKey, rec.Platform, rec.Name, rec.Format), RuleCount: len(rules), UpdatedAt: rec.RemoteUpdate, RemoteRevision: rec.RemoteRevision, Checksum: checksum, Metadata: meta, Warnings: warnings, Sample: sample}, rules, nil
+	behavior := rec.Behavior
+	if behavior == "" {
+		behavior = "classical"
+	}
+	return RuleItem{ExternalID: rec.ExternalID, SourceKey: rec.SourceKey, Name: rec.Name, Category: rec.Category, Platform: rec.Platform, Format: rec.Format, Behavior: behavior, URL: rec.URL, LocalPath: cachePath(rec.SourceKey, rec.Platform, rec.Name, rec.Format), RuleCount: len(rules), UpdatedAt: rec.RemoteUpdate, RemoteRevision: rec.RemoteRevision, Checksum: checksum, Metadata: meta, Warnings: warnings, Sample: sample}, rules, nil
 }
 
 func cachePath(source, platform, name, format string) string {
@@ -768,7 +829,7 @@ func prepareCatalogUpdate(ctx context.Context, externalID string) (RuleUpdatePre
 	oldData, _ := os.ReadFile(local)
 	oldRules := []NormalizedRule{}
 	if len(oldData) > 0 {
-		if parsed, _, err := ParseRules(oldData, rec.Format); err == nil {
+		if parsed, _, err := ParseRulesWithBehavior(oldData, rec.Format, rec.Behavior); err == nil {
 			oldRules = parsed
 		}
 	}
@@ -776,7 +837,7 @@ func prepareCatalogUpdate(ctx context.Context, externalID string) (RuleUpdatePre
 	if err != nil {
 		return RuleUpdatePreview{}, rec, oldData, nil, nil, err
 	}
-	newRules, warnings, err := ParseRules(newData, rec.Format)
+	newRules, warnings, err := ParseRulesWithBehavior(newData, rec.Format, rec.Behavior)
 	if err != nil {
 		return RuleUpdatePreview{}, rec, oldData, newData, nil, err
 	}
@@ -838,9 +899,9 @@ func PreviewCatalogDomainMatches(ctx context.Context, externalID string, domains
 	}
 	oldRules := []NormalizedRule{}
 	if len(oldData) > 0 {
-		oldRules, _, _ = ParseRules(oldData, rec.Format)
+		oldRules, _, _ = ParseRulesWithBehavior(oldData, rec.Format, rec.Behavior)
 	}
-	newRules, _, err := ParseRules(newData, rec.Format)
+	newRules, _, err := ParseRulesWithBehavior(newData, rec.Format, rec.Behavior)
 	if err != nil {
 		return nil, err
 	}

@@ -40,10 +40,9 @@ func ParseRulesWithBehavior(data []byte, format, behavior string) ([]NormalizedR
 		var root struct {
 			Payload []string `yaml:"payload"`
 		}
-		if err := yaml.Unmarshal(data, &root); err != nil {
-			return nil, nil, err
+		if err := yaml.Unmarshal(data, &root); err == nil && len(root.Payload) > 0 {
+			return normalizeProviderLines(root.Payload, behavior), warningsForProviderLines(root.Payload, behavior), nil
 		}
-		return normalizeProviderLines(root.Payload, behavior), warningsForProviderLines(root.Payload, behavior), nil
 	}
 	lines := make([]string, 0)
 	s := bufio.NewScanner(bytes.NewReader(data))
@@ -87,6 +86,14 @@ func normalizeProviderLines(lines []string, behavior string) []NormalizedRule {
 		for _, raw := range lines {
 			value := strings.TrimSpace(raw)
 			if value == "" {
+				continue
+			}
+			upper := strings.ToUpper(value)
+			if strings.HasPrefix(upper, "IP-CIDR,") || strings.HasPrefix(upper, "IP-CIDR6,") {
+				parts := strings.Split(value, ",")
+				if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
+					out = append(out, NormalizedRule{Type: strings.ToUpper(strings.TrimSpace(parts[0])), Value: strings.TrimSpace(parts[1])})
+				}
 				continue
 			}
 			ruleType := "IP-CIDR"

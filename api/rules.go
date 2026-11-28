@@ -47,6 +47,49 @@ func RuleSources(c *gin.Context) {
 	c.JSON(200, gin.H{"code": "00000", "data": sources, "msg": "ok"})
 }
 
+func RuleSourceCreate(c *gin.Context) {
+	var req struct {
+		Name       string `json:"name"`
+		Repo       string `json:"repo"`
+		Branch     string `json:"branch"`
+		PathPrefix string `json:"pathPrefix"`
+		Platform   string `json:"platform"`
+		Behavior   string `json:"behavior"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "请求格式错误"})
+		return
+	}
+	src, err := rulecenter.CreateCustomSource(req.Name, req.Repo, req.Branch, req.PathPrefix, req.Platform, req.Behavior)
+	if err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+	defer cancel()
+	syncErr := rulecenter.SyncSource(ctx, src.Key)
+	sources, _ := rulecenter.Sources()
+	if syncErr != nil {
+		c.JSON(200, gin.H{"code": "00000", "data": sources, "msg": "规则源已添加，但首次同步失败: " + syncErr.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"code": "00000", "data": sources, "msg": "自定义规则源已添加并完成同步"})
+}
+
+func RuleSourceDelete(c *gin.Context) {
+	key := strings.TrimSpace(c.Param("key"))
+	if key == "" {
+		c.JSON(400, gin.H{"code": "40000", "msg": "缺少规则源标识"})
+		return
+	}
+	if err := rulecenter.DeleteCustomSource(key); err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
+		return
+	}
+	sources, _ := rulecenter.Sources()
+	c.JSON(200, gin.H{"code": "00000", "data": sources, "msg": "已删除自定义规则源"})
+}
+
 func RuleCatalog(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "48"))
@@ -184,12 +227,13 @@ func RuleImport(c *gin.Context) {
 			c.JSON(400, gin.H{"msg": "V1 模板写入当前仅实现 Clash，所选规则包含 " + item.Platform})
 			return
 		}
+		providerFmt, providerBeh := rulecenter.ResolveClashImportSpec(item.Format, item.Behavior)
 		result, importErr := rulecenter.ImportClashProvider(text, rulecenter.ImportOptions{
 			ProviderName:   item.Name,
 			URL:            item.URL,
 			Policy:         req.Policy,
-			Behavior:       "classical",
-			Format:         "yaml",
+			Behavior:       providerBeh,
+			Format:         providerFmt,
 			Proxy:          req.Proxy,
 			ConflictPolicy: req.ConflictPolicy,
 			Interval:       3600,

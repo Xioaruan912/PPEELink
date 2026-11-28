@@ -15,6 +15,7 @@ type RuleItem struct {
 	Category       string           `json:"category"`
 	Platform       string           `json:"platform"`
 	Format         string           `json:"format"`
+	Behavior       string           `json:"behavior,omitempty"`
 	URL            string           `json:"url"`
 	LocalPath      string           `json:"localPath"`
 	RuleCount      int              `json:"ruleCount"`
@@ -33,6 +34,10 @@ type SourceStatus struct {
 	Kind        string     `json:"kind"`
 	Repo        string     `json:"repo"`
 	Branch      string     `json:"branch"`
+	PathPrefix  string     `json:"pathPrefix,omitempty"`
+	Platform    string     `json:"platform,omitempty"`
+	Behavior    string     `json:"behavior,omitempty"`
+	Custom      bool       `json:"custom"`
 	Enabled     bool       `json:"enabled"`
 	Status      string     `json:"status"`
 	LastSyncAt  *time.Time `json:"lastSyncAt"`

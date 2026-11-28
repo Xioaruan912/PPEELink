@@ -3,6 +3,27 @@ import request from "@/utils/request";
 export const getRuleSources = () =>
   request({ url: "/api/v1/rules/sources", method: "get" });
 
+export const createRuleSource = (data: {
+  name: string;
+  repo: string;
+  branch?: string;
+  pathPrefix?: string;
+  platform?: string;
+  behavior?: string;
+}) =>
+  request({
+    url: "/api/v1/rules/sources",
+    method: "post",
+    data,
+    timeout: 40000,
+  });
+
+export const deleteRuleSource = (key: string) =>
+  request({
+    url: `/api/v1/rules/sources/${encodeURIComponent(key)}`,
+    method: "delete",
+  });
+
 export const getRuleCatalog = (params: any) =>
   request({
     url: "/api/v1/rules/catalog",

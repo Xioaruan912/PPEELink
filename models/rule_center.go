@@ -11,6 +11,10 @@ type RuleSource struct {
 	Repo           string     `gorm:"size:255" json:"repo"`
 	Branch         string     `gorm:"size:64" json:"branch"`
 	BaseURL        string     `gorm:"size:512" json:"baseUrl"`
+	PathPrefix     string     `gorm:"size:255" json:"pathPrefix,omitempty"`
+	Platform       string     `gorm:"size:32" json:"platform,omitempty"`
+	Behavior       string     `gorm:"size:32" json:"behavior,omitempty"`
+	Custom         bool       `gorm:"not null;default:false" json:"custom"`
 	Enabled        bool       `gorm:"not null;default:true" json:"enabled"`
 	LastSyncAt     *time.Time `json:"lastSyncAt"`
 	LastSyncStatus string     `gorm:"size:32" json:"lastSyncStatus"`
@@ -29,6 +33,7 @@ type RuleCatalog struct {
 	Category       string    `gorm:"size:64;index" json:"category"`
 	Platform       string    `gorm:"size:32;index;not null" json:"platform"`
 	Format         string    `gorm:"size:32" json:"format"`
+	Behavior       string    `gorm:"size:32;default:'classical'" json:"behavior"`
 	URL            string    `gorm:"type:text;not null" json:"url"`
 	LocalPath      string    `gorm:"type:text" json:"localPath"`
 	RuleCount      int       `json:"ruleCount"`

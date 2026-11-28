@@ -10,6 +10,8 @@ func Rules(r *gin.Engine) {
 	g := r.Group("/api/v1/rules")
 	{
 		g.GET("/sources", api.RuleSources)
+		g.POST("/sources", api.RuleSourceCreate)
+		g.DELETE("/sources/:key", api.RuleSourceDelete)
 		g.GET("/catalog", api.RuleCatalog)
 		g.GET("/preview", api.RulePreview)
 		g.GET("/template-groups", api.RuleTemplateGroups)
