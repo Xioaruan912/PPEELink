@@ -128,6 +128,29 @@ func SubPreviewNodes(c *gin.Context) {
 	})
 }
 
+// ensureDefaultSubUDP 当新建订阅未显式指定 udp 字段时默认开启 UDP 转发。
+func ensureDefaultSubUDP(raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return `{"udp":true}`, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return "", err
+	}
+	if m == nil {
+		m = map[string]any{}
+	}
+	if _, ok := m["udp"]; !ok {
+		m["udp"] = true
+		encoded, err := json.Marshal(m)
+		if err != nil {
+			return "", err
+		}
+		return string(encoded), nil
+	}
+	return raw, nil
+}
+
 // 添加订阅
 func SubAdd(c *gin.Context) {
 	name := c.PostForm("name")
@@ -137,6 +160,12 @@ func SubAdd(c *gin.Context) {
 		c.JSON(400, gin.H{"code": "40000", "msg": "订阅配置格式无效"})
 		return
 	}
+	normalizedConfig, err := ensureDefaultSubUDP(configs)
+	if err != nil {
+		c.JSON(400, gin.H{"code": "40000", "msg": "订阅配置格式无效"})
+		return
+	}
+	configs = normalizedConfig
 	if err := node.ValidateAppRules(appConfig.AppRules); err != nil {
 		c.JSON(400, gin.H{"code": "40000", "msg": err.Error()})
 		return

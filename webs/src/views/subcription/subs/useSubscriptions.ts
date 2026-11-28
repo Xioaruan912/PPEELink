@@ -161,7 +161,7 @@ export function createSubscriptions() {
           b.validCount - a.validCount || a.name.localeCompare(b.name, "zh-CN")
       );
   });
-  const udpOn = ref(false);
+  const udpOn = ref(true);
   const certOn = ref(false);
   const providerOn = ref(false);
   const qrcode = ref("");
@@ -599,13 +599,13 @@ export function createSubscriptions() {
         clash: c.clash || "",
         surge: c.surge || "",
         loon: c.loon || "",
-        udp: !!c.udp,
+        udp: c.udp === undefined ? true : !!c.udp,
         cert: !!c.cert,
         proxyProvider: !!c.proxyProvider,
         appRules: Array.isArray(c.appRules) ? c.appRules : [],
       };
     } catch {
-      return { clash: "", surge: "", loon: "", udp: false, cert: false };
+      return { clash: "", surge: "", loon: "", udp: true, cert: false };
     }
   };
 
